@@ -1,5 +1,5 @@
 // services/api/src/modules/programs/application/copy/copiers/payments.copier.ts
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CopyInput, CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier } from '../program-copier.interface';
 
@@ -68,6 +68,43 @@ export class PaymentsCopier implements ProgramCopier {
 
     let replaced = 0;
     if (mode === 'replace') {
+      // Same failure mode ParticipationCategoriesCopier guards against
+      // (Task 4 / participation-categories.copier.ts's beforeReplace): unlike
+      // the hard-delete path (program-content.repository.ts:263-265), the
+      // soft-delete below does NOT trip a Postgres FK error — it silently
+      // succeeds and leaves paid invoices / applications pointing at an
+      // inactive, soft-deleted tier. Money surface, so this is checked
+      // before any mutation, using the TARGET's current live tier ids (not
+      // the source's — the source's ids are irrelevant to what's about to
+      // be soft-deleted).
+      const existingTierIds = (
+        await tx.programPricingTier.findMany({
+          where: { programId: targetProgramId, deletedAt: null },
+          select: { id: true },
+        })
+      ).map((t) => t.id);
+
+      if (existingTierIds.length > 0) {
+        // ApplicationInvoice.pricingTierId is required (non-null); a live
+        // invoice always references a real tier. ParticipantApplication.
+        // pricingTierId is optional at the schema level, but a non-null
+        // value on a live application is just as real a reference as an
+        // invoice's — optionality only means the column *can* be empty, not
+        // that a populated value is any less load-bearing. So both are
+        // treated identically: either one blocks the replace.
+        const [invoiceCount, applicationCount] = await Promise.all([
+          tx.applicationInvoice.count({ where: { pricingTierId: { in: existingTierIds } } }),
+          tx.participantApplication.count({ where: { pricingTierId: { in: existingTierIds } } }),
+        ]);
+        const referencedCount = invoiceCount + applicationCount;
+        if (referencedCount > 0) {
+          throw new ConflictException({
+            code: 'pricing_tier_in_use',
+            message: `Cannot replace: ${referencedCount} invoice(s)/application(s) still reference the current payment tiers. Use append mode instead, or reassign those records first.`,
+          });
+        }
+      }
+
       const result = await tx.programPricingTier.updateMany({
         where: { programId: targetProgramId, deletedAt: null },
         data: { deletedAt: new Date(), isActive: false },
