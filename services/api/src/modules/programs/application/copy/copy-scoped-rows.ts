@@ -1,4 +1,5 @@
 // services/api/src/modules/programs/application/copy/copy-scoped-rows.ts
+import { BadRequestException } from '@nestjs/common';
 import { CopyMode, CopyResult } from './program-copier.interface';
 
 /**
@@ -55,6 +56,22 @@ export async function copyScopedRows<Row>(config: CopyScopedRowsConfig<Row>): Pr
   if (itemIds && itemIds.length > 0) {
     const idSet = new Set(itemIds);
     sourceRows = sourceRows.filter((row) => idSet.has(idOf(row)));
+  }
+
+  // Replace mode soft-deletes every current target row unconditionally, then
+  // inserts sourceRows. If sourceRows is empty here — either the source has
+  // nothing active, or an itemIds selection filtered it down to nothing —
+  // that soft-delete would destroy the target's content with nothing to
+  // replace it. copy-fields-from-program.handler.ts guarded exactly this
+  // case (its `no_fields` 400, thrown before any mutation); mirror that here
+  // so all seven copiers built on this helper get the guard, not just forms.
+  // Append mode is unaffected: an empty source there is a legitimate no-op.
+  if (mode === 'replace' && sourceRows.length === 0) {
+    throw new BadRequestException({
+      code: 'empty_replace_source',
+      message:
+        "Replacing from an empty selection would delete the target's existing content without replacing it. Select at least one item to copy, or use append mode.",
+    });
   }
 
   // Always load the target's current live rows: append needs them for the
