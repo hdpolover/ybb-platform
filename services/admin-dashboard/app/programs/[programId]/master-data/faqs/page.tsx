@@ -22,6 +22,7 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/src/ui/sheet";
+import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 
 const FAQ_CATEGORIES: { value: string; label: string }[] = [
   { value: "general", label: "General" },
@@ -48,6 +49,7 @@ export default function ProgramFaqsPage() {
   const [editTarget, setEditTarget] = useState<ProgramFaq | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProgramFaq | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
 
   const programName =
     accessiblePrograms.find((p) => p.programId === params.programId)?.programName ?? "Selected Program";
@@ -110,6 +112,13 @@ export default function ProgramFaqsPage() {
           <p className="text-[11px] text-zinc-500">Showing {filteredFaqs.length} of {faqs.length} FAQ(s)</p>
           <div className="flex gap-2">
             <button type="button" onClick={load} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
+            <button
+              type="button"
+              onClick={() => setCopyFromProgramOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+            >
+              <span>Copy from program</span>
+            </button>
             <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"><PlusIcon className="h-3.5 w-3.5" />Add FAQ</button>
           </div>
         </div>
@@ -205,6 +214,19 @@ export default function ProgramFaqsPage() {
         item={editTarget ?? undefined}
         onClose={() => { setShowCreate(false); setEditTarget(null); }}
         onSaved={load}
+      />
+
+      <CopyFromProgramDialog
+        open={copyFromProgramOpen}
+        entityKey="faqs"
+        entityLabel="FAQs"
+        programId={resolvedProgramId}
+        supportsAppend
+        onClose={() => setCopyFromProgramOpen(false)}
+        onApplied={() => {
+          setCopyFromProgramOpen(false);
+          load();
+        }}
       />
 
       {deleteTarget && (
