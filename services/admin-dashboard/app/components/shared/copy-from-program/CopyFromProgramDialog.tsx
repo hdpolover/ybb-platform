@@ -217,9 +217,11 @@ export function CopyFromProgramDialog({
       const itemIds = selectedIds.size === items.length ? undefined : Array.from(selectedIds);
       const result = await postCopyEntity(entityKey, programId, { sourceProgramId: sourceId, itemIds, mode });
       toast.success(
-        result.skipped > 0
-          ? `Copied ${result.created} item(s). Skipped ${result.skipped} duplicate(s).`
-          : `Copied ${result.created} item(s).`,
+        mode === "replace"
+          ? `Replaced ${result.replaced} ${entityLabel.toLowerCase()}, copied ${result.created} new.`
+          : result.skipped > 0
+            ? `Copied ${result.created} ${entityLabel.toLowerCase()}. Skipped ${result.skipped} duplicate(s).`
+            : `Copied ${result.created} ${entityLabel.toLowerCase()}.`,
       );
       onApplied(result);
     } catch (err) {
@@ -355,7 +357,7 @@ export function CopyFromProgramDialog({
               </p>
               <input
                 type="text"
-                aria-label="Type REPLACE to confirm replacing all items"
+                aria-label={`Type REPLACE to confirm replacing all ${entityLabel.toLowerCase()}`}
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
                 placeholder="Type REPLACE"
