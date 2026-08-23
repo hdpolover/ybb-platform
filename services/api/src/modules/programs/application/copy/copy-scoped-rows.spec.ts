@@ -171,4 +171,68 @@ describe('copyScopedRows', () => {
     expect(delegate.updateMany).not.toHaveBeenCalled();
     expect(delegate.create).not.toHaveBeenCalled();
   });
+
+  it('merges a populated activeFilter into every where-clause alongside scopeField (source findMany, target findMany, and replace-mode updateMany)', async () => {
+    const delegate = fakeDelegate([
+      { id: 's1', name: 'a', order: 0, programId: 'src' },
+      { id: 't1', name: 'old', order: 0, programId: 'tgt' },
+    ]);
+    const activeFilter = { deletedAt: null };
+    const replaceData = { deletedAt: new Date('2026-08-23') };
+    await copyScopedRows({
+      delegate,
+      scopeField: 'programId',
+      sourceProgramId: 'src',
+      targetProgramId: 'tgt',
+      mode: 'replace',
+      activeFilter,
+      idOf: (r: Row) => r.id,
+      dedupeKey: (r: Row) => r.name,
+      fields: (r: Row, order: number) => ({ programId: 'tgt', name: r.name, order }),
+      replaceData,
+    });
+    // Source lookup: scopeField and activeFilter both present, neither dropped.
+    expect(delegate.findMany).toHaveBeenCalledWith({
+      where: { programId: 'src', deletedAt: null },
+      orderBy: { order: 'asc' },
+    });
+    // Target lookup: same merge.
+    expect(delegate.findMany).toHaveBeenCalledWith({
+      where: { programId: 'tgt', deletedAt: null },
+    });
+    // Replace-mode soft-delete: same merge — activeFilter does not clobber scopeField.
+    expect(delegate.updateMany).toHaveBeenCalledWith({
+      where: { programId: 'tgt', deletedAt: null },
+      data: replaceData,
+    });
+  });
+
+  it('append: a dedupe skip mid-loop does not consume an order slot for the next created row', async () => {
+    // Source, in order: 'a' (no collision), 'x' (collides with target's 'x'), 'b' (no collision).
+    const delegate = fakeDelegate([
+      { id: 's1', name: 'a', order: 0, programId: 'src' },
+      { id: 's2', name: 'x', order: 1, programId: 'src' },
+      { id: 's3', name: 'b', order: 2, programId: 'src' },
+      { id: 't1', name: 'x', order: 5, programId: 'tgt' },
+    ]);
+    const result = await copyScopedRows({
+      delegate,
+      scopeField: 'programId',
+      sourceProgramId: 'src',
+      targetProgramId: 'tgt',
+      mode: 'append',
+      activeFilter: {},
+      idOf: (r: Row) => r.id,
+      dedupeKey: (r: Row) => r.name,
+      fields: (r: Row, order: number) => ({ programId: 'tgt', name: r.name, order }),
+      replaceData: { deletedAt: new Date() },
+    });
+    // Target's max existing order is 5, so the baseline for new rows is 6.
+    // 'x' is skipped (collides) and must NOT consume order slot 7 — the
+    // second created row ('b') must land at 7, not 8.
+    expect(result).toEqual({ created: 2, skipped: 1, replaced: 0 });
+    expect(delegate.create).toHaveBeenCalledTimes(2);
+    expect(delegate.create.mock.calls[0][0].data).toMatchObject({ name: 'a', order: 6 });
+    expect(delegate.create.mock.calls[1][0].data).toMatchObject({ name: 'b', order: 7 });
+  });
 });
