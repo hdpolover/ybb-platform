@@ -19,7 +19,7 @@ import { fetchSystemFormFields, type SystemFormField } from "./catalog-api";
 import { FormFieldEditor } from "./FormFieldEditor";
 import { AddFieldDialog } from "./AddFieldDialog";
 import { CopyFromTemplateDialog } from "./CopyFromTemplateDialog";
-import { CopyFromProgramDialog } from "./CopyFromProgramDialog";
+import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import type { HelpAssetRow } from "./HelpAssetsRepeater";
 
 export interface ApplicationFormFieldRow {
@@ -424,7 +424,11 @@ export function FormFieldsTable({ programId }: { programId: string }) {
       />
       <CopyFromProgramDialog
         open={copyFromProgramOpen}
+        entityKey="form-fields"
+        entityLabel="Application Form Fields"
         programId={resolvedProgramId}
+        supportsAppend
+        referenceBrandName="China Youth Summit"
         onClose={() => setCopyFromProgramOpen(false)}
         onApplied={() => {
           setCopyFromProgramOpen(false);
