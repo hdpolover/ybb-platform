@@ -14,12 +14,15 @@ import {
     UpdateProgramFaqHandler,
     DeleteDocumentTemplateHandler,
     DeleteProgramTimelineHandler,
+    CreateProgramTimelineHandler,
+    UpdateProgramTimelineHandler,
     CreateProgramScheduleHandler,
     UpdateProgramScheduleHandler,
     DeleteProgramScheduleHandler,
     CreateProgramSubthemeHandler,
     UpdateProgramSubthemeHandler,
     DeleteProgramSubthemeHandler,
+    CreateProgramPartnerHandler,
     UpdateProgramPartnerHandler,
     DeleteProgramPartnerHandler,
 } from './manage-program-content.handlers';
@@ -35,16 +38,20 @@ import {
     UpdateProgramFaqCommand,
     DeleteDocumentTemplateCommand,
     DeleteProgramTimelineCommand,
+    CreateProgramTimelineCommand,
+    UpdateProgramTimelineCommand,
     CreateProgramScheduleCommand,
     UpdateProgramScheduleCommand,
     DeleteProgramScheduleCommand,
     CreateProgramSubthemeCommand,
     UpdateProgramSubthemeCommand,
     DeleteProgramSubthemeCommand,
+    CreateProgramPartnerCommand,
     UpdateProgramPartnerCommand,
     DeleteProgramPartnerCommand,
 } from '../program-content.commands';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
+import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { StorageService } from '../../../../files/application/storage.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
@@ -594,6 +601,8 @@ describe('ManageProgramContentHandlers', () => {
 
         beforeEach(() => {
             repo = {
+                createTimeline: jest.fn(),
+                updateTimeline: jest.fn(),
                 findTimelineById: jest.fn(),
                 deleteTimeline: jest.fn(),
                 createSchedule: jest.fn(),
@@ -604,6 +613,7 @@ describe('ManageProgramContentHandlers', () => {
                 updateSubtheme: jest.fn(),
                 deleteSubtheme: jest.fn(),
                 findSubthemeById: jest.fn(),
+                createPartner: jest.fn(),
                 updatePartner: jest.fn(),
                 deletePartner: jest.fn(),
                 findPartnerById: jest.fn(),
@@ -621,10 +631,36 @@ describe('ManageProgramContentHandlers', () => {
                     { provide: StorageService, useValue: storage },
                     { provide: PrismaService, useValue: prisma },
                     { provide: LandingCacheInvalidationService, useValue: landingCacheInvalidation },
+                    { provide: IUserActivityLogRepository, useValue: { create: jest.fn() } },
                 ],
             }).compile();
             return module.get(HandlerCtor);
         }
+
+        describe('CreateProgramTimelineHandler', () => {
+            it('invalidates using the created row programId', async () => {
+                const handler = await build(CreateProgramTimelineHandler);
+                repo.createTimeline.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
+
+                await handler.execute(new CreateProgramTimelineCommand(
+                    { programId: 'prog-1', date: '2026-09-01' } as any,
+                    'user-1',
+                ));
+
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+        });
+
+        describe('UpdateProgramTimelineHandler', () => {
+            it('invalidates using the updated row programId', async () => {
+                const handler = await build(UpdateProgramTimelineHandler);
+                repo.updateTimeline.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
+
+                await handler.execute(new UpdateProgramTimelineCommand('tl-1', { date: '2026-09-02' } as any, 'user-1'));
+
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+        });
 
         describe('DeleteProgramTimelineHandler', () => {
             it('reads the row before hard-deleting it (delete returns void, brandId would otherwise be lost) and invalidates', async () => {
@@ -725,6 +761,18 @@ describe('ManageProgramContentHandlers', () => {
         });
 
         describe('Partner handlers', () => {
+            it('CreateProgramPartnerHandler invalidates using the created row programId', async () => {
+                const handler = await build(CreateProgramPartnerHandler);
+                repo.createPartner.mockResolvedValue({ id: 'partner-1', programId: 'prog-1' });
+
+                await handler.execute(new CreateProgramPartnerCommand(
+                    { programId: 'prog-1', name: 'Acme Co' } as any,
+                    'user-1',
+                ));
+
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+
             it('UpdateProgramPartnerHandler invalidates using the updated row programId', async () => {
                 const handler = await build(UpdateProgramPartnerHandler);
                 repo.updatePartner.mockResolvedValue({ id: 'partner-1', programId: 'prog-1', name: 'Renamed' });

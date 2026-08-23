@@ -22,19 +22,17 @@ export interface InvalidateLandingCachesOptions {
     bustProgramCache?: boolean;
     /**
      * Delete the brand's `brand_landing_snapshots` row (the Postgres cache
-     * layer). Gallery's original call site never touched the snapshot table,
-     * so its call passes false. Defaults to true.
+     * layer). Defaults to true; pass false only for a write that genuinely
+     * never touches snapshot-cached data.
      */
     clearSnapshot?: boolean;
     /**
-     * Catch + log failures instead of letting them propagate. Brand/program
-     * writes want this: the DB write already succeeded, so a cache miss must
-     * not 500 the admin's request. Gallery's original call site had no
-     * try/catch around this, so pass false there to keep that behaviour.
-     * Also controls whether cache-clear tasks run concurrently (true, via
-     * Promise.all — matches brand/program) or sequentially and stop at the
-     * first failure (false — matches gallery's un-wrapped sequential awaits).
-     * Defaults to true.
+     * Catch + log failures instead of letting them propagate. Every current
+     * call site wants this: the DB write has already succeeded by the time
+     * this runs, so a cache-layer miss must surface as a stale-until-TTL page,
+     * not a 500 on a request that actually succeeded. Also controls whether
+     * cache-clear tasks run concurrently (true, via Promise.all) or
+     * sequentially and stop at the first failure (false). Defaults to true.
      */
     swallowErrors?: boolean;
     /** Which post-clear revalidation hook, if any, to fire. Required so every
