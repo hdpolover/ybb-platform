@@ -5,8 +5,7 @@ import { IProgramRepository } from '@core/interfaces/repositories/program.reposi
 import { Program } from '@core/entities/program.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
-import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
-import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
 
 @CommandHandler(CreateProgramCommand)
 export class CreateProgramHandler implements ICommandHandler<CreateProgramCommand> {
@@ -15,8 +14,7 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
         private readonly programRepository: IProgramRepository,
         @Inject(IUserActivityLogRepository)
         private readonly activityLogRepository: IUserActivityLogRepository,
-        private readonly cacheService: CacheService,
-        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
 
     async execute(command: CreateProgramCommand): Promise<any> {
@@ -55,30 +53,23 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
             new Date(),
         ));
 
-        // Invalidate caches so landing pages and program lists reflect the new program
-        await this.invalidateProgramCaches(program.brandId as string);
+        // Bust all three landing cache layers (Postgres snapshot, Redis
+        // including program:*, and the participant frontend's Next.js
+        // unstable_cache home+settings pages). Audit found this handler
+        // only cleared Redis and never fired the Next.js revalidate hook,
+        // so a newly-created program stayed publicly stale past the TTL.
+        await this.landingCacheInvalidation.invalidate(program.brandId as string, {
+            clearSnapshot: true,
+            bustProgramCache: true,
+            swallowErrors: true,
+            revalidate: { kind: 'homeAndSettings' },
+        });
 
         const { brandId, ...rest } = program as unknown as Record<string, unknown>;
         return {
             ...rest,
             brandId: brandId,
         };
-    }
-
-    /**
-     * Invalidate caches when a new program is created
-     */
-    private async invalidateProgramCaches(brandId: string): Promise<void> {
-        try {
-            await Promise.all([
-                this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId } }),
-                this.cacheService.invalidateBrandLandingCaches(brandId),
-                this.cacheService.invalidateByPattern('program:list:*'),
-            ]);
-        } catch (error) {
-            // Log but don't throw - cache invalidation failures shouldn't break program creation
-            console.error('Failed to invalidate program caches after create:', error);
-        }
     }
 
     private generateSlug(text: string): string {

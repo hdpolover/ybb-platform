@@ -4,8 +4,7 @@ import { DeleteProgramCommand } from '../delete-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
-import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
-import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
 
 @CommandHandler(DeleteProgramCommand)
 export class DeleteProgramHandler implements ICommandHandler<DeleteProgramCommand> {
@@ -14,8 +13,7 @@ export class DeleteProgramHandler implements ICommandHandler<DeleteProgramComman
         private readonly programRepository: IProgramRepository,
         @Inject(IUserActivityLogRepository)
         private readonly activityLogRepository: IUserActivityLogRepository,
-        private readonly cacheService: CacheService,
-        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
 
     async execute(command: DeleteProgramCommand): Promise<void> {
@@ -28,13 +26,15 @@ export class DeleteProgramHandler implements ICommandHandler<DeleteProgramComman
 
         await this.programRepository.delete(programId);
 
-        try {
-            await Promise.all([
-                this.prisma.brandLandingSnapshot.deleteMany({ where: { brandId: existingProgram.brandId } }),
-                this.cacheService.invalidateBrandLandingCaches(existingProgram.brandId),
-                this.cacheService.invalidateByPattern('program:*'),
-            ]);
-        } catch { /* non-critical */ }
+        // Bust all three landing cache layers. Audit found this handler
+        // only cleared Redis and never fired the Next.js revalidate hook, so
+        // a deleted program stayed visible on the public landing page.
+        await this.landingCacheInvalidation.invalidate(existingProgram.brandId, {
+            clearSnapshot: true,
+            bustProgramCache: true,
+            swallowErrors: true,
+            revalidate: { kind: 'homeAndSettings' },
+        });
 
         // Log activity
         await this.activityLogRepository.create(new UserActivityLog(
