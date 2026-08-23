@@ -103,7 +103,12 @@ describe('copyScopedRows', () => {
     expect(result).toEqual({ created: 1, skipped: 0, replaced: 1 });
   });
 
-  it('empty source is a no-op: no create/updateMany calls beyond the initial lookups', async () => {
+  // Empty source is a legitimate no-op only in append mode: nothing to add,
+  // nothing at risk. Replace mode is deliberately NOT covered by this
+  // no-op — see the "replace + empty source" tests below, which assert the
+  // opposite (throws, no mutation) precisely because replace's unconditional
+  // soft-delete would otherwise destroy the target's content for nothing.
+  it('append: empty source is a no-op: no create/updateMany calls beyond the initial lookups', async () => {
     const delegate = fakeDelegate([{ id: 't1', name: 'x', order: 0, programId: 'tgt' }]);
     const result = await copyScopedRows({
       delegate,
@@ -118,6 +123,56 @@ describe('copyScopedRows', () => {
       replaceData: { deletedAt: new Date() },
     });
     expect(result).toEqual({ created: 0, skipped: 0, replaced: 0 });
+    expect(delegate.create).not.toHaveBeenCalled();
+    expect(delegate.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('replace: empty source rejects before any mutation, instead of soft-deleting the target for nothing', async () => {
+    const delegate = fakeDelegate([{ id: 't1', name: 'x', order: 0, programId: 'tgt' }]);
+    await expect(
+      copyScopedRows({
+        delegate,
+        scopeField: 'programId',
+        sourceProgramId: 'src',
+        targetProgramId: 'tgt',
+        mode: 'replace',
+        activeFilter: {},
+        idOf: (r: Row) => r.id,
+        dedupeKey: (r: Row) => r.name,
+        fields: (r: Row, order: number) => ({ programId: 'tgt', name: r.name, order }),
+        replaceData: { deletedAt: new Date() },
+      }),
+    ).rejects.toThrow(/empty selection/i);
+    // The guard must run BEFORE the soft-delete — a guard placed after it
+    // would still throw while having already destroyed the target's rows.
+    expect(delegate.updateMany).not.toHaveBeenCalled();
+    expect(delegate.create).not.toHaveBeenCalled();
+  });
+
+  it('replace: a non-empty source filtered by itemIds down to zero also rejects before any mutation', async () => {
+    const delegate = fakeDelegate([
+      { id: 's1', name: 'a', order: 0, programId: 'src' },
+      { id: 't1', name: 'old', order: 0, programId: 'tgt' },
+    ]);
+    await expect(
+      copyScopedRows({
+        delegate,
+        scopeField: 'programId',
+        sourceProgramId: 'src',
+        targetProgramId: 'tgt',
+        // Selects nothing from a non-empty source — same destructive shape
+        // as an empty source, and the more likely UI path (user deselects
+        // everything, then hits Replace).
+        itemIds: ['does-not-exist'],
+        mode: 'replace',
+        activeFilter: {},
+        idOf: (r: Row) => r.id,
+        dedupeKey: (r: Row) => r.name,
+        fields: (r: Row, order: number) => ({ programId: 'tgt', name: r.name, order }),
+        replaceData: { deletedAt: new Date() },
+      }),
+    ).rejects.toThrow(/empty selection/i);
+    expect(delegate.updateMany).not.toHaveBeenCalled();
     expect(delegate.create).not.toHaveBeenCalled();
   });
 
