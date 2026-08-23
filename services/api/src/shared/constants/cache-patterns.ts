@@ -23,6 +23,12 @@ export const LANDING_BRAND_PATTERNS = [
   'landing:announcements:*',
   'landing:faqs:*',
   'landing:settings:*',
+  // Without this the decorator clears every page cache but leaves the
+  // snapshot, which is the layer LandingSnapshotService falls back to on a
+  // Redis miss — so the stale payload is re-served immediately and the admin
+  // concludes their edit did not save. CacheService.invalidateBrandLandingCaches
+  // has always cleared it; only this list was missing it.
+  'landing:snapshot:*',
 ];
 
 /**
