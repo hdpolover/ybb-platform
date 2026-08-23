@@ -4,8 +4,7 @@ import { CreateProgramHandler } from './create-program.handler';
 import { CreateProgramCommand } from '../create-program.command';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { CreateProgramDto } from '../../../presentation/dto/create-program.dto';
-import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
-import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
 
 describe('CreateProgramHandler', () => {
     let handler: CreateProgramHandler;
@@ -20,15 +19,8 @@ describe('CreateProgramHandler', () => {
         create: jest.fn(),
     };
 
-    const mockCacheService = {
-        invalidateBrandLandingCaches: jest.fn().mockResolvedValue(undefined),
-        invalidateByPattern: jest.fn().mockResolvedValue(undefined),
-    };
-
-    const mockPrismaService = {
-        brandLandingSnapshot: {
-            deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
-        },
+    const mockLandingCacheInvalidation = {
+        invalidate: jest.fn().mockResolvedValue(undefined),
     };
 
     beforeEach(async () => {
@@ -37,8 +29,7 @@ describe('CreateProgramHandler', () => {
                 CreateProgramHandler,
                 { provide: 'IProgramRepository', useValue: mockProgramRepository },
                 { provide: IUserActivityLogRepository, useValue: mockActivityLogRepository },
-                { provide: CacheService, useValue: mockCacheService },
-                { provide: PrismaService, useValue: mockPrismaService },
+                { provide: LandingCacheInvalidationService, useValue: mockLandingCacheInvalidation },
             ],
         }).compile();
 
@@ -123,5 +114,33 @@ describe('CreateProgramHandler', () => {
 
         const createdSlug = mockProgramRepository.create.mock.calls[0][0].slug as string;
         expect(createdSlug.length).toBeLessThanOrEqual(255);
+    });
+
+    // Audit: this handler cleared Redis + the Postgres snapshot directly but
+    // never fired LandingRevalidationService, so a newly-created program never
+    // showed up on the public landing page until the cache TTL lapsed. Routed
+    // through the shared service so it gets all three layers, like update-program.
+    it('invalidates landing caches via the shared service with the home+settings revalidate hook', async () => {
+        const dto: CreateProgramDto = {
+            name: 'Test Program',
+            brandId: 'brand-9',
+            year: 2024,
+            startDate: '2024-01-01',
+            endDate: '2024-01-10',
+            applicationDeadline: '2023-12-31',
+            slug: 'test-program',
+        };
+        const command = new CreateProgramCommand(dto, 'user-1');
+
+        mockProgramRepository.create.mockResolvedValue({ id: 'prog-1', ...dto });
+
+        await handler.execute(command);
+
+        expect(mockLandingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-9', {
+            clearSnapshot: true,
+            bustProgramCache: true,
+            swallowErrors: true,
+            revalidate: { kind: 'homeAndSettings' },
+        });
     });
 });

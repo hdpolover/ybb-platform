@@ -3,14 +3,14 @@ import { Inject, NotFoundException } from '@nestjs/common';
 import { UpdateProgramBrandingCommand } from '../update-program-branding.command';
 import { StorageService } from '../../../../files/application/storage.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
+import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
 
 @CommandHandler(UpdateProgramBrandingCommand)
 export class UpdateProgramBrandingHandler implements ICommandHandler<UpdateProgramBrandingCommand> {
     constructor(
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
-        private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
 
     async execute(command: UpdateProgramBrandingCommand) {
@@ -66,10 +66,15 @@ export class UpdateProgramBrandingHandler implements ICommandHandler<UpdateProgr
                 where: { id: programId },
                 data: updates
             });
-            try {
-                await this.cacheService.invalidateBrandLandingCaches(brandId);
-                await this.cacheService.invalidateByPattern('program:*');
-            } catch { /* non-critical */ }
+            // Branding assets render on the program landing page. Bust all
+            // three cache layers (audit found this handler never cleared the
+            // Postgres snapshot and never fired the Next.js revalidate hook).
+            await this.landingCacheInvalidation.invalidate(brandId, {
+                clearSnapshot: true,
+                bustProgramCache: true,
+                swallowErrors: true,
+                revalidate: { kind: 'homeAndSettings' },
+            });
             return updated;
         }
 
