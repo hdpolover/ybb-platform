@@ -12,6 +12,7 @@ import { buildApiUrl, getAccessToken, readErrorMessage, readJsonData } from "@/a
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
+import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
@@ -218,6 +219,7 @@ export function ParticipationCategoriesTable({ programId }: { programId: string 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formState, setFormState] = useState<CategoryModalState>(createEmptyCategoryState());
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
 
   const loadCategories = async () => {
     setIsLoading(true);
@@ -390,10 +392,19 @@ export function ParticipationCategoriesTable({ programId }: { programId: string 
             <p className="text-sm text-zinc-500">Define available participation categories for this program.</p>
           </div>
         </div>
-        <button type="button" onClick={openCreateModal} className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600">
-          <PlusIcon className="h-4 w-4" />
-          <span>Add Category</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCopyFromProgramOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+          >
+            <span>Copy from program</span>
+          </button>
+          <button type="button" onClick={openCreateModal} className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600">
+            <PlusIcon className="h-4 w-4" />
+            <span>Add Category</span>
+          </button>
+        </div>
       </div>
 
       {errorMessage ? (
@@ -483,6 +494,18 @@ export function ParticipationCategoriesTable({ programId }: { programId: string 
         onSubmit={() => void handleSave()}
         isSaving={isSaving}
         errorMessage={modalErrorMessage}
+      />
+      <CopyFromProgramDialog
+        open={copyFromProgramOpen}
+        entityKey="participation-categories"
+        entityLabel="Participation Categories"
+        programId={resolvedProgramId}
+        supportsAppend
+        onClose={() => setCopyFromProgramOpen(false)}
+        onApplied={() => {
+          setCopyFromProgramOpen(false);
+          void loadCategories();
+        }}
       />
     </section>
   );
