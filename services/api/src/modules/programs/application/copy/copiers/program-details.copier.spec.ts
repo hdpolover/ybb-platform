@@ -125,6 +125,44 @@ describe('ProgramDetailsCopier', () => {
     expect((prisma as any).program.update).not.toHaveBeenCalled();
   });
 
+  // Fix 4: `&nbsp;`-only content (no surrounding tags) must also count as
+  // blank, same as the tag-collapsed nbsp case already covered above.
+  it('rejects replace from a source whose fields contain only &nbsp;', async () => {
+    const prisma = mkPrisma({
+      src: { requirementsDescription: '&nbsp;', benefitsDescription: '&nbsp;&nbsp;', termsAndConditions: null },
+    });
+    const copier = new ProgramDetailsCopier(prisma);
+    await expect(
+      copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect((prisma as any).program.update).not.toHaveBeenCalled();
+  });
+
+  // Fix 4: a field whose only content is an <img> (or <hr>) strips to ''
+  // under the tag-stripping check, which would wrongly judge it blank. A
+  // source that is entirely an image must NOT be refused as "no content to
+  // copy", and a target that is entirely an image must count as content the
+  // replace overwrote (targetHadContent / `replaced`).
+  it('treats an image-only field as content, not blank: proceeds and reports replaced when the target was image-only too', async () => {
+    const prisma = mkPrisma({
+      src: { requirementsDescription: '<img src="https://cdn.example/x.png">', benefitsDescription: null, termsAndConditions: null },
+      tgt: { requirementsDescription: '<img src="https://cdn.example/old.png">', benefitsDescription: null, termsAndConditions: null },
+    });
+    const copier = new ProgramDetailsCopier(prisma);
+    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' });
+    expect((prisma as any).program.update).toHaveBeenCalled();
+    expect(result).toEqual({ created: 1, skipped: 0, replaced: 1 });
+  });
+
+  it('treats an <hr>-only field as content, not blank, in preview()', async () => {
+    const prisma = mkPrisma({ src: { requirementsDescription: '<hr>', benefitsDescription: null, termsAndConditions: null } });
+    const copier = new ProgramDetailsCopier(prisma);
+    const items = await copier.preview('src');
+    expect(items).toEqual([
+      { id: 'src', label: 'Requirements, Benefits & Terms', meta: '1 field(s) with content', hasExternalMedia: false },
+    ]);
+  });
+
   // The error message must advise something the user can actually do.
   // supportsAppend is false and copy() rejects append mode outright, so
   // telling the user to "use append mode instead" (copied verbatim from
@@ -178,7 +216,35 @@ describe('ProgramDetailsCopier', () => {
     const prisma = mkPrisma({ src: { requirementsDescription: '<p>x</p>', benefitsDescription: null, termsAndConditions: '<p>y</p>' } });
     const copier = new ProgramDetailsCopier(prisma);
     const items = await copier.preview('src');
-    expect(items).toEqual([{ id: 'src', label: 'Requirements, Benefits & Terms', meta: '2 field(s) with content' }]);
+    expect(items).toEqual([
+      { id: 'src', label: 'Requirements, Benefits & Terms', meta: '2 field(s) with content', hasExternalMedia: false },
+    ]);
+  });
+
+  // Fix 1: program-details is edited with Tiptap, which can embed
+  // `<img src="...">` pointing at the source brand's storage. preview()
+  // must flag this so the shared dialog's cross-brand warning (which reads
+  // hasExternalMedia exclusively) actually fires for this surface.
+  it('preview() sets hasExternalMedia: true when any of the three fields embeds an <img>', async () => {
+    const prisma = mkPrisma({
+      src: {
+        requirementsDescription: '<p>Bring a laptop</p>',
+        benefitsDescription: '<p><img src="https://other-brand.example/x.png"></p>',
+        termsAndConditions: null,
+      },
+    });
+    const copier = new ProgramDetailsCopier(prisma);
+    const items = await copier.preview('src');
+    expect(items[0].hasExternalMedia).toBe(true);
+  });
+
+  it('preview() sets hasExternalMedia: false when no field embeds img/iframe/video', async () => {
+    const prisma = mkPrisma({
+      src: { requirementsDescription: '<p>Plain text, no media</p>', benefitsDescription: null, termsAndConditions: null },
+    });
+    const copier = new ProgramDetailsCopier(prisma);
+    const items = await copier.preview('src');
+    expect(items[0].hasExternalMedia).toBe(false);
   });
 
   it('countFor() returns 1 when any field has content, 0 when the program has none or does not exist', async () => {

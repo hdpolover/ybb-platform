@@ -30,9 +30,12 @@ export interface CopyPreviewItem {
   id: string;
   label: string;
   meta?: string;
-  // Set true only by copiers whose rows can carry cross-brand media
-  // (currently just form-fields). Lets the generic dialog show the
-  // cross-brand warning without knowing which entity it's rendering.
+  // Set true only by copiers whose rows can carry cross-brand media: either
+  // literal media references (form-fields' mediaUrl/helpAssets) or Tiptap
+  // rich-text fields that can embed <img>/<iframe>/<video>
+  // (program-details, participation-categories, payments' tier
+  // description). Lets the generic dialog show the cross-brand warning
+  // without knowing which entity it's rendering.
   hasExternalMedia?: boolean;
 }
 

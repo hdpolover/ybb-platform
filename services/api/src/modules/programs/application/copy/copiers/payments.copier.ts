@@ -3,6 +3,14 @@ import { BadRequestException, ConflictException, Injectable } from '@nestjs/comm
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CopyInput, CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier } from '../program-copier.interface';
 
+// `description` (unlike `benefits`/`requirements`, which are plain
+// newline-separated textareas — see PaymentOptionActions.tsx) is edited
+// with the Tiptap rich-text editor (rich-text-editor.tsx) and can embed
+// `<img src="...">` pointing at the source brand's storage. Mirrors
+// form-fields.copier.ts's hasExternalMedia — the shared copy dialog shows a
+// cross-brand caveat when any selected item flags this.
+const EXTERNAL_MEDIA_PATTERN = /<(img|iframe|video)\b/i;
+
 /**
  * The only two-level copier: ProgramPricingTier has child
  * PricingTierValidityPeriod rows, so `copyScopedRows` (single-table) can't
@@ -31,6 +39,7 @@ export class PaymentsCopier implements ProgramCopier {
       id: t.id,
       label: t.name,
       meta: `${t.currency} ${t.price.toString()}`,
+      hasExternalMedia: t.description !== null && EXTERNAL_MEDIA_PATTERN.test(t.description),
     }));
   }
 

@@ -4,6 +4,19 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CopyInput, CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier } from '../program-copier.interface';
 import { copyScopedRows, ScopedRowsDelegate } from '../copy-scoped-rows';
 
+// description/benefits/eligibility are edited with the Tiptap rich-text
+// editor (rich-text-editor.tsx, same one program-details.copier.ts guards
+// against) and can embed `<img src="...">` pointing at the source brand's
+// storage. Mirrors form-fields.copier.ts's hasExternalMedia — the shared
+// copy dialog shows a cross-brand caveat when any selected item flags this.
+const EXTERNAL_MEDIA_PATTERN = /<(img|iframe|video)\b/i;
+
+function hasExternalMedia(row: { description: string | null; benefits: string | null; eligibility: string | null }): boolean {
+  return [row.description, row.benefits, row.eligibility].some(
+    (value) => value !== null && EXTERNAL_MEDIA_PATTERN.test(value),
+  );
+}
+
 type CategoryRow = {
   id: string;
   name: string;
@@ -35,6 +48,7 @@ export class ParticipationCategoriesCopier implements ProgramCopier {
       id: c.id,
       label: c.name,
       meta: c.isActive ? 'Active' : 'Inactive',
+      hasExternalMedia: hasExternalMedia(c),
     }));
   }
 
