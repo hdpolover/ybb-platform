@@ -89,6 +89,15 @@ describe('ParticipationCategoriesCopier', () => {
         data: expect.objectContaining({ deletedAt: expect.any(Date), isActive: false }),
       }),
     );
+    // Pins the guard to the TARGET's live category ids ('t1'), not the
+    // source's ('s1'). Without this assertion, a regression that queries
+    // the source program's ids instead — or drops the `in` filter and
+    // counts every ParticipantApplication platform-wide — would still pass
+    // all six tests unchanged, since participantApplication.count is a
+    // fixed-return stub that ignores its `where` argument entirely.
+    expect((prisma as any).participantApplication.count).toHaveBeenCalledWith({
+      where: { participationCategoryId: { in: ['t1'] } },
+    });
     expect(result).toEqual({ created: 1, skipped: 0, replaced: 1 });
   });
 
@@ -102,6 +111,12 @@ describe('ParticipationCategoriesCopier', () => {
     await expect(
       copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' }),
     ).rejects.toBeInstanceOf(ConflictException);
+    // Same pin as the soft-delete test above: the guard must have been
+    // asked about the target's ids ('t1'), not the source's ('s1'), before
+    // it refused.
+    expect((prisma as any).participantApplication.count).toHaveBeenCalledWith({
+      where: { participationCategoryId: { in: ['t1'] } },
+    });
     expect((prisma as any).programParticipationCategory.updateMany).not.toHaveBeenCalled();
     expect((prisma as any).programParticipationCategory.create).not.toHaveBeenCalled();
   });
