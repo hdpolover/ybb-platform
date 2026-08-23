@@ -20,6 +20,7 @@ import { SystemFormFieldsController } from './presentation/system-form-fields.co
 import { FormTemplatesController } from './presentation/form-templates.controller';
 import { ProgramFormFieldsController } from './presentation/program-form-fields.controller';
 import { ProgramScoringController } from './presentation/program-scoring.controller';
+import { ProgramCopyController } from './presentation/program-copy.controller';
 import { GetScoringRubricsHandler } from './application/queries/handlers/get-scoring-rubrics.handler';
 import { GetScoringRubricVersionsHandler } from './application/queries/handlers/get-scoring-rubric-versions.handler';
 import { UpsertScoringRubricHandler } from './application/commands/handlers/upsert-scoring-rubric.handler';
@@ -150,6 +151,7 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
     FormTemplatesController,
     ProgramFormFieldsController,
     ProgramScoringController,
+    ProgramCopyController,
   ],
   providers: [
     ListProgramsHandler,
