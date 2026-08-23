@@ -22,6 +22,14 @@ services:
       FILE_SERVICE_INTERNAL_KEY: ${FILE_SERVICE_INTERNAL_KEY}
       STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      # Without these the API sends no Authorization header to the landing
+      # app's revalidate hooks, every call 401s, LandingRevalidationService
+      # swallows the failure, and brand/program content edits stay invisible
+      # publicly until the 1h snapshot TTL expires. The values were already
+      # configured in Dokploy; they were simply never mapped into the
+      # container, so the process could not see them.
+      SETTINGS_REVALIDATE_SECRET: ${SETTINGS_REVALIDATE_SECRET}
+      HOME_REVALIDATE_SECRET: ${HOME_REVALIDATE_SECRET}
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
       RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY: ${RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY:-false}
       # NOTE: api-service-payment-events must NOT be a cleanup target. Purging it
