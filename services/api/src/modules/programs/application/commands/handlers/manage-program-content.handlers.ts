@@ -36,7 +36,11 @@ import {
 } from '../program-content.commands';
 
 // ─── Shared cache-invalidation helpers ───────────────────────────────────────
-async function invalidateLandingCacheByProgramId(
+// Exported for reuse by ProgramCopyController: @CacheInvalidate only busts
+// Redis-pattern caches, it cannot delete brand_landing_snapshots rows, so
+// any handler (or controller) that mutates program content the public
+// landing pages read through a snapshot must call this directly too.
+export async function invalidateLandingCacheByProgramId(
     programId: string,
     prisma: PrismaService,
     cacheService: CacheService,

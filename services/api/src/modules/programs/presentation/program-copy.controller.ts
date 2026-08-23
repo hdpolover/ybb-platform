@@ -8,9 +8,11 @@ import { UserRole } from '@core/entities/user.entity';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS } from '@shared/constants/cache-patterns';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { ProgramCopierRegistry } from '../application/copy/program-copier.registry';
 import { CopyEntityDto } from './dto/copy-entity.dto';
 import { CopyPreviewItem, CopyResult, PrismaTx } from '../application/copy/program-copier.interface';
+import { invalidateLandingCacheByProgramId } from '../application/commands/handlers/manage-program-content.handlers';
 
 @ApiTags('Program Content Copy')
 @ApiBearerAuth()
@@ -21,6 +23,7 @@ export class ProgramCopyController {
   constructor(
     private readonly registry: ProgramCopierRegistry,
     private readonly prisma: PrismaService,
+    private readonly cacheService: CacheService,
   ) {}
 
   @Get('copy/:entityKey/counts')
@@ -76,7 +79,7 @@ export class ProgramCopyController {
       });
     }
 
-    return this.prisma.$transaction((tx: unknown) =>
+    const result = await this.prisma.$transaction((tx: unknown) =>
       copier.copy(tx as PrismaTx, {
         sourceProgramId: dto.sourceProgramId,
         targetProgramId: programId,
@@ -84,5 +87,17 @@ export class ProgramCopyController {
         mode,
       }),
     );
+
+    // @CacheInvalidate above only busts Redis-pattern caches; it cannot
+    // delete brand_landing_snapshots rows. The public landing pages (e.g.
+    // FAQs, via faqs.strategy.ts -> landing-snapshot.service.ts) read
+    // through that DB-backed snapshot, so a copy into any content type it
+    // covers would otherwise serve stale data until the snapshot's
+    // freshness window lapses. Runs after the transaction has committed;
+    // the helper swallows its own errors (non-critical), so a cache miss
+    // here never fails the copy that already succeeded.
+    await invalidateLandingCacheByProgramId(programId, this.prisma, this.cacheService);
+
+    return result;
   }
 }
