@@ -1,0 +1,149 @@
+// services/api/src/modules/programs/application/copy/copiers/rundowns.copier.spec.ts
+import { RundownsCopier } from './rundowns.copier';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+
+type RundownRow = {
+  id: string;
+  day: string;
+  startTime: string | null;
+  endTime: string | null;
+  activity: string;
+  description: string | null;
+  location: string | null;
+  speaker: string | null;
+  order: number;
+  isActive: boolean;
+};
+
+function rundown(over: Partial<RundownRow>): RundownRow {
+  return {
+    id: over.id ?? 'r1',
+    day: over.day ?? 'Day 1',
+    startTime: over.startTime ?? '09:00',
+    endTime: over.endTime ?? '10:00',
+    activity: over.activity ?? 'Opening Ceremony',
+    description: over.description ?? null,
+    location: over.location ?? null,
+    speaker: over.speaker ?? null,
+    order: over.order ?? 0,
+    isActive: over.isActive ?? true,
+  };
+}
+
+function mkPrisma(opts: { sourceItems?: RundownRow[]; existingItems?: RundownRow[] } = {}): PrismaService {
+  const base: any = {
+    programSchedule: {
+      findMany: jest.fn().mockImplementation(({ where }: any) =>
+        Promise.resolve((where.programId === 'src' ? opts.sourceItems : opts.existingItems) ?? []),
+      ),
+      // Mirrors real Prisma updateMany: count reflects the rows actually
+      // matched by the where clause (the target's existing rows here), not
+      // a fixed stub — otherwise the replace-mode `replaced` assertion below
+      // could never be satisfied by any implementation. Same fix as
+      // form-fields.copier.spec.ts / copy-scoped-rows.spec.ts's fake delegate.
+      updateMany: jest.fn().mockImplementation(({ where }: any) =>
+        Promise.resolve({
+          count: (where.programId === 'src' ? opts.sourceItems : opts.existingItems)?.length ?? 0,
+        }),
+      ),
+      create: jest.fn().mockImplementation(({ data }: { data: any }) => Promise.resolve({ id: `new-${data.activity}`, ...data })),
+      count: jest.fn().mockResolvedValue((opts.sourceItems ?? []).length),
+    },
+  };
+  base.$transaction = jest.fn().mockImplementation((cb: (tx: any) => Promise<unknown>) => cb(base));
+  return base as PrismaService;
+}
+
+describe('RundownsCopier', () => {
+  it('has the expected key/label/supportsAppend', () => {
+    const copier = new RundownsCopier(mkPrisma());
+    expect(copier.key).toBe('rundowns');
+    expect(copier.label).toBe('Program Rundowns');
+    expect(copier.supportsAppend).toBe(true);
+  });
+
+  it('append dedupes on the (day, activity) composite, not activity alone (rows differing only in day do not collide)', async () => {
+    const prisma = mkPrisma({
+      sourceItems: [
+        rundown({ id: 's1', day: 'Day 1', activity: 'Opening Ceremony' }),
+        // Same activity name on a different day is NOT a collision.
+        rundown({ id: 's2', day: 'Day 2', activity: 'Opening Ceremony' }),
+      ],
+      existingItems: [rundown({ id: 't1', day: 'Day 1', activity: 'Opening Ceremony' })],
+    });
+    const copier = new RundownsCopier(prisma);
+    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    // Day 1 collides with the existing row; Day 2 does not.
+    expect(result).toEqual({ created: 1, skipped: 1, replaced: 0 });
+  });
+
+  it('append dedupes on the (day, activity) composite, not day alone (rows differing only in activity do not collide)', async () => {
+    const prisma = mkPrisma({
+      sourceItems: [
+        rundown({ id: 's1', day: 'Day 1', activity: 'Opening Ceremony' }),
+        // Same day, different activity — also NOT a collision.
+        rundown({ id: 's2', day: 'Day 1', activity: 'Keynote Speech' }),
+      ],
+      existingItems: [rundown({ id: 't1', day: 'Day 1', activity: 'Opening Ceremony' })],
+    });
+    const copier = new RundownsCopier(prisma);
+    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    // 'Opening Ceremony' on Day 1 collides with the existing row;
+    // 'Keynote Speech' on Day 1 does not.
+    expect(result).toEqual({ created: 1, skipped: 1, replaced: 0 });
+  });
+
+  // day/activity are free-text VarChar columns (CreateProgramScheduleDto only
+  // enforces @IsString() @IsNotEmpty(), no character restriction), so a fixed
+  // separator like "::" is NOT provably collision-free: day="Day1::Extra",
+  // activity="Foo" and day="Day1", activity="Extra::Foo" both naively
+  // concatenate to "Day1::Extra::Foo". The composite key must disambiguate
+  // these two distinct pairs.
+  it('does not alias two distinct (day, activity) pairs whose naive "day::activity" concatenation would collide', async () => {
+    const prisma = mkPrisma({
+      sourceItems: [
+        rundown({ id: 's1', day: 'Day1::Extra', activity: 'Foo' }),
+        rundown({ id: 's2', day: 'Day1', activity: 'Extra::Foo' }),
+      ],
+    });
+    const copier = new RundownsCopier(prisma);
+    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    // Both are genuinely distinct pairs against an empty target — both must
+    // be created, not deduped against each other.
+    expect(result).toEqual({ created: 2, skipped: 0, replaced: 0 });
+  });
+
+  it('replace soft-deletes existing items then inserts from order 0', async () => {
+    const prisma = mkPrisma({
+      sourceItems: [rundown({ id: 's1', activity: 'a', order: 3 })],
+      existingItems: [rundown({ id: 't1', activity: 'old' })],
+    });
+    const copier = new RundownsCopier(prisma);
+    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' });
+    expect((prisma as any).programSchedule.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ deletedAt: expect.any(Date), isActive: false }) }),
+    );
+    const create = (prisma as any).programSchedule.create as jest.Mock;
+    expect(create.mock.calls[0][0].data.order).toBe(0);
+    expect(result).toEqual({ created: 1, skipped: 0, replaced: 1 });
+  });
+
+  it('copies day/startTime/endTime/location/speaker verbatim', async () => {
+    const prisma = mkPrisma({
+      sourceItems: [rundown({ id: 's1', day: 'Day 2', startTime: '13:00', endTime: '14:30', location: 'Main Hall', speaker: 'Jane Doe' })],
+    });
+    const copier = new RundownsCopier(prisma);
+    await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    const create = (prisma as any).programSchedule.create as jest.Mock;
+    expect(create.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ day: 'Day 2', startTime: '13:00', endTime: '14:30', location: 'Main Hall', speaker: 'Jane Doe' }),
+    );
+  });
+
+  it('preview() maps rows to CopyPreviewItem with day as meta', async () => {
+    const prisma = mkPrisma({ sourceItems: [rundown({ id: 's1', day: 'Day 1', activity: 'Opening Ceremony' })] });
+    const copier = new RundownsCopier(prisma);
+    const items = await copier.preview('src');
+    expect(items).toEqual([{ id: 's1', label: 'Opening Ceremony', meta: 'Day 1' }]);
+  });
+});
