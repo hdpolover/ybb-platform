@@ -5,12 +5,14 @@ import {
     ExchangeRateHistoryResponseDto,
 } from '../../../presentation/dto/exchange-rate.dto';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
+import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
 
 @Injectable()
 export class UpdateExchangeRateHandler {
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
 
     async getExchangeRate(programId: string): Promise<ExchangeRateResponseDto> {
@@ -69,7 +71,7 @@ export class UpdateExchangeRateHandler {
         ]);
 
         // Invalidate caches so pricing changes are reflected immediately
-        await this.invalidateExchangeRateCaches(programId, program.brandId);
+        await this.invalidateExchangeRateCaches(program.brandId);
 
         return {
             programId: updatedProgram.id,
@@ -80,19 +82,30 @@ export class UpdateExchangeRateHandler {
     }
 
     /**
-     * Invalidate caches when exchange rate is updated
+     * Invalidate caches when exchange rate is updated. The rate feeds the
+     * pricing tiers / registration CTA on the program landing page, so it
+     * needs all three landing cache layers busted (audit found this handler
+     * only cleared Redis and never fired the Next.js revalidate hook).
+     * Portal payment/dashboard caches for enrolled participants are outside
+     * the landing-page scope the shared service owns, so they're cleared
+     * separately here.
      */
-    private async invalidateExchangeRateCaches(programId: string, brandId: string): Promise<void> {
+    private async invalidateExchangeRateCaches(brandId: string): Promise<void> {
+        await this.landingCacheInvalidation.invalidate(brandId, {
+            clearSnapshot: true,
+            bustProgramCache: true,
+            swallowErrors: true,
+            revalidate: { kind: 'homeAndSettings' },
+        });
+
         try {
             await Promise.all([
-                this.cacheService.invalidateBrandLandingCaches(brandId),
-                this.cacheService.invalidateByPattern(`program:detail:${programId}*`),
                 this.cacheService.invalidateByPattern('portal:payments:*'),
                 this.cacheService.invalidateByPattern('portal:dashboard:*'),
             ]);
         } catch (error) {
             // Log but don't throw - cache invalidation failures shouldn't break exchange rate updates
-            console.error('Failed to invalidate exchange rate caches:', error);
+            console.error('Failed to invalidate exchange rate portal caches:', error);
         }
     }
 

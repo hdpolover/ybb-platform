@@ -8,6 +8,7 @@ import { StorageService } from '../../../../files/application/storage.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '../../../../../shared/constants/cache-keys';
+import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
 import {
     assertValidPeriodRange,
     assertNoDuplicatePeriod,
@@ -36,10 +37,15 @@ import {
 } from '../program-content.commands';
 
 // ─── Shared cache-invalidation helpers ───────────────────────────────────────
-async function invalidateLandingCacheByProgramId(
+// Used by ~9 call sites (gallery, faq, document-template x3 each) plus the
+// Group C content handlers below. Routed through the shared service so a
+// revalidate hook only needs adding here once, instead of at every call site
+// — see landing-cache-invalidation.service.ts for why that copy-paste is how
+// gallery's missing snapshot-clear happened in the first place.
+export async function invalidateLandingCacheByProgramId(
     programId: string,
     prisma: PrismaService,
-    cacheService: CacheService,
+    landingCacheInvalidation: LandingCacheInvalidationService,
 ): Promise<void> {
     try {
         const program = await prisma.program.findUnique({
@@ -47,11 +53,12 @@ async function invalidateLandingCacheByProgramId(
             select: { brandId: true },
         });
         if (program?.brandId) {
-            await Promise.all([
-                prisma.brandLandingSnapshot.deleteMany({ where: { brandId: program.brandId } }),
-                cacheService.invalidateBrandLandingCaches(program.brandId),
-                cacheService.invalidateByPattern('program:*'),
-            ]);
+            await landingCacheInvalidation.invalidate(program.brandId, {
+                clearSnapshot: true,
+                bustProgramCache: true,
+                swallowErrors: true,
+                revalidate: { kind: 'homeAndSettings' },
+            });
         }
     } catch { /* non-critical */ }
 }
@@ -61,11 +68,18 @@ async function invalidateLandingCacheByProgramId(
  * Clears landing pages (brand-scoped) AND all enrolled-participant portal caches
  * (dashboard, payments, submission-detail) via wildcard to avoid a DB lookup of
  * all enrolled participants — accepted over-invalidation tradeoff.
+ *
+ * Also fires the Next.js frontend revalidation hook via the shared
+ * LandingCacheInvalidationService. clearSnapshot/bustProgramCache are passed
+ * false there because the Promise.all above already cleared the Postgres
+ * snapshot and busted `program:*` directly — this call exists only to fire
+ * `revalidate`, not to redo work already done a few lines up.
  */
 async function invalidatePricingTierCachesByProgramId(
     programId: string,
     prisma: PrismaService,
     cacheService: CacheService,
+    landingCacheInvalidation: LandingCacheInvalidationService,
 ): Promise<void> {
     try {
         const program = await prisma.program.findUnique({
@@ -81,6 +95,12 @@ async function invalidatePricingTierCachesByProgramId(
                 cacheService.invalidateByPattern('portal:payments:*'),
                 cacheService.invalidateByPattern('portal:submission-detail:*'),
             ]);
+            await landingCacheInvalidation.invalidate(program.brandId, {
+                clearSnapshot: false,
+                bustProgramCache: false,
+                swallowErrors: true,
+                revalidate: { kind: 'homeAndSettings' },
+            });
         }
     } catch { /* non-critical — cache failure must not break the mutation */ }
 }
@@ -88,11 +108,14 @@ async function invalidatePricingTierCachesByProgramId(
 /**
  * Full cache invalidation for validity-period mutations where only a
  * pricingTierId is available (lookup walks tier → program → brandId).
+ * See invalidatePricingTierCachesByProgramId above for why
+ * clearSnapshot/bustProgramCache are false in the revalidation call.
  */
 async function invalidatePricingTierCachesByPricingTierId(
     pricingTierId: string,
     prisma: PrismaService,
     cacheService: CacheService,
+    landingCacheInvalidation: LandingCacheInvalidationService,
 ): Promise<void> {
     try {
         const tier = await prisma.programPricingTier.findUnique({
@@ -108,6 +131,12 @@ async function invalidatePricingTierCachesByPricingTierId(
                 cacheService.invalidateByPattern('portal:payments:*'),
                 cacheService.invalidateByPattern('portal:submission-detail:*'),
             ]);
+            await landingCacheInvalidation.invalidate(tier.program.brandId, {
+                clearSnapshot: false,
+                bustProgramCache: false,
+                swallowErrors: true,
+                revalidate: { kind: 'homeAndSettings' },
+            });
         }
     } catch { /* non-critical — cache failure must not break the mutation */ }
 }
@@ -260,33 +289,23 @@ async function invalidateRequirementCaches(
 }
 
 /**
- * Cache invalidation for program resource mutations.
- * Clears landing pages, the specific PROGRAM_RESOURCES HOUR-cached key,
- * portal submission-detail pages, and the portal documents page.
+ * Portal-only cache invalidation for program resource mutations (submission-detail
+ * pages and the portal documents list, which show resources but aren't part of
+ * the landing-page cache layers). ProgramResource IS landing-rendered too
+ * (home.strategy.ts / programs.strategy.ts include the `resources` relation and
+ * render it as guidelines/guidebooks) — that half is handled by a sibling call
+ * to invalidateLandingCacheByProgramId at each call site, which also covers the
+ * PROGRAM_RESOURCES HOUR-cached key (`program:resources:{id}`) via its
+ * `program:*` wildcard bust, so it isn't duplicated here.
  */
-async function invalidateResourceCaches(
-    programId: string,
-    prisma: PrismaService,
+async function invalidatePortalResourceCaches(
     cacheService: CacheService,
 ): Promise<void> {
     try {
-        const program = await prisma.program.findUnique({
-            where: { id: programId },
-            select: { brandId: true },
-        });
-        if (program?.brandId) {
-            await Promise.all([
-                // Without dropping the DB snapshot too, the next request re-hydrates
-                // redis from the hour-fresh brand_landing_snapshots row and the
-                // resource change stays invisible for up to an hour.
-                prisma.brandLandingSnapshot.deleteMany({ where: { brandId: program.brandId } }),
-                cacheService.invalidateBrandLandingCaches(program.brandId),
-                cacheService.invalidateByPattern('program:*'),
-                cacheService.invalidateKey(CACHE_KEYS.PROGRAM_RESOURCES(programId)),
-                cacheService.invalidateByPattern('portal:submission-detail:*'),
-                cacheService.invalidateByPattern('portal:documents:*'),
-            ]);
-        }
+        await cacheService.invalidateByPatterns([
+            'portal:submission-detail:*',
+            'portal:documents:*',
+        ]);
     } catch { /* non-critical — cache failure must not break the mutation */ }
 }
 // ─────────────────────────────────────────────────────────────────────────────
@@ -296,7 +315,9 @@ async function invalidateResourceCaches(
 export class CreateProgramTimelineHandler implements ICommandHandler<CreateProgramTimelineCommand> {
     constructor(
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
-        @Inject(IUserActivityLogRepository) private readonly activityLog: IUserActivityLogRepository
+        @Inject(IUserActivityLogRepository) private readonly activityLog: IUserActivityLogRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: CreateProgramTimelineCommand) {
         const dto = {
@@ -306,49 +327,96 @@ export class CreateProgramTimelineHandler implements ICommandHandler<CreateProgr
         };
         const result = await this.repository.createTimeline(dto);
         // Log activity here if needed
+        if (result.programId) {
+            await invalidateLandingCacheByProgramId(result.programId, this.prisma, this.landingCacheInvalidation);
+        }
         return result;
     }
 }
 @CommandHandler(UpdateProgramTimelineCommand)
 export class UpdateProgramTimelineHandler implements ICommandHandler<UpdateProgramTimelineCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
     async execute(command: UpdateProgramTimelineCommand) {
         const dto = {
             ...command.dto,
             date: command.dto.date ? new Date(command.dto.date) : undefined,
             endDate: command.dto.endDate ? new Date(command.dto.endDate) : undefined,
         };
-        return this.repository.updateTimeline(command.id, dto);
+        const result = await this.repository.updateTimeline(command.id, dto);
+        if (result.programId) {
+            await invalidateLandingCacheByProgramId(result.programId, this.prisma, this.landingCacheInvalidation);
+        }
+        return result;
     }
 }
 @CommandHandler(DeleteProgramTimelineCommand)
 export class DeleteProgramTimelineHandler implements ICommandHandler<DeleteProgramTimelineCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
     async execute(command: DeleteProgramTimelineCommand) {
-        return this.repository.deleteTimeline(command.id);
+        // deleteTimeline is a hard delete returning void — the row (and its
+        // programId) would be unrecoverable after the fact, so read it first.
+        const existing = await this.repository.findTimelineById(command.id);
+        const result = await this.repository.deleteTimeline(command.id);
+        if (existing?.programId) {
+            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
+        }
+        return result;
     }
 }
 
 // --- Schedule Handlers ---
 @CommandHandler(CreateProgramScheduleCommand)
 export class CreateProgramScheduleHandler implements ICommandHandler<CreateProgramScheduleCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
     async execute(command: CreateProgramScheduleCommand) {
-        return this.repository.createSchedule(command.dto);
+        const result = await this.repository.createSchedule(command.dto);
+        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
+        return result;
     }
 }
 @CommandHandler(UpdateProgramScheduleCommand)
 export class UpdateProgramScheduleHandler implements ICommandHandler<UpdateProgramScheduleCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
     async execute(command: UpdateProgramScheduleCommand) {
-        return this.repository.updateSchedule(command.id, command.dto);
+        const result = await this.repository.updateSchedule(command.id, command.dto);
+        if (result.programId) {
+            await invalidateLandingCacheByProgramId(result.programId, this.prisma, this.landingCacheInvalidation);
+        }
+        return result;
     }
 }
 @CommandHandler(DeleteProgramScheduleCommand)
 export class DeleteProgramScheduleHandler implements ICommandHandler<DeleteProgramScheduleCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
     async execute(command: DeleteProgramScheduleCommand) {
-        return this.repository.deleteSchedule(command.id);
+        // deleteSchedule is a hard delete returning void — read the row first
+        // so its programId survives past the delete.
+        const existing = await this.repository.findScheduleById(command.id);
+        const result = await this.repository.deleteSchedule(command.id);
+        if (existing?.programId) {
+            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
+        }
+        return result;
     }
 }
 
@@ -442,7 +510,7 @@ export class CreateProgramGalleryHandler implements ICommandHandler<CreateProgra
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
-        private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: CreateProgramGalleryCommand) {
         let imageUrl = command.dto.imageUrl;
@@ -468,7 +536,7 @@ export class CreateProgramGalleryHandler implements ICommandHandler<CreateProgra
             imageUrl: imageUrl || ''
         };
         const result = await this.repository.createGallery(dto);
-        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.cacheService);
+        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
         return result;
     }
 }
@@ -478,7 +546,7 @@ export class UpdateProgramGalleryHandler implements ICommandHandler<UpdateProgra
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
-        private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: UpdateProgramGalleryCommand) {
         let imageUrl = command.dto.imageUrl;
@@ -512,7 +580,7 @@ export class UpdateProgramGalleryHandler implements ICommandHandler<UpdateProgra
             imageUrl
         };
         const result = await this.repository.updateGallery(command.id, dto);
-        await invalidateLandingCacheByProgramId(galleryItem.programId, this.prisma, this.cacheService);
+        await invalidateLandingCacheByProgramId(galleryItem.programId, this.prisma, this.landingCacheInvalidation);
         return result;
     }
 }
@@ -521,13 +589,13 @@ export class DeleteProgramGalleryHandler implements ICommandHandler<DeleteProgra
     constructor(
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
-        private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: DeleteProgramGalleryCommand) {
         const existing = await this.repository.findGalleryById(command.id);
         const result = await this.repository.deleteGallery(command.id);
         if (existing?.programId) {
-            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.cacheService);
+            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
         }
         return result;
     }
@@ -595,11 +663,11 @@ export class CreateProgramFaqHandler implements ICommandHandler<CreateProgramFaq
     constructor(
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
-        private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: CreateProgramFaqCommand) {
         const result = await this.repository.createFaq(command.dto);
-        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.cacheService);
+        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
         return result;
     }
 }
@@ -608,14 +676,14 @@ export class UpdateProgramFaqHandler implements ICommandHandler<UpdateProgramFaq
     constructor(
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
-        private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: UpdateProgramFaqCommand) {
         const existing = await this.repository.findFaqById(command.id);
         const result = await this.repository.updateFaq(command.id, command.dto);
         const programId = existing?.programId ?? result.programId;
         if (programId) {
-            await invalidateLandingCacheByProgramId(programId, this.prisma, this.cacheService);
+            await invalidateLandingCacheByProgramId(programId, this.prisma, this.landingCacheInvalidation);
         }
         return result;
     }
@@ -625,13 +693,13 @@ export class DeleteProgramFaqHandler implements ICommandHandler<DeleteProgramFaq
     constructor(
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
-        private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: DeleteProgramFaqCommand) {
         const existing = await this.repository.findFaqById(command.id);
         const result = await this.repository.deleteFaq(command.id);
         if (existing?.programId) {
-            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.cacheService);
+            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
         }
         return result;
     }
@@ -738,6 +806,7 @@ export class CreateProgramPartnerHandler implements ICommandHandler<CreateProgra
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: CreateProgramPartnerCommand) {
          let logoUrl = command.dto.logoUrl;
@@ -751,7 +820,7 @@ export class CreateProgramPartnerHandler implements ICommandHandler<CreateProgra
              const result = await this.storageService.uploadFile(
                 command.logo,
                 command.userId,
-                program.brandId, 
+                program.brandId,
                 'partners',
                 program.id
             );
@@ -762,7 +831,11 @@ export class CreateProgramPartnerHandler implements ICommandHandler<CreateProgra
             ...command.dto,
             logoUrl
         };
-        return this.repository.createPartner(dto);
+        const result = await this.repository.createPartner(dto);
+        if (result.programId) {
+            await invalidateLandingCacheByProgramId(result.programId, this.prisma, this.landingCacheInvalidation);
+        }
+        return result;
     }
 }
 @CommandHandler(UpdateProgramPartnerCommand)
@@ -771,6 +844,7 @@ export class UpdateProgramPartnerHandler implements ICommandHandler<UpdateProgra
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
 
     async execute(command: UpdateProgramPartnerCommand) {
@@ -805,14 +879,29 @@ export class UpdateProgramPartnerHandler implements ICommandHandler<UpdateProgra
             ...command.dto,
             logoUrl
         };
-        return this.repository.updatePartner(command.id, dto);
+        const result = await this.repository.updatePartner(command.id, dto);
+        if (result.programId) {
+            await invalidateLandingCacheByProgramId(result.programId, this.prisma, this.landingCacheInvalidation);
+        }
+        return result;
     }
 }
 @CommandHandler(DeleteProgramPartnerCommand)
 export class DeleteProgramPartnerHandler implements ICommandHandler<DeleteProgramPartnerCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
     async execute(command: DeleteProgramPartnerCommand) {
-        return this.repository.deletePartner(command.id);
+        // deletePartner is a hard delete returning void — read the row first
+        // so its programId survives past the delete.
+        const existing = await this.repository.findPartnerById(command.id);
+        const result = await this.repository.deletePartner(command.id);
+        if (existing?.programId) {
+            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
+        }
+        return result;
     }
 }
 
@@ -824,6 +913,7 @@ export class CreateProgramResourceHandler implements ICommandHandler<CreateProgr
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: CreateProgramResourceCommand) {
         const sourceType = command.dto.sourceType ?? 'upload';
@@ -871,7 +961,8 @@ export class CreateProgramResourceHandler implements ICommandHandler<CreateProgr
             linkUrl: sourceType === 'link' ? command.dto.linkUrl : null,
         };
         const result = await this.repository.createResource(dto);
-        await invalidateResourceCaches(command.dto.programId, this.prisma, this.cacheService);
+        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
+        await invalidatePortalResourceCaches(this.cacheService);
         return result;
     }
 }
@@ -882,6 +973,7 @@ export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgr
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
 
     async execute(command: UpdateProgramResourceCommand) {
@@ -931,7 +1023,8 @@ export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgr
                 fileType: null,
             };
             const result = await this.repository.updateResource(command.id, dto);
-            await invalidateResourceCaches(resource.programId, this.prisma, this.cacheService);
+            await invalidateLandingCacheByProgramId(resource.programId, this.prisma, this.landingCacheInvalidation);
+            await invalidatePortalResourceCaches(this.cacheService);
             return result;
         }
 
@@ -949,7 +1042,8 @@ export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgr
             linkUrl: resource.linkUrl,
         };
         const result = await this.repository.updateResource(command.id, dto);
-        await invalidateResourceCaches(resource.programId, this.prisma, this.cacheService);
+        await invalidateLandingCacheByProgramId(resource.programId, this.prisma, this.landingCacheInvalidation);
+        await invalidatePortalResourceCaches(this.cacheService);
         return result;
     }
 }
@@ -959,12 +1053,16 @@ export class DeleteProgramResourceHandler implements ICommandHandler<DeleteProgr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: DeleteProgramResourceCommand) {
+        // deleteResource is a hard delete returning void — the row (and its
+        // programId) would be unrecoverable after the fact, so read it first.
         const existing = await this.repository.findResourceById(command.id);
         const result = await this.repository.deleteResource(command.id);
         if (existing?.programId) {
-            await invalidateResourceCaches(existing.programId, this.prisma, this.cacheService);
+            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
+            await invalidatePortalResourceCaches(this.cacheService);
         }
         return result;
     }
@@ -977,6 +1075,7 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: CreateProgramPricingTierCommand) {
         // Validation: Ensure uniqueness of active registration fee tier per category
@@ -1040,7 +1139,7 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
             warnings = await buildValidityPeriodWarnings(result.id, this.repository, this.prisma, period.id);
         }
 
-        await invalidatePricingTierCachesByProgramId(command.dto.programId, this.prisma, this.cacheService);
+        await invalidatePricingTierCachesByProgramId(command.dto.programId, this.prisma, this.cacheService, this.landingCacheInvalidation);
         return { ...result, warnings };
     }
 }
@@ -1050,6 +1149,7 @@ export class UpdateProgramPricingTierHandler implements ICommandHandler<UpdatePr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: UpdateProgramPricingTierCommand) {
         // Fetch existing tier to check validation
@@ -1127,7 +1227,7 @@ export class UpdateProgramPricingTierHandler implements ICommandHandler<UpdatePr
         }
 
         const result = await this.repository.updatePricingTier(command.id, dto as unknown as Partial<ProgramPricingTier>);
-        await invalidatePricingTierCachesByProgramId(existingTier.programId, this.prisma, this.cacheService);
+        await invalidatePricingTierCachesByProgramId(existingTier.programId, this.prisma, this.cacheService, this.landingCacheInvalidation);
         return result;
     }
 }
@@ -1137,12 +1237,13 @@ export class DeleteProgramPricingTierHandler implements ICommandHandler<DeletePr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: DeleteProgramPricingTierCommand) {
         const existing = await this.repository.findPricingTierById(command.id);
         const result = await this.repository.deletePricingTier(command.id);
         if (existing?.programId) {
-            await invalidatePricingTierCachesByProgramId(existing.programId, this.prisma, this.cacheService);
+            await invalidatePricingTierCachesByProgramId(existing.programId, this.prisma, this.cacheService, this.landingCacheInvalidation);
         }
         return result;
     }
@@ -1155,6 +1256,7 @@ export class CreateValidityPeriodHandler implements ICommandHandler<CreateValidi
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: CreateValidityPeriodCommand) {
         const pricingTierId = command.dto.pricingTierId!;
@@ -1174,7 +1276,7 @@ export class CreateValidityPeriodHandler implements ICommandHandler<CreateValidi
             description: command.dto.description,
         };
         const result = await this.repository.createValidityPeriod(dto as Partial<PricingTierValidityPeriod>);
-        await invalidatePricingTierCachesByPricingTierId(pricingTierId, this.prisma, this.cacheService);
+        await invalidatePricingTierCachesByPricingTierId(pricingTierId, this.prisma, this.cacheService, this.landingCacheInvalidation);
         const warnings = await buildValidityPeriodWarnings(pricingTierId, this.repository, this.prisma, result.id);
         return {
             ...result,
@@ -1192,6 +1294,7 @@ export class UpdateValidityPeriodHandler implements ICommandHandler<UpdateValidi
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: UpdateValidityPeriodCommand) {
         const existing = await this.repository.findValidityPeriodById(command.id);
@@ -1214,7 +1317,7 @@ export class UpdateValidityPeriodHandler implements ICommandHandler<UpdateValidi
             description: command.dto.description,
         };
         const result = await this.repository.updateValidityPeriod(command.id, dto as Partial<PricingTierValidityPeriod>);
-        await invalidatePricingTierCachesByPricingTierId(existing.pricingTierId, this.prisma, this.cacheService);
+        await invalidatePricingTierCachesByPricingTierId(existing.pricingTierId, this.prisma, this.cacheService, this.landingCacheInvalidation);
         const warnings = await buildValidityPeriodWarnings(existing.pricingTierId, this.repository, this.prisma, command.id);
         return {
             ...result,
@@ -1232,12 +1335,13 @@ export class DeleteValidityPeriodHandler implements ICommandHandler<DeleteValidi
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: DeleteValidityPeriodCommand) {
         const existing = await this.repository.findValidityPeriodById(command.id);
         const result = await this.repository.deleteValidityPeriod(command.id);
         if (existing?.pricingTierId) {
-            await invalidatePricingTierCachesByPricingTierId(existing.pricingTierId, this.prisma, this.cacheService);
+            await invalidatePricingTierCachesByPricingTierId(existing.pricingTierId, this.prisma, this.cacheService, this.landingCacheInvalidation);
         }
         return result;
     }
@@ -1391,23 +1495,48 @@ export class DeleteProgramParticipationCategoryHandler implements ICommandHandle
 // --- Subtheme Handlers ---
 @CommandHandler(CreateProgramSubthemeCommand)
 export class CreateProgramSubthemeHandler implements ICommandHandler<CreateProgramSubthemeCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
     async execute(command: CreateProgramSubthemeCommand) {
-        return this.repository.createSubtheme(command.dto);
+        const result = await this.repository.createSubtheme(command.dto);
+        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
+        return result;
     }
 }
 @CommandHandler(UpdateProgramSubthemeCommand)
 export class UpdateProgramSubthemeHandler implements ICommandHandler<UpdateProgramSubthemeCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
     async execute(command: UpdateProgramSubthemeCommand) {
-        return this.repository.updateSubtheme(command.id, command.dto);
+        const result = await this.repository.updateSubtheme(command.id, command.dto);
+        if (result.programId) {
+            await invalidateLandingCacheByProgramId(result.programId, this.prisma, this.landingCacheInvalidation);
+        }
+        return result;
     }
 }
 @CommandHandler(DeleteProgramSubthemeCommand)
 export class DeleteProgramSubthemeHandler implements ICommandHandler<DeleteProgramSubthemeCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
     async execute(command: DeleteProgramSubthemeCommand) {
-        return this.repository.deleteSubtheme(command.id);
+        // deleteSubtheme is a soft-delete (isActive:false) but its interface
+        // signature returns void, so read the row first to get programId.
+        const existing = await this.repository.findSubthemeById(command.id);
+        const result = await this.repository.deleteSubtheme(command.id);
+        if (existing?.programId) {
+            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
+        }
+        return result;
     }
 }
 
@@ -1420,6 +1549,7 @@ export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocu
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
 
     async execute(command: CreateDocumentTemplateCommand) {
@@ -1470,7 +1600,7 @@ export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocu
         };
 
         const result = await this.repository.createDocumentTemplate(data);
-        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.cacheService);
+        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
         await invalidatePortalDocumentCaches(this.cacheService);
         return result;
     }
@@ -1483,6 +1613,7 @@ export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocu
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
 
     async execute(command: UpdateDocumentTemplateCommand) {
@@ -1532,7 +1663,7 @@ export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocu
         delete data.fileType;
 
         const result = await this.repository.updateDocumentTemplate(command.id, data);
-        await invalidateLandingCacheByProgramId(template.programId, this.prisma, this.cacheService);
+        await invalidateLandingCacheByProgramId(template.programId, this.prisma, this.landingCacheInvalidation);
         await invalidatePortalDocumentCaches(this.cacheService);
         return result;
     }
@@ -1544,13 +1675,14 @@ export class DeleteDocumentTemplateHandler implements ICommandHandler<DeleteDocu
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
 
     async execute(command: DeleteDocumentTemplateCommand) {
         const template = await this.repository.findDocumentTemplateById(command.id);
         if (!template) throw new NotFoundException('Document template not found');
         await this.repository.deleteDocumentTemplate(command.id);
-        await invalidateLandingCacheByProgramId(template.programId, this.prisma, this.cacheService);
+        await invalidateLandingCacheByProgramId(template.programId, this.prisma, this.landingCacheInvalidation);
         await invalidatePortalDocumentCaches(this.cacheService);
     }
 }
@@ -1562,6 +1694,7 @@ export class UpdateProgramPaymentInfoHandler implements ICommandHandler<UpdatePr
         @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
 
     async execute(command: UpdateProgramPaymentInfoCommand): Promise<void> {
@@ -1576,6 +1709,6 @@ export class UpdateProgramPaymentInfoHandler implements ICommandHandler<UpdatePr
             paymentInfoHtml: command.dto.paymentInfoHtml ?? null,
         });
 
-        await invalidatePricingTierCachesByProgramId(command.programId, this.prisma, this.cacheService);
+        await invalidatePricingTierCachesByProgramId(command.programId, this.prisma, this.cacheService, this.landingCacheInvalidation);
     }
 }
