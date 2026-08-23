@@ -1,4 +1,5 @@
 // services/api/src/modules/programs/application/copy/copiers/payments.copier.spec.ts
+import { ConflictException } from '@nestjs/common';
 import { PaymentsCopier } from './payments.copier';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
@@ -47,7 +48,20 @@ function tier(over: Partial<TierRow>): TierRow {
   };
 }
 
-function mkPrisma(opts: { sourceTiers?: TierRow[]; existingTiers?: TierRow[] } = {}): PrismaService {
+function mkPrisma(
+  opts: {
+    sourceTiers?: TierRow[];
+    existingTiers?: TierRow[];
+    // Tier ids that a live ApplicationInvoice / ParticipantApplication
+    // references, for the in-use replace guard. Defaults to "nothing
+    // referenced" so every test that doesn't care about the guard is
+    // unaffected.
+    invoiceRefTierIds?: string[];
+    applicationRefTierIds?: string[];
+  } = {},
+): PrismaService {
+  const invoiceRefTierIds = opts.invoiceRefTierIds ?? [];
+  const applicationRefTierIds = opts.applicationRefTierIds ?? [];
   const base: any = {
     programPricingTier: {
       findMany: jest.fn().mockImplementation(({ where }: any) =>
@@ -68,6 +82,22 @@ function mkPrisma(opts: { sourceTiers?: TierRow[]; existingTiers?: TierRow[] } =
     },
     pricingTierValidityPeriod: {
       create: jest.fn().mockImplementation(({ data }: { data: any }) => Promise.resolve({ id: `period-${Math.random()}`, ...data })),
+    },
+    // Counts how many of the *queried* tier ids (the guard passes the
+    // target's current live tier ids) intersect the fixture's "referenced"
+    // set — proves the guard queried with the ids it was actually given,
+    // not a hardcoded set.
+    applicationInvoice: {
+      count: jest.fn().mockImplementation(({ where }: any) => {
+        const ids: string[] = where.pricingTierId.in;
+        return Promise.resolve(ids.filter((id) => invoiceRefTierIds.includes(id)).length);
+      }),
+    },
+    participantApplication: {
+      count: jest.fn().mockImplementation(({ where }: any) => {
+        const ids: string[] = where.pricingTierId.in;
+        return Promise.resolve(ids.filter((id) => applicationRefTierIds.includes(id)).length);
+      }),
     },
   };
   base.$transaction = jest.fn().mockImplementation((cb: (tx: any) => Promise<unknown>) => cb(base));
@@ -220,6 +250,59 @@ describe('PaymentsCopier', () => {
     ).rejects.toThrow(/empty selection/i);
     expect((prisma as any).programPricingTier.updateMany).not.toHaveBeenCalled();
     expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
+    expect((prisma as any).pricingTierValidityPeriod.create).not.toHaveBeenCalled();
+  });
+
+  // ParticipationCategoriesCopier already guards this failure mode via
+  // beforeReplace; Payments needs its own copy since it doesn't route
+  // through copyScopedRows. Distinguishable source/target tier ids below
+  // prove the guard queries the TARGET's live tier ids, not the source's
+  // (that exact gap was a Task 6 finding).
+  it('replace: refuses when the target\'s existing tiers are still referenced by a live invoice', async () => {
+    const prisma = mkPrisma({
+      sourceTiers: [tier({ id: 'source-tier-999', name: 'a' })],
+      existingTiers: [tier({ id: 'target-tier-111', name: 'old' })],
+      invoiceRefTierIds: ['target-tier-111'],
+    });
+    const copier = new PaymentsCopier(prisma);
+    await expect(
+      copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect((prisma as any).applicationInvoice.count).toHaveBeenCalledWith({
+      where: { pricingTierId: { in: ['target-tier-111'] } },
+    });
+    expect((prisma as any).programPricingTier.updateMany).not.toHaveBeenCalled();
+    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
+    expect((prisma as any).pricingTierValidityPeriod.create).not.toHaveBeenCalled();
+  });
+
+  it('replace: refuses when the target\'s existing tiers are still referenced by a live application (optional FK, same as required)', async () => {
+    const prisma = mkPrisma({
+      sourceTiers: [tier({ id: 'source-tier-999', name: 'a' })],
+      existingTiers: [tier({ id: 'target-tier-222', name: 'old' })],
+      applicationRefTierIds: ['target-tier-222'],
+    });
+    const copier = new PaymentsCopier(prisma);
+    await expect(
+      copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect((prisma as any).participantApplication.count).toHaveBeenCalledWith({
+      where: { pricingTierId: { in: ['target-tier-222'] } },
+    });
+    expect((prisma as any).programPricingTier.updateMany).not.toHaveBeenCalled();
+    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
+    expect((prisma as any).pricingTierValidityPeriod.create).not.toHaveBeenCalled();
+  });
+
+  it('replace: proceeds normally when the target\'s existing tiers have no live references', async () => {
+    const prisma = mkPrisma({
+      sourceTiers: [tier({ id: 'source-tier-999', name: 'a' })],
+      existingTiers: [tier({ id: 'target-tier-333', name: 'old' })],
+    });
+    const copier = new PaymentsCopier(prisma);
+    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' });
+    expect(result).toEqual({ created: 1, skipped: 0, replaced: 1 });
+    expect((prisma as any).programPricingTier.updateMany).toHaveBeenCalled();
   });
 
   it('preview() maps rows to CopyPreviewItem with currency+price as meta', async () => {
