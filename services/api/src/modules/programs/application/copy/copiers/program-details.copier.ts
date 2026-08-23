@@ -151,13 +151,16 @@ export class ProgramDetailsCopier implements ProgramCopier {
       },
     });
 
-    // `created: 1` — the shared copy dialog's success toast is built as
-    // `Copied ${result.created} item(s).` (task-15-brief.md:238-240) and
-    // never reads `replaced`; it only ever reads `created`. preview()
-    // presents this section as exactly one selectable item, so "1" is the
-    // honest count of top-level units copied at the granularity the UI
-    // offers — consistent with every other copier, where `created` means
-    // "top-level rows the user selected", not "database rows written".
+    // `created: 1` reports against the CopyResult contract every copier
+    // shares (program-copier.interface.ts), not against any one caller's UI:
+    // `created` means "how many top-level units, at the granularity
+    // preview()/countFor() present, this call established at the target."
+    // This copier has exactly one such unit — the whole three-field bundle
+    // — and a successful replace always installs it, so `created` is
+    // unconditionally 1 on success. (The shared CopyFromProgramDialog's
+    // toast for this supportsAppend:false copier doesn't even read
+    // `created`/`replaced` — it shows a plain "Replaced <label>." — but the
+    // contract isn't scoped to what one caller happens to render with it.)
     // `replaced` additionally reports whether the target actually had prior
     // content overwritten, for callers that do inspect it.
     return { created: 1, skipped: 0, replaced: targetHadContent ? 1 : 0 };
