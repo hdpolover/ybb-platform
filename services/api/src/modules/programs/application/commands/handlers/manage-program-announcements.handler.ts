@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
+import { invalidateLandingCacheByProgramId } from './manage-program-content.handlers';
 import {
   GetProgramAnnouncementCommand,
   CreateProgramAnnouncementCommand,
@@ -58,7 +60,10 @@ export class GetProgramAnnouncementHandler {
 
 @Injectable()
 export class CreateProgramAnnouncementHandler {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+  ) {}
 
   async execute(command: CreateProgramAnnouncementCommand) {
     const { programId, dto, createdBy } = command;
@@ -66,7 +71,7 @@ export class CreateProgramAnnouncementHandler {
     const program = await this.prisma.program.findUnique({ where: { id: programId } });
     if (!program) throw new NotFoundException(`Program ${programId} not found`);
 
-    return this.prisma.programAnnouncement.create({
+    const result = await this.prisma.programAnnouncement.create({
       data: {
         programId,
         title: dto.title,
@@ -81,12 +86,19 @@ export class CreateProgramAnnouncementHandler {
         isActive: dto.isActive ?? true,
       },
     });
+    // AnnouncementsStrategy reads programAnnouncement directly for the public
+    // news feed; this handler previously cleared no cache layer at all.
+    await invalidateLandingCacheByProgramId(programId, this.prisma, this.landingCacheInvalidation);
+    return result;
   }
 }
 
 @Injectable()
 export class UpdateProgramAnnouncementHandler {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+  ) {}
 
   async execute(command: UpdateProgramAnnouncementCommand) {
     const { id, dto } = command;
@@ -94,7 +106,7 @@ export class UpdateProgramAnnouncementHandler {
     const existing = await this.prisma.programAnnouncement.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Announcement ${id} not found`);
 
-    return this.prisma.programAnnouncement.update({
+    const result = await this.prisma.programAnnouncement.update({
       where: { id },
       data: {
         ...(dto.title !== undefined && { title: dto.title }),
@@ -109,12 +121,17 @@ export class UpdateProgramAnnouncementHandler {
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
     });
+    await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
+    return result;
   }
 }
 
 @Injectable()
 export class DeleteProgramAnnouncementHandler {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+  ) {}
 
   async execute(command: DeleteProgramAnnouncementCommand) {
     const { id } = command;
@@ -123,6 +140,7 @@ export class DeleteProgramAnnouncementHandler {
     if (!existing) throw new NotFoundException(`Announcement ${id} not found`);
 
     await this.prisma.programAnnouncement.delete({ where: { id } });
+    await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
     return { success: true, id };
   }
 }

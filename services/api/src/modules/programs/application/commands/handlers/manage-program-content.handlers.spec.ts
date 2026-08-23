@@ -9,6 +9,30 @@ import {
     UpdateProgramSpeakerHandler,
     CreateValidityPeriodHandler,
     UpdateValidityPeriodHandler,
+    invalidateLandingCacheByProgramId,
+    CreateProgramGalleryHandler,
+    UpdateProgramFaqHandler,
+    DeleteDocumentTemplateHandler,
+    DeleteProgramTimelineHandler,
+    CreateProgramTimelineHandler,
+    UpdateProgramTimelineHandler,
+    CreateProgramScheduleHandler,
+    UpdateProgramScheduleHandler,
+    DeleteProgramScheduleHandler,
+    CreateProgramSubthemeHandler,
+    UpdateProgramSubthemeHandler,
+    DeleteProgramSubthemeHandler,
+    CreateProgramPartnerHandler,
+    UpdateProgramPartnerHandler,
+    DeleteProgramPartnerHandler,
+    CreateProgramResourceHandler,
+    UpdateProgramResourceHandler,
+    DeleteProgramResourceHandler,
+    CreateProgramPricingTierHandler,
+    UpdateProgramPricingTierHandler,
+    DeleteProgramPricingTierHandler,
+    DeleteValidityPeriodHandler,
+    UpdateProgramPaymentInfoHandler,
 } from './manage-program-content.handlers';
 import {
     CreateProgramEssayCommand,
@@ -18,11 +42,43 @@ import {
     UpdateProgramSpeakerCommand,
     CreateValidityPeriodCommand,
     UpdateValidityPeriodCommand,
+    CreateProgramGalleryCommand,
+    UpdateProgramFaqCommand,
+    DeleteDocumentTemplateCommand,
+    DeleteProgramTimelineCommand,
+    CreateProgramTimelineCommand,
+    UpdateProgramTimelineCommand,
+    CreateProgramScheduleCommand,
+    UpdateProgramScheduleCommand,
+    DeleteProgramScheduleCommand,
+    CreateProgramSubthemeCommand,
+    UpdateProgramSubthemeCommand,
+    DeleteProgramSubthemeCommand,
+    CreateProgramPartnerCommand,
+    UpdateProgramPartnerCommand,
+    DeleteProgramPartnerCommand,
+    CreateProgramResourceCommand,
+    UpdateProgramResourceCommand,
+    DeleteProgramResourceCommand,
+    CreateProgramPricingTierCommand,
+    UpdateProgramPricingTierCommand,
+    DeleteProgramPricingTierCommand,
+    DeleteValidityPeriodCommand,
+    UpdateProgramPaymentInfoCommand,
 } from '../program-content.commands';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
+import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { StorageService } from '../../../../files/application/storage.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
+
+const homeAndSettingsOptions = {
+    clearSnapshot: true,
+    bustProgramCache: true,
+    swallowErrors: true,
+    revalidate: { kind: 'homeAndSettings' as const },
+};
 
 describe('ManageProgramContentHandlers', () => {
     
@@ -286,6 +342,7 @@ describe('ManageProgramContentHandlers', () => {
         let vpRepository: any;
         let vpPrisma: any;
         let vpCache: any;
+        let vpLandingCacheInvalidation: any;
 
         beforeEach(() => {
             vpRepository = {
@@ -303,6 +360,7 @@ describe('ManageProgramContentHandlers', () => {
                 invalidateBrandLandingCaches: jest.fn(),
                 invalidateByPattern: jest.fn(),
             };
+            vpLandingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
         });
 
         async function buildModule<T>(HandlerCtor: new (...args: any[]) => T): Promise<T> {
@@ -312,6 +370,7 @@ describe('ManageProgramContentHandlers', () => {
                     { provide: 'IProgramContentRepository', useValue: vpRepository },
                     { provide: PrismaService, useValue: vpPrisma },
                     { provide: CacheService, useValue: vpCache },
+                    { provide: LandingCacheInvalidationService, useValue: vpLandingCacheInvalidation },
                 ],
             }).compile();
             return module.get(HandlerCtor);
@@ -391,6 +450,33 @@ describe('ManageProgramContentHandlers', () => {
                 expect(result.warnings.overlappingPeriods.map((p: any) => p.id)).toEqual(['p4']);
                 expect(result.warnings.coverageGap).toBeNull();
             });
+
+            it('fires the homeAndSettings revalidation hook after creating', async () => {
+                const handler = await buildModule(CreateValidityPeriodHandler);
+                const command = new CreateValidityPeriodCommand(
+                    { pricingTierId: 'tier-1', startDate: '2026-07-01T00:00:00.000Z', endDate: '2026-08-01T00:00:00.000Z' },
+                    'user-1',
+                );
+                vpRepository.findPricingTierById.mockResolvedValue({ id: 'tier-1', programId: 'prog-1', validityPeriods: [] });
+                vpRepository.createValidityPeriod.mockResolvedValue({
+                    id: 'p1',
+                    pricingTierId: 'tier-1',
+                    startDate: new Date('2026-07-01T00:00:00.000Z'),
+                    endDate: new Date('2026-08-01T00:00:00.000Z'),
+                    description: null,
+                });
+                vpPrisma.program.findUnique.mockResolvedValue({ registrationCloseDate: null });
+                vpPrisma.programPricingTier.findUnique.mockResolvedValue({ program: { brandId: 'brand-9' } });
+
+                await handler.execute(command);
+
+                expect(vpLandingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-9', {
+                    clearSnapshot: false,
+                    bustProgramCache: false,
+                    swallowErrors: true,
+                    revalidate: { kind: 'homeAndSettings' },
+                });
+            });
         });
 
         describe('UpdateValidityPeriodHandler', () => {
@@ -421,6 +507,36 @@ describe('ManageProgramContentHandlers', () => {
                 expect(result.description).toBe('Renamed');
             });
 
+            it('fires the homeAndSettings revalidation hook after updating', async () => {
+                const handler = await buildModule(UpdateValidityPeriodHandler);
+                const command = new UpdateValidityPeriodCommand('period-12', { description: 'Renamed again' }, 'user-1');
+                const existing = {
+                    id: 'period-12',
+                    pricingTierId: 'tier-1',
+                    startDate: new Date('2026-09-20T16:59:00.000Z'),
+                    endDate: new Date('2026-10-21T16:59:00.000Z'),
+                    description: 'Period 12',
+                };
+                vpRepository.findValidityPeriodById.mockResolvedValue(existing);
+                vpRepository.findPricingTierById.mockResolvedValue({
+                    id: 'tier-1',
+                    programId: 'prog-1',
+                    validityPeriods: [existing],
+                });
+                vpRepository.updateValidityPeriod.mockResolvedValue({ ...existing, description: 'Renamed again' });
+                vpPrisma.program.findUnique.mockResolvedValue({ registrationCloseDate: null });
+                vpPrisma.programPricingTier.findUnique.mockResolvedValue({ program: { brandId: 'brand-9' } });
+
+                await handler.execute(command);
+
+                expect(vpLandingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-9', {
+                    clearSnapshot: false,
+                    bustProgramCache: false,
+                    swallowErrors: true,
+                    revalidate: { kind: 'homeAndSettings' },
+                });
+            });
+
             it('rejects an update that would invert the range', async () => {
                 const handler = await buildModule(UpdateValidityPeriodHandler);
                 const command = new UpdateValidityPeriodCommand(
@@ -439,6 +555,540 @@ describe('ManageProgramContentHandlers', () => {
                 await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
                 expect(vpRepository.updateValidityPeriod).not.toHaveBeenCalled();
             });
+        });
+
+        describe('DeleteValidityPeriodHandler fires the frontend revalidation hook', () => {
+            it('resolves brandId via pricingTierId and fires homeAndSettings revalidation without re-clearing snapshot/program cache', async () => {
+                const handler = await buildModule(DeleteValidityPeriodHandler);
+                vpRepository.findValidityPeriodById.mockResolvedValue({ id: 'period-1', pricingTierId: 'tier-1' });
+                vpRepository.deleteValidityPeriod = jest.fn().mockResolvedValue(undefined);
+                vpPrisma.programPricingTier.findUnique.mockResolvedValue({ program: { brandId: 'brand-9' } });
+
+                await handler.execute(new DeleteValidityPeriodCommand('period-1', 'user-1'));
+
+                expect(vpPrisma.programPricingTier.findUnique).toHaveBeenCalledWith({
+                    where: { id: 'tier-1' },
+                    select: { program: { select: { brandId: true } } },
+                });
+                expect(vpLandingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-9', {
+                    clearSnapshot: false,
+                    bustProgramCache: false,
+                    swallowErrors: true,
+                    revalidate: { kind: 'homeAndSettings' },
+                });
+            });
+        });
+    });
+
+    // Audit: gallery/faq/document-template mutations cleared the Redis brand
+    // keys + Postgres snapshot via this shared helper, but the helper never
+    // fired LandingRevalidationService, so the Next.js frontend cache was
+    // never nudged. Fixed once here instead of at each of the ~9 call sites.
+    describe('invalidateLandingCacheByProgramId', () => {
+        it('resolves the brandId for the program and routes through the shared service with the home+settings hook', async () => {
+            const prisma = { program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-7' }) } };
+            const landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+
+            await invalidateLandingCacheByProgramId('prog-1', prisma as any, landingCacheInvalidation as any);
+
+            expect(prisma.program.findUnique).toHaveBeenCalledWith({
+                where: { id: 'prog-1' },
+                select: { brandId: true },
+            });
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-7', homeAndSettingsOptions);
+        });
+
+        it('does nothing when the program cannot be found', async () => {
+            const prisma = { program: { findUnique: jest.fn().mockResolvedValue(null) } };
+            const landingCacheInvalidation = { invalidate: jest.fn() };
+
+            await invalidateLandingCacheByProgramId('prog-missing', prisma as any, landingCacheInvalidation as any);
+
+            expect(landingCacheInvalidation.invalidate).not.toHaveBeenCalled();
+        });
+
+        it('swallows a brandId lookup failure instead of throwing (non-critical background invalidation)', async () => {
+            const prisma = { program: { findUnique: jest.fn().mockRejectedValue(new Error('db down')) } };
+            const landingCacheInvalidation = { invalidate: jest.fn() };
+
+            await expect(
+                invalidateLandingCacheByProgramId('prog-1', prisma as any, landingCacheInvalidation as any),
+            ).resolves.toBeUndefined();
+        });
+    });
+
+    describe('Handlers wired through invalidateLandingCacheByProgramId', () => {
+        let repo: any;
+        let storage: any;
+        let prisma: any;
+        let cache: any;
+        let landingCacheInvalidation: any;
+
+        beforeEach(() => {
+            repo = {
+                createGallery: jest.fn(),
+                findFaqById: jest.fn(),
+                updateFaq: jest.fn(),
+                findDocumentTemplateById: jest.fn(),
+                deleteDocumentTemplate: jest.fn(),
+            };
+            storage = { uploadFile: jest.fn() };
+            prisma = { program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-x' }) } };
+            cache = { invalidateByPattern: jest.fn().mockResolvedValue(undefined) };
+            landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+        });
+
+        async function build<T>(HandlerCtor: new (...args: any[]) => T): Promise<T> {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    HandlerCtor,
+                    { provide: 'IProgramContentRepository', useValue: repo },
+                    { provide: StorageService, useValue: storage },
+                    { provide: PrismaService, useValue: prisma },
+                    { provide: CacheService, useValue: cache },
+                    { provide: LandingCacheInvalidationService, useValue: landingCacheInvalidation },
+                ],
+            }).compile();
+            return module.get(HandlerCtor);
+        }
+
+        it('CreateProgramGalleryHandler invalidates via the shared service after creating', async () => {
+            const handler = await build(CreateProgramGalleryHandler);
+            repo.createGallery.mockResolvedValue({ id: 'gal-1' });
+
+            await handler.execute(new CreateProgramGalleryCommand(
+                { programId: 'prog-1', imageUrl: 'https://x.example/img.png' } as any,
+                'user-1',
+            ));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-x', homeAndSettingsOptions);
+        });
+
+        it('UpdateProgramFaqHandler invalidates via the shared service after updating', async () => {
+            const handler = await build(UpdateProgramFaqHandler);
+            repo.findFaqById.mockResolvedValue({ id: 'faq-1', programId: 'prog-1' });
+            repo.updateFaq.mockResolvedValue({ id: 'faq-1', programId: 'prog-1' });
+
+            await handler.execute(new UpdateProgramFaqCommand('faq-1', { question: 'Updated?' } as any, 'user-1'));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-x', homeAndSettingsOptions);
+        });
+
+        it('DeleteDocumentTemplateHandler invalidates via the shared service and still clears portal document caches', async () => {
+            const handler = await build(DeleteDocumentTemplateHandler);
+            repo.findDocumentTemplateById.mockResolvedValue({ id: 'doc-1', programId: 'prog-1' });
+            repo.deleteDocumentTemplate.mockResolvedValue(undefined);
+
+            await handler.execute(new DeleteDocumentTemplateCommand('doc-1', 'user-1'));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-x', homeAndSettingsOptions);
+            expect(cache.invalidateByPattern).toHaveBeenCalledWith('portal:documents:*');
+        });
+    });
+
+    // Group C: these handlers previously had no cache invalidation at all, so
+    // an edit never showed up publicly until the cache TTL lapsed. Confirmed
+    // landing-rendered first (programs.strategy.ts reads timeline/schedules/
+    // subthemes; partners-sponsors.strategy.ts reads programPartner) before
+    // wiring them up.
+    describe('Group C: previously-uninvalidated content handlers', () => {
+        let repo: any;
+        let storage: any;
+        let prisma: any;
+        let landingCacheInvalidation: any;
+
+        beforeEach(() => {
+            repo = {
+                createTimeline: jest.fn(),
+                updateTimeline: jest.fn(),
+                findTimelineById: jest.fn(),
+                deleteTimeline: jest.fn(),
+                createSchedule: jest.fn(),
+                updateSchedule: jest.fn(),
+                deleteSchedule: jest.fn(),
+                findScheduleById: jest.fn(),
+                createSubtheme: jest.fn(),
+                updateSubtheme: jest.fn(),
+                deleteSubtheme: jest.fn(),
+                findSubthemeById: jest.fn(),
+                createPartner: jest.fn(),
+                updatePartner: jest.fn(),
+                deletePartner: jest.fn(),
+                findPartnerById: jest.fn(),
+            };
+            storage = { uploadFile: jest.fn() };
+            prisma = { program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-c' }) } };
+            landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+        });
+
+        async function build<T>(HandlerCtor: new (...args: any[]) => T): Promise<T> {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    HandlerCtor,
+                    { provide: 'IProgramContentRepository', useValue: repo },
+                    { provide: StorageService, useValue: storage },
+                    { provide: PrismaService, useValue: prisma },
+                    { provide: LandingCacheInvalidationService, useValue: landingCacheInvalidation },
+                    { provide: IUserActivityLogRepository, useValue: { create: jest.fn() } },
+                ],
+            }).compile();
+            return module.get(HandlerCtor);
+        }
+
+        describe('CreateProgramTimelineHandler', () => {
+            it('invalidates using the created row programId', async () => {
+                const handler = await build(CreateProgramTimelineHandler);
+                repo.createTimeline.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
+
+                await handler.execute(new CreateProgramTimelineCommand(
+                    { programId: 'prog-1', date: '2026-09-01' } as any,
+                    'user-1',
+                ));
+
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+        });
+
+        describe('UpdateProgramTimelineHandler', () => {
+            it('invalidates using the updated row programId', async () => {
+                const handler = await build(UpdateProgramTimelineHandler);
+                repo.updateTimeline.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
+
+                await handler.execute(new UpdateProgramTimelineCommand('tl-1', { date: '2026-09-02' } as any, 'user-1'));
+
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+        });
+
+        describe('DeleteProgramTimelineHandler', () => {
+            it('reads the row before hard-deleting it (delete returns void, brandId would otherwise be lost) and invalidates', async () => {
+                const handler = await build(DeleteProgramTimelineHandler);
+                repo.findTimelineById.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
+                repo.deleteTimeline.mockResolvedValue(undefined);
+
+                await handler.execute(new DeleteProgramTimelineCommand('tl-1', 'user-1'));
+
+                expect(repo.findTimelineById).toHaveBeenCalledWith('tl-1');
+                expect(repo.deleteTimeline).toHaveBeenCalledWith('tl-1');
+                const findOrder = repo.findTimelineById.mock.invocationCallOrder[0];
+                const deleteOrder = repo.deleteTimeline.mock.invocationCallOrder[0];
+                expect(findOrder).toBeLessThan(deleteOrder);
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+
+            it('skips invalidation when the row is already gone', async () => {
+                const handler = await build(DeleteProgramTimelineHandler);
+                repo.findTimelineById.mockResolvedValue(null);
+                repo.deleteTimeline.mockResolvedValue(undefined);
+
+                await handler.execute(new DeleteProgramTimelineCommand('tl-missing', 'user-1'));
+
+                expect(landingCacheInvalidation.invalidate).not.toHaveBeenCalled();
+            });
+        });
+
+        describe('Schedule handlers', () => {
+            it('CreateProgramScheduleHandler invalidates using the dto programId', async () => {
+                const handler = await build(CreateProgramScheduleHandler);
+                repo.createSchedule.mockResolvedValue({ id: 'sch-1', programId: 'prog-1' });
+
+                await handler.execute(new CreateProgramScheduleCommand(
+                    { programId: 'prog-1', day: 'Day 1', activity: 'Arrival' } as any,
+                    'user-1',
+                ));
+
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+
+            it('UpdateProgramScheduleHandler invalidates using the updated row programId', async () => {
+                const handler = await build(UpdateProgramScheduleHandler);
+                repo.updateSchedule.mockResolvedValue({ id: 'sch-1', programId: 'prog-1', activity: 'Updated' });
+
+                await handler.execute(new UpdateProgramScheduleCommand('sch-1', { activity: 'Updated' } as any, 'user-1'));
+
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+
+            it('DeleteProgramScheduleHandler reads the row before hard-deleting it and invalidates', async () => {
+                const handler = await build(DeleteProgramScheduleHandler);
+                repo.findScheduleById.mockResolvedValue({ id: 'sch-1', programId: 'prog-1' });
+                repo.deleteSchedule.mockResolvedValue(undefined);
+
+                await handler.execute(new DeleteProgramScheduleCommand('sch-1', 'user-1'));
+
+                expect(repo.findScheduleById).toHaveBeenCalledWith('sch-1');
+                const findOrder = repo.findScheduleById.mock.invocationCallOrder[0];
+                const deleteOrder = repo.deleteSchedule.mock.invocationCallOrder[0];
+                expect(findOrder).toBeLessThan(deleteOrder);
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+        });
+
+        describe('Subtheme handlers', () => {
+            it('CreateProgramSubthemeHandler invalidates using the dto programId', async () => {
+                const handler = await build(CreateProgramSubthemeHandler);
+                repo.createSubtheme.mockResolvedValue({ id: 'sub-1', programId: 'prog-1' });
+
+                await handler.execute(new CreateProgramSubthemeCommand(
+                    { programId: 'prog-1', name: 'Sustainability' } as any,
+                    'user-1',
+                ));
+
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+
+            it('UpdateProgramSubthemeHandler invalidates using the updated row programId', async () => {
+                const handler = await build(UpdateProgramSubthemeHandler);
+                repo.updateSubtheme.mockResolvedValue({ id: 'sub-1', programId: 'prog-1', name: 'Renamed' });
+
+                await handler.execute(new UpdateProgramSubthemeCommand('sub-1', { name: 'Renamed' } as any, 'user-1'));
+
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+
+            it('DeleteProgramSubthemeHandler reads the row before soft-deleting it (deleteSubtheme returns void) and invalidates', async () => {
+                const handler = await build(DeleteProgramSubthemeHandler);
+                repo.findSubthemeById.mockResolvedValue({ id: 'sub-1', programId: 'prog-1' });
+                repo.deleteSubtheme.mockResolvedValue(undefined);
+
+                await handler.execute(new DeleteProgramSubthemeCommand('sub-1', 'user-1'));
+
+                expect(repo.findSubthemeById).toHaveBeenCalledWith('sub-1');
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+        });
+
+        describe('Partner handlers', () => {
+            it('CreateProgramPartnerHandler invalidates using the created row programId', async () => {
+                const handler = await build(CreateProgramPartnerHandler);
+                repo.createPartner.mockResolvedValue({ id: 'partner-1', programId: 'prog-1' });
+
+                await handler.execute(new CreateProgramPartnerCommand(
+                    { programId: 'prog-1', name: 'Acme Co' } as any,
+                    'user-1',
+                ));
+
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+
+            it('UpdateProgramPartnerHandler invalidates using the updated row programId', async () => {
+                const handler = await build(UpdateProgramPartnerHandler);
+                repo.updatePartner.mockResolvedValue({ id: 'partner-1', programId: 'prog-1', name: 'Renamed' });
+
+                await handler.execute(new UpdateProgramPartnerCommand('partner-1', { name: 'Renamed' } as any, 'user-1'));
+
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+
+            it('DeleteProgramPartnerHandler reads the row before hard-deleting it and invalidates', async () => {
+                const handler = await build(DeleteProgramPartnerHandler);
+                repo.findPartnerById.mockResolvedValue({ id: 'partner-1', programId: 'prog-1' });
+                repo.deletePartner.mockResolvedValue(undefined);
+
+                await handler.execute(new DeleteProgramPartnerCommand('partner-1', 'user-1'));
+
+                expect(repo.findPartnerById).toHaveBeenCalledWith('partner-1');
+                const findOrder = repo.findPartnerById.mock.invocationCallOrder[0];
+                const deleteOrder = repo.deletePartner.mock.invocationCallOrder[0];
+                expect(findOrder).toBeLessThan(deleteOrder);
+                expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
+            });
+        });
+    });
+
+    // Gap: ProgramResource IS landing-rendered — home.strategy.ts includes the
+    // `resources` relation and renders it as `guidelines`; programs.strategy.ts
+    // includes it too, rendered as guide/guidebook links. Its handlers cleared
+    // the Redis + Postgres snapshot layers via the (now-renamed) portal-only
+    // helper but never fired the Next.js revalidation hook, so an edit stayed
+    // stale on the public page until TTL. Wired through the same
+    // invalidateLandingCacheByProgramId helper Group C already uses.
+    describe('Group D: ProgramResource handlers', () => {
+        let repo: any;
+        let storage: any;
+        let prisma: any;
+        let cache: any;
+        let landingCacheInvalidation: any;
+
+        beforeEach(() => {
+            repo = {
+                createResource: jest.fn(),
+                updateResource: jest.fn(),
+                findResourceById: jest.fn(),
+                deleteResource: jest.fn(),
+            };
+            storage = { uploadFile: jest.fn() };
+            prisma = { program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-d' }) } };
+            cache = { invalidateByPatterns: jest.fn().mockResolvedValue(undefined) };
+            landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+        });
+
+        async function build<T>(HandlerCtor: new (...args: any[]) => T): Promise<T> {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    HandlerCtor,
+                    { provide: 'IProgramContentRepository', useValue: repo },
+                    { provide: StorageService, useValue: storage },
+                    { provide: PrismaService, useValue: prisma },
+                    { provide: CacheService, useValue: cache },
+                    { provide: LandingCacheInvalidationService, useValue: landingCacheInvalidation },
+                ],
+            }).compile();
+            return module.get(HandlerCtor);
+        }
+
+        it('CreateProgramResourceHandler invalidates landing caches and portal resource caches', async () => {
+            const handler = await build(CreateProgramResourceHandler);
+            repo.createResource.mockResolvedValue({ id: 'res-1', programId: 'prog-1' });
+
+            await handler.execute(new CreateProgramResourceCommand(
+                { programId: 'prog-1', title: 'Guidebook', sourceType: 'link', linkUrl: 'https://x.example/guide.pdf' } as any,
+                'user-1',
+            ));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-d', homeAndSettingsOptions);
+            expect(cache.invalidateByPatterns).toHaveBeenCalledWith([
+                'portal:submission-detail:*',
+                'portal:documents:*',
+            ]);
+        });
+
+        it('UpdateProgramResourceHandler invalidates landing caches and portal resource caches', async () => {
+            const handler = await build(UpdateProgramResourceHandler);
+            repo.findResourceById.mockResolvedValue({
+                id: 'res-1',
+                programId: 'prog-1',
+                sourceType: 'link',
+                linkUrl: 'https://x.example/guide.pdf',
+            });
+            repo.updateResource.mockResolvedValue({ id: 'res-1', programId: 'prog-1', title: 'Updated' });
+
+            await handler.execute(new UpdateProgramResourceCommand('res-1', { title: 'Updated' } as any, 'user-1'));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-d', homeAndSettingsOptions);
+            expect(cache.invalidateByPatterns).toHaveBeenCalledWith([
+                'portal:submission-detail:*',
+                'portal:documents:*',
+            ]);
+        });
+
+        it('DeleteProgramResourceHandler reads the row before hard-deleting it and invalidates', async () => {
+            const handler = await build(DeleteProgramResourceHandler);
+            repo.findResourceById.mockResolvedValue({ id: 'res-1', programId: 'prog-1' });
+            repo.deleteResource.mockResolvedValue(undefined);
+
+            await handler.execute(new DeleteProgramResourceCommand('res-1', 'user-1'));
+
+            expect(repo.findResourceById).toHaveBeenCalledWith('res-1');
+            const findOrder = repo.findResourceById.mock.invocationCallOrder[0];
+            const deleteOrder = repo.deleteResource.mock.invocationCallOrder[0];
+            expect(findOrder).toBeLessThan(deleteOrder);
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-d', homeAndSettingsOptions);
+            expect(cache.invalidateByPatterns).toHaveBeenCalledWith([
+                'portal:submission-detail:*',
+                'portal:documents:*',
+            ]);
+        });
+
+        it('DeleteProgramResourceHandler skips invalidation when the row is already gone', async () => {
+            const handler = await build(DeleteProgramResourceHandler);
+            repo.findResourceById.mockResolvedValue(null);
+            repo.deleteResource.mockResolvedValue(undefined);
+
+            await handler.execute(new DeleteProgramResourceCommand('res-missing', 'user-1'));
+
+            expect(landingCacheInvalidation.invalidate).not.toHaveBeenCalled();
+            expect(cache.invalidateByPatterns).not.toHaveBeenCalled();
+        });
+    });
+
+    // Gap: pricing tier / validity-period / payment-info mutations cleared the
+    // Redis + Postgres snapshot layers via invalidatePricingTierCachesByProgramId
+    // / invalidatePricingTierCachesByPricingTierId, but neither helper ever fired
+    // LandingRevalidationService, so a pricing edit cleared every API-side cache
+    // and still left the public page stale until TTL. clearSnapshot/bustProgramCache
+    // are false below because those layers are already cleared a few lines above
+    // the new revalidation call inside the same helper — see manage-program-content.handlers.ts.
+    describe('Pricing tier & payment-info handlers fire the frontend revalidation hook', () => {
+        let repo: any;
+        let prisma: any;
+        let cache: any;
+        let landingCacheInvalidation: any;
+
+        const revalidateOptions = {
+            clearSnapshot: false,
+            bustProgramCache: false,
+            swallowErrors: true,
+            revalidate: { kind: 'homeAndSettings' as const },
+        };
+
+        beforeEach(() => {
+            repo = {
+                createPricingTier: jest.fn(),
+                updatePricingTier: jest.fn(),
+                findPricingTierById: jest.fn(),
+                deletePricingTier: jest.fn(),
+                findPricingTiersByProgramId: jest.fn().mockResolvedValue([]),
+            };
+            prisma = {
+                program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-p' }) },
+                brandLandingSnapshot: { deleteMany: jest.fn().mockResolvedValue(undefined) },
+            };
+            cache = {
+                invalidateBrandLandingCaches: jest.fn().mockResolvedValue(undefined),
+                invalidateByPattern: jest.fn().mockResolvedValue(undefined),
+            };
+            landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+        });
+
+        it('CreateProgramPricingTierHandler fires revalidation after creating', async () => {
+            const handler = new CreateProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation);
+            repo.createPricingTier.mockResolvedValue({ id: 'tier-1', programId: 'prog-1' });
+
+            await handler.execute(new CreateProgramPricingTierCommand(
+                { programId: 'prog-1', name: 'Tier 1', usdPrice: 100, idrPrice: 1500000 } as any,
+                'user-1',
+            ));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-p', revalidateOptions);
+        });
+
+        it('UpdateProgramPricingTierHandler fires revalidation after updating', async () => {
+            const handler = new UpdateProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation);
+            repo.findPricingTierById.mockResolvedValue({
+                id: 'tier-1',
+                programId: 'prog-1',
+                feeType: 'program_fee_1',
+                allowedCategories: [],
+                isActive: true,
+            });
+            repo.updatePricingTier.mockResolvedValue({ id: 'tier-1', programId: 'prog-1', name: 'Renamed' });
+
+            await handler.execute(new UpdateProgramPricingTierCommand('tier-1', { name: 'Renamed' } as any, 'user-1'));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-p', revalidateOptions);
+        });
+
+        it('DeleteProgramPricingTierHandler fires revalidation after deleting', async () => {
+            const handler = new DeleteProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation);
+            repo.findPricingTierById.mockResolvedValue({ id: 'tier-1', programId: 'prog-1' });
+            repo.deletePricingTier.mockResolvedValue(undefined);
+
+            await handler.execute(new DeleteProgramPricingTierCommand('tier-1', 'user-1'));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-p', revalidateOptions);
+        });
+
+        it('UpdateProgramPaymentInfoHandler fires revalidation after saving payment info html', async () => {
+            const programRepository = {
+                findById: jest.fn().mockResolvedValue({ id: 'prog-1', brandId: 'brand-p' }),
+                update: jest.fn().mockResolvedValue(undefined),
+            };
+            const handler = new UpdateProgramPaymentInfoHandler(programRepository as any, prisma, cache, landingCacheInvalidation);
+
+            await handler.execute(new UpdateProgramPaymentInfoCommand('prog-1', { paymentInfoHtml: '<p>Pay here</p>' } as any, 'user-1'));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-p', revalidateOptions);
         });
     });
 });
