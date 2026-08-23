@@ -13,16 +13,19 @@ export class GalleryService {
     private readonly landingCacheInvalidation: LandingCacheInvalidationService,
   ) {}
 
-  // Gallery images aren't part of the brand_landing_snapshots payload, so
-  // clearSnapshot is skipped, and this call site never nudged the Next.js
-  // frontend cache. swallowErrors:false preserves the original code's lack
-  // of a try/catch — a cache failure here still surfaces as a 500.
+  // ProgramGallery is landing-rendered (see landing/strategies/home.strategy.ts),
+  // so a gallery write must clear the Postgres snapshot and nudge the Next.js
+  // frontend cache too, or an admin's edit stays publicly stale until the
+  // cache TTL expires. swallowErrors:true matches every other call site: the
+  // DB write above has already succeeded by the time this runs, so a cache
+  // failure must surface as a stale-until-TTL page, not a 500 on a request
+  // that actually succeeded.
   private async invalidateLandingCaches(brandId: string): Promise<void> {
     await this.landingCacheInvalidation.invalidate(brandId, {
-      clearSnapshot: false,
+      clearSnapshot: true,
       bustProgramCache: true,
-      swallowErrors: false,
-      revalidate: { kind: 'skip' },
+      swallowErrors: true,
+      revalidate: { kind: 'homeAndSettings' },
     });
   }
 

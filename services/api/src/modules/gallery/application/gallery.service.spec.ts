@@ -5,16 +5,19 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { StorageService } from '../../files/application/storage.service';
 import { LandingCacheInvalidationService } from '@modules/brands/application/services/landing-cache-invalidation.service';
 
-// Gallery's call site is the odd one out among the three landing-cache callers:
-// no Postgres snapshot clear and no try/catch around the Redis clear (a cache
-// failure here still surfaces as a 500), and it never nudges the Next.js
-// frontend cache. These tests pin that exact options shape so a future edit
-// doesn't silently drift it back toward the brand/program behaviour.
+// ProgramGallery is landing-rendered (see landing/strategies/home.strategy.ts),
+// so gallery writes must clear the Postgres snapshot AND nudge the Next.js
+// frontend cache, same as every other landing-cache caller. swallowErrors is
+// true here too: the DB write has already succeeded by the time this fires,
+// so a cache-layer failure must not turn a successful admin save into a 500 —
+// the shared service already unit-tests the swallow behaviour itself
+// (see landing-cache-invalidation.service.spec.ts); this file only needs to
+// pin the options gallery passes in.
 const expectedInvalidateOptions = {
-    clearSnapshot: false,
+    clearSnapshot: true,
     bustProgramCache: true,
-    swallowErrors: false,
-    revalidate: { kind: 'skip' as const },
+    swallowErrors: true,
+    revalidate: { kind: 'homeAndSettings' as const },
 };
 
 const makePrismaService = () => ({
@@ -111,24 +114,6 @@ describe('GalleryService', () => {
                 data: expect.objectContaining({ isActive: false }),
             });
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-3', expectedInvalidateOptions);
-        });
-    });
-
-    describe('cache failure propagation', () => {
-        it('propagates a rejected cache invalidation instead of swallowing it (no try/catch at this call site)', async () => {
-            // Arrange — matches the pre-refactor code: an un-wrapped invalidation
-            // call meant a Redis failure surfaced as a 500 even after the DB write
-            // already succeeded. Preserved deliberately; see gallery.service.ts.
-            const prisma = makePrismaService();
-            prisma.program.findUnique.mockResolvedValue({ id: 'prog-1', brandId: 'brand-1' });
-            prisma.programGallery.create.mockResolvedValue({ id: 'gal-1' });
-            const landingCacheInvalidation = { invalidate: jest.fn().mockRejectedValue(new Error('redis down')) };
-            const service = await buildService(prisma, landingCacheInvalidation);
-
-            // Act / Assert
-            await expect(
-                service.create({ program_id: 'prog-1', image_url: 'https://x.example/img.png' } as any, undefined, 'user-1'),
-            ).rejects.toThrow('redis down');
         });
     });
 });

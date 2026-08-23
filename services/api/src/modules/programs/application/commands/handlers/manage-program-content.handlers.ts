@@ -303,7 +303,9 @@ async function invalidateResourceCaches(
 export class CreateProgramTimelineHandler implements ICommandHandler<CreateProgramTimelineCommand> {
     constructor(
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
-        @Inject(IUserActivityLogRepository) private readonly activityLog: IUserActivityLogRepository
+        @Inject(IUserActivityLogRepository) private readonly activityLog: IUserActivityLogRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: CreateProgramTimelineCommand) {
         const dto = {
@@ -313,19 +315,30 @@ export class CreateProgramTimelineHandler implements ICommandHandler<CreateProgr
         };
         const result = await this.repository.createTimeline(dto);
         // Log activity here if needed
+        if (result.programId) {
+            await invalidateLandingCacheByProgramId(result.programId, this.prisma, this.landingCacheInvalidation);
+        }
         return result;
     }
 }
 @CommandHandler(UpdateProgramTimelineCommand)
 export class UpdateProgramTimelineHandler implements ICommandHandler<UpdateProgramTimelineCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
     async execute(command: UpdateProgramTimelineCommand) {
         const dto = {
             ...command.dto,
             date: command.dto.date ? new Date(command.dto.date) : undefined,
             endDate: command.dto.endDate ? new Date(command.dto.endDate) : undefined,
         };
-        return this.repository.updateTimeline(command.id, dto);
+        const result = await this.repository.updateTimeline(command.id, dto);
+        if (result.programId) {
+            await invalidateLandingCacheByProgramId(result.programId, this.prisma, this.landingCacheInvalidation);
+        }
+        return result;
     }
 }
 @CommandHandler(DeleteProgramTimelineCommand)
@@ -781,6 +794,7 @@ export class CreateProgramPartnerHandler implements ICommandHandler<CreateProgra
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: CreateProgramPartnerCommand) {
          let logoUrl = command.dto.logoUrl;
@@ -794,7 +808,7 @@ export class CreateProgramPartnerHandler implements ICommandHandler<CreateProgra
              const result = await this.storageService.uploadFile(
                 command.logo,
                 command.userId,
-                program.brandId, 
+                program.brandId,
                 'partners',
                 program.id
             );
@@ -805,7 +819,11 @@ export class CreateProgramPartnerHandler implements ICommandHandler<CreateProgra
             ...command.dto,
             logoUrl
         };
-        return this.repository.createPartner(dto);
+        const result = await this.repository.createPartner(dto);
+        if (result.programId) {
+            await invalidateLandingCacheByProgramId(result.programId, this.prisma, this.landingCacheInvalidation);
+        }
+        return result;
     }
 }
 @CommandHandler(UpdateProgramPartnerCommand)
