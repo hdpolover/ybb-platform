@@ -26,8 +26,18 @@ const SELECT = { requirementsDescription: true, benefitsDescription: true, terms
 // content" and would wave a visually-empty field through as real content.
 // Strip tags and collapse whitespace/nbsp before judging emptiness so
 // "cleared in the editor" and "never set" are treated the same way.
+//
+// Tag-stripping alone over-corrects for a field whose only content is a
+// visual element with no text inside it, e.g. `<img src="...">` or `<hr>` —
+// stripping tags reduces either to `''`, which would misjudge a real,
+// intentional field as blank. Those tags render something even with zero
+// text, so their presence short-circuits straight to "not blank" before the
+// strip-and-trim check ever runs.
+const NON_BLANK_MEDIA_PATTERN = /<(img|iframe|video|hr)\b/i;
+
 function isBlankRichText(value: string | null): boolean {
   if (!value) return true;
+  if (NON_BLANK_MEDIA_PATTERN.test(value)) return false;
   const stripped = value
     .replace(/<[^>]*>/g, '')
     .replace(/&nbsp;/gi, ' ')
@@ -39,6 +49,20 @@ function contentFieldCount(program: ProgramContentScalars): number {
   return [program.requirementsDescription, program.benefitsDescription, program.termsAndConditions].filter(
     (value) => !isBlankRichText(value),
   ).length;
+}
+
+// Subset of NON_BLANK_MEDIA_PATTERN that specifically embeds a `src`
+// pointing at storage (hr has none, so it's excluded here even though it
+// counts as non-blank content above). Cross-brand copies of these tags
+// silently make the target brand's public page hotlink the source brand's
+// storage — see CopyFromProgramDialog's cross-brand warning, which this
+// flag drives.
+const EXTERNAL_MEDIA_PATTERN = /<(img|iframe|video)\b/i;
+
+function hasExternalMedia(program: ProgramContentScalars): boolean {
+  return [program.requirementsDescription, program.benefitsDescription, program.termsAndConditions].some(
+    (value) => value !== null && EXTERNAL_MEDIA_PATTERN.test(value),
+  );
 }
 
 @Injectable()
@@ -76,6 +100,7 @@ export class ProgramDetailsCopier implements ProgramCopier {
         id: programId,
         label: 'Requirements, Benefits & Terms',
         meta: `${count} field(s) with content`,
+        hasExternalMedia: hasExternalMedia(program),
       },
     ];
   }

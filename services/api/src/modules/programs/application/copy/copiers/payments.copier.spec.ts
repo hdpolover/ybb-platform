@@ -309,6 +309,27 @@ describe('PaymentsCopier', () => {
     const prisma = mkPrisma({ sourceTiers: [tier({ id: 's1', name: 'Early Bird', currency: 'USD', price: 150 })] });
     const copier = new PaymentsCopier(prisma);
     const items = await copier.preview('src');
-    expect(items).toEqual([{ id: 's1', label: 'Early Bird', meta: 'USD 150' }]);
+    expect(items).toEqual([{ id: 's1', label: 'Early Bird', meta: 'USD 150', hasExternalMedia: false }]);
+  });
+
+  // Fix 1: `description` (unlike benefits/requirements, which are plain
+  // newline-separated textareas) is edited with Tiptap and can embed
+  // `<img src="...">` pointing at the source brand's storage. preview()
+  // must flag this so the shared dialog's cross-brand warning actually
+  // fires for payment tiers.
+  it('preview() sets hasExternalMedia: true when description embeds an <img>', async () => {
+    const prisma = mkPrisma({
+      sourceTiers: [tier({ id: 's1', name: 'Early Bird', description: '<p><img src="https://other-brand.example/x.png"></p>' })],
+    });
+    const copier = new PaymentsCopier(prisma);
+    const items = await copier.preview('src');
+    expect(items[0].hasExternalMedia).toBe(true);
+  });
+
+  it('preview() sets hasExternalMedia: false when description has no embedded media', async () => {
+    const prisma = mkPrisma({ sourceTiers: [tier({ id: 's1', name: 'Early Bird', description: '<p>Plain text</p>' })] });
+    const copier = new PaymentsCopier(prisma);
+    const items = await copier.preview('src');
+    expect(items[0].hasExternalMedia).toBe(false);
   });
 });

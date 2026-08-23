@@ -138,4 +138,23 @@ describe('ParticipationCategoriesCopier', () => {
     const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
     expect(result).toEqual({ created: 0, skipped: 0, replaced: 0 });
   });
+
+  // Fix 1: description/benefits/eligibility are edited with Tiptap, which
+  // can embed `<img src="...">` pointing at the source brand's storage.
+  // preview() must flag this so the shared dialog's cross-brand warning
+  // (which reads hasExternalMedia exclusively) actually fires here.
+  it('preview() sets hasExternalMedia: true when any of description/benefits/eligibility embeds an <img>', async () => {
+    const prisma = mkPrisma({
+      sourceCategories: [
+        category({ id: 's1', name: 'Plain', description: '<p>No media here</p>' }),
+        category({ id: 's2', name: 'WithImage', benefits: '<p><img src="https://other-brand.example/x.png"></p>' }),
+      ],
+    });
+    const copier = new ParticipationCategoriesCopier(prisma);
+    const items = await copier.preview('src');
+    expect(items).toEqual([
+      { id: 's1', label: 'Plain', meta: 'Active', hasExternalMedia: false },
+      { id: 's2', label: 'WithImage', meta: 'Active', hasExternalMedia: true },
+    ]);
+  });
 });
