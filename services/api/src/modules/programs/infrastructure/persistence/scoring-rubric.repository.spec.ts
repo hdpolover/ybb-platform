@@ -2,7 +2,7 @@
 import { Prisma, ScoringStage } from '@prisma/client';
 import { ScoringRubricRepository } from './scoring-rubric.repository';
 import { UpsertRubricPayload } from '../../../../core/interfaces/repositories/scoring-rubric.repository.interface';
-import { makePrismaTxMock, expectNoOuterWrites } from '../../../../../test/utils/prisma-tx-mock';
+import { makePrismaTxMock, expectNoOuterWrites } from '@test/utils/prisma-tx-mock';
 
 describe('ScoringRubricRepository', () => {
   let repo: ScoringRubricRepository;

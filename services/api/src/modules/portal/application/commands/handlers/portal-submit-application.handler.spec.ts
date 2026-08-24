@@ -7,7 +7,7 @@ import { PortalCacheService } from '../../services/portal-cache.service';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { PortalSubmitApplicationCommand } from '../../queries/portal-queries';
-import { makePrismaTxMock, expectNoOuterWrites } from '../../../../../../test/utils/prisma-tx-mock';
+import { makePrismaTxMock, expectNoOuterWrites } from '@test/utils/prisma-tx-mock';
 
 describe('PortalSubmitApplicationHandler', () => {
     let handler: PortalSubmitApplicationHandler;
