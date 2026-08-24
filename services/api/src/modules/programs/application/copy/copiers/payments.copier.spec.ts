@@ -1,7 +1,23 @@
 // services/api/src/modules/programs/application/copy/copiers/payments.copier.spec.ts
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PaymentsCopier } from './payments.copier';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+
+// Mirrors form-fields.copier.spec.ts / program-details.copier.spec.ts's
+// helper: BadRequestException here carries a structured { code, message }
+// response body, and Nest's HttpException surfaces that body's own `message`
+// string as the thrown error's `.message` — not `code` — so
+// `.rejects.toThrow(/some_code/)` can never match. Asserting on
+// `.getResponse().code` is this codebase's established way to check a
+// structured exception's code.
+async function captureError(promise: Promise<unknown>): Promise<any> {
+  try {
+    await promise;
+  } catch (err) {
+    return err;
+  }
+  throw new Error('expected promise to reject');
+}
 
 type ValidityPeriodRow = { id: string; pricingTierId: string; startDate: Date; endDate: Date; description: string | null };
 type TierRow = {
@@ -331,5 +347,92 @@ describe('PaymentsCopier', () => {
     const copier = new PaymentsCopier(prisma);
     const items = await copier.preview('src');
     expect(items[0].hasExternalMedia).toBe(false);
+  });
+});
+
+describe('PaymentsCopier.exportTemplate', () => {
+  it('exports tiers with nested validityPeriods as ISO date strings, and does not export soldCount/currentCount', async () => {
+    const prisma = mkPrisma({
+      sourceTiers: [
+        tier({
+          id: 's1',
+          name: 'Early Bird',
+          soldCount: 30,
+          currentCount: 30,
+          validityPeriods: [{ id: 'vp1', pricingTierId: 's1', startDate: new Date('2027-01-01T00:00:00.000Z'), endDate: new Date('2027-02-01T00:00:00.000Z'), description: 'Wave 1' }],
+        }),
+      ],
+    });
+    const copier = new PaymentsCopier(prisma);
+    const payload = await copier.exportTemplate('src');
+    expect(payload.items[0]).toEqual(
+      expect.objectContaining({
+        name: 'Early Bird',
+        validityPeriods: [{ startDate: '2027-01-01T00:00:00.000Z', endDate: '2027-02-01T00:00:00.000Z', description: 'Wave 1' }],
+      }),
+    );
+    expect(payload.items[0]).not.toHaveProperty('soldCount');
+    expect(payload.items[0]).not.toHaveProperty('currentCount');
+  });
+});
+
+describe('PaymentsCopier.applyTemplate', () => {
+  it('append inserts a tier from the template with soldCount/currentCount at 0, remapping validity periods to the new tier id', async () => {
+    const prisma = mkPrisma({ existingTiers: [] });
+    const copier = new PaymentsCopier(prisma);
+    await copier.applyTemplate(
+      prisma,
+      {
+        entityType: 'payments',
+        payloadVersion: 1,
+        items: [
+          {
+            name: 'Early Bird', description: null, price: 100, currency: 'USD', usdPrice: 100, idrPrice: 1500000,
+            capacity: null, benefits: [], requirements: [], feeType: 'registration_fee', allowedCategories: ['self_funded'],
+            icon: null, isActive: true,
+            validityPeriods: [{ startDate: '2027-01-01T00:00:00.000Z', endDate: '2027-02-01T00:00:00.000Z', description: 'Wave 1' }],
+          },
+        ],
+      },
+      'tgt',
+      'append',
+    );
+    const tierCreate = (prisma as any).programPricingTier.create as jest.Mock;
+    expect(tierCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ soldCount: 0, currentCount: 0 }));
+    const periodCreate = (prisma as any).pricingTierValidityPeriod.create as jest.Mock;
+    expect(periodCreate.mock.calls[0][0].data.pricingTierId).toBe('new-Early Bird');
+  });
+
+  it('replace refuses with ConflictException when existing tiers are still referenced by invoices/applications', async () => {
+    const prisma = mkPrisma({ existingTiers: [tier({ id: 't1', name: 'old' })] });
+    (prisma as any).applicationInvoice = { count: jest.fn().mockResolvedValue(1) };
+    (prisma as any).participantApplication = { count: jest.fn().mockResolvedValue(0) };
+    const copier = new PaymentsCopier(prisma);
+    await expect(
+      copier.applyTemplate(
+        prisma,
+        { entityType: 'payments', payloadVersion: 1, items: [{ name: 'a', description: null, price: 1, currency: 'USD', usdPrice: 1, idrPrice: 1, capacity: null, benefits: [], requirements: [], feeType: 'registration_fee', allowedCategories: [], icon: null, isActive: true, validityPeriods: [] }] },
+        'tgt',
+        'replace',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect((prisma as any).programPricingTier.updateMany).not.toHaveBeenCalled();
+    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
+  });
+
+  // The brief's original assertion here was `.rejects.toThrow(/empty_replace_source/)`,
+  // which can never match: BadRequestException's structured { code, message }
+  // body puts `code` at `.getResponse().code`, not in `.message` (see
+  // captureError's comment above). Fixed to assert on the actual code.
+  it('replace with an empty template throws BadRequestException before any mutation', async () => {
+    const prisma = mkPrisma({ existingTiers: [tier({ id: 't1', name: 'old' })] });
+    const copier = new PaymentsCopier(prisma);
+    const err = await captureError(
+      copier.applyTemplate(prisma, { entityType: 'payments', payloadVersion: 1, items: [] }, 'tgt', 'replace'),
+    );
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err.getResponse() as { code: string }).code).toBe('empty_replace_source');
+    expect((prisma as any).programPricingTier.updateMany).not.toHaveBeenCalled();
+    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
   });
 });
