@@ -6,6 +6,8 @@ import { CreateContentTemplateCommand, UpdateContentTemplateCommand, DeleteConte
 import { ProgramCopierRegistry } from '../../copy/program-copier.registry';
 import { parseTemplateItems } from '../../copy/template-payload.schemas';
 
+type TxLike = PrismaService;
+
 @Injectable()
 @CommandHandler(CreateContentTemplateCommand)
 export class CreateContentTemplateHandler implements ICommandHandler<CreateContentTemplateCommand> {
@@ -41,22 +43,24 @@ export class CreateContentTemplateHandler implements ICommandHandler<CreateConte
       });
     }
 
-    if (dto.isDefault) {
-      await this.prisma.contentTemplate.updateMany({
-        where: { entityType: dto.entityType, isDefault: true, deletedAt: null },
-        data: { isDefault: false },
-      });
-    }
+    return this.prisma.$transaction(async (tx: TxLike) => {
+      if (dto.isDefault) {
+        await tx.contentTemplate.updateMany({
+          where: { entityType: dto.entityType, isDefault: true, deletedAt: null },
+          data: { isDefault: false },
+        });
+      }
 
-    return this.prisma.contentTemplate.create({
-      data: {
-        name: dto.name,
-        description: dto.description ?? null,
-        entityType: dto.entityType,
-        payload: { entityType: dto.entityType, payloadVersion: payload.payloadVersion, items: validatedItems } as never,
-        payloadVersion: payload.payloadVersion,
-        isDefault: dto.isDefault ?? false,
-      },
+      return tx.contentTemplate.create({
+        data: {
+          name: dto.name,
+          description: dto.description ?? null,
+          entityType: dto.entityType,
+          payload: { entityType: dto.entityType, payloadVersion: payload.payloadVersion, items: validatedItems } as never,
+          payloadVersion: payload.payloadVersion,
+          isDefault: dto.isDefault ?? false,
+        },
+      });
     });
   }
 }
@@ -70,20 +74,22 @@ export class UpdateContentTemplateHandler implements ICommandHandler<UpdateConte
     const existing = await this.prisma.contentTemplate.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new NotFoundException(`Content template ${id} not found`);
 
-    if (dto.isDefault) {
-      await this.prisma.contentTemplate.updateMany({
-        where: { entityType: existing.entityType, isDefault: true, deletedAt: null, NOT: { id } },
-        data: { isDefault: false },
-      });
-    }
+    return this.prisma.$transaction(async (tx: TxLike) => {
+      if (dto.isDefault) {
+        await tx.contentTemplate.updateMany({
+          where: { entityType: existing.entityType, isDefault: true, deletedAt: null, NOT: { id } },
+          data: { isDefault: false },
+        });
+      }
 
-    return this.prisma.contentTemplate.update({
-      where: { id },
-      data: {
-        ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.isDefault !== undefined && { isDefault: dto.isDefault }),
-      },
+      return tx.contentTemplate.update({
+        where: { id },
+        data: {
+          ...(dto.name !== undefined && { name: dto.name }),
+          ...(dto.description !== undefined && { description: dto.description }),
+          ...(dto.isDefault !== undefined && { isDefault: dto.isDefault }),
+        },
+      });
     });
   }
 }
