@@ -112,3 +112,4 @@ services/api/ybb-platform-firebase-adminsdk-*.json
 
 # Playwright MCP browser artifacts (downloads, snapshots)
 .playwright-mcp/
+.claude/worktrees/
