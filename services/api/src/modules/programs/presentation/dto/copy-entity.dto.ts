@@ -28,3 +28,19 @@ export class CopyEntityDto {
   @IsBoolean()
   confirm?: boolean;
 }
+
+export class ApplyTemplateEntityDto {
+  @ApiProperty({ description: 'ContentTemplate id to apply.' })
+  @IsUUID()
+  templateId!: string;
+
+  @ApiPropertyOptional({ enum: ['append', 'replace'], default: 'append' })
+  @IsOptional()
+  @IsIn(['append', 'replace'])
+  mode?: 'append' | 'replace';
+
+  @ApiPropertyOptional({ description: "Must be true when mode='replace' to guard against accidental data loss." })
+  @IsOptional()
+  @IsBoolean()
+  confirm?: boolean;
+}
