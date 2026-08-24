@@ -15,6 +15,7 @@ import {
   Bell,
   Database,
   FileEdit,
+  LayoutTemplate,
   DollarSign,
   Wallet,
   Calendar,
@@ -92,6 +93,7 @@ export const platformNavSections: NavSection[] = [
     items: [
       { id: "system-announcements", label: "Announcements", href: "/platform/announcements", icon: Bell },
       { id: "email-templates", label: "Email Templates", href: "/platform/email-templates", icon: Mail },
+      { id: "content-templates", label: "Content Templates", href: "/platform/content-templates", icon: LayoutTemplate },
     ],
   },
   {
