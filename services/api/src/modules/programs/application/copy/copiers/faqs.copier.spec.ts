@@ -1,6 +1,22 @@
 // services/api/src/modules/programs/application/copy/copiers/faqs.copier.spec.ts
+import { BadRequestException } from '@nestjs/common';
 import { FaqsCopier } from './faqs.copier';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+
+// Mirrors form-fields.copier.spec.ts's helper: BadRequestException here
+// carries a structured { code, message } response body, and Nest's
+// HttpException surfaces that body's own `message` string as the thrown
+// error's `.message` — not the `code` — so `.rejects.toThrow(/code/)` can
+// never match. Asserting on `.getResponse().code` is this codebase's
+// established way to check a structured exception's code.
+async function captureError(promise: Promise<unknown>): Promise<any> {
+  try {
+    await promise;
+  } catch (err) {
+    return err;
+  }
+  throw new Error('expected promise to reject');
+}
 
 type FaqRow = {
   id: string;
@@ -96,5 +112,58 @@ describe('FaqsCopier', () => {
     const copier = new FaqsCopier(prisma);
     const items = await copier.preview('src');
     expect(items).toEqual([{ id: 's1', label: 'How do I apply?', meta: 'registration' }]);
+  });
+});
+
+describe('FaqsCopier.exportTemplate', () => {
+  it('exports the full row shape', async () => {
+    const prisma = mkPrisma({ sourceItems: [faq({ id: 's1', question: 'Q?', answer: 'A.', category: 'general' })] });
+    const copier = new FaqsCopier(prisma);
+    const payload = await copier.exportTemplate('src');
+    expect(payload).toEqual({ entityType: 'faqs', payloadVersion: 1, items: [{ question: 'Q?', answer: 'A.', category: 'general', isActive: true }] });
+  });
+});
+
+describe('FaqsCopier.applyTemplate', () => {
+  it('append inserts and dedupes on question', async () => {
+    const prisma = mkPrisma({ existingItems: [faq({ id: 't1', question: 'Existing?' })] });
+    const copier = new FaqsCopier(prisma);
+    const result = await copier.applyTemplate(
+      prisma,
+      {
+        entityType: 'faqs',
+        payloadVersion: 1,
+        items: [
+          { question: 'Existing?', answer: 'A.', category: 'general', isActive: true },
+          { question: 'New?', answer: 'A2.', category: 'general', isActive: true },
+        ],
+      },
+      'tgt',
+      'append',
+    );
+    expect(result).toEqual({ created: 1, skipped: 1, replaced: 0 });
+  });
+
+  it('replace with an empty template throws BadRequestException before any mutation', async () => {
+    const prisma = mkPrisma({ existingItems: [faq({ id: 't1', question: 'old?' })] });
+    const copier = new FaqsCopier(prisma);
+    const err = await captureError(
+      copier.applyTemplate(prisma, { entityType: 'faqs', payloadVersion: 1, items: [] }, 'tgt', 'replace'),
+    );
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err.getResponse() as { code: string }).code).toBe('empty_replace_source');
+    expect((prisma as any).programFaq.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('FaqsCopier round-trip', () => {
+  it('exportTemplate then applyTemplate reproduces the FAQ on the target program', async () => {
+    const prisma = mkPrisma({ sourceItems: [faq({ id: 's1', question: 'Refund policy?', answer: 'Non-refundable.', category: 'payment' })] });
+    const copier = new FaqsCopier(prisma);
+    const payload = await copier.exportTemplate('src');
+    const result = await copier.applyTemplate(prisma, payload, 'tgt', 'append');
+    const create = (prisma as any).programFaq.create as jest.Mock;
+    expect(create.mock.calls[0][0].data).toEqual(expect.objectContaining({ question: 'Refund policy?', answer: 'Non-refundable.', category: 'payment' }));
+    expect(result).toEqual({ created: 1, skipped: 0, replaced: 0 });
   });
 });
