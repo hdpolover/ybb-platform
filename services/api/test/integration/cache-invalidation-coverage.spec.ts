@@ -143,7 +143,6 @@ const ALLOWLIST_CONTROLLER_PREFIXES: string[] = [
   // with no separately-cached public read endpoint. Portal reads application-form
   // config as part of program content, invalidated by program-content controller.
   'modules/programs/presentation/program-form-fields.controller.ts',
-  'modules/programs/presentation/form-templates.controller.ts',
   'modules/programs/presentation/system-form-fields.controller.ts',
   // Payments mutations: intent creation and payment processing are stateless
   // passthroughs to the Go payment microservice via gRPC. Cache invalidation
