@@ -5,6 +5,7 @@ import { Layers, CheckCircle, Users, Archive } from "lucide-react";
 import { toast } from "sonner";
 import { ProgramsTable, type Program } from "../components/programs/ProgramsTable";
 import { ProgramFormModal, type ProgramFormData } from "../components/programs/ProgramFormModal";
+import { CloneOnCreateDialog } from "../components/programs/CloneOnCreateDialog";
 import { PageHeader } from "@/src/admin/page-header";
 import { StatCard } from "@/src/admin/stat-card";
 import { FilterBar } from "@/src/admin/filter-bar";
@@ -60,6 +61,9 @@ export default function ProgramsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBrand, setSelectedBrand] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
+  const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+  const [cloneNewProgramId, setCloneNewProgramId] = useState<string | null>(null);
+  const [cloneBrandId, setCloneBrandId] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -160,8 +164,24 @@ export default function ProgramsPage() {
         isActive: data.isActive,
       });
 
+      // Checked against the PRE-update `programs` list (captured by this
+      // closure before setPrograms below runs) — this tells us whether the
+      // brand had any OTHER program before this one, which is exactly what
+      // decides whether there's anything to clone from.
+      const brandHasSiblings = programs.some((p) => p.brandId === data.brandId);
+
       setPrograms((current) => [mapProgram(createdProgram), ...current]);
-      await offerDefaultTemplate(createdProgram.id);
+
+      if (brandHasSiblings) {
+        setCloneBrandId(data.brandId);
+        setCloneNewProgramId(createdProgram.id);
+        setCloneDialogOpen(true);
+      } else {
+        // No sibling programs in this brand — nothing to clone from, so keep
+        // offering the existing default-template prompt.
+        await offerDefaultTemplate(createdProgram.id);
+      }
+
       setIsFormModalOpen(false);
       setSelectedProgram(null);
     } catch (error) {
@@ -349,6 +369,16 @@ export default function ProgramsPage() {
         categories={categories}
         isSubmitting={isSubmitting}
         errorMessage={formError}
+      />
+
+      <CloneOnCreateDialog
+        open={cloneDialogOpen}
+        newProgramId={cloneNewProgramId ?? ""}
+        sourcePrograms={programs
+          .filter((p) => p.brandId === cloneBrandId && p.id !== cloneNewProgramId)
+          .map((p) => ({ id: p.id, name: p.name, year: p.year }))}
+        onClose={() => setCloneDialogOpen(false)}
+        onDone={() => setCloneDialogOpen(false)}
       />
 
       <ConfirmDialog
