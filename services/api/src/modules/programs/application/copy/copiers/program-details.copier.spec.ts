@@ -254,3 +254,57 @@ describe('ProgramDetailsCopier', () => {
     expect(await copier.countFor('missing')).toBe(0);
   });
 });
+
+describe('ProgramDetailsCopier.exportTemplate', () => {
+  it('exports a single-item payload with the three scalar fields', async () => {
+    const prisma = mkPrisma({ src: { requirementsDescription: '<p>Bring a laptop</p>', benefitsDescription: null, termsAndConditions: '<p>No refunds</p>' } });
+    const copier = new ProgramDetailsCopier(prisma);
+    const payload = await copier.exportTemplate('src');
+    expect(payload).toEqual({
+      entityType: 'program-details',
+      payloadVersion: 1,
+      items: [{ requirementsDescription: '<p>Bring a laptop</p>', benefitsDescription: null, termsAndConditions: '<p>No refunds</p>' }],
+    });
+  });
+});
+
+describe('ProgramDetailsCopier.applyTemplate', () => {
+  it("replace writes the template item's three fields onto the target program", async () => {
+    const prisma = mkPrisma({ tgt: { requirementsDescription: null, benefitsDescription: null, termsAndConditions: null } });
+    const copier = new ProgramDetailsCopier(prisma);
+    const result = await copier.applyTemplate(
+      prisma,
+      { entityType: 'program-details', payloadVersion: 1, items: [{ requirementsDescription: '<p>x</p>', benefitsDescription: '<p>y</p>', termsAndConditions: null }] },
+      'tgt',
+      'replace',
+    );
+    expect((prisma as any).program.update).toHaveBeenCalledWith({
+      where: { id: 'tgt' },
+      data: { requirementsDescription: '<p>x</p>', benefitsDescription: '<p>y</p>', termsAndConditions: null },
+    });
+    expect(result).toEqual({ created: 1, skipped: 0, replaced: 0 });
+  });
+
+  it('rejects append mode', async () => {
+    const prisma = mkPrisma({});
+    const copier = new ProgramDetailsCopier(prisma);
+    await expect(
+      copier.applyTemplate(prisma, { entityType: 'program-details', payloadVersion: 1, items: [{ requirementsDescription: 'x', benefitsDescription: null, termsAndConditions: null }] }, 'tgt', 'append'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect((prisma as any).program.update).not.toHaveBeenCalled();
+  });
+
+  // The brief's original assertion here was `.rejects.toThrow(/empty_replace_source/)`,
+  // which can never match — see this file's captureError comment above.
+  // Fixed to assert on the actual structured code.
+  it('rejects a template whose single item is blank in all three fields, before any mutation', async () => {
+    const prisma = mkPrisma({});
+    const copier = new ProgramDetailsCopier(prisma);
+    const err = await captureError(
+      copier.applyTemplate(prisma, { entityType: 'program-details', payloadVersion: 1, items: [{ requirementsDescription: '<p></p>', benefitsDescription: null, termsAndConditions: null }] }, 'tgt', 'replace'),
+    );
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err.getResponse() as { code: string }).code).toBe('empty_replace_source');
+    expect((prisma as any).program.update).not.toHaveBeenCalled();
+  });
+});
