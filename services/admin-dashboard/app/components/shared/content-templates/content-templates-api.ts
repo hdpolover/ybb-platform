@@ -31,11 +31,10 @@ export type ContentTemplateDetail = ContentTemplateSummary & {
  * content-template.handler.ts / copy-scoped-rows.ts) so callers can branch
  * on the code instead of pattern-matching English copy.
  *
- * NOTE: as of this writing the API's global HttpExceptionFilter only forwards
- * a body field named `errorCode`, but the two handlers above throw
- * `{ code, message }` (not `errorCode`) for those two codes. Until that
- * naming is aligned API-side, `.code` will be `undefined` for those
- * particular errors even though this client already reads both field names.
+ * The API's global HttpExceptionFilter accepts either `errorCode` or `code`
+ * on the thrown body and always emits it as top-level `errorCode`, so these
+ * codes do reach the client. This reader accepts both spellings anyway, so it
+ * stays correct regardless of which one a future throw site uses.
  */
 export class ContentTemplateApiError extends Error {
   readonly status: number;
