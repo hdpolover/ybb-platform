@@ -147,7 +147,7 @@ export function CopyFromTemplateDialog({
                   }
                 >
                   <div className="text-sm font-semibold text-zinc-900">Append</div>
-                  <p className="mt-1 text-xs text-zinc-500">Add the template's items; skip any whose key already exists.</p>
+                  <p className="mt-1 text-xs text-zinc-500">Add the template&apos;s items; skip any whose key already exists.</p>
                 </button>
                 <button
                   type="button"
