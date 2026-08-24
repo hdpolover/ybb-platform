@@ -7,7 +7,7 @@ import { PortalCacheService } from '../../services/portal-cache.service';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { PortalSubmitApplicationCommand } from '../../queries/portal-queries';
-import { makePrismaTxMock } from '../../../../../../test/utils/prisma-tx-mock';
+import { makePrismaTxMock, expectNoOuterWrites } from '../../../../../../test/utils/prisma-tx-mock';
 
 describe('PortalSubmitApplicationHandler', () => {
     let handler: PortalSubmitApplicationHandler;
@@ -16,8 +16,11 @@ describe('PortalSubmitApplicationHandler', () => {
     // ambassador.*, participant.*) runs inside `this.prisma.$transaction`, so
     // those mocks live ONLY on `mockTx`. If a referral write regresses onto
     // `mockPrisma` (outside the transaction's rollback boundary), the
-    // `mockPrisma.ambassador.update` `.not.toHaveBeenCalled()` guard below
-    // catches it instead of passing either way.
+    // `expectNoOuterWrites({ ambassador: mockPrisma.ambassador })` guard below
+    // catches it instead of passing either way. Scoped to `ambassador` only
+    // (not the full `mockPrisma`) because `participantApplication.update` is a
+    // *legitimate* outer write here -- the submit-status update happens
+    // outside the referral transaction by design.
     const { prisma: mockPrisma, tx: mockTx } = makePrismaTxMock(
         {
             participantApplication: {
@@ -353,7 +356,7 @@ describe('PortalSubmitApplicationHandler', () => {
             // later write in the block throws. If it lands outside (on mockPrisma),
             // a failed transaction still leaves totalReferrals permanently bumped with
             // no referral row behind it.
-            expect(mockPrisma.ambassador.update).not.toHaveBeenCalled();
+            expectNoOuterWrites({ ambassador: mockPrisma.ambassador });
             expect(mockReferralFunnel.advanceToApplied).toHaveBeenCalledWith('participant-1', 'program-123');
         });
 

@@ -6,7 +6,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { ApplicationCategory } from '@core/entities/participant-application.entity';
-import { makePrismaTxMock } from '../../../../../../test/utils/prisma-tx-mock';
+import { makePrismaTxMock, expectNoOuterWrites } from '../../../../../../test/utils/prisma-tx-mock';
 
 describe('SwitchApplicationCategoryHandler', () => {
   let handler: SwitchApplicationCategoryHandler;
@@ -14,8 +14,8 @@ describe('SwitchApplicationCategoryHandler', () => {
   // Disjoint prisma/tx mocks: `update`/`updateMany` live ONLY on `mockTx`, so a
   // regression that moves the switch+auto-cancel writes outside the
   // `$transaction` callback (onto `mockPrisma` instead) is caught by the
-  // `mockPrisma.participantApplication.update` `.not.toHaveBeenCalled()` guard
-  // below, rather than passing identically either way.
+  // `expectNoOuterWrites(mockPrisma)` guard below, rather than passing
+  // identically either way.
   const { prisma: mockPrisma, tx: mockTx } = makePrismaTxMock(
     {
       participantApplication: {
@@ -158,7 +158,7 @@ describe('SwitchApplicationCategoryHandler', () => {
     // ...and never leak onto the outer (non-transactional) prisma client. If it
     // did, a mid-transaction failure could leave cancelled invoices under a
     // category the participant never actually switched to, or vice versa.
-    expect(mockPrisma.participantApplication.update).not.toHaveBeenCalled();
+    expectNoOuterWrites(mockPrisma);
   });
 
   it('auto-cancels unpaid invoices atomically with the category switch, inside the same transaction', async () => {
@@ -194,6 +194,6 @@ describe('SwitchApplicationCategoryHandler', () => {
       }),
     );
     // Same non-atomicity concern as above, for the auto-cancel side.
-    expect(mockPrisma.applicationInvoice.updateMany).not.toHaveBeenCalled();
+    expectNoOuterWrites(mockPrisma);
   });
 });

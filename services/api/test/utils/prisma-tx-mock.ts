@@ -31,7 +31,7 @@
 //   );
 //   // ...
 //   expect(tx.participantApplication.update).toHaveBeenCalledWith(...);
-//   expect(prisma.participantApplication.update).not.toHaveBeenCalled(); // proves the write didn't escape the transaction
+//   expectNoOuterWrites(prisma); // proves no write escaped the transaction onto the outer client
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -72,4 +72,63 @@ export function makePrismaTxMock<TPrisma extends object, TTx extends object>(
     }),
   };
   return { prisma, tx };
+}
+
+/** Prisma delegate methods that mutate data. Read methods (find-family, count,
+ * aggregate, groupBy) are deliberately excluded — reads on the outer,
+ * non-transactional `prisma` client are normal and expected; only writes must
+ * never land there. */
+const WRITE_OPERATIONS = new Set([
+  'create',
+  'createMany',
+  'createManyAndReturn',
+  'update',
+  'updateMany',
+  'updateManyAndReturn',
+  'upsert',
+  'delete',
+  'deleteMany',
+]);
+
+/**
+ * Asserts that no write-shaped Prisma operation was called on the given mock.
+ * Intended for the outer, non-transactional `prisma` mock returned by
+ * `makePrismaTxMock` (or any subset of it shaped the same way,
+ * `{ modelName: { opName: jest.fn(), ... }, ... }`) — pass a subset when some
+ * model on the outer client legitimately writes outside the transaction and
+ * only other models must be write-free.
+ *
+ * This is the assertion every `$transaction`-mocking spec needs and, without
+ * this helper, has to hand-write once per model per operation:
+ *   expect(prisma.someModel.update).not.toHaveBeenCalled();
+ * That negative IS the fix for a mocked transaction: asserting the `tx` mock
+ * was called proves nothing on its own, because a write that escaped the
+ * transaction still calls *something* — this is the only assertion that
+ * catches it landing in the wrong place.
+ *
+ * Failures name the exact `model.operation` that was called outside the
+ * transaction, so a failure is diagnosable without a debugger.
+ */
+export function expectNoOuterWrites(prisma: Record<string, unknown>): void {
+  for (const [model, ops] of Object.entries(prisma)) {
+    if (model === '$transaction' || ops === null || typeof ops !== 'object') continue;
+
+    for (const [op, fn] of Object.entries(ops as Record<string, unknown>)) {
+      if (!WRITE_OPERATIONS.has(op)) continue;
+      if (typeof fn !== 'function' || !('mock' in fn)) continue;
+
+      const mockFn = fn as jest.Mock;
+      if (mockFn.mock.calls.length > 0) {
+        try {
+          expect(mockFn).not.toHaveBeenCalled();
+        } catch (err) {
+          throw new Error(
+            `expectNoOuterWrites: prisma.${model}.${op} was called outside the transaction ` +
+              `— a write that must be atomic escaped $transaction (route it through the tx ` +
+              `client instead).\n\n${(err as Error).message}`,
+          );
+        }
+      }
+    }
+  }
 }

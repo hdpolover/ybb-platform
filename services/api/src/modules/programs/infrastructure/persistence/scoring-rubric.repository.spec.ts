@@ -2,7 +2,7 @@
 import { Prisma, ScoringStage } from '@prisma/client';
 import { ScoringRubricRepository } from './scoring-rubric.repository';
 import { UpsertRubricPayload } from '../../../../core/interfaces/repositories/scoring-rubric.repository.interface';
-import { makePrismaTxMock } from '../../../../../test/utils/prisma-tx-mock';
+import { makePrismaTxMock, expectNoOuterWrites } from '../../../../../test/utils/prisma-tx-mock';
 
 describe('ScoringRubricRepository', () => {
   let repo: ScoringRubricRepository;
@@ -14,8 +14,8 @@ describe('ScoringRubricRepository', () => {
   // outer `mockPrisma`. If the deactivate step (`scoringSchema.update`)
   // regresses onto `mockPrisma` instead of `mockTx`, it commits independently
   // of the create -- a failure partway through would leave zero active
-  // rubrics for the program/stage. The `mockPrisma.scoringSchema.update`
-  // `.not.toHaveBeenCalled()` guard below catches that.
+  // rubrics for the program/stage. The `expectNoOuterWrites(mockPrisma)`
+  // guard below catches that.
   let mockPrisma: any;
   let mockTx: any;
 
@@ -229,7 +229,7 @@ describe('ScoringRubricRepository', () => {
       // the outer (non-transactional) client instead, a failure later in the
       // same mint (create, category/criteria loop) leaves zero active rubrics
       // for this program/stage, with no rollback to recover the old one.
-      expect(mockPrisma.scoringSchema.update).not.toHaveBeenCalled();
+      expectNoOuterWrites(mockPrisma);
     });
 
     it('returns the existing active version unchanged and mints nothing when the payload is semantically identical', async () => {
