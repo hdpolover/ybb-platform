@@ -40,10 +40,11 @@ describe('SupportAccessService.exchangeImpersonationToken', () => {
       dataChangeLog: { create: jest.fn() },
       $transaction: jest.fn().mockResolvedValue([]),
     };
-    // Distinct access/refresh return values so `res.accessToken !== res.refreshToken`
-    // is actually checkable -- a constant return value is indistinguishable from a
-    // swapped-token bug. Order matches production: accessToken is signed first,
-    // refreshToken second (support-access.service.ts exchangeImpersonationToken).
+    // Distinct access/refresh return values so the exact-value assertions below
+    // (`res.accessToken`/`res.refreshToken`) pin each token to a specific mock
+    // call rather than two calls returning the same constant. Order matches
+    // production: accessToken is signed first, refreshToken second
+    // (support-access.service.ts exchangeImpersonationToken).
     const jwt = {
       sign: jest.fn().mockReturnValueOnce('access.jwt').mockReturnValueOnce('refresh.jwt'),
     } as unknown as JwtService;
@@ -87,9 +88,16 @@ describe('SupportAccessService.exchangeImpersonationToken', () => {
       expect.objectContaining({ sub: activeUser.id }),
       expect.anything(),
     );
-    // Distinct return values (see buildService) make this a real check rather
-    // than two identical constants comparing equal to themselves.
-    expect(res.accessToken).not.toBe(res.refreshToken);
+    // Exact-value assertions, not `.not.toBe()`: two *distinct* mock values are
+    // still distinct after being swapped, so `expect(res.accessToken).not.toBe(
+    // res.refreshToken)` cannot detect `accessToken`/`refreshToken` being
+    // returned in the wrong slots -- it passes identically whether the service
+    // wires them correctly or swaps them. Pinning to the exact literal each
+    // mock returns also verifies the signing order production relies on:
+    // accessToken is signed first (support-access.service.ts L244), refreshToken
+    // second (L255).
+    expect(res.accessToken).toBe('access.jwt');
+    expect(res.refreshToken).toBe('refresh.jwt');
     expect(res.redirectTo).toBe('/dashboard');
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
