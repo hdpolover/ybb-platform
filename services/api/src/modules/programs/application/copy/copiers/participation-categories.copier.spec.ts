@@ -1,7 +1,23 @@
 // services/api/src/modules/programs/application/copy/copiers/participation-categories.copier.spec.ts
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ParticipationCategoriesCopier } from './participation-categories.copier';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+
+// Mirrors form-fields.copier.spec.ts / program-details.copier.spec.ts's
+// helper: BadRequestException here carries a structured { code, message }
+// response body, and Nest's HttpException surfaces that body's own `message`
+// string as the thrown error's `.message` — not the `code` — so
+// `.rejects.toThrow(/code/)` can never match. Asserting on
+// `.getResponse().code` is this codebase's established way to check a
+// structured exception's code.
+async function captureError(promise: Promise<unknown>): Promise<any> {
+  try {
+    await promise;
+  } catch (err) {
+    return err;
+  }
+  throw new Error('expected promise to reject');
+}
 
 type CategoryRow = {
   id: string;
@@ -156,5 +172,79 @@ describe('ParticipationCategoriesCopier', () => {
       { id: 's1', label: 'Plain', meta: 'Active', hasExternalMedia: false },
       { id: 's2', label: 'WithImage', meta: 'Active', hasExternalMedia: true },
     ]);
+  });
+});
+
+describe('ParticipationCategoriesCopier.exportTemplate', () => {
+  it('exports the full category row shape', async () => {
+    const prisma = mkPrisma({ sourceCategories: [category({ id: 's1', name: 'High School', description: '<p>desc</p>' })] });
+    const copier = new ParticipationCategoriesCopier(prisma);
+    const payload = await copier.exportTemplate('src');
+    expect(payload).toEqual({
+      entityType: 'participation-categories',
+      payloadVersion: 1,
+      items: [{ name: 'High School', description: '<p>desc</p>', benefits: null, eligibility: null, isActive: true }],
+    });
+  });
+
+  it('honors itemIds', async () => {
+    const prisma = mkPrisma({ sourceCategories: [category({ id: 's1', name: 'a' }), category({ id: 's2', name: 'b' })] });
+    const copier = new ParticipationCategoriesCopier(prisma);
+    const payload = await copier.exportTemplate('src', ['s2']);
+    expect(payload.items).toEqual([expect.objectContaining({ name: 'b' })]);
+  });
+});
+
+describe('ParticipationCategoriesCopier.applyTemplate', () => {
+  it('append inserts template categories and dedupes on name', async () => {
+    const prisma = mkPrisma({ existingCategories: [category({ id: 't1', name: 'High School' })] });
+    const copier = new ParticipationCategoriesCopier(prisma);
+    const result = await copier.applyTemplate(
+      prisma,
+      {
+        entityType: 'participation-categories',
+        payloadVersion: 1,
+        items: [
+          { name: 'High School', description: null, benefits: null, eligibility: null, isActive: true },
+          { name: 'University', description: null, benefits: null, eligibility: null, isActive: true },
+        ],
+      },
+      'tgt',
+      'append',
+    );
+    expect(result).toEqual({ created: 1, skipped: 1, replaced: 0 });
+  });
+
+  it('replace refuses with ConflictException when existing categories are still referenced by applications', async () => {
+    const prisma = mkPrisma({ existingCategories: [category({ id: 't1', name: 'old' })], referencingApplicationCount: 2 });
+    const copier = new ParticipationCategoriesCopier(prisma);
+    await expect(
+      copier.applyTemplate(prisma, { entityType: 'participation-categories', payloadVersion: 1, items: [{ name: 'a', description: null, benefits: null, eligibility: null, isActive: true }] }, 'tgt', 'replace'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect((prisma as any).programParticipationCategory.updateMany).not.toHaveBeenCalled();
+    expect((prisma as any).programParticipationCategory.create).not.toHaveBeenCalled();
+  });
+
+  it('replace with an empty template throws BadRequestException before any mutation', async () => {
+    const prisma = mkPrisma({ existingCategories: [category({ id: 't1', name: 'old' })] });
+    const copier = new ParticipationCategoriesCopier(prisma);
+    const err = await captureError(
+      copier.applyTemplate(prisma, { entityType: 'participation-categories', payloadVersion: 1, items: [] }, 'tgt', 'replace'),
+    );
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err.getResponse() as { code: string }).code).toBe('empty_replace_source');
+    expect((prisma as any).programParticipationCategory.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('ParticipationCategoriesCopier round-trip', () => {
+  it('exportTemplate then applyTemplate reproduces the category on the target program', async () => {
+    const prisma = mkPrisma({ sourceCategories: [category({ id: 's1', name: 'High School', description: '<p>desc</p>', benefits: '<p>b</p>' })] });
+    const copier = new ParticipationCategoriesCopier(prisma);
+    const payload = await copier.exportTemplate('src');
+    const result = await copier.applyTemplate(prisma, payload, 'tgt', 'append');
+    const create = (prisma as any).programParticipationCategory.create as jest.Mock;
+    expect(create.mock.calls[0][0].data).toEqual(expect.objectContaining({ name: 'High School', description: '<p>desc</p>', benefits: '<p>b</p>' }));
+    expect(result).toEqual({ created: 1, skipped: 0, replaced: 0 });
   });
 });
