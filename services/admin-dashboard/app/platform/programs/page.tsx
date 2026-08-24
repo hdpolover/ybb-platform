@@ -10,10 +10,8 @@ import { StatCard } from "@/src/admin/stat-card";
 import { FilterBar } from "@/src/admin/filter-bar";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 import { Button } from "@/src/ui/button";
-import {
-  applyTemplateToProgram,
-  fetchFormTemplates,
-} from "@/app/components/submissionsMasterData/form-fields/catalog-api";
+import { fetchContentTemplates } from "@/app/components/shared/content-templates/content-templates-api";
+import { postApplyTemplate } from "@/app/components/shared/copy-from-program/copy-api";
 import {
   createPlatformProgram,
   deletePlatformProgram,
@@ -119,22 +117,23 @@ export default function ProgramsPage() {
 
   async function offerDefaultTemplate(programId: string) {
     try {
-      const templates = await fetchFormTemplates();
+      const templates = await fetchContentTemplates("form-fields");
       // Prefer a default template; any will do for MVP
       const defaultTemplate = templates.find((t) => t.isDefault);
       if (!defaultTemplate) return;
 
       const ok = window.confirm(
         `Apply the "${defaultTemplate.name}" template?\n\n` +
-          `It will pre-populate ${defaultTemplate.fieldCount} form fields. ` +
+          `It will pre-populate ${defaultTemplate.itemCount} form fields. ` +
           `You can edit or remove any of them later.`,
       );
       if (!ok) return;
 
-      const result = await applyTemplateToProgram(programId, defaultTemplate.id, "append");
-      toast.success(
-        `Added ${result.added.length} fields from "${defaultTemplate.name}".`,
-      );
+      const result = await postApplyTemplate("form-fields", programId, {
+        templateId: defaultTemplate.id,
+        mode: "append",
+      });
+      toast.success(`Added ${result.created} fields from "${defaultTemplate.name}".`);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Failed to apply default template",
