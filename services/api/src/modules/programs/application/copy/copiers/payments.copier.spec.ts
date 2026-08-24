@@ -2,6 +2,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PaymentsCopier } from './payments.copier';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { createPrismaTxMock } from '../../../../../../test/utils/prisma-tx-mock';
 
 // Mirrors form-fields.copier.spec.ts / program-details.copier.spec.ts's
 // helper: BadRequestException here carries a structured { code, message }
@@ -64,6 +65,12 @@ function tier(over: Partial<TierRow>): TierRow {
   };
 }
 
+// Builds a disjoint `{ prisma, tx }` pair (see prisma-tx-mock.ts): `prisma`
+// is what the copier reads through outside a transaction (countFor,
+// preview, exportTemplate); `tx` is what copy()/applyTemplate() — and the
+// in-use guard they run inline — read and write through. Both model mocks
+// share the same fixture-backed behavior, but are independently-tracked
+// jest.fn() sets.
 function mkPrisma(
   opts: {
     sourceTiers?: TierRow[];
@@ -75,10 +82,10 @@ function mkPrisma(
     invoiceRefTierIds?: string[];
     applicationRefTierIds?: string[];
   } = {},
-): PrismaService {
+) {
   const invoiceRefTierIds = opts.invoiceRefTierIds ?? [];
   const applicationRefTierIds = opts.applicationRefTierIds ?? [];
-  const base: any = {
+  const buildModels = () => ({
     programPricingTier: {
       findMany: jest.fn().mockImplementation(({ where }: any) =>
         Promise.resolve((where.programId === 'src' ? opts.sourceTiers : opts.existingTiers) ?? []),
@@ -115,55 +122,55 @@ function mkPrisma(
         return Promise.resolve(ids.filter((id) => applicationRefTierIds.includes(id)).length);
       }),
     },
-  };
-  base.$transaction = jest.fn().mockImplementation((cb: (tx: any) => Promise<unknown>) => cb(base));
-  return base as PrismaService;
+  });
+  const { prisma, tx } = createPrismaTxMock(buildModels);
+  return { prisma: prisma as unknown as PrismaService, tx: tx as unknown as PrismaService };
 }
 
 describe('PaymentsCopier', () => {
   it('has the expected key/label/supportsAppend', () => {
-    const copier = new PaymentsCopier(mkPrisma());
+    const copier = new PaymentsCopier(mkPrisma().prisma);
     expect(copier.key).toBe('payments');
     expect(copier.label).toBe('Payment Options');
     expect(copier.supportsAppend).toBe(true);
   });
 
   it('append copies new tiers, dedupes on name, and resets soldCount/currentCount to 0', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceTiers: [tier({ id: 's1', name: 'Early Bird', soldCount: 30, currentCount: 30 })],
       existingTiers: [],
     });
     const copier = new PaymentsCopier(prisma);
-    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
-    const create = (prisma as any).programPricingTier.create as jest.Mock;
+    const result = await copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    const create = (tx as any).programPricingTier.create as jest.Mock;
     expect(create.mock.calls[0][0].data.soldCount).toBe(0);
     expect(create.mock.calls[0][0].data.currentCount).toBe(0);
     expect(result).toEqual({ created: 1, skipped: 0, replaced: 0 });
   });
 
   it('append copies capacity verbatim as content, not reset like the live counters', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceTiers: [tier({ id: 's1', name: 'Early Bird', capacity: 250 })],
       existingTiers: [],
     });
     const copier = new PaymentsCopier(prisma);
-    await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
-    const create = (prisma as any).programPricingTier.create as jest.Mock;
+    await copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    const create = (tx as any).programPricingTier.create as jest.Mock;
     expect(create.mock.calls[0][0].data.capacity).toBe(250);
   });
 
   it('append skips a tier whose name collides with an existing tier', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceTiers: [tier({ id: 's1', name: 'Early Bird' })],
       existingTiers: [tier({ id: 't1', name: 'Early Bird' })],
     });
     const copier = new PaymentsCopier(prisma);
-    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    const result = await copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
     expect(result).toEqual({ created: 0, skipped: 1, replaced: 0 });
   });
 
   it('remaps validity periods to the newly created tier id, not the source tier id', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceTiers: [
         tier({
           id: 's1',
@@ -176,8 +183,8 @@ describe('PaymentsCopier', () => {
       ],
     });
     const copier = new PaymentsCopier(prisma);
-    await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
-    const periodCreate = (prisma as any).pricingTierValidityPeriod.create as jest.Mock;
+    await copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    const periodCreate = (tx as any).pricingTierValidityPeriod.create as jest.Mock;
     expect(periodCreate).toHaveBeenCalledTimes(2);
     expect(periodCreate.mock.calls[0][0].data.pricingTierId).toBe('new-Early Bird');
     expect(periodCreate.mock.calls[0][0].data.pricingTierId).not.toBe('s1');
@@ -185,7 +192,7 @@ describe('PaymentsCopier', () => {
   });
 
   it('remaps validity periods correctly across two distinct tiers, using distinguishable ids to catch a swap', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceTiers: [
         tier({
           id: 's-alpha',
@@ -200,8 +207,8 @@ describe('PaymentsCopier', () => {
       ],
     });
     const copier = new PaymentsCopier(prisma);
-    await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
-    const periodCreate = (prisma as any).pricingTierValidityPeriod.create as jest.Mock;
+    await copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    const periodCreate = (tx as any).pricingTierValidityPeriod.create as jest.Mock;
     expect(periodCreate).toHaveBeenCalledTimes(2);
     const alphaCall = periodCreate.mock.calls.find((c) => c[0].data.description === 'Alpha wave');
     const betaCall = periodCreate.mock.calls.find((c) => c[0].data.description === 'Beta wave');
@@ -211,62 +218,67 @@ describe('PaymentsCopier', () => {
   });
 
   it('replace soft-deletes existing tiers then inserts from order 0', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceTiers: [tier({ id: 's1', name: 'a', order: 3 })],
       existingTiers: [tier({ id: 't1', name: 'old' })],
     });
     const copier = new PaymentsCopier(prisma);
-    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' });
-    expect((prisma as any).programPricingTier.updateMany).toHaveBeenCalledWith(
+    const result = await copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' });
+    expect((tx as any).programPricingTier.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { programId: 'tgt', deletedAt: null },
         data: expect.objectContaining({ deletedAt: expect.any(Date), isActive: false }),
       }),
     );
-    const create = (prisma as any).programPricingTier.create as jest.Mock;
+    const create = (tx as any).programPricingTier.create as jest.Mock;
     expect(create.mock.calls[0][0].data.order).toBe(0);
     expect(result).toEqual({ created: 1, skipped: 0, replaced: 1 });
+    // The whole point of the disjoint prisma/tx mock: prove the writes went
+    // through the transactional client, not around it via the ambient
+    // this.prisma the copier also holds for reads.
+    expect((prisma as any).programPricingTier.updateMany).not.toHaveBeenCalled();
+    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
   });
 
   it('append: empty source is a no-op', async () => {
-    const prisma = mkPrisma({ sourceTiers: [] });
+    const { prisma, tx } = mkPrisma({ sourceTiers: [] });
     const copier = new PaymentsCopier(prisma);
-    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    const result = await copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
     expect(result).toEqual({ created: 0, skipped: 0, replaced: 0 });
-    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.create).not.toHaveBeenCalled();
   });
 
   // copy-scoped-rows.ts's replace/append semantics (which the other five
   // copiers get for free) must be reproduced here by hand, since Payments
   // is the one copier that doesn't route through that helper.
   it('replace: empty source rejects before any mutation, instead of soft-deleting the target for nothing', async () => {
-    const prisma = mkPrisma({ sourceTiers: [], existingTiers: [tier({ id: 't1', name: 'old' })] });
+    const { prisma, tx } = mkPrisma({ sourceTiers: [], existingTiers: [tier({ id: 't1', name: 'old' })] });
     const copier = new PaymentsCopier(prisma);
     await expect(
-      copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' }),
+      copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' }),
     ).rejects.toThrow(/empty selection/i);
-    expect((prisma as any).programPricingTier.updateMany).not.toHaveBeenCalled();
-    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
-    expect((prisma as any).pricingTierValidityPeriod.create).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.updateMany).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.create).not.toHaveBeenCalled();
+    expect((tx as any).pricingTierValidityPeriod.create).not.toHaveBeenCalled();
   });
 
   it('replace: a non-empty source filtered by itemIds down to zero also rejects before any mutation', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceTiers: [tier({ id: 's1', name: 'a' })],
       existingTiers: [tier({ id: 't1', name: 'old' })],
     });
     const copier = new PaymentsCopier(prisma);
     await expect(
-      copier.copy(prisma, {
+      copier.copy(tx, {
         sourceProgramId: 'src',
         targetProgramId: 'tgt',
         itemIds: ['does-not-exist'],
         mode: 'replace',
       }),
     ).rejects.toThrow(/empty selection/i);
-    expect((prisma as any).programPricingTier.updateMany).not.toHaveBeenCalled();
-    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
-    expect((prisma as any).pricingTierValidityPeriod.create).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.updateMany).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.create).not.toHaveBeenCalled();
+    expect((tx as any).pricingTierValidityPeriod.create).not.toHaveBeenCalled();
   });
 
   // ParticipationCategoriesCopier already guards this failure mode via
@@ -275,54 +287,54 @@ describe('PaymentsCopier', () => {
   // prove the guard queries the TARGET's live tier ids, not the source's
   // (that exact gap was a Task 6 finding).
   it('replace: refuses when the target\'s existing tiers are still referenced by a live invoice', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceTiers: [tier({ id: 'source-tier-999', name: 'a' })],
       existingTiers: [tier({ id: 'target-tier-111', name: 'old' })],
       invoiceRefTierIds: ['target-tier-111'],
     });
     const copier = new PaymentsCopier(prisma);
     await expect(
-      copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' }),
+      copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' }),
     ).rejects.toBeInstanceOf(ConflictException);
-    expect((prisma as any).applicationInvoice.count).toHaveBeenCalledWith({
+    expect((tx as any).applicationInvoice.count).toHaveBeenCalledWith({
       where: { pricingTierId: { in: ['target-tier-111'] } },
     });
-    expect((prisma as any).programPricingTier.updateMany).not.toHaveBeenCalled();
-    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
-    expect((prisma as any).pricingTierValidityPeriod.create).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.updateMany).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.create).not.toHaveBeenCalled();
+    expect((tx as any).pricingTierValidityPeriod.create).not.toHaveBeenCalled();
   });
 
   it('replace: refuses when the target\'s existing tiers are still referenced by a live application (optional FK, same as required)', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceTiers: [tier({ id: 'source-tier-999', name: 'a' })],
       existingTiers: [tier({ id: 'target-tier-222', name: 'old' })],
       applicationRefTierIds: ['target-tier-222'],
     });
     const copier = new PaymentsCopier(prisma);
     await expect(
-      copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' }),
+      copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' }),
     ).rejects.toBeInstanceOf(ConflictException);
-    expect((prisma as any).participantApplication.count).toHaveBeenCalledWith({
+    expect((tx as any).participantApplication.count).toHaveBeenCalledWith({
       where: { pricingTierId: { in: ['target-tier-222'] } },
     });
-    expect((prisma as any).programPricingTier.updateMany).not.toHaveBeenCalled();
-    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
-    expect((prisma as any).pricingTierValidityPeriod.create).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.updateMany).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.create).not.toHaveBeenCalled();
+    expect((tx as any).pricingTierValidityPeriod.create).not.toHaveBeenCalled();
   });
 
   it('replace: proceeds normally when the target\'s existing tiers have no live references', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceTiers: [tier({ id: 'source-tier-999', name: 'a' })],
       existingTiers: [tier({ id: 'target-tier-333', name: 'old' })],
     });
     const copier = new PaymentsCopier(prisma);
-    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' });
+    const result = await copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' });
     expect(result).toEqual({ created: 1, skipped: 0, replaced: 1 });
-    expect((prisma as any).programPricingTier.updateMany).toHaveBeenCalled();
+    expect((tx as any).programPricingTier.updateMany).toHaveBeenCalled();
   });
 
   it('preview() maps rows to CopyPreviewItem with currency+price as meta', async () => {
-    const prisma = mkPrisma({ sourceTiers: [tier({ id: 's1', name: 'Early Bird', currency: 'USD', price: 150 })] });
+    const { prisma } = mkPrisma({ sourceTiers: [tier({ id: 's1', name: 'Early Bird', currency: 'USD', price: 150 })] });
     const copier = new PaymentsCopier(prisma);
     const items = await copier.preview('src');
     expect(items).toEqual([{ id: 's1', label: 'Early Bird', meta: 'USD 150', hasExternalMedia: false }]);
@@ -334,7 +346,7 @@ describe('PaymentsCopier', () => {
   // must flag this so the shared dialog's cross-brand warning actually
   // fires for payment tiers.
   it('preview() sets hasExternalMedia: true when description embeds an <img>', async () => {
-    const prisma = mkPrisma({
+    const { prisma } = mkPrisma({
       sourceTiers: [tier({ id: 's1', name: 'Early Bird', description: '<p><img src="https://other-brand.example/x.png"></p>' })],
     });
     const copier = new PaymentsCopier(prisma);
@@ -343,7 +355,7 @@ describe('PaymentsCopier', () => {
   });
 
   it('preview() sets hasExternalMedia: false when description has no embedded media', async () => {
-    const prisma = mkPrisma({ sourceTiers: [tier({ id: 's1', name: 'Early Bird', description: '<p>Plain text</p>' })] });
+    const { prisma } = mkPrisma({ sourceTiers: [tier({ id: 's1', name: 'Early Bird', description: '<p>Plain text</p>' })] });
     const copier = new PaymentsCopier(prisma);
     const items = await copier.preview('src');
     expect(items[0].hasExternalMedia).toBe(false);
@@ -352,7 +364,7 @@ describe('PaymentsCopier', () => {
 
 describe('PaymentsCopier.exportTemplate', () => {
   it('exports tiers with nested validityPeriods as ISO date strings, and does not export soldCount/currentCount', async () => {
-    const prisma = mkPrisma({
+    const { prisma } = mkPrisma({
       sourceTiers: [
         tier({
           id: 's1',
@@ -378,10 +390,10 @@ describe('PaymentsCopier.exportTemplate', () => {
 
 describe('PaymentsCopier.applyTemplate', () => {
   it('append inserts a tier from the template with soldCount/currentCount at 0, remapping validity periods to the new tier id', async () => {
-    const prisma = mkPrisma({ existingTiers: [] });
+    const { prisma, tx } = mkPrisma({ existingTiers: [] });
     const copier = new PaymentsCopier(prisma);
     await copier.applyTemplate(
-      prisma,
+      tx,
       {
         entityType: 'payments',
         payloadVersion: 1,
@@ -397,27 +409,32 @@ describe('PaymentsCopier.applyTemplate', () => {
       'tgt',
       'append',
     );
-    const tierCreate = (prisma as any).programPricingTier.create as jest.Mock;
+    const tierCreate = (tx as any).programPricingTier.create as jest.Mock;
     expect(tierCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ soldCount: 0, currentCount: 0 }));
-    const periodCreate = (prisma as any).pricingTierValidityPeriod.create as jest.Mock;
+    const periodCreate = (tx as any).pricingTierValidityPeriod.create as jest.Mock;
     expect(periodCreate.mock.calls[0][0].data.pricingTierId).toBe('new-Early Bird');
+    // The whole point of the disjoint prisma/tx mock: prove the writes went
+    // through the transactional client, not around it via the ambient
+    // this.prisma the copier also holds for reads.
+    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
+    expect((prisma as any).pricingTierValidityPeriod.create).not.toHaveBeenCalled();
   });
 
   it('replace refuses with ConflictException when existing tiers are still referenced by invoices/applications', async () => {
-    const prisma = mkPrisma({ existingTiers: [tier({ id: 't1', name: 'old' })] });
-    (prisma as any).applicationInvoice = { count: jest.fn().mockResolvedValue(1) };
-    (prisma as any).participantApplication = { count: jest.fn().mockResolvedValue(0) };
+    const { prisma, tx } = mkPrisma({ existingTiers: [tier({ id: 't1', name: 'old' })] });
+    (tx as any).applicationInvoice = { count: jest.fn().mockResolvedValue(1) };
+    (tx as any).participantApplication = { count: jest.fn().mockResolvedValue(0) };
     const copier = new PaymentsCopier(prisma);
     await expect(
       copier.applyTemplate(
-        prisma,
+        tx,
         { entityType: 'payments', payloadVersion: 1, items: [{ name: 'a', description: null, price: 1, currency: 'USD', usdPrice: 1, idrPrice: 1, capacity: null, benefits: [], requirements: [], feeType: 'registration_fee', allowedCategories: [], icon: null, isActive: true, validityPeriods: [] }] },
         'tgt',
         'replace',
       ),
     ).rejects.toBeInstanceOf(ConflictException);
-    expect((prisma as any).programPricingTier.updateMany).not.toHaveBeenCalled();
-    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.updateMany).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.create).not.toHaveBeenCalled();
   });
 
   // The brief's original assertion here was `.rejects.toThrow(/empty_replace_source/)`,
@@ -425,14 +442,14 @@ describe('PaymentsCopier.applyTemplate', () => {
   // body puts `code` at `.getResponse().code`, not in `.message` (see
   // captureError's comment above). Fixed to assert on the actual code.
   it('replace with an empty template throws BadRequestException before any mutation', async () => {
-    const prisma = mkPrisma({ existingTiers: [tier({ id: 't1', name: 'old' })] });
+    const { prisma, tx } = mkPrisma({ existingTiers: [tier({ id: 't1', name: 'old' })] });
     const copier = new PaymentsCopier(prisma);
     const err = await captureError(
-      copier.applyTemplate(prisma, { entityType: 'payments', payloadVersion: 1, items: [] }, 'tgt', 'replace'),
+      copier.applyTemplate(tx, { entityType: 'payments', payloadVersion: 1, items: [] }, 'tgt', 'replace'),
     );
     expect(err).toBeInstanceOf(BadRequestException);
     expect((err.getResponse() as { code: string }).code).toBe('empty_replace_source');
-    expect((prisma as any).programPricingTier.updateMany).not.toHaveBeenCalled();
-    expect((prisma as any).programPricingTier.create).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.updateMany).not.toHaveBeenCalled();
+    expect((tx as any).programPricingTier.create).not.toHaveBeenCalled();
   });
 });
