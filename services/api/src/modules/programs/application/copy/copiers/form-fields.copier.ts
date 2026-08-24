@@ -42,6 +42,9 @@ type TemplateItem = {
   type?: string | null;
   placeholder?: string | null;
   helpText?: string | null;
+  mediaUrl?: string | null;
+  mediaAlt?: string | null;
+  helpAssets?: unknown;
   options?: unknown;
   validationRules?: unknown;
   section: string;
@@ -129,12 +132,18 @@ export class FormFieldsCopier implements ProgramCopier {
         // formFieldsItemSchema comment. label/type/helpText/options are
         // never exported for a system field; applyTemplate always
         // re-resolves them from SystemFormFieldDefinition at apply time.
+        // mediaUrl/mediaAlt/helpAssets are NOT part of the catalog — they're
+        // per-instance data on this program's field row, so (like copy())
+        // they're always carried verbatim, even for a system-sourced field.
         return {
           source: 'system',
           systemFieldKey: row.systemFieldKey,
           section: row.section,
           isRequired: row.isRequired,
           order: row.order,
+          mediaUrl: row.mediaUrl,
+          mediaAlt: row.mediaAlt,
+          helpAssets: row.helpAssets,
         };
       }
       return {
@@ -144,6 +153,9 @@ export class FormFieldsCopier implements ProgramCopier {
         type: row.type,
         placeholder: row.placeholder,
         helpText: row.helpText,
+        mediaUrl: row.mediaUrl,
+        mediaAlt: row.mediaAlt,
+        helpAssets: row.helpAssets,
         options: row.options,
         validationRules: row.validationRules,
         section: row.section,
@@ -154,6 +166,14 @@ export class FormFieldsCopier implements ProgramCopier {
     return { entityType: this.key, payloadVersion: 1, items: items as unknown as Record<string, unknown>[] };
   }
 
+  /**
+   * Unlike the other six copiers (dedupe-only), the returned `skipped` count
+   * here conflates two distinct causes — a dedupe-collision skip (name
+   * already exists on the target) and a catalog-drift skip (a system item's
+   * SystemFormFieldDefinition is missing/inactive/deleted). This matches
+   * apply-form-template.handler.ts's own `skipped` array, which never
+   * distinguished the two either — see `catalogSkipped` below.
+   */
   async applyTemplate(tx: PrismaTx, payload: TemplatePayload, targetProgramId: string, mode: CopyMode): Promise<CopyResult> {
     const items = parseTemplateItems(this.key, payload.items) as unknown as TemplateItem[];
     const delegate = tx.applicationFormField as unknown as ScopedRowsDelegate<FormFieldRow>;
@@ -161,9 +181,16 @@ export class FormFieldsCopier implements ProgramCopier {
     // Ports apply-form-template.handler.ts's resolution algorithm verbatim —
     // per the spec, this must not be generalised (no other entity has a
     // catalog). `resolved` carries the exact same three-way precedence that
-    // handler used: labelOverride/helpTextOverride win when set; type always
-    // follows the catalog for system fields; options only falls back to the
-    // catalog's defaultOptions when the item's own options are empty/absent.
+    // handler used: labelOverride/helpTextOverride win when set — for EVERY
+    // item, system or custom, exactly like the handler's `let label =
+    // tf.labelOverride ?? tf.label` ran before its source==='system' branch
+    // — type always follows the catalog for system fields; options only
+    // falls back to the catalog's defaultOptions when the item's own options
+    // are empty/absent. mediaUrl/mediaAlt/helpAssets are outside the
+    // handler's original scope (the legacy ApplicationFormTemplateField had
+    // no such columns) but are carried verbatim from the item for both
+    // branches here, mirroring copy()'s "copied verbatim by design" — the
+    // template-payload schema added those three slots for exactly this.
     //
     // catalogSkipped counts items dropped here (missing/inactive/deleted
     // catalog entry) so they land in CopyResult.skipped — mirroring
@@ -197,28 +224,32 @@ export class FormFieldsCopier implements ProgramCopier {
           order: item.order,
           placeholder: item.placeholder ?? null,
           helpText: helpText ?? null,
-          mediaUrl: null,
-          mediaAlt: null,
-          helpAssets: [],
+          mediaUrl: item.mediaUrl ?? null,
+          mediaAlt: item.mediaAlt ?? null,
+          helpAssets: (item.helpAssets as never) ?? [],
           options: (options as never) ?? [],
           validationRules: (item.validationRules as never) ?? {},
           source: 'system',
           systemFieldKey: item.systemFieldKey,
         });
       } else if (item.source === 'custom' && item.name) {
+        // labelOverride/helpTextOverride are not gated by source in the
+        // legacy ApplicationFormTemplateField schema — a migrated custom row
+        // can carry either — so they take the same precedence here as they
+        // do in the system branch above.
         resolved.push({
           id: '',
           name: item.name,
-          label: item.label ?? item.name,
+          label: item.labelOverride ?? item.label ?? item.name,
           type: item.type ?? 'text',
           section: item.section,
           isRequired: item.isRequired,
           order: item.order,
           placeholder: item.placeholder ?? null,
-          helpText: item.helpText ?? null,
-          mediaUrl: null,
-          mediaAlt: null,
-          helpAssets: [],
+          helpText: item.helpTextOverride ?? item.helpText ?? null,
+          mediaUrl: item.mediaUrl ?? null,
+          mediaAlt: item.mediaAlt ?? null,
+          helpAssets: (item.helpAssets as never) ?? [],
           options: (item.options as never) ?? [],
           validationRules: (item.validationRules as never) ?? {},
           source: 'custom',
