@@ -6,7 +6,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { ApplicationCategory } from '@core/entities/participant-application.entity';
-import { makePrismaTxMock, expectNoOuterWrites } from '../../../../../../test/utils/prisma-tx-mock';
+import { makePrismaTxMock, expectNoOuterWrites } from '@test/utils/prisma-tx-mock';
 
 describe('SwitchApplicationCategoryHandler', () => {
   let handler: SwitchApplicationCategoryHandler;
