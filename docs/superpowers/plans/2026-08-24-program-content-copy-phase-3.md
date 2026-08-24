@@ -528,12 +528,12 @@ describe('PlatformSettingRepository', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [ ] **Step 4: Run tests to verify they fail**
 
 Run (from `services/api/`): `npx jest --testPathPattern="platform-setting.repository.spec"`
 Expected: FAIL — cannot find module `./platform-setting.repository`.
 
-- [ ] **Step 3: Write the repository**
+- [ ] **Step 5: Write the repository**
 
 ```typescript
 // services/api/src/modules/platform-settings/infrastructure/persistence/platform-setting.repository.ts
@@ -569,12 +569,12 @@ export class PlatformSettingRepository {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [ ] **Step 6: Run tests to verify they pass**
 
 Run (from `services/api/`): `npx jest --testPathPattern="platform-setting.repository.spec"`
 Expected: PASS — 3 passing tests.
 
-- [ ] **Step 5: Module scaffold and registration**
+- [ ] **Step 7: Module scaffold and registration**
 
 ```typescript
 // services/api/src/modules/platform-settings/platform-settings.module.ts
@@ -590,12 +590,12 @@ export class PlatformSettingsModule {}
 
 Register `PlatformSettingsModule` in `services/api/src/app.module.ts`'s `imports` array, alongside the other feature modules.
 
-- [ ] **Step 6: Verify it compiles, migrate the dev DB**
+- [ ] **Step 8: Verify it compiles, migrate the dev DB**
 
 Run: `npx tsc --noEmit -p tsconfig.json` — no errors.
 Run: `npx prisma migrate dev` against the local/dev DB.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 cd services/api
@@ -714,7 +714,7 @@ export class UpdateProgramContactDto {
 }
 ```
 
-(Verify the exact import path for `NormalizeEmail` against `update-brand-details.dto.ts`'s own import before writing this — copy it verbatim from there.)
+(`@shared/decorators/normalize-email.decorator` confirmed against `update-brand-details.dto.ts:4` — same import, verbatim.)
 
 - [ ] **Step 4: Add the command**
 
@@ -1129,14 +1129,22 @@ Run: `npx jest --testPathPattern="impact-stats.service.spec"` — PASS, 3 tests.
 ```typescript
 // services/api/src/modules/platform-settings/presentation/platform-settings.controller.ts
 import { Body, Controller, Get, Put, Request, UseGuards } from '@nestjs/common';
+import { Request as ExpressRequest } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
-import { AuthenticatedRequest } from '@shared/types/authenticated-request';
 import { ImpactStatsService } from '../application/services/impact-stats.service';
 import { ImpactStatsDto } from '../application/dto/impact-stats.dto';
+
+// This codebase has no shared AuthenticatedRequest type — every controller
+// declares its own local copy (confirmed across programs.controller.ts,
+// program-announcements.controller.ts, program-application.controller.ts,
+// etc.). Matching that convention here rather than introducing a shared one.
+interface AuthenticatedRequest extends ExpressRequest {
+  user: { id: string; userId: string; email: string; brandId: string };
+}
 
 @ApiTags('Platform Settings')
 @ApiBearerAuth()
@@ -1159,8 +1167,6 @@ export class PlatformSettingsController {
   }
 }
 ```
-
-(Verify the exact import path for `AuthenticatedRequest` against an existing controller, e.g. `programs.controller.ts`, before writing this — copy it verbatim.)
 
 Gated to `SUPER_ADMIN` only, not `ADMIN` — this is organisation-wide, not brand-scoped, unlike every other admin-guarded route in this plan.
 
@@ -6432,4 +6438,3 @@ Run (from `services/api/`, against the local/dev API): `curl -s http://localhost
 
 If Steps 1-4 all pass, Phase 3 is complete: every task from 1 through 21 has run (this task, 22, is the check that they all landed correctly together, not itself a change), backend and frontend both compile and pass their full suites, the only public contract change is the documented one, and neither of the two systems assumed to need no changes required any.
 
----
