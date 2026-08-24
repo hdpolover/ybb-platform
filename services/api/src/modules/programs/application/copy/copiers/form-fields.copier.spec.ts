@@ -197,14 +197,18 @@ describe('FormFieldsCopier.exportTemplate', () => {
     });
   });
 
-  it('exports system-sourced fields WITHOUT label/type/helpText/options — only systemFieldKey/section/isRequired/order', async () => {
+  it('exports system-sourced fields WITHOUT label/type/helpText/options — only systemFieldKey/section/isRequired/order/media', async () => {
     const prisma = mkPrisma({
       sourceFields: [srcField({ id: 'f1', name: 'full_name', source: 'system', systemFieldKey: 'full_name', label: 'Full Legal Name (customized on this program)', type: 'text' })],
     });
     const copier = new FormFieldsCopier(prisma);
     const payload = await copier.exportTemplate('src');
+    // mediaUrl/mediaAlt/helpAssets ARE present (null/null/[] here, from
+    // srcField's defaults) — they're per-instance data, not catalog data, so
+    // unlike label/type/helpText/options they're never re-resolved and must
+    // round-trip through the thin shape too.
     expect(payload.items).toEqual([
-      { source: 'system', systemFieldKey: 'full_name', section: 'personal_details', isRequired: true, order: 0 },
+      { source: 'system', systemFieldKey: 'full_name', section: 'personal_details', isRequired: true, order: 0, mediaUrl: null, mediaAlt: null, helpAssets: [] },
     ]);
     // Explicitly not present — a system field's label is never frozen at export time.
     expect(payload.items[0]).not.toHaveProperty('label');
@@ -218,6 +222,38 @@ describe('FormFieldsCopier.exportTemplate', () => {
     const copier = new FormFieldsCopier(prisma);
     const payload = await copier.exportTemplate('src', ['f2']);
     expect(payload.items).toHaveLength(1);
+  });
+
+  it('captures mediaUrl/mediaAlt/helpAssets verbatim for both custom- and system-sourced fields', async () => {
+    const prisma = mkPrisma({
+      sourceFields: [
+        srcField({
+          id: 'f1',
+          name: 'tshirt_size',
+          source: 'custom',
+          mediaUrl: 'https://cdn/custom.png',
+          mediaAlt: 'Size guide',
+          helpAssets: [{ kind: 'link', label: 'Guide', url: 'https://h/custom' }],
+        }),
+        srcField({
+          id: 'f2',
+          name: 'full_name',
+          source: 'system',
+          systemFieldKey: 'full_name',
+          mediaUrl: 'https://cdn/system.png',
+          mediaAlt: 'ID guide',
+          helpAssets: [{ kind: 'link', label: 'Guide', url: 'https://h/system' }],
+        }),
+      ],
+    });
+    const copier = new FormFieldsCopier(prisma);
+    const payload = await copier.exportTemplate('src');
+    expect(payload.items[0]).toEqual(
+      expect.objectContaining({ mediaUrl: 'https://cdn/custom.png', mediaAlt: 'Size guide', helpAssets: [{ kind: 'link', label: 'Guide', url: 'https://h/custom' }] }),
+    );
+    expect(payload.items[1]).toEqual(
+      expect.objectContaining({ mediaUrl: 'https://cdn/system.png', mediaAlt: 'ID guide', helpAssets: [{ kind: 'link', label: 'Guide', url: 'https://h/system' }] }),
+    );
   });
 });
 
@@ -239,7 +275,11 @@ describe('FormFieldsCopier.applyTemplate', () => {
 
   it('re-resolves a thin system-sourced item against the live catalog (type, label, helpText, options all come from the catalog)', async () => {
     const prisma = mkPrismaWithCatalog({
-      catalog: { full_name: { type: 'text', label: 'Full Name (catalog, current)', defaultOptions: [], helpText: 'Catalog help', isActive: true, deletedAt: null } },
+      // catalog type is deliberately 'select', not 'text' — the thin item
+      // carries no `type` at all, so a buggy `item.type ?? 'text'` fallback
+      // would coincidentally match a 'text' catalog type and this assertion
+      // would pass for the wrong reason.
+      catalog: { full_name: { type: 'select', label: 'Full Name (catalog, current)', defaultOptions: [], helpText: 'Catalog help', isActive: true, deletedAt: null } },
     });
     const copier = new FormFieldsCopier(prisma);
     const result = await copier.applyTemplate(
@@ -250,9 +290,33 @@ describe('FormFieldsCopier.applyTemplate', () => {
     );
     const create = (prisma as any).applicationFormField.create as jest.Mock;
     expect(create.mock.calls[0][0].data).toEqual(
-      expect.objectContaining({ name: 'full_name', label: 'Full Name (catalog, current)', type: 'text', helpText: 'Catalog help' }),
+      expect.objectContaining({ name: 'full_name', label: 'Full Name (catalog, current)', type: 'select', helpText: 'Catalog help' }),
     );
     expect(result).toEqual({ created: 1, skipped: 0, replaced: 0 });
+  });
+
+  it('falls back to the catalog defaultOptions when the item carries no options of its own', async () => {
+    const prisma = mkPrismaWithCatalog({
+      catalog: {
+        favorite_color: {
+          type: 'select',
+          label: 'Favorite Color',
+          defaultOptions: [{ label: 'Red', value: 'red' }, { label: 'Blue', value: 'blue' }],
+          helpText: null,
+          isActive: true,
+          deletedAt: null,
+        },
+      },
+    });
+    const copier = new FormFieldsCopier(prisma);
+    await copier.applyTemplate(
+      prisma,
+      { entityType: 'form-fields', payloadVersion: 1, items: [{ source: 'system', systemFieldKey: 'favorite_color', section: 'personal_details', isRequired: true, order: 0 }] },
+      'tgt',
+      'append',
+    );
+    const create = (prisma as any).applicationFormField.create as jest.Mock;
+    expect(create.mock.calls[0][0].data.options).toEqual([{ label: 'Red', value: 'red' }, { label: 'Blue', value: 'blue' }]);
   });
 
   it('a set labelOverride wins over the catalog label; an unset one always follows the catalog', async () => {
@@ -307,6 +371,87 @@ describe('FormFieldsCopier.applyTemplate', () => {
     expect((prisma as any).systemFormFieldDefinition.findUnique).not.toHaveBeenCalled();
     const create = (prisma as any).applicationFormField.create as jest.Mock;
     expect(create.mock.calls[0][0].data.label).toBe('T-Shirt Size');
+  });
+
+  it('a set labelOverride/helpTextOverride wins over a custom-sourced item\'s own label/helpText (the legacy migration shape is not gated by source)', async () => {
+    const prisma = mkPrismaWithCatalog();
+    const copier = new FormFieldsCopier(prisma);
+    await copier.applyTemplate(
+      prisma,
+      {
+        entityType: 'form-fields',
+        payloadVersion: 1,
+        items: [
+          {
+            source: 'custom',
+            name: 'tshirt_size',
+            label: 'T-Shirt Size',
+            type: 'select',
+            placeholder: null,
+            helpText: 'Original help',
+            options: [{ label: 'M', value: 'm' }],
+            validationRules: {},
+            section: 'miscellaneous',
+            isRequired: false,
+            order: 0,
+            labelOverride: 'Frozen Custom Label',
+            helpTextOverride: 'Frozen Custom Help',
+          },
+        ],
+      },
+      'tgt',
+      'append',
+    );
+    const create = (prisma as any).applicationFormField.create as jest.Mock;
+    expect(create.mock.calls[0][0].data.label).toBe('Frozen Custom Label');
+    expect(create.mock.calls[0][0].data.helpText).toBe('Frozen Custom Help');
+  });
+
+  it('preserves mediaUrl/mediaAlt/helpAssets from the template item, for both system- and custom-sourced items', async () => {
+    const prisma = mkPrismaWithCatalog({
+      catalog: { full_name: { type: 'text', label: 'Catalog Label', defaultOptions: [], helpText: null, isActive: true, deletedAt: null } },
+    });
+    const copier = new FormFieldsCopier(prisma);
+    await copier.applyTemplate(
+      prisma,
+      {
+        entityType: 'form-fields',
+        payloadVersion: 1,
+        items: [
+          {
+            source: 'system',
+            systemFieldKey: 'full_name',
+            section: 'personal_details',
+            isRequired: true,
+            order: 0,
+            mediaUrl: 'https://cdn/sys.png',
+            mediaAlt: 'Sys guide',
+            helpAssets: [{ kind: 'link', label: 'Sys', url: 'https://s' }],
+          },
+          {
+            source: 'custom',
+            name: 'tshirt_size',
+            label: 'T-Shirt Size',
+            type: 'select',
+            section: 'miscellaneous',
+            isRequired: false,
+            order: 1,
+            mediaUrl: 'https://cdn/custom.png',
+            mediaAlt: 'Custom guide',
+            helpAssets: [{ kind: 'link', label: 'Custom', url: 'https://c' }],
+          },
+        ],
+      },
+      'tgt',
+      'append',
+    );
+    const create = (prisma as any).applicationFormField.create as jest.Mock;
+    expect(create.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ mediaUrl: 'https://cdn/sys.png', mediaAlt: 'Sys guide', helpAssets: [{ kind: 'link', label: 'Sys', url: 'https://s' }] }),
+    );
+    expect(create.mock.calls[1][0].data).toEqual(
+      expect.objectContaining({ mediaUrl: 'https://cdn/custom.png', mediaAlt: 'Custom guide', helpAssets: [{ kind: 'link', label: 'Custom', url: 'https://c' }] }),
+    );
   });
 
   it('replace with an empty template payload throws BadRequestException before any mutation', async () => {
