@@ -222,6 +222,13 @@ describe('ReleaseLoaBatchHandler', () => {
     mockRepo.findById.mockResolvedValue(null);
     const { ReleaseLoaBatchCommand } = await import('../commands/loa-batch.commands');
     await expect(handler.execute(new ReleaseLoaBatchCommand('bad-id', 'prog-1'))).rejects.toThrow(NotFoundException);
+    // `rejects.toThrow` only proves the exception fired, not that the mutation
+    // was skipped -- release() is a bare jest.fn() that resolves undefined
+    // without throwing, so this must be asserted separately. Firing release()
+    // for a foreign/unknown batch id would trigger the notify-eligible-recipients
+    // pipeline (in-app notifications + loa.batch.released event) irreversibly,
+    // even though the caller still sees a 404. Template: cancel-portal-payment.handler.spec.ts.
+    expect(mockRepo.release).not.toHaveBeenCalled();
   });
 
   it('on a real release, creates an in-app notification per eligible recipient and emits loa.batch.released', async () => {
@@ -337,6 +344,11 @@ describe('UnreleaseLoaBatchHandler', () => {
     mockRepo.findById.mockResolvedValue(null);
     const { UnreleaseLoaBatchCommand } = await import('../commands/loa-batch.commands');
     await expect(handler.execute(new UnreleaseLoaBatchCommand('bad-id', 'prog-1'))).rejects.toThrow(NotFoundException);
+    // Guard test must also prove the mutation was skipped -- unrelease() flips
+    // releasedAt back to null on a real batch, retracting LoAs participants
+    // already have. A bare unconfigured jest.fn() resolving undefined would
+    // pass this test either way without this assertion.
+    expect(mockRepo.unrelease).not.toHaveBeenCalled();
   });
 });
 
@@ -370,6 +382,10 @@ describe('DeleteLoaBatchHandler', () => {
     mockRepo.findById.mockResolvedValue(null);
     const { DeleteLoaBatchCommand } = await import('../commands/loa-batch.commands');
     await expect(handler.execute(new DeleteLoaBatchCommand('bad-id', 'prog-1'))).rejects.toThrow(NotFoundException);
+    // Guard test must also prove the mutation was skipped -- softDelete()
+    // removes another program's batch. A bare unconfigured jest.fn() resolving
+    // undefined would pass this test either way without this assertion.
+    expect(mockRepo.softDelete).not.toHaveBeenCalled();
   });
 });
 
