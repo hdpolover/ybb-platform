@@ -1,6 +1,6 @@
 // services/api/src/modules/programs/presentation/program-copy.controller.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ProgramCopyController } from './program-copy.controller';
 import { ProgramCopierRegistry } from '../application/copy/program-copier.registry';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -162,6 +162,53 @@ describe('ProgramCopyController', () => {
         controller.copy('prog-1', 'faqs', { sourceProgramId: 'prog-1', mode: 'append' }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(mockInvalidateLandingCache).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('applyTemplate', () => {
+    const mockPrismaFindTemplate = jest.fn();
+    const mockInvalidate = jest.fn().mockResolvedValue(undefined);
+
+    beforeEach(() => {
+      (controller as any).prisma.contentTemplate = { findFirst: mockPrismaFindTemplate };
+      (controller as any).landingCacheInvalidation = { invalidate: mockInvalidate };
+    });
+
+    it('404s when the template does not exist', async () => {
+      mockPrismaFindTemplate.mockResolvedValue(null);
+      await expect(controller.applyTemplate('tgt', 'faqs', { templateId: 'missing', mode: 'append' })).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('rejects when the template\'s entityType does not match the :entityKey in the URL', async () => {
+      mockPrismaFindTemplate.mockResolvedValue({ id: 't1', entityType: 'timelines', payload: { entityType: 'timelines', payloadVersion: 1, items: [] } });
+      await expect(controller.applyTemplate('tgt', 'faqs', { templateId: 't1', mode: 'append' })).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockPrismaTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects replace mode without confirm: true', async () => {
+      mockPrismaFindTemplate.mockResolvedValue({ id: 't1', entityType: 'faqs', payload: { entityType: 'faqs', payloadVersion: 1, items: [] } });
+      mockRegistryGet.mockReturnValue({ supportsAppend: true, applyTemplate: jest.fn() });
+      await expect(controller.applyTemplate('tgt', 'faqs', { templateId: 't1', mode: 'replace' })).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockPrismaTransaction).not.toHaveBeenCalled();
+    });
+
+    it('opens a transaction, calls copier.applyTemplate(tx, payload, programId, mode), then invalidates the landing cache', async () => {
+      const payload = { entityType: 'faqs', payloadVersion: 1, items: [{ question: 'Q?', answer: 'A.', category: 'general', isActive: true }] };
+      mockPrismaFindTemplate.mockResolvedValue({ id: 't1', entityType: 'faqs', payload });
+      const applyTemplate = jest.fn().mockResolvedValue({ created: 1, skipped: 0, replaced: 0 });
+      mockRegistryGet.mockReturnValue({ supportsAppend: true, applyTemplate });
+      mockPrismaTransaction.mockImplementation((cb: (tx: unknown) => Promise<unknown>) => cb('fake-tx'));
+
+      const result = await controller.applyTemplate('tgt', 'faqs', { templateId: 't1', mode: 'append' });
+
+      expect(applyTemplate).toHaveBeenCalledWith('fake-tx', payload, 'tgt', 'append');
+      expect(result).toEqual({ created: 1, skipped: 0, replaced: 0 });
+      // invalidateLandingCacheByProgramId is mocked at the module level (see
+      // the jest.mock at the top of this file), so it never calls through
+      // to the local `landingCacheInvalidation.invalidate` mock assigned
+      // above — assert on the module-level mock instead, same as copy()'s
+      // own cache-invalidation test does.
+      expect(mockInvalidateLandingCache).toHaveBeenCalled();
     });
   });
 });
