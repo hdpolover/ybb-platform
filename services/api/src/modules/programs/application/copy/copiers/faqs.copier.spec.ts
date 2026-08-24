@@ -2,6 +2,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { FaqsCopier } from './faqs.copier';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { createPrismaTxMock } from '../../../../../../test/utils/prisma-tx-mock';
 
 // Mirrors form-fields.copier.spec.ts's helper: BadRequestException here
 // carries a structured { code, message } response body, and Nest's
@@ -38,8 +39,14 @@ function faq(over: Partial<FaqRow>): FaqRow {
   };
 }
 
-function mkPrisma(opts: { sourceItems?: FaqRow[]; existingItems?: FaqRow[] } = {}): PrismaService {
-  const base: any = {
+// Builds a disjoint `{ prisma, tx }` pair (see prisma-tx-mock.ts): `prisma`
+// is what the copier reads through outside a transaction (countFor,
+// preview, exportTemplate); `tx` is what copy()/applyTemplate() read and
+// write through. Both model mocks share the same fixture-backed behavior,
+// but are independently-tracked jest.fn() sets so a write that escaped the
+// transaction onto `prisma` instead of `tx` is visible to assertions.
+function mkPrisma(opts: { sourceItems?: FaqRow[]; existingItems?: FaqRow[] } = {}) {
+  const buildModels = () => ({
     programFaq: {
       findMany: jest.fn().mockImplementation(({ where }: any) =>
         Promise.resolve((where.programId === 'src' ? opts.sourceItems : opts.existingItems) ?? []),
@@ -57,58 +64,63 @@ function mkPrisma(opts: { sourceItems?: FaqRow[]; existingItems?: FaqRow[] } = {
       create: jest.fn().mockImplementation(({ data }: { data: any }) => Promise.resolve({ id: `new-${data.question}`, ...data })),
       count: jest.fn().mockResolvedValue((opts.sourceItems ?? []).length),
     },
-  };
-  base.$transaction = jest.fn().mockImplementation((cb: (tx: any) => Promise<unknown>) => cb(base));
-  return base as PrismaService;
+  });
+  const { prisma, tx } = createPrismaTxMock(buildModels);
+  return { prisma: prisma as unknown as PrismaService, tx: tx as unknown as PrismaService };
 }
 
 describe('FaqsCopier', () => {
   it('has the expected key/label/supportsAppend', () => {
-    const copier = new FaqsCopier(mkPrisma());
+    const copier = new FaqsCopier(mkPrisma().prisma);
     expect(copier.key).toBe('faqs');
     expect(copier.label).toBe('FAQs');
     expect(copier.supportsAppend).toBe(true);
   });
 
   it('append copies new FAQs and dedupes on question', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceItems: [faq({ id: 's1', question: 'How do I apply?' }), faq({ id: 's2', question: 'When is the deadline?' })],
       existingItems: [faq({ id: 't1', question: 'How do I apply?' })],
     });
     const copier = new FaqsCopier(prisma);
-    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    const result = await copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
     expect(result).toEqual({ created: 1, skipped: 1, replaced: 0 });
   });
 
   it('replace soft-deletes existing FAQs then inserts from order 0', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceItems: [faq({ id: 's1', question: 'a', order: 3 })],
       existingItems: [faq({ id: 't1', question: 'old' })],
     });
     const copier = new FaqsCopier(prisma);
-    const result = await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' });
-    expect((prisma as any).programFaq.updateMany).toHaveBeenCalledWith(
+    const result = await copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'replace' });
+    expect((tx as any).programFaq.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ deletedAt: expect.any(Date), isActive: false }) }),
     );
-    const create = (prisma as any).programFaq.create as jest.Mock;
+    const create = (tx as any).programFaq.create as jest.Mock;
     expect(create.mock.calls[0][0].data.order).toBe(0);
     expect(result).toEqual({ created: 1, skipped: 0, replaced: 1 });
+    // The whole point of the disjoint prisma/tx mock: prove the writes went
+    // through the transactional client, not around it via the ambient
+    // this.prisma the copier also holds for reads.
+    expect((prisma as any).programFaq.updateMany).not.toHaveBeenCalled();
+    expect((prisma as any).programFaq.create).not.toHaveBeenCalled();
   });
 
   it('copies answer and category verbatim', async () => {
-    const prisma = mkPrisma({
+    const { prisma, tx } = mkPrisma({
       sourceItems: [faq({ id: 's1', question: 'Refund policy?', answer: 'Non-refundable after acceptance.', category: 'payment' })],
     });
     const copier = new FaqsCopier(prisma);
-    await copier.copy(prisma, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
-    const create = (prisma as any).programFaq.create as jest.Mock;
+    await copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    const create = (tx as any).programFaq.create as jest.Mock;
     expect(create.mock.calls[0][0].data).toEqual(
       expect.objectContaining({ answer: 'Non-refundable after acceptance.', category: 'payment' }),
     );
   });
 
   it('preview() maps rows to CopyPreviewItem with category as meta', async () => {
-    const prisma = mkPrisma({ sourceItems: [faq({ id: 's1', question: 'How do I apply?', category: 'registration' })] });
+    const { prisma } = mkPrisma({ sourceItems: [faq({ id: 's1', question: 'How do I apply?', category: 'registration' })] });
     const copier = new FaqsCopier(prisma);
     const items = await copier.preview('src');
     expect(items).toEqual([{ id: 's1', label: 'How do I apply?', meta: 'registration' }]);
@@ -117,7 +129,7 @@ describe('FaqsCopier', () => {
 
 describe('FaqsCopier.exportTemplate', () => {
   it('exports the full row shape', async () => {
-    const prisma = mkPrisma({ sourceItems: [faq({ id: 's1', question: 'Q?', answer: 'A.', category: 'general' })] });
+    const { prisma } = mkPrisma({ sourceItems: [faq({ id: 's1', question: 'Q?', answer: 'A.', category: 'general' })] });
     const copier = new FaqsCopier(prisma);
     const payload = await copier.exportTemplate('src');
     expect(payload).toEqual({ entityType: 'faqs', payloadVersion: 1, items: [{ question: 'Q?', answer: 'A.', category: 'general', isActive: true }] });
@@ -126,10 +138,10 @@ describe('FaqsCopier.exportTemplate', () => {
 
 describe('FaqsCopier.applyTemplate', () => {
   it('append inserts and dedupes on question', async () => {
-    const prisma = mkPrisma({ existingItems: [faq({ id: 't1', question: 'Existing?' })] });
+    const { prisma, tx } = mkPrisma({ existingItems: [faq({ id: 't1', question: 'Existing?' })] });
     const copier = new FaqsCopier(prisma);
     const result = await copier.applyTemplate(
-      prisma,
+      tx,
       {
         entityType: 'faqs',
         payloadVersion: 1,
@@ -145,24 +157,25 @@ describe('FaqsCopier.applyTemplate', () => {
   });
 
   it('replace with an empty template throws BadRequestException before any mutation', async () => {
-    const prisma = mkPrisma({ existingItems: [faq({ id: 't1', question: 'old?' })] });
+    const { prisma, tx } = mkPrisma({ existingItems: [faq({ id: 't1', question: 'old?' })] });
     const copier = new FaqsCopier(prisma);
     const err = await captureError(
-      copier.applyTemplate(prisma, { entityType: 'faqs', payloadVersion: 1, items: [] }, 'tgt', 'replace'),
+      copier.applyTemplate(tx, { entityType: 'faqs', payloadVersion: 1, items: [] }, 'tgt', 'replace'),
     );
     expect(err).toBeInstanceOf(BadRequestException);
     expect((err.getResponse() as { code: string }).code).toBe('empty_replace_source');
+    expect((tx as any).programFaq.updateMany).not.toHaveBeenCalled();
     expect((prisma as any).programFaq.updateMany).not.toHaveBeenCalled();
   });
 });
 
 describe('FaqsCopier round-trip', () => {
   it('exportTemplate then applyTemplate reproduces the FAQ on the target program', async () => {
-    const prisma = mkPrisma({ sourceItems: [faq({ id: 's1', question: 'Refund policy?', answer: 'Non-refundable.', category: 'payment' })] });
+    const { prisma, tx } = mkPrisma({ sourceItems: [faq({ id: 's1', question: 'Refund policy?', answer: 'Non-refundable.', category: 'payment' })] });
     const copier = new FaqsCopier(prisma);
     const payload = await copier.exportTemplate('src');
-    const result = await copier.applyTemplate(prisma, payload, 'tgt', 'append');
-    const create = (prisma as any).programFaq.create as jest.Mock;
+    const result = await copier.applyTemplate(tx, payload, 'tgt', 'append');
+    const create = (tx as any).programFaq.create as jest.Mock;
     expect(create.mock.calls[0][0].data).toEqual(expect.objectContaining({ question: 'Refund policy?', answer: 'Non-refundable.', category: 'payment' }));
     expect(result).toEqual({ created: 1, skipped: 0, replaced: 0 });
   });
