@@ -1858,7 +1858,7 @@ git commit -m "feat(programs): register ContactCopier and LandingCopier in the c
 
 ---
 
-## Task 10: `dump-brand-metadata.ts` — recoverable backup of every brand's raw `metadata`
+## Task 10: `dump-brand-metadata.ts` — recoverable backup of every brand's raw `metadata` **and the seven typed columns Task 21 drops**
 
 **Files:**
 - Create: `services/api/scripts/dump-brand-metadata.ts`
@@ -1915,12 +1915,30 @@ interface BrandMetadataDump {
     brandName: string;
     brandSlug: string;
     metadata: unknown;
+    // The seven TYPED columns Task 21 also drops. These are NOT part of
+    // `metadata`, so dumping metadata alone does not back them up. Task 12's
+    // backfill deliberately skips a field when the target Program already has
+    // a value, and skips entirely when a brand has no published+active program
+    // — for those fields the Brand value would otherwise exist nowhere once
+    // Task 21 runs, recoverable only via Postgres PITR. Dump them here.
+    contactEmail: string | null;
+    contactPhone: string | null;
+    contactWhatsapp: string | null;
+    contactAddress: string | null;
+    metaTitle: string | null;
+    metaDescription: string | null;
+    metaKeywords: string | null;
 }
 
 async function main(): Promise<void> {
     const brands = await prisma.brand.findMany({
         where: { deletedAt: null },
-        select: { id: true, name: true, slug: true, metadata: true },
+        select: {
+            id: true, name: true, slug: true, metadata: true,
+            contactEmail: true, contactPhone: true, contactWhatsapp: true,
+            contactAddress: true, metaTitle: true, metaDescription: true,
+            metaKeywords: true,
+        },
         orderBy: { name: 'asc' },
     });
 
@@ -1929,6 +1947,13 @@ async function main(): Promise<void> {
         brandName: b.name,
         brandSlug: b.slug,
         metadata: b.metadata,
+        contactEmail: b.contactEmail,
+        contactPhone: b.contactPhone,
+        contactWhatsapp: b.contactWhatsapp,
+        contactAddress: b.contactAddress,
+        metaTitle: b.metaTitle,
+        metaDescription: b.metaDescription,
+        metaKeywords: b.metaKeywords,
     }));
 
     const backupDir = join(__dirname, 'backups');
@@ -6154,7 +6179,7 @@ git commit -m "refactor(admin): remove superseded Brand-level contact/landing/SE
 - Consumes: nothing new.
 - Produces: nothing new — this task only removes. `GET /brands` and `GET /brands/:id`'s `BrandResponseDto` stop shipping `contactEmail`/`contactPhone`/`contactWhatsapp`/`contactAddress`/`metaTitle`/`metaDescription`/`metaKeywords`, which is the public API contract change the spec and this plan's Global Constraints both flag explicitly.
 
-**Preconditions, non-negotiable per this plan's Global Constraints:** Tasks 10-18 deployed and verified (backup taken, both backfills applied, every contact consumer repointed, both read strategies switched, all caches purged, Task 18's diff shows zero unexplained differences across every non-legacy brand) **and** Task 20's admin UI cutover shipped (the old Brand-level UI must be gone before this runs, or an admin using it would silently resurrect a key this task is about to strip permanently — see Task 20's own entry for the full mechanism). This task is the one place in the whole phase where a mistake is expensive to reverse — there is a metadata backup (Task 10) but no equivalent backup of the `Brand` columns dropped here beyond Postgres's own point-in-time recovery, so treat the migration step as one-way.
+**Preconditions, non-negotiable per this plan's Global Constraints:** Tasks 10-18 deployed and verified (backup taken, both backfills applied, every contact consumer repointed, both read strategies switched, all caches purged, Task 18's diff shows zero unexplained differences across every non-legacy brand) **and** Task 20's admin UI cutover shipped (the old Brand-level UI must be gone before this runs, or an admin using it would silently resurrect a key this task is about to strip permanently — see Task 20's own entry for the full mechanism). This task is the one place in the whole phase where a mistake is expensive to reverse — Task 10's dump covers BOTH the raw `metadata` JSON **and** all seven typed columns dropped here (contact x4, SEO x3) — it was originally metadata-only, which left a real hole: Task 12's backfill skips a field when the target Program already has a value, and skips entirely when a brand has no published+active program, so those Brand values would have existed nowhere once this task ran. Verify the dump file contains non-null contact values for every brand before proceeding. Treat the migration step as one-way regardless.
 
 This task is compile-verified, not TDD, like Tasks 1-3 — it is schema + plumbing removal with no new branching logic. But unlike those additive tasks, `Brand`'s constructor is positional with fields being **removed from the middle**, not appended at the end (this plan's Global Constraints flags this exact task by name for that reason) — `tsc` alone can silently pass a shifted-position bug if two adjacent `string | null` params are removed from the entity but not from the single `mapToEntity()` call site in the same positions. Step 4 below is an explicit before/after argument-count check for exactly that reason; do not skip it because Step 3's `tsc --noEmit` was clean.
 
