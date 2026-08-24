@@ -1,5 +1,22 @@
+import { BadRequestException } from '@nestjs/common';
 import { FormFieldsCopier } from './form-fields.copier';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+
+// Mirrors program-details.copier.spec.ts's helper: BadRequestException here
+// carries a structured { code, message } response body (from copy-scoped-
+// rows.ts's guard and template-payload.schemas.ts's parseTemplateItems), and
+// Nest's HttpException surfaces that body's own `message` string as the
+// thrown error's `.message` — not the `code` — so `.rejects.toThrow(/code/)`
+// can never match. Asserting on `.getResponse().code` is this codebase's
+// established way to check a structured exception's code.
+async function captureError(promise: Promise<unknown>): Promise<any> {
+  try {
+    await promise;
+  } catch (err) {
+    return err;
+  }
+  throw new Error('expected promise to reject');
+}
 
 type SourceField = {
   id: string;
@@ -161,5 +178,173 @@ describe('FormFieldsCopier', () => {
     const count = await copier.countFor('src');
     expect(count).toBe(2);
     expect((prisma as any).applicationFormField.count).toHaveBeenCalledWith({ where: { programId: 'src', deletedAt: null } });
+  });
+});
+
+describe('FormFieldsCopier.exportTemplate', () => {
+  it('exports custom-sourced fields with their full resolved shape', async () => {
+    const prisma = mkPrisma({
+      sourceFields: [srcField({ id: 'f1', name: 'tshirt_size', source: 'custom', label: 'T-Shirt Size', type: 'select', options: [{ label: 'M', value: 'm' }] })],
+    });
+    const copier = new FormFieldsCopier(prisma);
+    const payload = await copier.exportTemplate('src');
+    expect(payload).toEqual({
+      entityType: 'form-fields',
+      payloadVersion: 1,
+      items: [
+        expect.objectContaining({ source: 'custom', name: 'tshirt_size', label: 'T-Shirt Size', type: 'select', options: [{ label: 'M', value: 'm' }] }),
+      ],
+    });
+  });
+
+  it('exports system-sourced fields WITHOUT label/type/helpText/options — only systemFieldKey/section/isRequired/order', async () => {
+    const prisma = mkPrisma({
+      sourceFields: [srcField({ id: 'f1', name: 'full_name', source: 'system', systemFieldKey: 'full_name', label: 'Full Legal Name (customized on this program)', type: 'text' })],
+    });
+    const copier = new FormFieldsCopier(prisma);
+    const payload = await copier.exportTemplate('src');
+    expect(payload.items).toEqual([
+      { source: 'system', systemFieldKey: 'full_name', section: 'personal_details', isRequired: true, order: 0 },
+    ]);
+    // Explicitly not present — a system field's label is never frozen at export time.
+    expect(payload.items[0]).not.toHaveProperty('label');
+    expect(payload.items[0]).not.toHaveProperty('type');
+  });
+
+  it('honors itemIds', async () => {
+    const prisma = mkPrisma({
+      sourceFields: [srcField({ id: 'f1', name: 'a', order: 0 }), srcField({ id: 'f2', name: 'b', order: 1 })],
+    });
+    const copier = new FormFieldsCopier(prisma);
+    const payload = await copier.exportTemplate('src', ['f2']);
+    expect(payload.items).toHaveLength(1);
+  });
+});
+
+describe('FormFieldsCopier.applyTemplate', () => {
+  function mkPrismaWithCatalog(opts: { existingFields?: SourceField[]; catalog?: Record<string, { type: string; label: string; defaultOptions: unknown; helpText: string | null; isActive: boolean; deletedAt: Date | null }> } = {}): PrismaService {
+    const base: any = {
+      applicationFormField: {
+        findMany: jest.fn().mockImplementation(({ where }: any) => Promise.resolve(where.programId === 'tgt' ? (opts.existingFields ?? []) : [])),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        create: jest.fn().mockImplementation(({ data }: { data: any }) => Promise.resolve({ id: `new-${data.name}`, ...data })),
+      },
+      systemFormFieldDefinition: {
+        findUnique: jest.fn().mockImplementation(({ where }: any) => Promise.resolve(opts.catalog?.[where.key] ? { key: where.key, ...opts.catalog[where.key] } : null)),
+      },
+    };
+    base.$transaction = jest.fn().mockImplementation((cb: (tx: any) => Promise<unknown>) => cb(base));
+    return base as PrismaService;
+  }
+
+  it('re-resolves a thin system-sourced item against the live catalog (type, label, helpText, options all come from the catalog)', async () => {
+    const prisma = mkPrismaWithCatalog({
+      catalog: { full_name: { type: 'text', label: 'Full Name (catalog, current)', defaultOptions: [], helpText: 'Catalog help', isActive: true, deletedAt: null } },
+    });
+    const copier = new FormFieldsCopier(prisma);
+    const result = await copier.applyTemplate(
+      prisma,
+      { entityType: 'form-fields', payloadVersion: 1, items: [{ source: 'system', systemFieldKey: 'full_name', section: 'personal_details', isRequired: true, order: 0 }] },
+      'tgt',
+      'append',
+    );
+    const create = (prisma as any).applicationFormField.create as jest.Mock;
+    expect(create.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ name: 'full_name', label: 'Full Name (catalog, current)', type: 'text', helpText: 'Catalog help' }),
+    );
+    expect(result).toEqual({ created: 1, skipped: 0, replaced: 0 });
+  });
+
+  it('a set labelOverride wins over the catalog label; an unset one always follows the catalog', async () => {
+    const prisma = mkPrismaWithCatalog({
+      catalog: { full_name: { type: 'text', label: 'Catalog Label', defaultOptions: [], helpText: null, isActive: true, deletedAt: null } },
+    });
+    const copier = new FormFieldsCopier(prisma);
+    await copier.applyTemplate(
+      prisma,
+      {
+        entityType: 'form-fields',
+        payloadVersion: 1,
+        items: [
+          { source: 'system', systemFieldKey: 'full_name', name: null, label: null, type: null, placeholder: null, helpText: null, options: [], validationRules: {}, section: 'personal_details', isRequired: true, order: 0, labelOverride: 'Frozen Legal Name', helpTextOverride: null },
+        ],
+      },
+      'tgt',
+      'append',
+    );
+    const create = (prisma as any).applicationFormField.create as jest.Mock;
+    expect(create.mock.calls[0][0].data.label).toBe('Frozen Legal Name');
+  });
+
+  it('skips (does not create) a system-sourced item whose catalog entry is inactive or deleted', async () => {
+    const prisma = mkPrismaWithCatalog({
+      catalog: { retired_field: { type: 'text', label: 'x', defaultOptions: [], helpText: null, isActive: false, deletedAt: null } },
+    });
+    const copier = new FormFieldsCopier(prisma);
+    const result = await copier.applyTemplate(
+      prisma,
+      { entityType: 'form-fields', payloadVersion: 1, items: [{ source: 'system', systemFieldKey: 'retired_field', section: 'personal_details', isRequired: true, order: 0 }] },
+      'tgt',
+      'append',
+    );
+    expect((prisma as any).applicationFormField.create).not.toHaveBeenCalled();
+    expect(result).toEqual({ created: 0, skipped: 1, replaced: 0 });
+  });
+
+  it('applies a custom-sourced item verbatim, no catalog lookup', async () => {
+    const prisma = mkPrismaWithCatalog();
+    const copier = new FormFieldsCopier(prisma);
+    await copier.applyTemplate(
+      prisma,
+      {
+        entityType: 'form-fields',
+        payloadVersion: 1,
+        items: [{ source: 'custom', name: 'tshirt_size', label: 'T-Shirt Size', type: 'select', placeholder: null, helpText: null, options: [{ label: 'M', value: 'm' }], validationRules: {}, section: 'miscellaneous', isRequired: false, order: 0 }],
+      },
+      'tgt',
+      'append',
+    );
+    expect((prisma as any).systemFormFieldDefinition.findUnique).not.toHaveBeenCalled();
+    const create = (prisma as any).applicationFormField.create as jest.Mock;
+    expect(create.mock.calls[0][0].data.label).toBe('T-Shirt Size');
+  });
+
+  it('replace with an empty template payload throws BadRequestException before any mutation', async () => {
+    const prisma = mkPrismaWithCatalog({ existingFields: [srcField({ id: 't1', name: 'old' })] });
+    const copier = new FormFieldsCopier(prisma);
+    const err = await captureError(
+      copier.applyTemplate(prisma, { entityType: 'form-fields', payloadVersion: 1, items: [] }, 'tgt', 'replace'),
+    );
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err.getResponse() as { code: string }).code).toBe('empty_replace_source');
+    expect((prisma as any).applicationFormField.updateMany).not.toHaveBeenCalled();
+    expect((prisma as any).applicationFormField.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed payload (missing source) via parseTemplateItems before touching the database', async () => {
+    const prisma = mkPrismaWithCatalog();
+    const copier = new FormFieldsCopier(prisma);
+    const err = await captureError(
+      copier.applyTemplate(prisma, { entityType: 'form-fields', payloadVersion: 1, items: [{ section: 'personal_details' }] as any }, 'tgt', 'append'),
+    );
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err.getResponse() as { code: string }).code).toBe('invalid_template_payload');
+    expect((prisma as any).applicationFormField.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('FormFieldsCopier round-trip', () => {
+  it('exportTemplate then applyTemplate reproduces a custom-sourced field on the target program', async () => {
+    const prisma = mkPrisma({
+      sourceFields: [srcField({ id: 'f1', name: 'tshirt_size', source: 'custom', label: 'T-Shirt Size', type: 'select', options: [{ label: 'M', value: 'm' }] })],
+    });
+    const copier = new FormFieldsCopier(prisma);
+    const payload = await copier.exportTemplate('src');
+    const result = await copier.applyTemplate(prisma, payload, 'tgt', 'append');
+    const create = (prisma as any).applicationFormField.create as jest.Mock;
+    expect(create.mock.calls[0][0].data).toEqual(
+      expect.objectContaining({ name: 'tshirt_size', label: 'T-Shirt Size', type: 'select', options: [{ label: 'M', value: 'm' }] }),
+    );
+    expect(result).toEqual({ created: 1, skipped: 0, replaced: 0 });
   });
 });
