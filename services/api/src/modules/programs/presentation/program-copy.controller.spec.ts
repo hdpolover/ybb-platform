@@ -177,6 +177,9 @@ describe('ProgramCopyController', () => {
     it('404s when the template does not exist', async () => {
       mockPrismaFindTemplate.mockResolvedValue(null);
       await expect(controller.applyTemplate('tgt', 'faqs', { templateId: 'missing', mode: 'append' })).rejects.toBeInstanceOf(NotFoundException);
+      // The point of a guard test is that the mutation did not happen, not
+      // merely that it threw — a guard firing after the write still throws.
+      expect(mockPrismaTransaction).not.toHaveBeenCalled();
     });
 
     it('rejects when the template\'s entityType does not match the :entityKey in the URL', async () => {
