@@ -18,7 +18,7 @@ import { ProgramLandingController } from './presentation/program-landing.control
 import { ProgramExchangeRateController } from './presentation/program-exchange-rate.controller';
 import { ProgramAnnouncementsController } from './presentation/program-announcements.controller';
 import { SystemFormFieldsController } from './presentation/system-form-fields.controller';
-import { FormTemplatesController } from './presentation/form-templates.controller';
+import { ContentTemplatesController } from './presentation/content-templates.controller';
 import { ProgramFormFieldsController } from './presentation/program-form-fields.controller';
 import { ProgramScoringController } from './presentation/program-scoring.controller';
 import { ProgramCopyController } from './presentation/program-copy.controller';
@@ -27,11 +27,10 @@ import { GetScoringRubricVersionsHandler } from './application/queries/handlers/
 import { UpsertScoringRubricHandler } from './application/commands/handlers/upsert-scoring-rubric.handler';
 import { ScoringRubricRepository } from './infrastructure/persistence/scoring-rubric.repository';
 import {
-  CreateFormTemplateHandler,
-  UpdateFormTemplateHandler,
-  DeleteFormTemplateHandler,
-} from './application/commands/handlers/form-template.handler';
-import { ApplyFormTemplateHandler } from './application/commands/handlers/apply-form-template.handler';
+  CreateContentTemplateHandler,
+  UpdateContentTemplateHandler,
+  DeleteContentTemplateHandler,
+} from './application/commands/handlers/content-template.handler';
 import { ProgramCopierRegistry } from './application/copy/program-copier.registry';
 import { ProgramCopier } from './application/copy/program-copier.interface';
 import { FormFieldsCopier } from './application/copy/copiers/form-fields.copier';
@@ -42,9 +41,9 @@ import { FaqsCopier } from './application/copy/copiers/faqs.copier';
 import { PaymentsCopier } from './application/copy/copiers/payments.copier';
 import { ProgramDetailsCopier } from './application/copy/copiers/program-details.copier';
 import {
-  GetFormTemplatesHandler,
-  GetFormTemplateByIdHandler,
-} from './application/queries/handlers/get-form-templates.handler';
+  GetContentTemplatesHandler,
+  GetContentTemplateByIdHandler,
+} from './application/queries/handlers/get-content-templates.handler';
 import {
   ListProgramAnnouncementsHandler,
   GetProgramAnnouncementHandler,
@@ -149,7 +148,7 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
     ProgramExchangeRateController,
     ProgramAnnouncementsController,
     SystemFormFieldsController,
-    FormTemplatesController,
+    ContentTemplatesController,
     ProgramFormFieldsController,
     ProgramScoringController,
     ProgramCopyController,
@@ -209,13 +208,12 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
     UpdateSystemFormFieldHandler,
     DeleteSystemFormFieldHandler,
 
-    // Form Template Handlers
-    CreateFormTemplateHandler,
-    UpdateFormTemplateHandler,
-    DeleteFormTemplateHandler,
-    GetFormTemplatesHandler,
-    GetFormTemplateByIdHandler,
-    ApplyFormTemplateHandler,
+    // Content Template Handlers
+    CreateContentTemplateHandler,
+    UpdateContentTemplateHandler,
+    DeleteContentTemplateHandler,
+    GetContentTemplatesHandler,
+    GetContentTemplateByIdHandler,
 
     // Program Content Copy
     FormFieldsCopier,
