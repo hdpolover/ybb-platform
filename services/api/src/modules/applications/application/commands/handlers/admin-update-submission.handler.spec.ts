@@ -272,6 +272,18 @@ describe('AdminUpdateSubmissionHandler', () => {
         applicationId: 'app-uuid-1',
         editHistoryId: EDIT_HISTORY_RESULT.id,
       });
+
+      // Array-form `$transaction([a(), b(), c()])` evaluates a(), b(), c() eagerly
+      // -- before $transaction is ever invoked -- so delegate-level assertions on
+      // updateApplication/updateParticipant/createEditHistory pass identically
+      // whether or not the writes are actually wrapped in $transaction (e.g. if
+      // this were refactored to Promise.all([...]), which never calls
+      // $transaction at all). Asserting the array shape handed to $transaction is
+      // the strongest signal available with this mock shape; it is what actually
+      // catches that regression, per the handler's own "Both updates happen
+      // inside the same $transaction" invariant comment.
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.$transaction.mock.calls[0][0]).toHaveLength(3);
     });
   });
 });
