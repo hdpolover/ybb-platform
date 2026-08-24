@@ -10,7 +10,7 @@ import { PROGRAM_CONTENT_PATTERNS } from '@shared/constants/cache-patterns';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { LandingCacheInvalidationService } from '../../brands/application/services/landing-cache-invalidation.service';
 import { ProgramCopierRegistry } from '../application/copy/program-copier.registry';
-import { CopyEntityDto, ApplyTemplateEntityDto } from './dto/copy-entity.dto';
+import { CopyEntityDto, ApplyTemplateEntityDto, CloneFromProgramDto } from './dto/copy-entity.dto';
 import { CopyPreviewItem, CopyResult, PrismaTx, TemplatePayload } from '../application/copy/program-copier.interface';
 import { invalidateLandingCacheByProgramId } from '../application/commands/handlers/manage-program-content.handlers';
 
@@ -138,5 +138,52 @@ export class ProgramCopyController {
     await invalidateLandingCacheByProgramId(programId, this.prisma, this.landingCacheInvalidation);
 
     return result;
+  }
+
+  @Get(':programId/copy/registry')
+  @ApiOperation({ summary: 'List every registered copier with its label, append support, and item count for this program.' })
+  async getRegistry(@Param('programId') programId: string): Promise<Array<{ key: string; label: string; supportsAppend: boolean; count: number }>> {
+    const copiers = this.registry.list();
+    const counts = await Promise.all(copiers.map((c) => c.countFor(programId)));
+    return copiers.map((c, i) => ({ key: c.key, label: c.label, supportsAppend: c.supportsAppend, count: counts[i] }));
+  }
+
+  @Post(':id/clone-from')
+  @ApiOperation({ summary: 'Clone selected content types from a sibling program into this one, in one transaction.' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  async cloneFrom(@Param('id') id: string, @Body() dto: CloneFromProgramDto): Promise<Record<string, CopyResult>> {
+    if (dto.sourceProgramId === id) {
+      throw new BadRequestException({ code: 'invalid_source', message: 'Source program must differ from the target program.' });
+    }
+
+    const anyReplace = dto.entities.some((e) => e.mode === 'replace');
+    if (anyReplace && dto.confirmReplace !== true) {
+      throw new BadRequestException({ code: 'confirm_required', message: "One or more entities requests replace mode — 'confirmReplace: true' is required." });
+    }
+
+    for (const entity of dto.entities) {
+      const copier = this.registry.get(entity.key);
+      if (entity.mode === 'append' && !copier.supportsAppend) {
+        throw new BadRequestException({ code: 'append_not_supported', message: `'${entity.key}' only supports replace mode.` });
+      }
+    }
+
+    const results = await this.prisma.$transaction(async (tx: unknown) => {
+      const entries: Array<[string, CopyResult]> = [];
+      for (const entity of dto.entities) {
+        const copier = this.registry.get(entity.key);
+        const result = await copier.copy(tx as PrismaTx, {
+          sourceProgramId: dto.sourceProgramId,
+          targetProgramId: id,
+          mode: entity.mode,
+        });
+        entries.push([entity.key, result]);
+      }
+      return Object.fromEntries(entries);
+    });
+
+    await invalidateLandingCacheByProgramId(id, this.prisma, this.landingCacheInvalidation);
+
+    return results;
   }
 }

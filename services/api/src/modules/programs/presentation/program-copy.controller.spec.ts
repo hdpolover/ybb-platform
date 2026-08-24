@@ -211,4 +211,80 @@ describe('ProgramCopyController', () => {
       expect(mockInvalidateLandingCache).toHaveBeenCalled();
     });
   });
+
+  describe('getRegistry', () => {
+    it('returns key/label/supportsAppend/count for every registered copier against the given program', async () => {
+      const faqsCountFor = jest.fn().mockResolvedValue(3);
+      const timelinesCountFor = jest.fn().mockResolvedValue(0);
+      (controller as any).registry.list = jest.fn().mockReturnValue([
+        { key: 'faqs', label: 'FAQs', supportsAppend: true, countFor: faqsCountFor },
+        { key: 'timelines', label: 'Timelines', supportsAppend: true, countFor: timelinesCountFor },
+      ]);
+      const result = await controller.getRegistry('src');
+      expect(faqsCountFor).toHaveBeenCalledWith('src');
+      expect(result).toEqual([
+        { key: 'faqs', label: 'FAQs', supportsAppend: true, count: 3 },
+        { key: 'timelines', label: 'Timelines', supportsAppend: true, count: 0 },
+      ]);
+    });
+  });
+
+  describe('cloneFrom', () => {
+    it('rejects when sourceProgramId equals the target :id', async () => {
+      await expect(
+        controller.cloneFrom('prog-1', { sourceProgramId: 'prog-1', entities: [{ key: 'faqs', mode: 'append' }] }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockPrismaTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects when any entity requests replace without top-level confirmReplace: true', async () => {
+      mockRegistryGet.mockReturnValue({ supportsAppend: true, copy: jest.fn() });
+      await expect(
+        controller.cloneFrom('tgt', { sourceProgramId: 'src', entities: [{ key: 'faqs', mode: 'replace' }] }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockPrismaTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects an entity requesting append on a copier that does not support it', async () => {
+      mockRegistryGet.mockReturnValue({ supportsAppend: false, copy: jest.fn() });
+      await expect(
+        controller.cloneFrom('tgt', { sourceProgramId: 'src', entities: [{ key: 'program-details', mode: 'append' }] }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(mockPrismaTransaction).not.toHaveBeenCalled();
+    });
+
+    it('runs every selected copier\'s copy() inside ONE transaction and returns results keyed by entity key', async () => {
+      const faqsCopy = jest.fn().mockResolvedValue({ created: 2, skipped: 0, replaced: 0 });
+      const timelinesCopy = jest.fn().mockResolvedValue({ created: 1, skipped: 1, replaced: 0 });
+      mockRegistryGet.mockImplementation((key: string) =>
+        key === 'faqs' ? { supportsAppend: true, copy: faqsCopy } : { supportsAppend: true, copy: timelinesCopy },
+      );
+      mockPrismaTransaction.mockImplementation((cb: (tx: unknown) => Promise<unknown>) => cb('fake-tx'));
+
+      const result = await controller.cloneFrom('tgt', {
+        sourceProgramId: 'src',
+        entities: [{ key: 'faqs', mode: 'append' }, { key: 'timelines', mode: 'append' }],
+      });
+
+      expect(faqsCopy).toHaveBeenCalledWith('fake-tx', { sourceProgramId: 'src', targetProgramId: 'tgt', itemIds: undefined, mode: 'append' });
+      expect(timelinesCopy).toHaveBeenCalledWith('fake-tx', { sourceProgramId: 'src', targetProgramId: 'tgt', itemIds: undefined, mode: 'append' });
+      expect(result).toEqual({ faqs: { created: 2, skipped: 0, replaced: 0 }, timelines: { created: 1, skipped: 1, replaced: 0 } });
+      // Both copiers ran through the SAME $transaction call — a single commit
+      // for the whole batch, not one per entity.
+      expect(mockPrismaTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('a copier throwing mid-batch propagates the error without swallowing it (so $transaction rolls everything back)', async () => {
+      const faqsCopy = jest.fn().mockResolvedValue({ created: 1, skipped: 0, replaced: 0 });
+      const timelinesCopy = jest.fn().mockRejectedValue(new Error('boom'));
+      mockRegistryGet.mockImplementation((key: string) =>
+        key === 'faqs' ? { supportsAppend: true, copy: faqsCopy } : { supportsAppend: true, copy: timelinesCopy },
+      );
+      mockPrismaTransaction.mockImplementation((cb: (tx: unknown) => Promise<unknown>) => cb('fake-tx'));
+
+      await expect(
+        controller.cloneFrom('tgt', { sourceProgramId: 'src', entities: [{ key: 'faqs', mode: 'append' }, { key: 'timelines', mode: 'append' }] }),
+      ).rejects.toThrow('boom');
+    });
+  });
 });
