@@ -7,32 +7,46 @@ import { PortalCacheService } from '../../services/portal-cache.service';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { PortalSubmitApplicationCommand } from '../../queries/portal-queries';
+import { makePrismaTxMock } from '../../../../../../test/utils/prisma-tx-mock';
 
 describe('PortalSubmitApplicationHandler', () => {
     let handler: PortalSubmitApplicationHandler;
 
-    const mockPrisma = {
-        participantApplication: {
-            findFirst: jest.fn(),
-            update: jest.fn(),
+    // Disjoint prisma/tx mocks. The referral block (ambassadorReferral.*,
+    // ambassador.*, participant.*) runs inside `this.prisma.$transaction`, so
+    // those mocks live ONLY on `mockTx`. If a referral write regresses onto
+    // `mockPrisma` (outside the transaction's rollback boundary), the
+    // `mockPrisma.ambassador.update` `.not.toHaveBeenCalled()` guard below
+    // catches it instead of passing either way.
+    const { prisma: mockPrisma, tx: mockTx } = makePrismaTxMock(
+        {
+            participantApplication: {
+                findFirst: jest.fn(),
+                update: jest.fn(),
+            },
+            applicationInvoice: {
+                findFirst: jest.fn(),
+            },
+            ambassador: {
+                findUnique: jest.fn(),
+                update: jest.fn(),
+            },
         },
-        applicationInvoice: {
-            findFirst: jest.fn(),
+        {
+            ambassadorReferral: {
+                findFirst: jest.fn(),
+                create: jest.fn(),
+            },
+            ambassador: {
+                findUnique: jest.fn(),
+                update: jest.fn(),
+            },
+            participant: {
+                findUnique: jest.fn(),
+                update: jest.fn(),
+            },
         },
-        ambassador: {
-            findUnique: jest.fn(),
-            update: jest.fn(),
-        },
-        ambassadorReferral: {
-            findFirst: jest.fn(),
-            create: jest.fn(),
-        },
-        participant: {
-            findUnique: jest.fn(),
-            update: jest.fn(),
-        },
-        $transaction: jest.fn(),
-    };
+    );
 
     const mockCacheService = {
         invalidateKey: jest.fn().mockResolvedValue(undefined),
@@ -70,8 +84,9 @@ describe('PortalSubmitApplicationHandler', () => {
         jest.clearAllMocks();
         // Default: gate allows
         mockGateService.assertRegistrationFeePaid.mockResolvedValue(undefined);
-        // Default: $transaction calls the callback with prisma mock itself
-        mockPrisma.$transaction.mockImplementation((cb: (tx: typeof mockPrisma) => Promise<unknown>) => cb(mockPrisma));
+        // Default: $transaction calls the callback with the disjoint tx mock (never
+        // the outer mockPrisma -- see makePrismaTxMock's docstring for why).
+        mockPrisma.$transaction.mockImplementation((cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx));
         // Default: advanceToApplied succeeds
         mockReferralFunnel.advanceToApplied.mockResolvedValue(undefined);
     });
@@ -312,28 +327,33 @@ describe('PortalSubmitApplicationHandler', () => {
                 }),
             );
             mockPrisma.participantApplication.update.mockResolvedValue({});
-            mockPrisma.ambassadorReferral.findFirst.mockResolvedValue(null);
-            mockPrisma.ambassador.findUnique.mockResolvedValue({ id: 'amb-1', referralCode: 'ABC123', isActive: true });
-            mockPrisma.ambassadorReferral.create.mockResolvedValue({});
-            mockPrisma.ambassador.update.mockResolvedValue({});
-            mockPrisma.participant.findUnique.mockResolvedValue({ referralCode: null });
-            mockPrisma.participant.update.mockResolvedValue({});
+            mockTx.ambassadorReferral.findFirst.mockResolvedValue(null);
+            mockTx.ambassador.findUnique.mockResolvedValue({ id: 'amb-1', referralCode: 'ABC123', isActive: true });
+            mockTx.ambassadorReferral.create.mockResolvedValue({});
+            mockTx.ambassador.update.mockResolvedValue({});
+            mockTx.participant.findUnique.mockResolvedValue({ referralCode: null });
+            mockTx.participant.update.mockResolvedValue({});
 
             const result = await handler.execute(command);
 
             expect(result.success).toBe(true);
-            expect(mockPrisma.ambassadorReferral.create).toHaveBeenCalledWith({
+            expect(mockTx.ambassadorReferral.create).toHaveBeenCalledWith({
                 data: {
                     ambassadorId: 'amb-1',
                     participantId: 'participant-1',
                     status: 'referred',
                 },
             });
-            expect(mockPrisma.ambassador.update).toHaveBeenCalledWith(
+            expect(mockTx.ambassador.update).toHaveBeenCalledWith(
                 expect.objectContaining({
                     data: expect.objectContaining({ totalReferrals: { increment: 1 } }),
                 }),
             );
+            // The increment must be rolled back with the rest of the transaction if a
+            // later write in the block throws. If it lands outside (on mockPrisma),
+            // a failed transaction still leaves totalReferrals permanently bumped with
+            // no referral row behind it.
+            expect(mockPrisma.ambassador.update).not.toHaveBeenCalled();
             expect(mockReferralFunnel.advanceToApplied).toHaveBeenCalledWith('participant-1', 'program-123');
         });
 
@@ -348,12 +368,12 @@ describe('PortalSubmitApplicationHandler', () => {
             );
             mockPrisma.participantApplication.update.mockResolvedValue({});
             // Existing referral present
-            mockPrisma.ambassadorReferral.findFirst.mockResolvedValue({ id: 'ref-existing' });
+            mockTx.ambassadorReferral.findFirst.mockResolvedValue({ id: 'ref-existing' });
 
             const result = await handler.execute(command);
 
             expect(result.success).toBe(true);
-            expect(mockPrisma.ambassadorReferral.create).not.toHaveBeenCalled();
+            expect(mockTx.ambassadorReferral.create).not.toHaveBeenCalled();
         });
 
         it('skips referral creation when ambassador is not found', async () => {
@@ -366,14 +386,14 @@ describe('PortalSubmitApplicationHandler', () => {
                 }),
             );
             mockPrisma.participantApplication.update.mockResolvedValue({});
-            mockPrisma.ambassadorReferral.findFirst.mockResolvedValue(null);
+            mockTx.ambassadorReferral.findFirst.mockResolvedValue(null);
             // Ambassador not found
-            mockPrisma.ambassador.findUnique.mockResolvedValue(null);
+            mockTx.ambassador.findUnique.mockResolvedValue(null);
 
             const result = await handler.execute(command);
 
             expect(result.success).toBe(true);
-            expect(mockPrisma.ambassadorReferral.create).not.toHaveBeenCalled();
+            expect(mockTx.ambassadorReferral.create).not.toHaveBeenCalled();
         });
 
         it('skips referral block when no referral field is present in form fields', async () => {
