@@ -32,6 +32,11 @@
 //   // ...
 //   expect(tx.participantApplication.update).toHaveBeenCalledWith(...);
 //   expectNoOuterWrites(prisma); // proves no write escaped the transaction onto the outer client
+//
+// `makePrismaTxMock` throws at construction time if `prisma` and `tx` end up sharing
+// any `jest.fn()` by reference (e.g. passing the same shape object/literal to both
+// parameters) — see `assertDisjointMocks` below. That mistake type-checks, compiles,
+// and passes today; it silently reintroduces the exact bug this helper exists to catch.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -40,6 +45,57 @@ export interface PrismaTxMock<TPrisma extends object, TTx extends object> {
   prisma: TPrisma & { $transaction: jest.Mock };
   /** The disjoint transaction-client mock. Never the same object as `prisma`. */
   tx: TTx;
+}
+
+/**
+ * Walks a (nested, model -> operation -> fn) shape and returns a map of every
+ * function reference found to the dotted path it was found at. Used to detect
+ * whether `prismaShape` and `txShape` share any `jest.fn()` by reference.
+ */
+function collectFnPaths(shape: object, prefix = '', seen = new Set<object>()): Map<unknown, string> {
+  const found = new Map<unknown, string>();
+  if (seen.has(shape)) return found;
+  seen.add(shape);
+
+  for (const [key, value] of Object.entries(shape)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === 'function') {
+      found.set(value, path);
+    } else if (value && typeof value === 'object') {
+      for (const [fn, p] of collectFnPaths(value, path, seen)) {
+        found.set(fn, p);
+      }
+    }
+  }
+  return found;
+}
+
+/**
+ * Throws if `prismaShape` and `txShape` share any `jest.fn()` by reference —
+ * e.g. `makePrismaTxMock(models, models)`, or two shapes built from the same
+ * object literal. That mistake compiles and type-checks: `prisma.X.update` and
+ * `tx.X.update` become literally the same mock function, so
+ * `expect(prisma.X.update).not.toHaveBeenCalled()` and
+ * `expect(tx.X.update).toHaveBeenCalled()` can never disagree, and the spec is
+ * structurally incapable of detecting a write that escaped the transaction.
+ * A loud failure here beats a silently vacuous spec.
+ */
+function assertDisjointMocks(prismaShape: object, txShape: object): void {
+  const prismaFns = collectFnPaths(prismaShape);
+  const txFns = collectFnPaths(txShape);
+
+  for (const [fn, txPath] of txFns) {
+    if (prismaFns.has(fn)) {
+      const prismaPath = prismaFns.get(fn);
+      throw new Error(
+        `makePrismaTxMock: prisma.${prismaPath} and tx.${txPath} are the SAME jest.fn() ` +
+          `(shared by reference). This collapses "was this write routed through the ` +
+          `transaction" and "did the outer client see this write" into one observable, ` +
+          `which defeats the entire purpose of this helper. Pass separate shape objects ` +
+          `for the outer prisma mock and the tx mock — never the same object/literal for both.`,
+      );
+    }
+  }
 }
 
 /**
@@ -53,11 +109,16 @@ export interface PrismaTxMock<TPrisma extends object, TTx extends object> {
  * transaction-aware for that form — specs using array-form `$transaction` must
  * additionally assert `prisma.$transaction` was called with an array of the
  * expected length.
+ *
+ * @throws if `prismaShape` and `txShape` share any `jest.fn()` by reference — see
+ * `assertDisjointMocks`.
  */
 export function makePrismaTxMock<TPrisma extends object, TTx extends object>(
   prismaShape: TPrisma,
   txShape: TTx,
 ): PrismaTxMock<TPrisma, TTx> {
+  assertDisjointMocks(prismaShape, txShape);
+
   const tx = txShape;
   const prisma: any = {
     ...prismaShape,
