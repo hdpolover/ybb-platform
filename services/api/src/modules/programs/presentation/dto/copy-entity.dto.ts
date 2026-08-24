@@ -1,19 +1,20 @@
+// services/api/src/modules/programs/presentation/dto/copy-entity.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsArray, IsBoolean, IsIn, IsOptional, IsUUID } from 'class-validator';
 
-export class CopyFieldsFromProgramDto {
-  @ApiProperty({ description: 'Program to copy fields FROM.' })
+export class CopyEntityDto {
+  @ApiProperty({ description: 'Program to copy items FROM.' })
   @IsUUID()
   sourceProgramId!: string;
 
   @ApiPropertyOptional({
-    description: 'Specific source field ids to copy. Omit to copy all active fields.',
+    description: 'Specific source item ids to copy. Omit to copy all.',
     type: [String],
   })
   @IsOptional()
   @IsArray()
   @IsUUID('all', { each: true })
-  fieldIds?: string[];
+  itemIds?: string[];
 
   @ApiPropertyOptional({ enum: ['append', 'replace'], default: 'append' })
   @IsOptional()
@@ -21,7 +22,7 @@ export class CopyFieldsFromProgramDto {
   mode?: 'append' | 'replace';
 
   @ApiPropertyOptional({
-    description: "Must be true when mode='replace' to guard against accidental field deletion.",
+    description: "Must be true when mode='replace' to guard against accidental data loss.",
   })
   @IsOptional()
   @IsBoolean()

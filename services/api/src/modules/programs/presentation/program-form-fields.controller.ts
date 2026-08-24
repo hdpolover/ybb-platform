@@ -14,8 +14,6 @@ import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { ApplyFormTemplateCommand } from '../application/commands/apply-form-template.command';
 import { ApplyFormTemplateDto } from './dto/apply-form-template.dto';
-import { CopyFieldsFromProgramCommand } from '../application/commands/copy-fields-from-program.command';
-import { CopyFieldsFromProgramDto } from './dto/copy-fields-from-program.dto';
 
 @ApiTags('Program Form Fields')
 @ApiBearerAuth()
@@ -43,38 +41,6 @@ export class ProgramFormFieldsController {
     }
     return this.commandBus.execute(
       new ApplyFormTemplateCommand(programId, dto.templateId, mode),
-    );
-  }
-
-  @Post(':programId/form-fields/copy-from-program')
-  @ApiOperation({
-    summary:
-      "Copy another program's form fields into this program (append or replace).",
-  })
-  copyFromProgram(
-    @Param('programId') programId: string,
-    @Body() dto: CopyFieldsFromProgramDto,
-  ) {
-    const mode = dto.mode ?? 'append';
-    if (dto.sourceProgramId === programId) {
-      throw new BadRequestException({
-        code: 'invalid_source',
-        message: 'Source program must differ from the target program.',
-      });
-    }
-    if (mode === 'replace' && dto.confirm !== true) {
-      throw new BadRequestException({
-        code: 'confirm_required',
-        message: "Replace mode requires 'confirm: true' in the request body.",
-      });
-    }
-    return this.commandBus.execute(
-      new CopyFieldsFromProgramCommand(
-        programId,
-        dto.sourceProgramId,
-        dto.fieldIds,
-        mode,
-      ),
     );
   }
 }

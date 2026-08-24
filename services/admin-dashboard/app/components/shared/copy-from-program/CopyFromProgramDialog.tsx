@@ -1,6 +1,7 @@
+// services/admin-dashboard/app/components/shared/copy-from-program/CopyFromProgramDialog.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -11,57 +12,88 @@ import {
 } from "@/src/ui/sheet";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
-  copyFieldsFromProgram,
-  fetchProgramFormFields,
-  type ProgramFormFieldRow,
-} from "./catalog-api";
-
-// The canonical reference program brand. Its programs are pinned to the top
-// of the copy-source picker and pre-selected by default, because admins treat
-// CYS as the battle-tested submission-form reference to copy from.
-const REFERENCE_BRAND_NAME = 'China Youth Summit';
+  fetchCopyPreview,
+  fetchCopySourceCounts,
+  postCopyEntity,
+  type CopyPreviewItem,
+  type CopyResult,
+} from "./copy-api";
 
 interface CopyFromProgramDialogProps {
   open: boolean;
+  entityKey: string;
+  entityLabel: string;
   programId: string;
+  /** Hides the append/replace toggle and forces mode='replace' when false (e.g. program-details). */
+  supportsAppend: boolean;
+  /**
+   * When set, programs from this brand (case-insensitive match) are pinned to
+   * the top of the source picker and the newest one is pre-selected on open.
+   * Omit for surfaces that should not default to any particular source.
+   */
+  referenceBrandName?: string;
+  /**
+   * Extra sentence appended into the replace-mode disclaimer, after the
+   * generic soft-delete notice and before the "Type REPLACE to confirm"
+   * instruction. Use for surface-specific warnings that don't hold true for
+   * every entity (e.g. how replacing this entity interacts with other live
+   * data). Omit for the plain generic disclaimer.
+   */
+  replaceCaveat?: ReactNode;
   onClose: () => void;
-  onApplied: () => void;
+  onApplied: (result: CopyResult) => void;
 }
 
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
-function isReferenceProgram(brandName: string): boolean {
-  return brandName.trim().toLowerCase() === REFERENCE_BRAND_NAME.toLowerCase();
-}
-
 export function CopyFromProgramDialog({
   open,
+  entityKey,
+  entityLabel,
   programId,
+  supportsAppend,
+  referenceBrandName,
+  replaceCaveat,
   onClose,
   onApplied,
 }: CopyFromProgramDialogProps) {
   const { accessiblePrograms } = useAuth();
 
   const [sourceId, setSourceId] = useState<string | null>(null);
-  const [fields, setFields] = useState<ProgramFormFieldRow[]>([]);
+  const [items, setItems] = useState<CopyPreviewItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [loadingFields, setLoadingFields] = useState(false);
-  const [fieldsError, setFieldsError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"append" | "replace">("append");
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [itemsError, setItemsError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"append" | "replace">(supportsAppend ? "append" : "replace");
   const [confirmText, setConfirmText] = useState("");
   const [applying, setApplying] = useState(false);
   const [search, setSearch] = useState("");
+  const [sourceCounts, setSourceCounts] = useState<Map<string, number>>(new Map());
 
   const currentBrandId = useMemo(
     () => accessiblePrograms.find((p) => p.programId === programId)?.brandId ?? null,
     [accessiblePrograms, programId],
   );
 
+  function isReferenceProgram(brandName: string): boolean {
+    if (!referenceBrandName) return false;
+    return brandName.trim().toLowerCase() === referenceBrandName.trim().toLowerCase();
+  }
+
   // All eligible source programs (excluding the current one), split into
-  // reference and non-reference groups, each sorted internally.
+  // reference and non-reference groups when referenceBrandName is set.
   const { referenceOptions, otherOptions } = useMemo(() => {
     const eligible = accessiblePrograms.filter((p) => p.programId !== programId);
+
+    if (!referenceBrandName) {
+      const all = eligible
+        .slice()
+        .sort((a, b) =>
+          a.brandName === b.brandName ? b.programYear - a.programYear : a.brandName.localeCompare(b.brandName),
+        );
+      return { referenceOptions: [], otherOptions: all };
+    }
 
     const ref = eligible
       .filter((p) => isReferenceProgram(p.brandName))
@@ -72,34 +104,28 @@ export function CopyFromProgramDialog({
       .filter((p) => !isReferenceProgram(p.brandName))
       .slice()
       .sort((a, b) =>
-        a.brandName === b.brandName
-          ? b.programYear - a.programYear
-          : a.brandName.localeCompare(b.brandName),
+        a.brandName === b.brandName ? b.programYear - a.programYear : a.brandName.localeCompare(b.brandName),
       );
 
     return { referenceOptions: ref, otherOptions: other };
-  }, [accessiblePrograms, programId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessiblePrograms, programId, referenceBrandName]);
 
-  // Combined ordered list: reference pinned first, then others.
   const allSourceOptions = useMemo(
     () => [...referenceOptions, ...otherOptions],
     [referenceOptions, otherOptions],
   );
 
-  // The newest reference program (first in the pinned group), if any.
   const defaultReferenceId = useMemo(
     () => referenceOptions[0]?.programId ?? null,
     [referenceOptions],
   );
 
-  // Filter by search query (case-insensitive substring across name, brand, year).
   const filteredSourceOptions = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return allSourceOptions;
     return allSourceOptions.filter((p) =>
-      [p.programName, p.brandName, String(p.programYear)].some((s) =>
-        s.toLowerCase().includes(q),
-      ),
+      [p.programName, p.brandName, String(p.programYear)].some((s) => s.toLowerCase().includes(q)),
     );
   }, [allSourceOptions, search]);
 
@@ -108,54 +134,71 @@ export function CopyFromProgramDialog({
     [accessiblePrograms, sourceId],
   );
 
-  // Reset everything when the dialog opens and default-select the newest
-  // reference program if one exists.
+  // Reset everything when the dialog opens; default-select the newest
+  // reference program if this surface has one configured.
   useEffect(() => {
     if (!open) return;
     setSourceId(defaultReferenceId);
-    setFields([]);
+    setItems([]);
     setSelectedIds(new Set());
-    setLoadingFields(false);
-    setFieldsError(null);
-    setMode("append");
+    setLoadingItems(false);
+    setItemsError(null);
+    setMode(supportsAppend ? "append" : "replace");
     setConfirmText("");
     setSearch("");
-  }, [open, defaultReferenceId]);
+  }, [open, defaultReferenceId, supportsAppend]);
 
-  // Load the source program's fields when the source changes.
+  // Fetch per-source counts for the candidate list in the background once
+  // the dialog opens, so the dropdown can show "(N items)" per option.
   useEffect(() => {
-    if (!sourceId) {
-      setFields([]);
-      setSelectedIds(new Set());
-      return;
-    }
-    // Guard against a stale fetch overwriting state if the admin switches
-    // source program before the previous request resolves.
+    if (!open || allSourceOptions.length === 0) return;
     let cancelled = false;
-    setLoadingFields(true);
-    setFieldsError(null);
-    fetchProgramFormFields(sourceId)
-      .then((rows) => {
+    fetchCopySourceCounts(entityKey, allSourceOptions.map((p) => p.programId))
+      .then((counts) => {
         if (cancelled) return;
-        setFields(rows);
-        setSelectedIds(new Set(rows.map((r) => r.id)));
+        setSourceCounts(new Map(counts.map((c) => [c.programId, c.count])));
       })
-      .catch((err) => {
-        if (cancelled) return;
-        setFieldsError(err instanceof Error ? err.message : "Failed to load fields");
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingFields(false);
+      .catch(() => {
+        // Counts are a display nicety, not required to use the dialog.
       });
     return () => {
       cancelled = true;
     };
-  }, [sourceId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, entityKey]);
 
-  const allSelected = fields.length > 0 && selectedIds.size === fields.length;
+  // Load the source program's items when the source changes.
+  useEffect(() => {
+    if (!sourceId) {
+      setItems([]);
+      setSelectedIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    setLoadingItems(true);
+    setItemsError(null);
+    fetchCopyPreview(entityKey, sourceId)
+      .then((rows) => {
+        if (cancelled) return;
+        setItems(rows);
+        setSelectedIds(new Set(rows.map((r) => r.id)));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setItemsError(err instanceof Error ? err.message : "Failed to load items");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingItems(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entityKey, sourceId]);
+
+  const allSelected = items.length > 0 && selectedIds.size === items.length;
 
   function toggleAll() {
-    setSelectedIds(allSelected ? new Set() : new Set(fields.map((f) => f.id)));
+    setSelectedIds(allSelected ? new Set() : new Set(items.map((i) => i.id)));
   }
 
   function toggleOne(id: string) {
@@ -170,12 +213,8 @@ export function CopyFromProgramDialog({
   const crossBrandMediaWarning = useMemo(() => {
     if (!selectedSource || !currentBrandId) return false;
     if (selectedSource.brandId === currentBrandId) return false;
-    return fields.some(
-      (f) =>
-        selectedIds.has(f.id) &&
-        (Boolean(f.mediaUrl) || (f.helpAssets?.length ?? 0) > 0),
-    );
-  }, [selectedSource, currentBrandId, fields, selectedIds]);
+    return items.some((i) => selectedIds.has(i.id) && i.hasExternalMedia);
+  }, [selectedSource, currentBrandId, items, selectedIds]);
 
   const replaceConfirmed = mode !== "replace" || confirmText.trim().toUpperCase() === "REPLACE";
   const canApply = !!sourceId && selectedIds.size > 0 && replaceConfirmed && !applying;
@@ -184,27 +223,20 @@ export function CopyFromProgramDialog({
     if (!sourceId) return;
     setApplying(true);
     try {
-      const fieldIds =
-        selectedIds.size === fields.length ? undefined : Array.from(selectedIds);
-      const result = await copyFieldsFromProgram(programId, {
-        sourceProgramId: sourceId,
-        fieldIds,
-        mode,
-      });
-      const skippedCopy =
-        result.skipped.length > 0
-          ? result.skipped.length <= 5
-            ? result.skipped.join(", ")
-            : `${result.skipped.slice(0, 5).join(", ")} +${result.skipped.length - 5} more`
-          : null;
+      const itemIds = selectedIds.size === items.length ? undefined : Array.from(selectedIds);
+      const result = await postCopyEntity(entityKey, programId, { sourceProgramId: sourceId, itemIds, mode });
       toast.success(
-        skippedCopy
-          ? `Copied ${result.added.length} field(s). Skipped: ${skippedCopy}`
-          : `Copied ${result.added.length} field(s).`,
+        mode === "replace"
+          ? supportsAppend
+            ? `Replaced ${result.replaced} ${entityLabel.toLowerCase()}, copied ${result.created} new.`
+            : `Replaced ${entityLabel}.`
+          : result.skipped > 0
+            ? `Copied ${result.created} ${entityLabel.toLowerCase()}. Skipped ${result.skipped} duplicate(s).`
+            : `Copied ${result.created} ${entityLabel.toLowerCase()}.`,
       );
-      onApplied();
+      onApplied(result);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to copy fields");
+      toast.error(err instanceof Error ? err.message : `Failed to copy ${entityLabel.toLowerCase()}`);
     } finally {
       setApplying(false);
     }
@@ -216,18 +248,16 @@ export function CopyFromProgramDialog({
         <SheetHeader className="sticky top-0 z-10 border-b border-zinc-200 bg-white px-6 py-4">
           <SheetTitle>Copy from another program</SheetTitle>
           <SheetDescription>
-            Copy application form fields from any program you can access into this one.
+            Copy {entityLabel.toLowerCase()} from any program you can access into this one.
           </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-5 px-6 py-6">
-          {/* Source program picker */}
           <section>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
               Source program
             </h3>
 
-            {/* Search filter */}
             <input
               type="search"
               aria-label="Search programs"
@@ -245,9 +275,11 @@ export function CopyFromProgramDialog({
               <option value="">Select a program…</option>
               {filteredSourceOptions.map((p) => {
                 const isRef = isReferenceProgram(p.brandName);
+                const count = sourceCounts.get(p.programId);
+                const countSuffix = count === undefined ? "" : ` (${count})`;
                 const label = isRef
-                  ? `★ Reference · ${p.programName} · ${p.brandName} · ${p.programYear}`
-                  : `${p.programName} · ${p.brandName} · ${p.programYear}`;
+                  ? `★ Reference · ${p.programName} · ${p.brandName} · ${p.programYear}${countSuffix}`
+                  : `${p.programName} · ${p.brandName} · ${p.programYear}${countSuffix}`;
                 return (
                   <option key={p.programId} value={p.programId}>
                     {label}
@@ -257,42 +289,30 @@ export function CopyFromProgramDialog({
             </select>
           </section>
 
-          {loadingFields && (
-            <p className="text-xs text-zinc-500">Loading fields…</p>
-          )}
-          {fieldsError && (
-            <p className="text-sm text-rose-600">{fieldsError}</p>
-          )}
+          {loadingItems && <p className="text-xs text-zinc-500">Loading {entityLabel.toLowerCase()}…</p>}
+          {itemsError && <p className="text-sm text-rose-600">{itemsError}</p>}
 
-          {/* Field selector */}
-          {!loadingFields && !fieldsError && fields.length > 0 && (
+          {!loadingItems && !itemsError && items.length > 0 && (
             <section>
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                  Fields ({selectedIds.size}/{fields.length})
+                  {entityLabel} ({selectedIds.size}/{items.length})
                 </h3>
-                <button
-                  type="button"
-                  className="text-xs text-blue-600 hover:underline"
-                  onClick={toggleAll}
-                >
+                <button type="button" className="text-xs text-blue-600 hover:underline" onClick={toggleAll}>
                   {allSelected ? "Deselect all" : "Select all"}
                 </button>
               </div>
               <ul className="max-h-72 space-y-1 overflow-y-auto rounded-md border border-zinc-200 bg-white p-2">
-                {fields.map((f) => (
-                  <li key={f.id}>
+                {items.map((item) => (
+                  <li key={item.id}>
                     <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-zinc-50">
                       <input
                         type="checkbox"
-                        checked={selectedIds.has(f.id)}
-                        onChange={() => toggleOne(f.id)}
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => toggleOne(item.id)}
                       />
-                      <span className="text-sm text-zinc-800">{f.label}</span>
-                      <span className="ml-auto text-[11px] text-zinc-400">
-                        {f.fieldName} · {f.fieldType}
-                        {f.section ? ` · ${f.section}` : ""}
-                      </span>
+                      <span className="text-sm text-zinc-800">{item.label}</span>
+                      {item.meta ? <span className="ml-auto text-[11px] text-zinc-400">{item.meta}</span> : null}
                     </label>
                   </li>
                 ))}
@@ -300,12 +320,13 @@ export function CopyFromProgramDialog({
             </section>
           )}
 
-          {/* Mode */}
-          {fields.length > 0 && (
+          {!loadingItems && !itemsError && sourceId && items.length === 0 && (
+            <p className="text-xs text-zinc-500">This program has no {entityLabel.toLowerCase()} to copy.</p>
+          )}
+
+          {supportsAppend && items.length > 0 && (
             <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                Mode
-              </h3>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Mode</h3>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <button
                   type="button"
@@ -318,7 +339,7 @@ export function CopyFromProgramDialog({
                 >
                   <div className="text-sm font-semibold text-zinc-900">Append</div>
                   <p className="mt-1 text-xs text-zinc-500">
-                    Add selected fields; skip any whose key already exists in this program.
+                    Add selected items; skip any whose key already exists in this program.
                   </p>
                 </button>
                 <button
@@ -332,37 +353,41 @@ export function CopyFromProgramDialog({
                 >
                   <div className="text-sm font-semibold text-rose-700">Replace</div>
                   <p className="mt-1 text-xs text-rose-600">
-                    Remove this program&apos;s current fields first, then copy. Destructive.
+                    Remove this program&apos;s current {entityLabel.toLowerCase()} first, then copy. Destructive.
                   </p>
                 </button>
               </div>
-
-              {mode === "replace" && (
-                <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
-                  <p className="mb-2 text-xs text-rose-700">
-                    This will soft-delete all form fields currently on this program. If
-                    participants have already submitted answers, those answers are kept but
-                    may no longer match the new fields. Type <strong>REPLACE</strong> to
-                    confirm.
-                  </p>
-                  <input
-                    type="text"
-                    aria-label="Type REPLACE to confirm replacing all fields"
-                    value={confirmText}
-                    onChange={(e) => setConfirmText(e.target.value)}
-                    placeholder="Type REPLACE"
-                    className={INPUT_CLS}
-                  />
-                </div>
-              )}
             </section>
           )}
 
-          {/* Cross-brand media warning */}
+          {mode === "replace" && items.length > 0 && (
+            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2">
+              <p className="mb-2 text-xs text-rose-700">
+                This will soft-delete this program&apos;s current {entityLabel.toLowerCase()}.
+                {replaceCaveat && (
+                  <>
+                    {" "}
+                    {replaceCaveat}
+                  </>
+                )}
+                {" "}
+                Type <strong>REPLACE</strong> to confirm.
+              </p>
+              <input
+                type="text"
+                aria-label={`Type REPLACE to confirm replacing all ${entityLabel.toLowerCase()}`}
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="Type REPLACE"
+                className={INPUT_CLS}
+              />
+            </div>
+          )}
+
           {crossBrandMediaWarning && (
             <p className="text-xs text-zinc-500">
-              Some selected fields reference media from another brand&apos;s storage. The
-              images will work, but consider re-uploading them under this brand.
+              Some selected items reference media from another brand&apos;s storage. The images will work, but
+              consider re-uploading them under this brand.
             </p>
           )}
         </div>
@@ -386,7 +411,7 @@ export function CopyFromProgramDialog({
                 : "rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-50"
             }
           >
-            {applying ? "Copying…" : mode === "replace" ? "Replace fields" : "Copy fields"}
+            {applying ? "Copying…" : mode === "replace" ? "Replace" : "Copy"}
           </button>
         </div>
       </SheetContent>

@@ -21,6 +21,7 @@ import { SystemFormFieldsController } from './presentation/system-form-fields.co
 import { FormTemplatesController } from './presentation/form-templates.controller';
 import { ProgramFormFieldsController } from './presentation/program-form-fields.controller';
 import { ProgramScoringController } from './presentation/program-scoring.controller';
+import { ProgramCopyController } from './presentation/program-copy.controller';
 import { GetScoringRubricsHandler } from './application/queries/handlers/get-scoring-rubrics.handler';
 import { GetScoringRubricVersionsHandler } from './application/queries/handlers/get-scoring-rubric-versions.handler';
 import { UpsertScoringRubricHandler } from './application/commands/handlers/upsert-scoring-rubric.handler';
@@ -31,7 +32,15 @@ import {
   DeleteFormTemplateHandler,
 } from './application/commands/handlers/form-template.handler';
 import { ApplyFormTemplateHandler } from './application/commands/handlers/apply-form-template.handler';
-import { CopyFieldsFromProgramHandler } from './application/commands/handlers/copy-fields-from-program.handler';
+import { ProgramCopierRegistry } from './application/copy/program-copier.registry';
+import { ProgramCopier } from './application/copy/program-copier.interface';
+import { FormFieldsCopier } from './application/copy/copiers/form-fields.copier';
+import { ParticipationCategoriesCopier } from './application/copy/copiers/participation-categories.copier';
+import { TimelinesCopier } from './application/copy/copiers/timelines.copier';
+import { RundownsCopier } from './application/copy/copiers/rundowns.copier';
+import { FaqsCopier } from './application/copy/copiers/faqs.copier';
+import { PaymentsCopier } from './application/copy/copiers/payments.copier';
+import { ProgramDetailsCopier } from './application/copy/copiers/program-details.copier';
 import {
   GetFormTemplatesHandler,
   GetFormTemplateByIdHandler,
@@ -143,6 +152,7 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
     FormTemplatesController,
     ProgramFormFieldsController,
     ProgramScoringController,
+    ProgramCopyController,
   ],
   providers: [
     ListProgramsHandler,
@@ -206,7 +216,28 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
     GetFormTemplatesHandler,
     GetFormTemplateByIdHandler,
     ApplyFormTemplateHandler,
-    CopyFieldsFromProgramHandler,
+
+    // Program Content Copy
+    FormFieldsCopier,
+    ParticipationCategoriesCopier,
+    TimelinesCopier,
+    RundownsCopier,
+    FaqsCopier,
+    PaymentsCopier,
+    ProgramDetailsCopier,
+    {
+      provide: ProgramCopierRegistry,
+      useFactory: (...copiers: ProgramCopier[]) => new ProgramCopierRegistry(...copiers),
+      inject: [
+        FormFieldsCopier,
+        ParticipationCategoriesCopier,
+        TimelinesCopier,
+        RundownsCopier,
+        FaqsCopier,
+        PaymentsCopier,
+        ProgramDetailsCopier,
+      ],
+    },
 
     // Participation Info Handlers
     UpsertParticipationInfoHandler,

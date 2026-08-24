@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import {
     ProgramTimeline,
     ProgramSchedule,
@@ -326,7 +326,9 @@ export class ProgramContentRepository implements IProgramContentRepository {
 
     async findParticipationCategoriesByProgramId(programId: string, includeInactive = false): Promise<ProgramParticipationCategory[]> {
         return this.prisma.programParticipationCategory.findMany({
-            where: includeInactive ? { programId } : { programId, isActive: true },
+            where: includeInactive
+                ? { programId, deletedAt: null }
+                : { programId, isActive: true, deletedAt: null },
             orderBy: { order: 'asc' },
         });
     }
@@ -353,10 +355,25 @@ export class ProgramContentRepository implements IProgramContentRepository {
         return this.prisma.programParticipationCategory.update({ where: { id }, data: data as Prisma.ProgramParticipationCategoryUncheckedUpdateInput });
     }
     async deleteParticipationCategory(id: string): Promise<void> {
-        await this.prisma.programParticipationCategory.delete({ where: { id } });
+        // A hard delete here would hit the FK from ParticipantApplication.participationCategoryId
+        // (no onDelete clause) as a raw Postgres constraint violation. Guard explicitly so the
+        // admin gets a clear message instead of a 500.
+        const referencedCount = await this.prisma.participantApplication.count({
+            where: { participationCategoryId: id },
+        });
+        if (referencedCount > 0) {
+            throw new ConflictException({
+                code: 'category_in_use',
+                message: `Cannot delete: ${referencedCount} application(s) still reference this participation category.`,
+            });
+        }
+        await this.prisma.programParticipationCategory.update({
+            where: { id },
+            data: { deletedAt: new Date(), isActive: false },
+        });
     }
     async findParticipationCategoryById(id: string): Promise<ProgramParticipationCategory | null> {
-        return this.prisma.programParticipationCategory.findUnique({ where: { id } });
+        return this.prisma.programParticipationCategory.findFirst({ where: { id, deletedAt: null } });
     }
 
     // CRUD for Subthemes

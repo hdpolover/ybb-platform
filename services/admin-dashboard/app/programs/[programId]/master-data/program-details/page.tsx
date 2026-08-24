@@ -25,6 +25,7 @@ import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/
 import { ExchangeRateTab } from "@/app/components/programDetailsMasterData/exchange-rate/ExchangeRateTab";
 import { parseApiDate, toLocalDatetimeInputValue, toUtcIsoFromLocalInput } from "@/lib/utils";
 import { formatInBusinessTz } from "@/lib/datetime";
+import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 
 type ProgramDetail = {
   id: string;
@@ -278,6 +279,7 @@ export default function ProgramDetailsPage({
   const [isSaving, setIsSaving] = useState(false);
   const [generalSaveError, setGeneralSaveError] = useState<string | null>(null);
   const [isGeneralSaving, setIsGeneralSaving] = useState(false);
+  const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -470,6 +472,23 @@ export default function ProgramDetailsPage({
     }
   };
 
+  const refreshProgramDetail = async () => {
+    try {
+      const token = getAccessToken();
+      const response = await fetch(buildApiUrl(`/admin/programs/${encodeURIComponent(resolvedProgramId)}`), {
+        cache: "no-store",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response));
+      }
+      const envelope = (await response.json()) as ApiEnvelope<ProgramDetail>;
+      setProgramDetail(envelope.data);
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "Failed to refresh program details.");
+    }
+  };
+
   return (
     <main className="space-y-4">
       <HeaderSection programName={programName} />
@@ -506,13 +525,22 @@ export default function ProgramDetailsPage({
               errorMessage={generalSaveError}
             />
           ) : activeTab === "specifics" && specificsFormValues ? (
-            <EditSpecificsAction
-              programName={programName}
-              initialValues={specificsFormValues}
-              onSave={handleSaveSpecifics}
-              isSaving={isSaving}
-              errorMessage={saveError}
-            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCopyFromProgramOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              >
+                <span>Copy from program</span>
+              </button>
+              <EditSpecificsAction
+                programName={programName}
+                initialValues={specificsFormValues}
+                onSave={handleSaveSpecifics}
+                isSaving={isSaving}
+                errorMessage={saveError}
+              />
+            </div>
           ) : activeTab === "exchange-rate" ? null : null}
         </div>
 
@@ -538,6 +566,19 @@ export default function ProgramDetailsPage({
           )}
         </div>
       </section>
+
+      <CopyFromProgramDialog
+        open={copyFromProgramOpen}
+        entityKey="program-details"
+        entityLabel="Participant-Facing Content"
+        programId={resolvedProgramId}
+        supportsAppend={false}
+        onClose={() => setCopyFromProgramOpen(false)}
+        onApplied={() => {
+          setCopyFromProgramOpen(false);
+          void refreshProgramDetail();
+        }}
+      />
     </main>
   );
 }
