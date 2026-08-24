@@ -40,11 +40,25 @@ export interface CopyPreviewItem {
 }
 
 /**
- * Phase 1 subset of the spec's full ProgramCopier contract
- * (docs/superpowers/specs/2026-08-23-program-content-copy-design.md). The
- * spec's interface also has exportTemplate/applyTemplate, added in Phase 2
- * once ContentTemplate exists. Every copier below implements only the six
- * members here — there is no stub for the template methods.
+ * The portable, storable form of "what a copier would copy" — produced by
+ * exportTemplate, consumed by applyTemplate, and what ContentTemplate.payload
+ * actually stores as JSON (Task 5). `items` is intentionally untyped at this
+ * level: ProgramCopier is a function contract, not a data descriptor (spec),
+ * so each copier's own exportTemplate/applyTemplate is the only code that
+ * knows its own item shape — validated against template-payload.schemas.ts
+ * (Task 4) inside each copier, not here.
+ */
+export interface TemplatePayload {
+  entityType: string;
+  payloadVersion: number;
+  items: Record<string, unknown>[];
+}
+
+/**
+ * Full spec ProgramCopier contract
+ * (docs/superpowers/specs/2026-08-23-program-content-copy-design.md). Phase 1
+ * shipped every member except exportTemplate/applyTemplate, deferred until
+ * ContentTemplate existed. This plan (Phase 2) adds them.
  */
 export interface ProgramCopier {
   readonly key: string;
@@ -54,4 +68,9 @@ export interface ProgramCopier {
   countFor(programId: string): Promise<number>;
   preview(programId: string): Promise<CopyPreviewItem[]>;
   copy(tx: PrismaTx, input: CopyInput): Promise<CopyResult>;
+
+  /** Builds a storable payload from a program's current live rows. Honors itemIds like copy() does. */
+  exportTemplate(programId: string, itemIds?: string[]): Promise<TemplatePayload>;
+  /** Applies a stored payload into targetProgramId, sharing copy()'s dedupe/order/replace semantics. */
+  applyTemplate(tx: PrismaTx, payload: TemplatePayload, targetProgramId: string, mode: CopyMode): Promise<CopyResult>;
 }
