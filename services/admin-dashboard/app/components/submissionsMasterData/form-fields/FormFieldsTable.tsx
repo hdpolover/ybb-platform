@@ -18,7 +18,7 @@ import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { fetchSystemFormFields, type SystemFormField } from "./catalog-api";
 import { FormFieldEditor } from "./FormFieldEditor";
 import { AddFieldDialog } from "./AddFieldDialog";
-import { CopyFromTemplateDialog } from "./CopyFromTemplateDialog";
+import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import type { HelpAssetRow } from "./HelpAssetsRepeater";
 
@@ -415,7 +415,10 @@ export function FormFieldsTable({ programId }: { programId: string }) {
       />
       <CopyFromTemplateDialog
         open={copyTemplateOpen}
+        entityKey="form-fields"
+        entityLabel="Application Form Fields"
         programId={resolvedProgramId}
+        supportsAppend
         onClose={() => setCopyTemplateOpen(false)}
         onApplied={() => {
           setCopyTemplateOpen(false);
