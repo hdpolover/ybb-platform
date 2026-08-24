@@ -26,6 +26,7 @@ import { ExchangeRateTab } from "@/app/components/programDetailsMasterData/excha
 import { parseApiDate, toLocalDatetimeInputValue, toUtcIsoFromLocalInput } from "@/lib/utils";
 import { formatInBusinessTz } from "@/lib/datetime";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
+import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 
 type ProgramDetail = {
   id: string;
@@ -280,6 +281,7 @@ export default function ProgramDetailsPage({
   const [generalSaveError, setGeneralSaveError] = useState<string | null>(null);
   const [isGeneralSaving, setIsGeneralSaving] = useState(false);
   const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
+  const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -533,6 +535,13 @@ export default function ProgramDetailsPage({
               >
                 <span>Copy from program</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setCopyFromTemplateOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              >
+                <span>Copy from template</span>
+              </button>
               <EditSpecificsAction
                 programName={programName}
                 initialValues={specificsFormValues}
@@ -576,6 +585,19 @@ export default function ProgramDetailsPage({
         onClose={() => setCopyFromProgramOpen(false)}
         onApplied={() => {
           setCopyFromProgramOpen(false);
+          void refreshProgramDetail();
+        }}
+      />
+
+      <CopyFromTemplateDialog
+        open={copyFromTemplateOpen}
+        entityKey="program-details"
+        entityLabel="Participant-Facing Content"
+        programId={resolvedProgramId}
+        supportsAppend={false}
+        onClose={() => setCopyFromTemplateOpen(false)}
+        onApplied={() => {
+          setCopyFromTemplateOpen(false);
           void refreshProgramDetail();
         }}
       />
