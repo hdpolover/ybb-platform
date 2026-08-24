@@ -6,23 +6,38 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { ApplicationCategory } from '@core/entities/participant-application.entity';
+import { makePrismaTxMock } from '../../../../../../test/utils/prisma-tx-mock';
 
 describe('SwitchApplicationCategoryHandler', () => {
   let handler: SwitchApplicationCategoryHandler;
 
-  const mockPrisma = {
-    participantApplication: {
-      findUnique: jest.fn(),
-      update: jest.fn(),
+  // Disjoint prisma/tx mocks: `update`/`updateMany` live ONLY on `mockTx`, so a
+  // regression that moves the switch+auto-cancel writes outside the
+  // `$transaction` callback (onto `mockPrisma` instead) is caught by the
+  // `mockPrisma.participantApplication.update` `.not.toHaveBeenCalled()` guard
+  // below, rather than passing identically either way.
+  const { prisma: mockPrisma, tx: mockTx } = makePrismaTxMock(
+    {
+      participantApplication: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+      },
+      participant: {
+        findUnique: jest.fn(),
+      },
+      applicationInvoice: {
+        updateMany: jest.fn(),
+      },
     },
-    applicationInvoice: {
-      updateMany: jest.fn(),
+    {
+      participantApplication: {
+        update: jest.fn(),
+      },
+      applicationInvoice: {
+        updateMany: jest.fn(),
+      },
     },
-    participant: {
-      findUnique: jest.fn(),
-    },
-    $transaction: jest.fn(),
-  };
+  );
 
   const mockCacheService = {
     invalidateKeys: jest.fn().mockResolvedValue(undefined),
@@ -121,10 +136,7 @@ describe('SwitchApplicationCategoryHandler', () => {
         },
       ]),
     );
-    mockPrisma.$transaction.mockImplementation(async (cb: (tx: typeof mockPrisma) => unknown) =>
-      cb(mockPrisma),
-    );
-    mockPrisma.participantApplication.update.mockResolvedValue({
+    mockTx.participantApplication.update.mockResolvedValue({
       id: 'app-1',
       applicationCategory: 'fully_funded',
     });
@@ -136,6 +148,52 @@ describe('SwitchApplicationCategoryHandler', () => {
     );
 
     await expect(handler.execute(command)).resolves.toBeDefined();
-    expect(mockPrisma.participantApplication.update).toHaveBeenCalled();
+    // The switch write must go through the transaction client...
+    expect(mockTx.participantApplication.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'app-1' },
+        data: expect.objectContaining({ applicationCategory: 'fully_funded' }),
+      }),
+    );
+    // ...and never leak onto the outer (non-transactional) prisma client. If it
+    // did, a mid-transaction failure could leave cancelled invoices under a
+    // category the participant never actually switched to, or vice versa.
+    expect(mockPrisma.participantApplication.update).not.toHaveBeenCalled();
+  });
+
+  it('auto-cancels unpaid invoices atomically with the category switch, inside the same transaction', async () => {
+    const application = buildApplication([
+      {
+        startDate: new Date(Date.now() - 86400000),
+        endDate: new Date(Date.now() + 86400000), // ends tomorrow
+      },
+    ]);
+    mockPrisma.participantApplication.findUnique.mockResolvedValue({
+      ...application,
+      invoices: [
+        { id: 'inv-1', status: 'unpaid', pricingTier: { feeType: 'registration_fee' } },
+      ],
+    });
+    mockTx.participantApplication.update.mockResolvedValue({
+      id: 'app-1',
+      applicationCategory: 'fully_funded',
+    });
+
+    const command = new SwitchApplicationCategoryCommand(
+      'app-1',
+      'fully_funded' as ApplicationCategory,
+      'u-1',
+    );
+
+    await handler.execute(command);
+
+    expect(mockTx.applicationInvoice.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ['inv-1'] } },
+        data: { status: 'cancelled' },
+      }),
+    );
+    // Same non-atomicity concern as above, for the auto-cancel side.
+    expect(mockPrisma.applicationInvoice.updateMany).not.toHaveBeenCalled();
   });
 });
