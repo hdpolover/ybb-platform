@@ -291,3 +291,102 @@ describe('copyScopedRows', () => {
     expect(delegate.create.mock.calls[1][0].data).toMatchObject({ name: 'b', order: 7 });
   });
 });
+
+import { applyScopedTemplate } from './copy-scoped-rows';
+
+describe('applyScopedTemplate', () => {
+  it('append inserts template rows and skips exact dedupe-key collisions (case-sensitive)', async () => {
+    const delegate = fakeDelegate([{ id: 't1', name: 'email', order: 0, programId: 'tgt' }]);
+    const result = await applyScopedTemplate({
+      delegate,
+      scopeField: 'programId',
+      targetProgramId: 'tgt',
+      sourceRows: [
+        { id: '', name: 'Email', order: 0, programId: '' } as Row,
+        { id: '', name: 'phone', order: 1, programId: '' } as Row,
+      ],
+      mode: 'append',
+      activeFilter: {},
+      idOf: (r: Row) => r.id,
+      dedupeKey: (r: Row) => r.name,
+      fields: (r: Row, order: number) => ({ programId: 'tgt', name: r.name, order }),
+      replaceData: { deletedAt: new Date() },
+    });
+    // 'Email' (capital E) does not collide with existing lowercase 'email' —
+    // same exact-match dedupe copyScopedRows uses, verified here so
+    // applyScopedTemplate can't silently drift from it.
+    expect(result).toEqual({ created: 2, skipped: 0, replaced: 0 });
+    expect(delegate.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('replace with an empty template throws BadRequestException before any mutation', async () => {
+    const delegate = fakeDelegate([{ id: 't1', name: 'old', order: 0, programId: 'tgt' }]);
+    await expect(
+      applyScopedTemplate({
+        delegate,
+        scopeField: 'programId',
+        targetProgramId: 'tgt',
+        sourceRows: [] as Row[],
+        mode: 'replace',
+        activeFilter: {},
+        idOf: (r: Row) => r.id,
+        dedupeKey: (r: Row) => r.name,
+        fields: (r: Row, order: number) => ({ programId: 'tgt', name: r.name, order }),
+        replaceData: { deletedAt: new Date() },
+      }),
+      // NestJS's BadRequestException({ code, message }) sets .message to the
+      // human-readable text, not `code` (verified against
+      // @nestjs/common's HttpException#initMessage) — jest's
+      // toThrow(string) matches only against .message, so this mirrors the
+      // sibling assertion in copyScopedRows's own "replace: empty source"
+      // test above, which covers the exact same shared guard.
+    ).rejects.toThrow(/empty selection/i);
+    expect(delegate.updateMany).not.toHaveBeenCalled();
+    expect(delegate.create).not.toHaveBeenCalled();
+  });
+
+  it('replace soft-deletes existing target rows via replaceData, then inserts from order 0', async () => {
+    const delegate = fakeDelegate([{ id: 't1', name: 'old', order: 0, programId: 'tgt' }]);
+    const replaceData = { deletedAt: new Date('2026-08-24'), isActive: false };
+    const result = await applyScopedTemplate({
+      delegate,
+      scopeField: 'programId',
+      targetProgramId: 'tgt',
+      sourceRows: [{ id: '', name: 'a', order: 3, programId: '' } as Row],
+      mode: 'replace',
+      activeFilter: {},
+      idOf: (r: Row) => r.id,
+      dedupeKey: (r: Row) => r.name,
+      fields: (r: Row, order: number) => ({ programId: 'tgt', name: r.name, order }),
+      replaceData,
+    });
+    expect(delegate.updateMany).toHaveBeenCalledWith({ where: { programId: 'tgt' }, data: replaceData });
+    expect(delegate.create.mock.calls[0][0].data.order).toBe(0);
+    expect(result).toEqual({ created: 1, skipped: 0, replaced: 1 });
+  });
+
+  it('runs beforeReplace with the existing target row ids before deleting, and aborts if it throws', async () => {
+    const delegate = fakeDelegate([{ id: 't1', name: 'old', order: 0, programId: 'tgt' }]);
+    const beforeReplace = jest.fn(async () => {
+      throw new Error('blocked');
+    });
+    await expect(
+      applyScopedTemplate({
+        delegate,
+        scopeField: 'programId',
+        targetProgramId: 'tgt',
+        sourceRows: [{ id: '', name: 'a', order: 0, programId: '' } as Row],
+        mode: 'replace',
+        activeFilter: {},
+        idOf: (r: Row) => r.id,
+        dedupeKey: (r: Row) => r.name,
+        fields: (r: Row, order: number) => ({ programId: 'tgt', name: r.name, order }),
+        replaceData: { deletedAt: new Date() },
+        beforeReplace,
+      }),
+    ).rejects.toThrow('blocked');
+    expect(beforeReplace).toHaveBeenCalledWith(['t1']);
+    expect(delegate.updateMany).not.toHaveBeenCalled();
+    expect(delegate.create).not.toHaveBeenCalled();
+  });
+});
