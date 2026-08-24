@@ -39,7 +39,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let status: number;
     let userMessage: string;
     // Optional machine-readable error code forwarded from the exception
-    // response body (e.g. BadRequestException({ message, errorCode })). Only
+    // response body. Accepts either `errorCode` (e.g.
+    // BadRequestException({ message, errorCode })) or `code` (e.g. the
+    // `programs` module's BadRequestException({ code, message }) /
+    // ConflictException({ code, message }) shape) so both spellings reach
+    // the client — `errorCode` wins when both are present. Always emitted
+    // as `errorCode` to keep the public response contract unchanged. Only
     // included in the JSON response when present, to stay backward compatible.
     let errorCode: string | undefined;
     // Optional field-level error detail forwarded from the exception response
@@ -68,6 +73,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
         typeof (body as { errorCode: unknown }).errorCode === 'string'
       ) {
         errorCode = (body as { errorCode: string }).errorCode;
+      } else if (
+        typeof body === 'object' &&
+        body !== null &&
+        'code' in body &&
+        typeof (body as { code: unknown }).code === 'string'
+      ) {
+        errorCode = (body as { code: string }).code;
       }
       if (typeof body === 'object' && body !== null && 'errors' in body && Array.isArray((body as { errors: unknown }).errors)) {
         errors = (body as { errors: unknown[] }).errors;

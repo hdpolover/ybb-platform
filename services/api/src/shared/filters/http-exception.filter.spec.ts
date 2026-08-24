@@ -161,6 +161,87 @@ describe('HttpExceptionFilter', () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
+  it('forwards `errorCode` when only `errorCode` is present on the exception body', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/programs/copy' });
+
+    filter.catch(
+      new BadRequestException({ errorCode: 'confirm_required', message: 'Confirmation required.' }),
+      host,
+    );
+
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).toEqual(
+      expect.objectContaining({ statusCode: 400, errorCode: 'confirm_required' }),
+    );
+  });
+
+  it('forwards `code` as `errorCode` when only `code` is present on the exception body (the fix)', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/programs/copy' });
+
+    filter.catch(
+      new BadRequestException({ code: 'empty_replace_source', message: 'Nothing to copy.' }),
+      host,
+    );
+
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).toEqual(
+      expect.objectContaining({ statusCode: 400, errorCode: 'empty_replace_source' }),
+    );
+  });
+
+  it('prefers `errorCode` over `code` when both are present with differing values', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/programs/copy' });
+
+    filter.catch(
+      new BadRequestException({ errorCode: 'errorCode-value', code: 'code-value', message: 'Conflict.' }),
+      host,
+    );
+
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).toEqual(
+      expect.objectContaining({ statusCode: 400, errorCode: 'errorCode-value' }),
+    );
+  });
+
+  it('ignores a non-string `code` value and does not emit `errorCode` or crash', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/programs/copy' });
+
+    filter.catch(
+      new BadRequestException({ code: 42, message: 'Bad shape.' }),
+      host,
+    );
+
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).not.toHaveProperty('errorCode');
+    expect(body).toEqual(expect.objectContaining({ statusCode: 400, message: 'Bad shape.' }));
+  });
+
+  it('ignores a non-string `code` object value and does not emit `errorCode` or crash', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/programs/copy' });
+
+    filter.catch(
+      new BadRequestException({ code: { nested: true }, message: 'Bad shape.' }),
+      host,
+    );
+
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).not.toHaveProperty('errorCode');
+    expect(body).toEqual(expect.objectContaining({ statusCode: 400, message: 'Bad shape.' }));
+  });
+
+  it('emits no `errorCode` key at all when neither `errorCode` nor `code` is present', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/programs/copy' });
+
+    filter.catch(
+      new BadRequestException({ message: 'Plain failure, no code.' }),
+      host,
+    );
+
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).not.toHaveProperty('errorCode');
+    expect(body).toEqual(expect.objectContaining({ statusCode: 400, message: 'Plain failure, no code.' }));
+  });
+
   it('logs at error level (not warn) for an unrecognized thrown error', () => {
     const host = makeHost({ method: 'GET', url: '/v1/programs/1' });
 
