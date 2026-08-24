@@ -6172,6 +6172,7 @@ git commit -m "refactor(admin): remove superseded Brand-level contact/landing/SE
 - Modify: `services/api/src/modules/brands/application/queries/handlers/get-brand-detail.handler.ts`
 - Modify: `services/api/src/modules/brands/application/queries/handlers/list-brands.handler.ts`
 - Modify: `services/api/src/modules/brands/application/commands/handlers/update-brand-details.handler.ts`
+- Modify: `services/api/src/modules/brands/application/commands/handlers/update-brand-settings.handler.ts` (**added after the pre-flight scan — this file was missing from the plan entirely.** Its `mapToDto()` copies all seven dropped fields onto `BrandResponseDto` at lines 91-94 and 102-104. Delete those seven assignments, exactly as for the other `BrandResponseDto` sites above. Without this, Task 21's `npx tsc --noEmit` gate fails on a file no step tells you to open.)
 - Modify: `services/api/src/modules/brands/presentation/brands.controller.spec.ts` (fixture updates, driven by running it)
 - Create: `services/api/scripts/strip-migrated-brand-metadata-keys.ts`
 
