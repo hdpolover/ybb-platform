@@ -1,6 +1,22 @@
 // services/api/src/modules/programs/application/copy/copiers/rundowns.copier.spec.ts
+import { BadRequestException } from '@nestjs/common';
 import { RundownsCopier } from './rundowns.copier';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+
+// Mirrors form-fields.copier.spec.ts's helper: BadRequestException here
+// carries a structured { code, message } response body, and Nest's
+// HttpException surfaces that body's own `message` string as the thrown
+// error's `.message` — not the `code` — so `.rejects.toThrow(/code/)` can
+// never match. Asserting on `.getResponse().code` is this codebase's
+// established way to check a structured exception's code.
+async function captureError(promise: Promise<unknown>): Promise<any> {
+  try {
+    await promise;
+  } catch (err) {
+    return err;
+  }
+  throw new Error('expected promise to reject');
+}
 
 type RundownRow = {
   id: string;
@@ -145,5 +161,79 @@ describe('RundownsCopier', () => {
     const copier = new RundownsCopier(prisma);
     const items = await copier.preview('src');
     expect(items).toEqual([{ id: 's1', label: 'Opening Ceremony', meta: 'Day 1' }]);
+  });
+});
+
+describe('RundownsCopier.exportTemplate', () => {
+  it('exports the full row shape', async () => {
+    const prisma = mkPrisma({ sourceItems: [rundown({ id: 's1', day: 'Day 1', activity: 'Registration' })] });
+    const copier = new RundownsCopier(prisma);
+    const payload = await copier.exportTemplate('src');
+    expect(payload.items).toEqual([expect.objectContaining({ day: 'Day 1', activity: 'Registration' })]);
+  });
+});
+
+describe('RundownsCopier.applyTemplate', () => {
+  it('dedupes on the composite (day, activity), not on activity alone', async () => {
+    const prisma = mkPrisma({ existingItems: [rundown({ id: 't1', day: 'Day 1', activity: 'Registration' })] });
+    const copier = new RundownsCopier(prisma);
+    const result = await copier.applyTemplate(
+      prisma,
+      {
+        entityType: 'rundowns',
+        payloadVersion: 1,
+        items: [
+          { day: 'Day 1', startTime: null, endTime: null, activity: 'Registration', description: null, location: null, speaker: null, isActive: true },
+          { day: 'Day 2', startTime: null, endTime: null, activity: 'Registration', description: null, location: null, speaker: null, isActive: true },
+        ],
+      },
+      'tgt',
+      'append',
+    );
+    // Same activity name on a different day is NOT a collision — only the
+    // exact (day, activity) pair is.
+    expect(result).toEqual({ created: 1, skipped: 1, replaced: 0 });
+  });
+
+  it('does not alias two distinct (day, activity) pairs whose naive "day::activity" concatenation would collide', async () => {
+    const prisma = mkPrisma({ existingItems: [] });
+    const copier = new RundownsCopier(prisma);
+    const result = await copier.applyTemplate(
+      prisma,
+      {
+        entityType: 'rundowns',
+        payloadVersion: 1,
+        items: [
+          { day: 'Day1::Extra', startTime: null, endTime: null, activity: 'Foo', description: null, location: null, speaker: null, isActive: true },
+          { day: 'Day1', startTime: null, endTime: null, activity: 'Extra::Foo', description: null, location: null, speaker: null, isActive: true },
+        ],
+      },
+      'tgt',
+      'append',
+    );
+    expect(result).toEqual({ created: 2, skipped: 0, replaced: 0 });
+  });
+
+  it('replace with an empty template throws BadRequestException before any mutation', async () => {
+    const prisma = mkPrisma({ existingItems: [rundown({ id: 't1', day: 'Day 1', activity: 'old' })] });
+    const copier = new RundownsCopier(prisma);
+    const err = await captureError(
+      copier.applyTemplate(prisma, { entityType: 'rundowns', payloadVersion: 1, items: [] }, 'tgt', 'replace'),
+    );
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err.getResponse() as { code: string }).code).toBe('empty_replace_source');
+    expect((prisma as any).programSchedule.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('RundownsCopier round-trip', () => {
+  it('exportTemplate then applyTemplate reproduces the rundown item on the target program', async () => {
+    const prisma = mkPrisma({ sourceItems: [rundown({ id: 's1', day: 'Day 2', activity: 'Keynote', speaker: 'Jane Doe' })] });
+    const copier = new RundownsCopier(prisma);
+    const payload = await copier.exportTemplate('src');
+    const result = await copier.applyTemplate(prisma, payload, 'tgt', 'append');
+    const create = (prisma as any).programSchedule.create as jest.Mock;
+    expect(create.mock.calls[0][0].data).toEqual(expect.objectContaining({ day: 'Day 2', activity: 'Keynote', speaker: 'Jane Doe' }));
+    expect(result).toEqual({ created: 1, skipped: 0, replaced: 0 });
   });
 });
