@@ -650,6 +650,59 @@ export function updatePlatformBrandMetadata(
   });
 }
 
+// ─── Program-owned contact + landing content (Phase 3 ownership split) ───────
+// Mirrors BrandMetadata's structured section types but scoped to
+// Program.landingContent (PUT /programs/:id/landing-content, partial merge,
+// 7-key allow-list enforced server-side — see
+// program-landing-content.constants.ts) — reuses BenefitGroup/BrandFeature/
+// BrandPromoCta/BrandMomentsShorts/BrandFurtherInformation/BrandPaymentInfo,
+// same shapes, now Program-owned instead of Brand-owned.
+export type ProgramLandingContent = {
+  benefits?: { eyebrow: string; title: string; groups: BenefitGroup[] };
+  features?: BrandFeature[];
+  promo_cta?: BrandPromoCta;
+  moments_shorts?: BrandMomentsShorts;
+  further_information?: BrandFurtherInformation;
+  payment_info?: BrandPaymentInfo;
+  participant_demographics?: Record<string, unknown>;
+};
+
+// No dedicated GET function for landingContent — it already rides along on
+// the general admin program detail response (GET /admin/programs/:id) that
+// program-details/page.tsx already fetches for every other field on this
+// page. Callers read detail.landingContent straight off the same
+// ProgramDetail the page already holds.
+
+// PUT /programs/:id/landing-content merges the patch server-side and
+// returns only { message } (matching every other program-content endpoint)
+// — the caller re-fetches the program detail to see the merged result, it
+// is not returned here.
+export function updateProgramLandingContent(
+  programId: string,
+  patch: Partial<ProgramLandingContent>,
+): Promise<{ message: string }> {
+  return request<{ message: string }>(`/programs/${programId}/landing-content`, {
+    method: "PUT",
+    body: JSON.stringify({ patch }),
+  });
+}
+
+export type ProgramContact = {
+  contactEmail?: string;
+  contactPhone?: string;
+  contactWhatsapp?: string;
+  contactAddress?: string;
+};
+
+// PUT /programs/:id/contact REPLACES the whole block (not a patch) — an
+// omitted field clears to null server-side, matching UpdateProgramContactHandler.
+export function updateProgramContact(programId: string, contact: ProgramContact): Promise<{ message: string }> {
+  return request<{ message: string }>(`/programs/${programId}/contact`, {
+    method: "PUT",
+    body: JSON.stringify(contact),
+  });
+}
+
 export type BrandSponsor = {
   id: string;
   name: string;
