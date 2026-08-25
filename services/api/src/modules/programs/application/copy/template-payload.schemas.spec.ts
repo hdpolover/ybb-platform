@@ -341,4 +341,32 @@ describe('parseTemplateItems', () => {
       expect(() => parseTemplateItems(entityType, [{ ...validItem, unexpectedField: 'nope' }])).toThrow(BadRequestException);
     });
   });
+
+  // The template path does not go through UpdateProgramContactDto, so its
+  // @MaxLength guards never run here. Without caps in the schema an oversized
+  // value reaches Postgres and fails as a 22001, which the admin sees as an
+  // opaque 500 rather than a field-level validation error.
+  describe('caps contact fields at their column widths', () => {
+    const valid = { contactEmail: null, contactPhone: null, contactWhatsapp: null, contactAddress: null };
+
+    it.each([
+      ['contactEmail', 256],
+      ['contactPhone', 51],
+      ['contactWhatsapp', 51],
+    ])('rejects %s longer than the column allows', (field, len) => {
+      expect(() => parseTemplateItems('contact', [{ ...valid, [field]: 'x'.repeat(len) }])).toThrow(BadRequestException);
+    });
+
+    it.each([
+      ['contactEmail', 255],
+      ['contactPhone', 50],
+      ['contactWhatsapp', 50],
+    ])('accepts %s exactly at the column width', (field, len) => {
+      expect(() => parseTemplateItems('contact', [{ ...valid, [field]: 'x'.repeat(len) }])).not.toThrow();
+    });
+
+    it('leaves contactAddress uncapped — it is a Text column, not VarChar', () => {
+      expect(() => parseTemplateItems('contact', [{ ...valid, contactAddress: 'x'.repeat(5000) }])).not.toThrow();
+    });
+  });
 });

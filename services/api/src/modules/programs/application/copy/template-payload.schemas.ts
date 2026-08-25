@@ -188,11 +188,17 @@ const programDetailsItemSchema = z
 // (e.g. participationCategoriesItemSchema's `name` is VarChar(255) with no
 // `.max()`), so this stays consistent with that existing precedent rather
 // than inventing a new one.
+// Lengths mirror Program's column widths (program.prisma: contact_email
+// VarChar(255), contact_phone/contact_whatsapp VarChar(50), contact_address
+// Text). The template path does NOT go through UpdateProgramContactDto, so its
+// @MaxLength guards do not protect this ingress — without these caps an
+// oversized value passes validation and only fails at Postgres, as a 22001 that
+// surfaces to the admin as an opaque 500. That failure shape has recurred here.
 const contactItemSchema = z
   .object({
-    contactEmail: z.string().nullable(),
-    contactPhone: z.string().nullable(),
-    contactWhatsapp: z.string().nullable(),
+    contactEmail: z.string().max(255).nullable(),
+    contactPhone: z.string().max(50).nullable(),
+    contactWhatsapp: z.string().max(50).nullable(),
     contactAddress: z.string().nullable(),
   })
   .strict();
