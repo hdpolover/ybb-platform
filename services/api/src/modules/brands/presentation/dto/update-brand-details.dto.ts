@@ -9,6 +9,12 @@ export class UpdateBrandDetailsDto {
     @IsString()
     description?: string;
 
+    @ApiProperty({ required: false, example: 'Empowering the next generation of global leaders' })
+    @IsOptional()
+    @IsString()
+    @MaxLength(255)
+    tagline?: string;
+
     @ApiProperty({ required: false, description: 'Longer "About Us" text.' })
     @IsOptional()
     @IsString()

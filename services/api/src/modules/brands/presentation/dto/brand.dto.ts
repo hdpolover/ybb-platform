@@ -14,6 +14,9 @@ export class BrandResponseDto {
     description?: string | null;
 
     @ApiProperty({ required: false, nullable: true })
+    tagline?: string | null;
+
+    @ApiProperty({ required: false, nullable: true })
     logoUrl?: string | null;
 
     @ApiProperty({ required: false, nullable: true })
