@@ -29,12 +29,11 @@ export function LogoOverrideWarning({
           <>
             This brand&rsquo;s active program has its own logo set, and it&rsquo;s currently just a copy of this brand
             logo. It serves no purpose other than blocking edits here (the program logo always wins on the
-            public site). The program logo upload only replaces, it cannot be cleared from this UI, so ask an
-            administrator or engineer to clear it, or replace it on the{" "}
+            public site). Remove it, or replace it with the logo you actually want shown, on the{" "}
             <Link href={programBrandingHref} className="font-medium underline hover:text-amber-900">
               program&rsquo;s branding page
-            </Link>{" "}
-            with the logo you actually want shown.
+            </Link>
+            .
           </>
         ) : (
           <>
