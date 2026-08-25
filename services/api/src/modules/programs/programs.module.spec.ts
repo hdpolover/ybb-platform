@@ -11,12 +11,24 @@ import { RundownsCopier } from './application/copy/copiers/rundowns.copier';
 import { FaqsCopier } from './application/copy/copiers/faqs.copier';
 import { PaymentsCopier } from './application/copy/copiers/payments.copier';
 import { ProgramDetailsCopier } from './application/copy/copiers/program-details.copier';
+import { ContactCopier } from './application/copy/copiers/contact.copier';
+import { LandingCopier } from './application/copy/copiers/landing.copier';
 
 // This spec exercises the *exact* provider registration shape used in
-// programs.module.ts for the copy feature: the seven copiers as ordinary
+// programs.module.ts for the copy feature: the nine copiers as ordinary
 // providers, plus ProgramCopierRegistry registered via an explicit
 // useFactory/inject pair (required because its constructor is a rest
 // parameter, which Nest cannot resolve positionally from `providers`).
+//
+// Task 9 (program-content-copy phase 3) added ContactCopier/LandingCopier
+// here. The task's own brief claimed no bootstrap-spec-style file existed
+// in this repo ("no file named *bootstrap*.spec.ts or app.module.spec.ts
+// exists") — that's incorrect, this file is exactly that, and it hardcoded
+// "seven" copiers by name. Left unedited, it would still pass (it doesn't
+// reference contact/landing at all) while silently failing to exercise the
+// exact bug class Task 9 exists to catch: an inject-array omission for the
+// two new copiers. Updated to include both, per the codebase-over-brief
+// instruction.
 //
 // It deliberately does not import the full ProgramsModule — that module
 // also imports AuthModule, which instantiates JwtStrategy and fails in this
@@ -41,6 +53,8 @@ describe('ProgramsModule copy DI graph', () => {
         FaqsCopier,
         PaymentsCopier,
         ProgramDetailsCopier,
+        ContactCopier,
+        LandingCopier,
         {
           provide: ProgramCopierRegistry,
           useFactory: (...copiers: ProgramCopier[]) => new ProgramCopierRegistry(...copiers),
@@ -52,6 +66,8 @@ describe('ProgramsModule copy DI graph', () => {
             FaqsCopier,
             PaymentsCopier,
             ProgramDetailsCopier,
+            ContactCopier,
+            LandingCopier,
           ],
         },
       ],
@@ -68,8 +84,8 @@ describe('ProgramsModule copy DI graph', () => {
     expect(registry).toBeInstanceOf(ProgramCopierRegistry);
   });
 
-  it('lists exactly seven copiers', () => {
-    expect(registry.list()).toHaveLength(7);
+  it('lists exactly nine copiers', () => {
+    expect(registry.list()).toHaveLength(9);
   });
 
   it.each([
@@ -80,6 +96,8 @@ describe('ProgramsModule copy DI graph', () => {
     ['faqs', FaqsCopier],
     ['payments', PaymentsCopier],
     ['program-details', ProgramDetailsCopier],
+    ['contact', ContactCopier],
+    ['landing', LandingCopier],
   ] as const)('get(%s) returns the %s instance', (key, CopierClass) => {
     expect(registry.get(key)).toBeInstanceOf(CopierClass);
   });

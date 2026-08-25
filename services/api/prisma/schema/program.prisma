@@ -6,6 +6,7 @@ model Brand {
   id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   name        String    @unique @db.VarChar(100)
   description String?   @db.Text
+  tagline     String?   @db.VarChar(255)
   slug        String    @unique @db.VarChar(100)
   isActive    Boolean   @default(true) @map("is_active")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -196,9 +197,22 @@ model Program {
   essayGuidelineUrl       String?  @map("essay_guideline_url") @db.VarChar(500)
   previewChecklistItems   String[] @map("preview_checklist_items")
 
+  // Contact Information (program-owned — see docs/superpowers/specs/2026-08-23-program-content-copy-design.md)
+  contactEmail    String? @map("contact_email") @db.VarChar(255)
+  contactPhone    String? @map("contact_phone") @db.VarChar(50)
+  contactWhatsapp String? @map("contact_whatsapp") @db.VarChar(50)
+  contactAddress  String? @map("contact_address") @db.Text
+
   // SEO
   metaTitle       String? @map("meta_title") @db.VarChar(255)
   metaDescription String? @map("meta_description") @db.Text
+  metaKeywords    String? @map("meta_keywords") @db.Text
+
+  // Program-owned landing sections, normalised replacement for the
+  // program-scoped subset of the old Brand.metadata index signature. Legal
+  // top-level keys are enumerated in program-landing-content.constants.ts —
+  // the update handler (Task 5) rejects any other key.
+  landingContent Json @default("{}") @map("landing_content") @db.Json
 
   // Timestamps
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)

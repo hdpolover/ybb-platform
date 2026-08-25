@@ -157,6 +157,12 @@ export class ProgramRepository implements IProgramRepository {
                 metaTitle: data.metaTitle,
                 metaDescription: data.metaDescription,
                 paymentInfoHtml: data.paymentInfoHtml,
+                contactEmail: data.contactEmail,
+                contactPhone: data.contactPhone,
+                contactWhatsapp: data.contactWhatsapp,
+                contactAddress: data.contactAddress,
+                metaKeywords: data.metaKeywords,
+                landingContent: (data.landingContent ?? {}) as Prisma.InputJsonValue,
             },
             include: {
                 brand: {
@@ -213,6 +219,12 @@ export class ProgramRepository implements IProgramRepository {
                 metaTitle: data.metaTitle,
                 metaDescription: data.metaDescription,
                 paymentInfoHtml: data.paymentInfoHtml,
+                contactEmail: data.contactEmail,
+                contactPhone: data.contactPhone,
+                contactWhatsapp: data.contactWhatsapp,
+                contactAddress: data.contactAddress,
+                metaKeywords: data.metaKeywords,
+                landingContent: data.landingContent as Prisma.InputJsonValue | undefined,
             },
             include: {
                 brand: {
@@ -282,6 +294,12 @@ export class ProgramRepository implements IProgramRepository {
             (prismaEntity as Record<string, unknown> & { brand?: { name?: string } }).brand?.name ?? null,
             prismaEntity.theme,
             prismaEntity.paymentInfoHtml ?? null,
+            prismaEntity.contactEmail ?? null,
+            prismaEntity.contactPhone ?? null,
+            prismaEntity.contactWhatsapp ?? null,
+            prismaEntity.contactAddress ?? null,
+            prismaEntity.metaKeywords ?? null,
+            (prismaEntity.landingContent as Record<string, unknown>) ?? {},
         );
     }
 }

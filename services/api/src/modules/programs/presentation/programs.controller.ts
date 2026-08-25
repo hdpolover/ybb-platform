@@ -35,7 +35,9 @@ import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.dec
 import { PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
 import { ChangeType } from '@prisma/client';
 import { UpdateProgramPaymentInfoDto } from './dto/create-update-program-content.dto';
-import { UpdateProgramPaymentInfoCommand } from '../application/commands/program-content.commands';
+import { UpdateProgramPaymentInfoCommand, UpdateProgramContactCommand, UpdateProgramLandingContentCommand } from '../application/commands/program-content.commands';
+import { UpdateProgramContactDto } from './dto/update-program-contact.dto';
+import { UpdateProgramLandingContentDto } from './dto/update-program-landing-content.dto';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string; email: string; brandId: string };
@@ -211,6 +213,37 @@ export class ProgramsController {
       new UpdateProgramPaymentInfoCommand(id, dto, req.user.id),
     );
     return { message: 'Payment info updated successfully' };
+  }
+
+  @Put(':id/contact')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Replace program contact information' })
+  @ApiResponse({ status: 200, description: 'Contact info updated successfully' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  async updateContact(
+    @Param('id') id: string,
+    @Body() dto: UpdateProgramContactDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    await this.commandBus.execute(new UpdateProgramContactCommand(id, dto, req.user.id));
+    return { message: 'Contact info updated successfully' };
+  }
+
+  @Put(':id/landing-content')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update program-owned landing page content (partial merge)' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  async updateLandingContent(
+    @Param('id') id: string,
+    @Body() dto: UpdateProgramLandingContentDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    await this.commandBus.execute(new UpdateProgramLandingContentCommand(id, dto, req.user.id));
+    return { message: 'Landing content updated successfully' };
   }
 
   private mapToResponse(program: ProgramLike): ProgramResponseDto {

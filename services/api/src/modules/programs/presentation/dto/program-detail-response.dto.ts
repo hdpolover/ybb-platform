@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 class BrandDto {
   @ApiProperty()
@@ -436,6 +436,13 @@ export class ProgramDetailResponseDto {
 
   @ApiProperty()
   metaDescription?: string;
+
+  @ApiPropertyOptional() metaKeywords?: string;
+  @ApiPropertyOptional() contactEmail?: string;
+  @ApiPropertyOptional() contactPhone?: string;
+  @ApiPropertyOptional() contactWhatsapp?: string;
+  @ApiPropertyOptional() contactAddress?: string;
+  @ApiPropertyOptional({ type: 'object', additionalProperties: true }) landingContent?: Record<string, unknown>;
 
   @ApiProperty({ type: BrandDto })
   brand: BrandDto;

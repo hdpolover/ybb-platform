@@ -71,6 +71,7 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
 
         const updatedBrand = await this.brandRepository.update(id, {
             description: dto.description,
+            tagline: dto.tagline,
             logoUrl: dto.logoUrl,
             bannerUrl: dto.bannerUrl,
             about: dto.about,
@@ -109,6 +110,7 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
         dto.name = brand.name;
         dto.slug = brand.slug;
         dto.description = brand.description;
+        dto.tagline = brand.tagline;
         dto.logoUrl = brand.logoUrl;
         dto.logoIconUrl = brand.logoIconUrl;
         dto.bannerUrl = brand.bannerUrl;

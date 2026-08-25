@@ -48,5 +48,6 @@ export class Brand {
         // Relations
         public readonly settings?: BrandSetting | null,
         public readonly programCount?: number,
+        public readonly tagline?: string | null,
     ) { }
 }
