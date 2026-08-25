@@ -317,6 +317,7 @@ describe('HomeStrategy', () => {
             landingContent: { benefits: { eyebrow: 'VYS eyebrow' } },
         };
         mockPrismaService.program.findFirst
+            .mockResolvedValueOnce(null) // rule 0: no open registration window
             .mockResolvedValueOnce(null) // rule 1: isPublished && isActive finds nothing
             .mockResolvedValueOnce(vietnamProgram); // rule 2: most recent non-deleted program
         mockPrismaService.programGallery.findMany.mockResolvedValue([]);
@@ -328,8 +329,8 @@ describe('HomeStrategy', () => {
 
         const result: any = await strategy.getData(category as any);
 
-        expect(mockPrismaService.program.findFirst).toHaveBeenNthCalledWith(1, expect.objectContaining(activeProgramQuery('brand-vys')));
-        expect(mockPrismaService.program.findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining(anyProgramFallbackQuery('brand-vys')));
+        expect(mockPrismaService.program.findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining(activeProgramQuery('brand-vys')));
+        expect(mockPrismaService.program.findFirst).toHaveBeenNthCalledWith(3, expect.objectContaining(anyProgramFallbackQuery('brand-vys')));
         const overview = result.sections.find((s: any) => s.type === 'registration_overview');
         expect(overview?.content.registration_types).toHaveLength(1);
         expect(result.sections.find((s: any) => s.type === 'program_benefits')?.content.eyebrow).toBe('VYS eyebrow');
@@ -347,6 +348,7 @@ describe('HomeStrategy', () => {
             landingContent: { benefits: { eyebrow: 'KYS eyebrow' } },
         };
         mockPrismaService.program.findFirst
+            .mockResolvedValueOnce(null) // rule 0: no open registration window
             .mockResolvedValueOnce(null) // rule 1: isPublished && isActive finds nothing
             .mockResolvedValueOnce(koreaProgram); // rule 2: most recent non-deleted program
         mockPrismaService.programGallery.findMany.mockResolvedValue([]);
@@ -358,8 +360,8 @@ describe('HomeStrategy', () => {
 
         const result: any = await strategy.getData(category as any);
 
-        expect(mockPrismaService.program.findFirst).toHaveBeenNthCalledWith(1, expect.objectContaining(activeProgramQuery('brand-kys')));
-        expect(mockPrismaService.program.findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining(anyProgramFallbackQuery('brand-kys')));
+        expect(mockPrismaService.program.findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining(activeProgramQuery('brand-kys')));
+        expect(mockPrismaService.program.findFirst).toHaveBeenNthCalledWith(3, expect.objectContaining(anyProgramFallbackQuery('brand-kys')));
         const overview = result.sections.find((s: any) => s.type === 'registration_overview');
         expect(overview?.content.registration_types).toHaveLength(1);
         expect(result.sections.find((s: any) => s.type === 'program_benefits')?.content.eyebrow).toBe('KYS eyebrow');

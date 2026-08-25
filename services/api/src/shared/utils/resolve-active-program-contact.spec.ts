@@ -20,7 +20,7 @@ function mkPrisma(findFirst: jest.Mock): PrismaService {
 
 describe('resolveActiveProgramContact', () => {
     it('rule 1: queries via the shared activeProgramQuery builder with a contact-only select', async () => {
-        const findFirst = jest.fn().mockResolvedValueOnce({
+        const findFirst = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({
             contactEmail: 'x@example.com',
             contactPhone: null,
             contactWhatsapp: null,
@@ -72,6 +72,7 @@ describe('resolveActiveProgramContact', () => {
     it('rule 2: falls back to the most recent non-deleted program (Vietnam Youth Summit shape — published, inactive)', async () => {
         const findFirst = jest
             .fn()
+            .mockResolvedValueOnce(null) // rule 0: no program with an open registration window
             .mockResolvedValueOnce(null) // rule 1: no published+active program
             .mockResolvedValueOnce({
                 contactEmail: 'vys@ybbfoundation.com',
@@ -83,11 +84,11 @@ describe('resolveActiveProgramContact', () => {
 
         const result = await resolveActiveProgramContact(prisma, 'brand-vys');
 
-        expect(findFirst).toHaveBeenNthCalledWith(1, {
+        expect(findFirst).toHaveBeenNthCalledWith(2, {
             ...activeProgramQuery('brand-vys'),
             select: { contactEmail: true, contactPhone: true, contactWhatsapp: true, contactAddress: true },
         });
-        expect(findFirst).toHaveBeenNthCalledWith(2, {
+        expect(findFirst).toHaveBeenNthCalledWith(3, {
             ...anyProgramFallbackQuery('brand-vys'),
             select: { contactEmail: true, contactPhone: true, contactWhatsapp: true, contactAddress: true },
         });
@@ -106,6 +107,6 @@ describe('resolveActiveProgramContact', () => {
         const result = await resolveActiveProgramContact(prisma, 'brand-empty');
 
         expect(result).toEqual({ contactEmail: null, contactPhone: null, contactWhatsapp: null, contactAddress: null });
-        expect(findFirst).toHaveBeenCalledTimes(2);
+        expect(findFirst).toHaveBeenCalledTimes(3);
     });
 });
