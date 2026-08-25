@@ -29,6 +29,8 @@ import {
   uploadFileViaPresignedUrl,
   type ProgramTestimonial,
 } from "@/src/shared/api-client";
+import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
+import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 
 export default function ProgramTestimoniesPage() {
   const params = useParams<{ programId: string }>();
@@ -45,6 +47,8 @@ export default function ProgramTestimoniesPage() {
   const [editTarget, setEditTarget] = useState<ProgramTestimonial | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProgramTestimonial | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
+  const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
 
   const program = accessiblePrograms.find((p) => p.programId === params.programId);
   const programName = program?.programName ?? "Selected Program";
@@ -127,6 +131,20 @@ export default function ProgramTestimoniesPage() {
             >
               <ArrowPathIcon className="h-3.5 w-3.5" />
               Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => setCopyFromProgramOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+            >
+              <span>Copy from program</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCopyFromTemplateOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+            >
+              <span>Copy from template</span>
             </button>
             <button
               type="button"
@@ -300,6 +318,32 @@ export default function ProgramTestimoniesPage() {
           onConfirm={handleDelete}
         />
       )}
+
+      <CopyFromProgramDialog
+        open={copyFromProgramOpen}
+        entityKey="testimonials"
+        entityLabel="Testimonials"
+        programId={resolvedProgramId}
+        supportsAppend
+        onClose={() => setCopyFromProgramOpen(false)}
+        onApplied={() => {
+          setCopyFromProgramOpen(false);
+          load();
+        }}
+      />
+
+      <CopyFromTemplateDialog
+        open={copyFromTemplateOpen}
+        entityKey="testimonials"
+        entityLabel="Testimonials"
+        programId={resolvedProgramId}
+        supportsAppend
+        onClose={() => setCopyFromTemplateOpen(false)}
+        onApplied={() => {
+          setCopyFromTemplateOpen(false);
+          load();
+        }}
+      />
     </main>
   );
 }
