@@ -12,6 +12,7 @@ import {
   Logger,
   Res,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -29,7 +30,9 @@ import {
 import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { isPrivateCategoryKey } from '@shared/utils/private-file-key';
+import { resolveRevenueAccessScope, assertProgramAccess } from '@modules/stats/revenue/utils/revenue-access.util';
 
 /**
  * Files Controller
@@ -53,7 +56,48 @@ export class FilesController {
     private readonly storageService: StorageService,
     private readonly metricsService: MetricsService,
     private readonly prisma: PrismaService,
+    private readonly prismaRead: PrismaReadService,
   ) {}
+
+  /**
+   * Resolve the brand_id an upload should be stamped with. NEVER trust a caller-supplied
+   * brand_id: for a program-scoped upload it must be the PROGRAM's own brand, not the
+   * uploader's JWT home brand (a super/multi-brand admin uploading to another brand's
+   * program was previously mis-stamping files with their own home brand — see
+   * fix/file-brand-attribution). Non-program uploads keep the old JWT-brand behavior.
+   */
+  private async resolveUploadBrandId(
+    programId: string | undefined,
+    user: CurrentUserData,
+  ): Promise<string> {
+    if (!programId) return user.brandId;
+
+    const program = await this.prisma.program.findUnique({
+      where: { id: programId },
+      select: { id: true, brandId: true, deletedAt: true },
+    });
+    if (!program || program.deletedAt) {
+      throw new NotFoundException(`Program ${programId} not found`);
+    }
+
+    // Same-brand upload (the overwhelming common case for both participants and
+    // single-brand admins) — always allowed, no extra scope lookup needed.
+    if (program.brandId === user.brandId) {
+      return program.brandId;
+    }
+
+    // Cross-brand upload: only an admin with actual access to that program/brand
+    // (platform admin, or brand_scope/assigned admin granted this program) may do
+    // this. Reuses the same admin access classifier the revenue endpoints use
+    // (services/api/src/modules/stats/revenue/utils/revenue-access.util.ts) instead
+    // of inventing a second notion of "who can touch this brand".
+    if (!user.adminId) {
+      throw new ForbiddenException('You do not have access to this program.');
+    }
+    const scope = await resolveRevenueAccessScope(this.prismaRead, user);
+    await assertProgramAccess(this.prismaRead, scope, programId);
+    return program.brandId;
+  }
 
   private isSelfDownloadProxyUrl(url: string, fileId: string): boolean {
     const escapedId = fileId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -420,7 +464,7 @@ export class FilesController {
     const scopedRequest: CreateUploadUrlRequest = {
       ...dto,
       user_id: user.userId,
-      brand_id: user.brandId,
+      brand_id: await this.resolveUploadBrandId(dto.program_id, user),
     };
     this.logger.log(`Requesting upload URL for ${scopedRequest.filename} (brand ${scopedRequest.brand_id})`);
     const data = await this.fileServiceClient.createUploadUrl(scopedRequest);
@@ -471,9 +515,12 @@ export class FilesController {
       const result = await this.fileGrpcClient.getPresignedUploadUrl({
           filename: dto.filename,
           content_type: dto.content_type,
-          // Always use JWT-sourced identity — never trust caller-supplied user_id/brand_id.
+          // Always use JWT-sourced identity — never trust caller-supplied user_id.
+          // brand_id is derived server-side from program_id (see resolveUploadBrandId),
+          // never taken from the caller and never blindly forced to the JWT's home
+          // brand — a program-scoped upload must be stamped with the PROGRAM's brand.
           user_id: user.userId,
-          brand_id: user.brandId,
+          brand_id: await this.resolveUploadBrandId(dto.program_id, user),
           bucket: dto.bucket || 'uploads',
           program_id: dto.program_id,
           participant_id: dto.participant_id,
