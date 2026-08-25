@@ -38,7 +38,6 @@
 // parameters) — see `assertDisjointMocks` below. That mistake type-checks, compiles,
 // and passes today; it silently reintroduces the exact bug this helper exists to catch.
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 export interface PrismaTxMock<TPrisma extends object, TTx extends object> {
   /** The outer `PrismaService` mock. Has `$transaction` pre-wired to invoke its callback with `tx`. */
