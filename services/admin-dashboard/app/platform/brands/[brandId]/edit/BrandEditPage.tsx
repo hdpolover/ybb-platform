@@ -208,9 +208,6 @@ function IdentityTab({
   const [description, setDescription] = useState(brand.description ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(brand.websiteUrl ?? "");
   const [primaryColor, setPrimaryColor] = useState(brand.primaryColor ?? "");
-  const [contactEmail, setContactEmail] = useState(
-    (brand as PlatformBrandDetail & { contactEmail?: string }).contactEmail ?? "",
-  );
   const [isActive, setIsActive] = useState(brand.isActive);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<File | null>(null);
@@ -247,7 +244,6 @@ function IdentityTab({
         description: description || undefined,
         websiteUrl: websiteUrl || undefined,
         primaryColor: primaryColor || undefined,
-        contactEmail: contactEmail || undefined,
         isActive,
         logo: logoFile ?? undefined,
         banner: bannerFile ?? undefined,
@@ -398,25 +394,15 @@ function IdentityTab({
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Contact & Status</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Contact Email"
-            id="contactEmail"
-            value={contactEmail}
-            onChange={setContactEmail}
-            type="email"
-            placeholder="contact@example.com"
+        <CardHeader><CardTitle>Status</CardTitle></CardHeader>
+        <CardContent>
+          <CheckboxField
+            label="Brand is Active"
+            id="isActive"
+            checked={isActive}
+            onChange={setIsActive}
+            hint="Inactive brands are hidden from the platform."
           />
-          <div className="flex items-end">
-            <CheckboxField
-              label="Brand is Active"
-              id="isActive"
-              checked={isActive}
-              onChange={setIsActive}
-              hint="Inactive brands are hidden from the platform."
-            />
-          </div>
         </CardContent>
       </Card>
 
@@ -437,15 +423,9 @@ function DetailsTab({
   const [about, setAbout] = useState(brand.about ?? "");
   const [vision, setVision] = useState(brand.vision ?? "");
   const [mission, setMission] = useState(brand.mission ?? "");
-  const [contactPhone, setContactPhone] = useState(brand.contactPhone ?? "");
-  const [contactWhatsapp, setContactWhatsapp] = useState(brand.contactWhatsapp ?? "");
-  const [contactAddress, setContactAddress] = useState(brand.contactAddress ?? "");
   const [defaultLocation, setDefaultLocation] = useState(brand.defaultLocation ?? "");
   const [defaultCountry, setDefaultCountry] = useState(brand.defaultCountry ?? "");
   const [defaultTimezone, setDefaultTimezone] = useState(brand.defaultTimezone ?? "");
-  const [metaTitle, setMetaTitle] = useState(brand.metaTitle ?? "");
-  const [metaDescription, setMetaDescription] = useState(brand.metaDescription ?? "");
-  const [metaKeywords, setMetaKeywords] = useState(brand.metaKeywords ?? "");
   // Social media as editable key-value pairs
   const [socialEntries, setSocialEntries] = useState<Array<{ platform: string; url: string }>>(
     Object.entries(brand.socialMediaLinks ?? {}).map(([platform, url]) => ({ platform, url })),
@@ -486,16 +466,10 @@ function DetailsTab({
         about: about || undefined,
         vision: vision || undefined,
         mission: mission || undefined,
-        contactPhone: contactPhone || undefined,
-        contactWhatsapp: contactWhatsapp || undefined,
-        contactAddress: contactAddress || undefined,
         socialMediaLinks: Object.keys(socialMediaLinks).length > 0 ? socialMediaLinks : undefined,
         defaultLocation: defaultLocation || undefined,
         defaultCountry: defaultCountry || undefined,
         defaultTimezone: defaultTimezone || undefined,
-        metaTitle: metaTitle || undefined,
-        metaDescription: metaDescription || undefined,
-        metaKeywords: metaKeywords || undefined,
       });
       setSuccess("Details saved.");
       onSaved(updated);
@@ -514,17 +488,6 @@ function DetailsTab({
           <TextArea label="About" id="about" value={about} onChange={setAbout} rows={4} placeholder="Who is this brand?" />
           <TextArea label="Vision" id="vision" value={vision} onChange={setVision} rows={3} placeholder="Long-term vision…" />
           <TextArea label="Mission" id="mission" value={mission} onChange={setMission} rows={3} placeholder="What does this brand do…" />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Contact</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field label="Phone" id="contactPhone" value={contactPhone} onChange={setContactPhone} type="tel" placeholder="+62 812 0000 0000" />
-          <Field label="WhatsApp" id="contactWhatsapp" value={contactWhatsapp} onChange={setContactWhatsapp} type="tel" placeholder="+62 812 0000 0000" />
-          <div className="sm:col-span-2">
-            <TextArea label="Address" id="contactAddress" value={contactAddress} onChange={setContactAddress} rows={2} placeholder="Street, City, Country…" />
-          </div>
         </CardContent>
       </Card>
 
@@ -575,15 +538,6 @@ function DetailsTab({
           <Field label="Default Location" id="defaultLocation" value={defaultLocation} onChange={setDefaultLocation} placeholder="Jakarta" />
           <Field label="Default Country" id="defaultCountry" value={defaultCountry} onChange={setDefaultCountry} placeholder="Indonesia" />
           <Field label="Default Timezone" id="defaultTimezone" value={defaultTimezone} onChange={setDefaultTimezone} placeholder="Asia/Jakarta" />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>SEO</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <Field label="Meta Title" id="metaTitle" value={metaTitle} onChange={setMetaTitle} placeholder="Page title for SEO" />
-          <TextArea label="Meta Description" id="metaDescription" value={metaDescription} onChange={setMetaDescription} rows={2} placeholder="Short description for search engines…" />
-          <Field label="Meta Keywords" id="metaKeywords" value={metaKeywords} onChange={setMetaKeywords} placeholder="keyword1, keyword2, keyword3" hint="Comma-separated" />
         </CardContent>
       </Card>
 
