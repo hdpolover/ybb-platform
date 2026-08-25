@@ -47,5 +47,11 @@ export class Program {
         public readonly brandName?: string | null,
         public readonly theme?: string | null,
         public readonly paymentInfoHtml?: string | null,
+        public readonly contactEmail?: string | null,
+        public readonly contactPhone?: string | null,
+        public readonly contactWhatsapp?: string | null,
+        public readonly contactAddress?: string | null,
+        public readonly metaKeywords?: string | null,
+        public readonly landingContent?: Record<string, unknown>,
     ) { }
 }

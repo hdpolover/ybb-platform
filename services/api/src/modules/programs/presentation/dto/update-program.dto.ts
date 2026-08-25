@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsNumber, IsDateString, IsBoolean, IsUUID, IsEnum, IsArray, MaxLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ProgramFormat } from '../../../../core/entities/program.entity';
 
 const PROGRAM_FORMAT_VALUES: ProgramFormat[] = ['in_person', 'hybrid', 'online'];
@@ -167,6 +167,11 @@ export class UpdateProgramDto {
     @IsString()
     @IsOptional()
     metaDescription?: string;
+
+    @ApiPropertyOptional({ description: 'SEO keywords, comma-separated' })
+    @IsOptional()
+    @IsString()
+    metaKeywords?: string;
 
     @ApiProperty({ description: 'Whether the program is visible to users on the public site', required: false })
     @IsBoolean()
