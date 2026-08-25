@@ -7,6 +7,7 @@ import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.servi
 import { StorageService } from '../application/storage.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 
 // BLOCKER regression coverage: GET /v1/files/:fileId/download is @Public() and must
@@ -43,6 +44,7 @@ describe('FilesController — downloadFile (masked public download)', () => {
                 { provide: StorageService, useValue: {} },
                 { provide: MetricsService, useValue: { fileUploadsTotal: { inc: jest.fn() } } },
                 { provide: PrismaService, useValue: mockPrisma },
+                { provide: PrismaReadService, useValue: {} },
             ],
         })
             .overrideGuard(JwtAuthGuard)
@@ -115,5 +117,149 @@ describe('FilesController — downloadFile (masked public download)', () => {
     it('404s for an unresolvable id (no File, ProgramResource, or DocumentTemplate match)', async () => {
         await expect(controller.downloadFile(FILE_ID, mockRes)).rejects.toThrow(NotFoundException);
         expect(mockRes.redirect).not.toHaveBeenCalled();
+    });
+});
+
+// Regression coverage for fix/file-brand-attribution: a program-scoped upload must be
+// stamped with the PROGRAM's own brand, never the uploader's JWT home brand. user_id is
+// always forced from the JWT regardless.
+describe('FilesController — requestUploadUrl (brand attribution)', () => {
+    let controller: FilesController;
+    let mockPrisma: { program: { findUnique: jest.Mock } };
+    let mockPrismaRead: { admin: { findUnique: jest.Mock }; program: { findUnique: jest.Mock } };
+    let mockFileServiceClient: { createUploadUrl: jest.Mock };
+
+    const PROGRAM_ID = 'prog-1';
+    const PROGRAM_BRAND_ID = 'brand-program-owner';
+    const JWT_HOME_BRAND_ID = 'brand-jwt-home';
+
+    const baseDto = {
+        filename: 'photo.jpg',
+        content_type: 'image/jpeg',
+        size: 1024,
+        user_id: 'caller-supplied-should-be-ignored',
+        brand_id: 'caller-supplied-should-be-ignored',
+    };
+
+    beforeEach(async () => {
+        mockPrisma = {
+            program: { findUnique: jest.fn() },
+        };
+        mockPrismaRead = {
+            admin: { findUnique: jest.fn() },
+            program: { findUnique: jest.fn() },
+        };
+        mockFileServiceClient = {
+            createUploadUrl: jest.fn().mockResolvedValue({
+                file_id: 'file-1',
+                upload_url: 'https://storage.example.com/upload',
+                storage_path: 'path',
+                bucket: 'gallery',
+                public_url: null,
+                expires_in_seconds: 600,
+            }),
+        };
+
+        const module: TestingModule = await Test.createTestingModule({
+            controllers: [FilesController],
+            providers: [
+                { provide: FileServiceClient, useValue: mockFileServiceClient },
+                { provide: FileGrpcClient, useValue: {} },
+                { provide: StorageService, useValue: {} },
+                { provide: MetricsService, useValue: { fileUploadsTotal: { inc: jest.fn() } } },
+                { provide: PrismaService, useValue: mockPrisma },
+                { provide: PrismaReadService, useValue: mockPrismaRead },
+            ],
+        })
+            .overrideGuard(JwtAuthGuard)
+            .useValue({ canActivate: () => true })
+            .compile();
+
+        controller = module.get<FilesController>(FilesController);
+    });
+
+    it('stamps the PROGRAM brand, not the JWT brand, for a same-org participant upload', async () => {
+        mockPrisma.program.findUnique.mockResolvedValue({
+            id: PROGRAM_ID,
+            brandId: JWT_HOME_BRAND_ID,
+            deletedAt: null,
+        });
+        const user = { userId: 'user-1', email: 'p@x.com', brandId: JWT_HOME_BRAND_ID };
+
+        await controller.requestUploadUrl({ ...baseDto, program_id: PROGRAM_ID }, user);
+
+        expect(mockFileServiceClient.createUploadUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ brand_id: JWT_HOME_BRAND_ID, user_id: 'user-1' }),
+        );
+    });
+
+    it('stamps the PROGRAM brand (not the caller JWT brand) for a multi-brand admin uploading cross-brand', async () => {
+        mockPrisma.program.findUnique.mockResolvedValue({
+            id: PROGRAM_ID,
+            brandId: PROGRAM_BRAND_ID,
+            deletedAt: null,
+        });
+        mockPrismaRead.program.findUnique.mockResolvedValue({
+            id: PROGRAM_ID,
+            brandId: PROGRAM_BRAND_ID,
+            name: 'Test Program',
+            deletedAt: null,
+        });
+        mockPrismaRead.admin.findUnique.mockResolvedValue({
+            accessLevel: 10, // platform/super admin
+            canManageAdmins: false,
+            canAssignRoles: false,
+            customPermissions: null,
+            role: null,
+            adminBrands: [],
+            adminPrograms: [],
+        });
+        const superAdminUser = {
+            userId: 'admin-1',
+            email: 'super@ybbhub.com',
+            brandId: JWT_HOME_BRAND_ID,
+            adminId: 'admin-1',
+        };
+
+        await controller.requestUploadUrl({ ...baseDto, program_id: PROGRAM_ID }, superAdminUser);
+
+        expect(mockFileServiceClient.createUploadUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ brand_id: PROGRAM_BRAND_ID, user_id: 'admin-1' }),
+        );
+    });
+
+    it('rejects a non-admin caller uploading cross-brand to a program they do not own', async () => {
+        mockPrisma.program.findUnique.mockResolvedValue({
+            id: PROGRAM_ID,
+            brandId: PROGRAM_BRAND_ID,
+            deletedAt: null,
+        });
+        const otherBrandUser = { userId: 'user-2', email: 'p2@x.com', brandId: JWT_HOME_BRAND_ID };
+
+        await expect(
+            controller.requestUploadUrl({ ...baseDto, program_id: PROGRAM_ID }, otherBrandUser),
+        ).rejects.toThrow();
+        expect(mockFileServiceClient.createUploadUrl).not.toHaveBeenCalled();
+    });
+
+    it('keeps the old JWT-brand behavior when no program_id is supplied', async () => {
+        const user = { userId: 'user-3', email: 'p3@x.com', brandId: JWT_HOME_BRAND_ID };
+
+        await controller.requestUploadUrl({ ...baseDto }, user);
+
+        expect(mockPrisma.program.findUnique).not.toHaveBeenCalled();
+        expect(mockFileServiceClient.createUploadUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ brand_id: JWT_HOME_BRAND_ID, user_id: 'user-3' }),
+        );
+    });
+
+    it('always forces user_id from the JWT, never from the caller-supplied body', async () => {
+        const user = { userId: 'real-jwt-user', email: 'p4@x.com', brandId: JWT_HOME_BRAND_ID };
+
+        await controller.requestUploadUrl({ ...baseDto, user_id: 'spoofed-user-id' }, user);
+
+        expect(mockFileServiceClient.createUploadUrl).toHaveBeenCalledWith(
+            expect.objectContaining({ user_id: 'real-jwt-user' }),
+        );
     });
 });
