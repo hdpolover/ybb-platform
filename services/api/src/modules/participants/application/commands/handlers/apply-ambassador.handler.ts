@@ -53,11 +53,19 @@ export class ApplyAmbassadorHandler implements ICommandHandler<ApplyAmbassadorCo
         try {
             const [userRecord, programRecord] = await Promise.all([
                 this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
-                this.prisma.program.findUnique({ where: { id: dto.programId }, include: { brand: true } }),
+                this.prisma.program.findUnique({
+                    where: { id: dto.programId },
+                    select: { contactEmail: true, contactAddress: true, brand: true },
+                }),
             ]);
 
             const email = userRecord?.email;
-            const brand = programRecord?.brand;
+            // Merge program-owned contact fields back onto the emitted `brand`
+            // shape — services/notification reads brand.contactEmail/contactAddress
+            // from this event payload's field names, unchanged by this phase.
+            const brand = programRecord?.brand
+                ? { ...programRecord.brand, contactEmail: programRecord.contactEmail, contactAddress: programRecord.contactAddress }
+                : null;
 
             if (email) {
                 let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';

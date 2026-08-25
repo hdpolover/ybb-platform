@@ -56,6 +56,9 @@ export interface ReceiptDocInput {
         name: string;
         logoUrl: string | null;
         primaryColor: string | null;
+        // Sourced from Program as of Phase 3 (docs/superpowers/specs/2026-08-23-program-content-copy-design.md)
+        // — the caller (portal.controller.ts's toReceiptDocInput) reads these off
+        // application.program, not application.program.brand. Shape unchanged.
         contactEmail: string | null;
         contactPhone: string | null;
         contactAddress: string | null;
