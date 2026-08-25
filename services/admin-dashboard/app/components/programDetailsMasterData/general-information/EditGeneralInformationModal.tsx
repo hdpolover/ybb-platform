@@ -12,12 +12,15 @@ import {
   FolderOpenIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
+  TrashIcon,
 } from "@heroicons/react/24/solid";
+import { toast } from "sonner";
 import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
 import { listProgramMedia, type MediaFile } from "@/src/shared/api-client";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { FormSection } from "@/src/ui/drawer/form-section";
+import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
@@ -231,6 +234,7 @@ function ImageUploadField({
   onFileChange,
   onPick,
   onClear,
+  onRemove,
   uploadStatus,
   hint,
   programId,
@@ -243,6 +247,7 @@ function ImageUploadField({
   onFileChange: (f: File | null) => void;
   onPick: (url: string) => void;
   onClear: () => void;
+  onRemove?: () => Promise<void>;
   uploadStatus: "idle" | "uploading" | "done" | "error";
   hint?: string;
   programId: string;
@@ -250,8 +255,30 @@ function ImageUploadField({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const previewUrl = file ? URL.createObjectURL(file) : pickedUrl ?? currentUrl ?? null;
   const isDirty = file !== null || pickedUrl !== null;
+  // Removing the saved asset only makes sense when there IS a saved asset
+  // and the admin hasn't already staged a replacement (staged changes are
+  // discarded with the "Clear" button above, not this one). Hiding it in
+  // that case also keeps the UI from ever sending an upload+clear request
+  // for the same asset, which the API rejects as contradictory anyway.
+  const canRemove = Boolean(currentUrl) && !isDirty && Boolean(onRemove);
+  // Only the logo has a brand-level fallback (settings.strategy.ts: program
+  // logoUrl || brand logoUrl) — banner/thumbnail have no such fallback, so
+  // the confirm copy below shouldn't imply one exists for those.
+  const isLogo = label.toLowerCase().includes("logo");
+
+  async function handleConfirmRemove() {
+    if (!onRemove) return;
+    try {
+      await onRemove();
+      toast.success(`${label} removed`);
+      setRemoveConfirmOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Failed to remove the ${label.toLowerCase()}.`);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -354,9 +381,33 @@ function ImageUploadField({
             Clear
           </button>
         )}
+        {canRemove && !pickerOpen && (
+          <button
+            type="button"
+            onClick={() => setRemoveConfirmOpen(true)}
+            className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-500 shadow-sm transition hover:bg-rose-50 hover:text-rose-600"
+          >
+            <TrashIcon className="h-3.5 w-3.5" />
+            Remove
+          </button>
+        )}
       </div>
 
       {hint && <p className="text-[10px] leading-relaxed text-zinc-400">{hint}</p>}
+
+      <ConfirmDialog
+        open={removeConfirmOpen}
+        onOpenChange={setRemoveConfirmOpen}
+        title={`Remove ${label.toLowerCase()}`}
+        description={
+          isLogo
+            ? `This removes the current logo right away, it does not wait for "Save Changes". The public site falls back to the brand's logo, if one is set.`
+            : `This removes the current ${label.toLowerCase()} right away, it does not wait for "Save Changes".`
+        }
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={handleConfirmRemove}
+      />
     </div>
   );
 }
@@ -425,6 +476,32 @@ export function EditGeneralInformationModal({
     value: GeneralInformationFormValues[K],
   ) {
     setFormValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  // Removing a saved asset is a direct, immediate action (its own confirm
+  // dialog in ImageUploadField) rather than a staged change folded into
+  // handleUploadBranding — it has nothing to upload and no reason to wait
+  // for "Save Changes". Refreshes currentLogoUrl/currentBannerUrl/
+  // currentThumbnailUrl via onBrandingUploaded so the freed slot re-renders
+  // as empty (or reveals the brand logo, for the logo field) right away.
+  async function handleRemoveAsset(field: "logo" | "banner" | "thumbnail") {
+    const token = getAccessToken();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const clearField = `clear${field.charAt(0).toUpperCase()}${field.slice(1)}`;
+    const formData = new FormData();
+    formData.append(clearField, "true");
+
+    const res = await fetch(
+      buildApiUrl(`/programs/${encodeURIComponent(programId)}/branding`),
+      { method: "POST", headers, body: formData },
+    );
+    if (!res.ok) {
+      throw new Error(await readErrorMessage(res));
+    }
+
+    await onBrandingUploaded?.();
   }
 
   async function handleUploadBranding(): Promise<boolean> {
@@ -660,6 +737,7 @@ export function EditGeneralInformationModal({
               onFileChange={(f) => { setLogoFile(f); resetBrandingState(); }}
               onPick={(url) => { setLogoPickedUrl(url); setLogoFile(null); resetBrandingState(); }}
               onClear={() => { setLogoFile(null); setLogoPickedUrl(null); resetBrandingState(); }}
+              onRemove={() => handleRemoveAsset("logo")}
               uploadStatus={brandingStatus}
               hint="Square or 4:3 ratio recommended. PNG/JPG up to 2 MB."
               programId={programId}
@@ -673,6 +751,7 @@ export function EditGeneralInformationModal({
               onFileChange={(f) => { setBannerFile(f); resetBrandingState(); }}
               onPick={(url) => { setBannerPickedUrl(url); setBannerFile(null); resetBrandingState(); }}
               onClear={() => { setBannerFile(null); setBannerPickedUrl(null); resetBrandingState(); }}
+              onRemove={() => handleRemoveAsset("banner")}
               uploadStatus={brandingStatus}
               hint="16:9 ratio recommended (e.g. 1200×675). PNG/JPG up to 2 MB."
               programId={programId}
@@ -686,6 +765,7 @@ export function EditGeneralInformationModal({
               onFileChange={(f) => { setThumbnailFile(f); resetBrandingState(); }}
               onPick={(url) => { setThumbnailPickedUrl(url); setThumbnailFile(null); resetBrandingState(); }}
               onClear={() => { setThumbnailFile(null); setThumbnailPickedUrl(null); resetBrandingState(); }}
+              onRemove={() => handleRemoveAsset("thumbnail")}
               uploadStatus={brandingStatus}
               hint="Used on program cards and listings. PNG/JPG up to 2 MB."
               programId={programId}
