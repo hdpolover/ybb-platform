@@ -42,6 +42,7 @@ import { AuditModule } from '@modules/audit/audit.module';
 import { ReportingModule } from '@modules/reporting/reporting.module';
 import { AdminsModule } from '@modules/admins/admins.module';
 import { EmailTemplatesModule } from '@modules/email-templates/email-templates.module';
+import { PlatformSettingsModule } from '@modules/platform-settings/platform-settings.module';
 
 @Module({
   imports: [
@@ -144,6 +145,7 @@ import { EmailTemplatesModule } from '@modules/email-templates/email-templates.m
     AuditModule,
     ReportingModule,
     AdminsModule,
+    PlatformSettingsModule,
   ],
   controllers: [CacheController, MetricsController, QueueController],
 })

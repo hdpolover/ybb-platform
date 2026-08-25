@@ -34,7 +34,10 @@ import {
     CreateProgramSubthemeCommand, UpdateProgramSubthemeCommand, DeleteProgramSubthemeCommand,
     CreateDocumentTemplateCommand, UpdateDocumentTemplateCommand, DeleteDocumentTemplateCommand,
     UpdateProgramPaymentInfoCommand,
+    UpdateProgramContactCommand,
+    UpdateProgramLandingContentCommand,
 } from '../program-content.commands';
+import { PROGRAM_LANDING_CONTENT_KEYS, isProgramLandingContentKey } from '../../copy/program-landing-content.constants';
 
 // ─── Shared cache-invalidation helpers ───────────────────────────────────────
 // Used by ~9 call sites (gallery, faq, document-template x3 each) plus the
@@ -1710,5 +1713,68 @@ export class UpdateProgramPaymentInfoHandler implements ICommandHandler<UpdatePr
         });
 
         await invalidatePricingTierCachesByProgramId(command.programId, this.prisma, this.cacheService, this.landingCacheInvalidation);
+    }
+}
+
+// --- Program Contact Handler ---
+@CommandHandler(UpdateProgramContactCommand)
+export class UpdateProgramContactHandler implements ICommandHandler<UpdateProgramContactCommand> {
+    constructor(
+        @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
+
+    async execute(command: UpdateProgramContactCommand): Promise<void> {
+        const program = await this.programRepository.findById(command.programId);
+        if (!program) {
+            throw new NotFoundException(`Program ${command.programId} not found`);
+        }
+
+        // Replaces the whole block, like updatePaymentInfo — omitted fields
+        // clear to null rather than being left as a stale partial patch.
+        await this.programRepository.update(command.programId, {
+            contactEmail: command.dto.contactEmail ?? null,
+            contactPhone: command.dto.contactPhone ?? null,
+            contactWhatsapp: command.dto.contactWhatsapp ?? null,
+            contactAddress: command.dto.contactAddress ?? null,
+        });
+
+        await invalidateLandingCacheByProgramId(command.programId, this.prisma, this.landingCacheInvalidation);
+    }
+}
+
+// --- Program Landing Content Handler ---
+// Allow-listed partial merge — the untyped index signature this replaces
+// let any client persist arbitrary keys into Brand.metadata forever. Unknown
+// keys are REJECTED, not silently stripped: a value the admin entered
+// vanishing with no signal is this project's recurring defect class.
+@CommandHandler(UpdateProgramLandingContentCommand)
+export class UpdateProgramLandingContentHandler implements ICommandHandler<UpdateProgramLandingContentCommand> {
+    constructor(
+        @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
+
+    async execute(command: UpdateProgramLandingContentCommand): Promise<void> {
+        const program = await this.programRepository.findById(command.programId);
+        if (!program) {
+            throw new NotFoundException(`Program ${command.programId} not found`);
+        }
+
+        const unknownKeys = Object.keys(command.dto.patch).filter((key) => !isProgramLandingContentKey(key));
+        if (unknownKeys.length > 0) {
+            throw new BadRequestException({
+                code: 'unknown_landing_content_key',
+                message: `Unknown landingContent key(s): ${unknownKeys.join(', ')}. Legal keys: ${PROGRAM_LANDING_CONTENT_KEYS.join(', ')}.`,
+            });
+        }
+
+        const existing = (program.landingContent as Record<string, unknown>) ?? {};
+        const merged = { ...existing, ...command.dto.patch };
+
+        await this.programRepository.update(command.programId, { landingContent: merged });
+        await invalidateLandingCacheByProgramId(command.programId, this.prisma, this.landingCacheInvalidation);
     }
 }

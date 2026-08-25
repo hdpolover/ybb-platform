@@ -136,7 +136,8 @@ export class BrandRepository implements IBrandRepository {
                 metaTitle: data.metaTitle,
                 metaDescription: data.metaDescription,
                 metaKeywords: data.metaKeywords,
-                
+                tagline: data.tagline,
+
                 isActive: data.isActive,
                 
                 settings: settingsUpdate,
@@ -247,6 +248,7 @@ export class BrandRepository implements IBrandRepository {
             prismaEntity.isActive,
             settings,
             (prismaEntity as unknown as { programs?: { id: string }[] }).programs?.length ?? 0,
+            prismaEntity.tagline ?? null,
         );
     }
 }

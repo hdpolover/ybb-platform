@@ -10,6 +10,7 @@ import {
   TimelineType,
 } from '@prisma/client';
 import { z } from 'zod';
+import { PROGRAM_LANDING_CONTENT_KEYS } from './program-landing-content.constants';
 
 // Prisma serializes a Decimal to JSON as a *string* (e.g. "55.00"), and a
 // raw Decimal instance fails z.number() outright — verified empirically
@@ -181,6 +182,41 @@ const programDetailsItemSchema = z
   })
   .strict();
 
+// ContactCopier (Task 7): four scalars on the Program row, same shape as
+// programDetailsItemSchema above. No length caps here — none of this
+// codebase's other template schemas enforce a column's VarChar width either
+// (e.g. participationCategoriesItemSchema's `name` is VarChar(255) with no
+// `.max()`), so this stays consistent with that existing precedent rather
+// than inventing a new one.
+// Lengths mirror Program's column widths (program.prisma: contact_email
+// VarChar(255), contact_phone/contact_whatsapp VarChar(50), contact_address
+// Text). The template path does NOT go through UpdateProgramContactDto, so its
+// @MaxLength guards do not protect this ingress — without these caps an
+// oversized value passes validation and only fails at Postgres, as a 22001 that
+// surfaces to the admin as an opaque 500. That failure shape has recurred here.
+const contactItemSchema = z
+  .object({
+    contactEmail: z.string().max(255).nullable(),
+    contactPhone: z.string().max(50).nullable(),
+    contactWhatsapp: z.string().max(50).nullable(),
+    contactAddress: z.string().nullable(),
+  })
+  .strict();
+
+// LandingCopier (Task 8): one JSON bucket, built from
+// PROGRAM_LANDING_CONTENT_KEYS rather than a hand-copied literal list, so
+// this schema can't silently drift from that single source of truth (see
+// its own comment: "imported by ... the landing copier (Task 8) ... so the
+// three can never drift out of sync with each other"). Every key is
+// optional+unknown — landingContent's per-key shape is deliberately untyped
+// (program-landing-content.constants.ts), and a template item only carries
+// whichever keys were populated on the source program. `.strict()` still
+// catches a stray top-level key outside the allow-list, matching every
+// other schema in this file.
+const landingContentItemSchema = z
+  .object(Object.fromEntries(PROGRAM_LANDING_CONTENT_KEYS.map((key) => [key, z.unknown().optional()])))
+  .strict();
+
 // Keyed by ProgramCopier.key — adding an eighth copier means adding one
 // entry here, not touching any call site.
 const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
@@ -191,6 +227,8 @@ const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
   faqs: faqsItemSchema,
   payments: paymentsItemSchema,
   'program-details': programDetailsItemSchema,
+  contact: contactItemSchema,
+  landing: landingContentItemSchema,
 };
 
 /**
