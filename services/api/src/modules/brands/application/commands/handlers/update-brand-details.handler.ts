@@ -80,17 +80,10 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
             primaryColor: dto.primaryColor,
             websiteUrl: dto.websiteUrl,
             landingUrl: dto.landingUrl,
-            contactEmail: dto.contactEmail,
-            contactPhone: dto.contactPhone,
-            contactWhatsapp: dto.contactWhatsapp,
-            contactAddress: dto.contactAddress,
             socialMediaLinks: dto.socialMediaLinks,
             defaultLocation: dto.defaultLocation,
             defaultCountry: dto.defaultCountry,
             defaultTimezone: dto.defaultTimezone,
-            metaTitle: dto.metaTitle,
-            metaDescription: dto.metaDescription,
-            metaKeywords: dto.metaKeywords,
         });
 
         await Promise.all([
@@ -120,10 +113,6 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
         dto.about = brand.about;
         dto.vision = brand.vision;
         dto.mission = brand.mission;
-        dto.contactEmail = brand.contactEmail;
-        dto.contactPhone = brand.contactPhone;
-        dto.contactWhatsapp = brand.contactWhatsapp;
-        dto.contactAddress = brand.contactAddress;
         dto.socialMediaLinks = brand.socialMediaLinks;
         dto.defaultLocation = brand.defaultLocation;
         dto.defaultCountry = brand.defaultCountry;
@@ -131,9 +120,6 @@ export class UpdateBrandDetailsHandler implements ICommandHandler<UpdateBrandDet
         dto.requireEmailVerification = brand.requireEmailVerification;
         dto.defaultCurrency = brand.defaultCurrency;
         dto.enableMultiCurrency = brand.enableMultiCurrency;
-        dto.metaTitle = brand.metaTitle;
-        dto.metaDescription = brand.metaDescription;
-        dto.metaKeywords = brand.metaKeywords;
         dto.createdAt = brand.createdAt;
         dto.updatedAt = brand.updatedAt;
         dto.deletedAt = brand.deletedAt;

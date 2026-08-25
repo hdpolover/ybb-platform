@@ -49,10 +49,6 @@ export class GetBrandDetailHandler implements IQueryHandler<GetBrandDetailQuery>
             vision: brand.vision || null,
             mission: brand.mission || null,
 
-            contactEmail: brand.contactEmail || null,
-            contactPhone: brand.contactPhone || null,
-            contactWhatsapp: brand.contactWhatsapp || null,
-            contactAddress: brand.contactAddress || null,
             socialMediaLinks: brand.socialMediaLinks || null,
 
             defaultLocation: brand.defaultLocation || null,
@@ -63,9 +59,6 @@ export class GetBrandDetailHandler implements IQueryHandler<GetBrandDetailQuery>
             defaultCurrency: brand.defaultCurrency,
             enableMultiCurrency: brand.enableMultiCurrency,
 
-            metaTitle: brand.metaTitle || null,
-            metaDescription: brand.metaDescription || null,
-            metaKeywords: brand.metaKeywords || null,
             isActive: brand.isActive,
             programCount: brand.programCount ?? 0,
 
