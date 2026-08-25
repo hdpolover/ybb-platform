@@ -10,8 +10,10 @@ import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
 import { ActivityStrategy } from './strategies/activity.strategy';
 import { LandingSnapshotService } from './services/landing-snapshot.service';
+import { PlatformSettingsModule } from '@modules/platform-settings/platform-settings.module';
 
 @Module({
+  imports: [PlatformSettingsModule],
   controllers: [LandingController],
   providers: [
     LandingService,
