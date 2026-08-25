@@ -703,6 +703,35 @@ export function updateProgramContact(programId: string, contact: ProgramContact)
   });
 }
 
+// ─── Platform Settings — Impact Stats (Phase 3 Task 6/19 Step 8) ─────────────
+// A SINGLE organisation-wide PlatformSetting row read by every brand's
+// landing page (home.strategy.ts) — not per-brand, not per-program. Both
+// endpoints are SUPER_ADMIN-only server-side (platform-settings.controller.ts
+// declares @Roles(UserRole.SUPER_ADMIN) at the class level, with no
+// method-level override, so GET is gated the same as PUT — NOT the
+// ADMIN+SUPER_ADMIN-read split this task's brief assumed).
+export type ImpactStats = {
+  totalAlumni: string | null;
+  editionsHeld: string | null;
+  totalCountries: string | null;
+  totalParticipants: string | null;
+};
+
+export function getImpactStats(): Promise<ImpactStats> {
+  return request<ImpactStats>("/platform-settings/impact-stats");
+}
+
+// Server-side partial merge (ImpactStatsService.update) — an omitted key
+// keeps its existing value, it is not cleared. Saving already fans out and
+// purges every brand's landing caches server-side; no client-side cache
+// busting needed here.
+export function updateImpactStats(patch: Partial<ImpactStats>): Promise<ImpactStats> {
+  return request<ImpactStats>("/platform-settings/impact-stats", {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  });
+}
+
 export type BrandSponsor = {
   id: string;
   name: string;
