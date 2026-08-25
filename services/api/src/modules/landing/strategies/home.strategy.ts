@@ -176,11 +176,14 @@ export class HomeStrategy implements ILandingPageStrategy {
           type: 'image',
           isActive: true,
           deletedAt: null,
-          program: {
-            brandId: brand.id,
-            isPublished: true,
-            isActive: true,
-          },
+          // Scope to the SAME program resolveActiveProgram picked above, not a
+          // second inlined isPublished/isActive predicate. The old predicate
+          // matched zero rows for Vietnam Youth Summit (published, inactive)
+          // and Korea Youth Summit (unpublished, active), so their gallery,
+          // objectives and highlights rendered titled-but-imageless — the exact
+          // two brands the rule-2 fallback exists to serve. See
+          // shared/utils/active-program-resolver.ts.
+          ...(program ? { programId: program.id } : { program: { brandId: brand.id } }),
         },
         orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
         take: 60,
