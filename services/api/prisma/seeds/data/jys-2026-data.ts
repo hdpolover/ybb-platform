@@ -13,7 +13,6 @@ export const JYS_2026_DATA = {
     benefitsDescription: '1. Guaranteed program participation (Self-Funded)\n2. Faster application processing\n3. No competitive selection required\n4. Enhanced program recognition (Fully-Funded)\n5. Access to exclusive fully funded activities\n6. Opportunity to be moderator in panel discussions\n7. Additional mentorship opportunities',
     requirementsDescription: '1. Open to youth leaders aged 15-35\n2. Passionate about Sustainable Development Goals (SDGs)\n3. Committed to developing and implementing social projects\n4. Proficiency in English is preferred',
     termsAndConditions: 'All participants must adhere to the code of conduct. Fees are non-refundable except under specified conditions for Fully-Funded participants. Participation does not guarantee visa approval.',
-    contactEmail: 'japanyouthsummit@gmail.com',
     logoUrl: 'https://placehold.co/400x100/EF4444/FFF?text=JYS+2026+Logo',
     bannerUrl: 'https://placehold.co/1200x400/EF4444/FFF?text=JYS+Osaka+2026',
   },
