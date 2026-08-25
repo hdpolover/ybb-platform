@@ -40,6 +40,16 @@ export interface InvalidateLandingCachesOptions {
     revalidate: LandingRevalidationRequest;
 }
 
+/** Result of a fan-out purge across every active brand. A brand id in
+ *  `failed` had at least one cache layer NOT cleared for it — its landing
+ *  page may keep serving stale data until the cache TTL expires and must
+ *  be treated as an actionable signal, never silently folded into an
+ *  overall "success". */
+export interface InvalidateAllBrandsResult {
+    succeeded: string[];
+    failed: Array<{ brandId: string; error: string }>;
+}
+
 /**
  * Single entry point for busting all three landing-page cache layers:
  *   1. Redis (`landing:*`, optionally `program:*`)
@@ -76,6 +86,56 @@ export class LandingCacheInvalidationService {
         // mirrors every pre-refactor call site, which invoked it as a
         // separate statement regardless of how cache clearing above went.
         await this.fireRevalidation(brandId, options.revalidate);
+    }
+
+    /**
+     * Fan out a purge across every active, non-deleted brand — the shape a
+     * platform-wide setting (e.g. impact_stats, a single PlatformSetting row
+     * read by all 8 brands' home pages) needs, since every other method on
+     * this class purges exactly one brandId.
+     *
+     * Enumeration: queried fresh from Postgres on every call (`isActive:
+     * true, deletedAt: null`, the same predicate `available_brands` and
+     * Task 17's standalone purge script use) — never a hardcoded or cached
+     * brand list, so a brand added/deactivated between calls is picked up
+     * automatically without this service drifting out of sync with reality.
+     *
+     * Partial failure: each brand's purge is isolated (Promise.allSettled)
+     * so one brand's failure never stops the other N-1 from being attempted
+     * — but each is also run with swallowErrors forced to false internally,
+     * regardless of what the caller passed, so a real per-layer failure
+     * surfaces as a rejection THIS method can observe and record in
+     * `failed`, instead of being silently absorbed the way a single
+     * `invalidate()` call (swallowErrors: true, the default every write-path
+     * handler uses) intentionally absorbs it. A fan-out purge's entire job
+     * is purging — reporting "succeeded" for a brand whose Redis call
+     * actually threw would be exactly the "partial purge that reports
+     * success" failure shape this exists to avoid.
+     */
+    async invalidateForAllBrands(options: InvalidateLandingCachesOptions): Promise<InvalidateAllBrandsResult> {
+        const brands = await this.prisma.brand.findMany({
+            where: { isActive: true, deletedAt: null },
+            select: { id: true },
+        });
+
+        const outcomes = await Promise.allSettled(
+            brands.map((brand) => this.invalidate(brand.id, { ...options, swallowErrors: false })),
+        );
+
+        const succeeded: string[] = [];
+        const failed: Array<{ brandId: string; error: string }> = [];
+        outcomes.forEach((outcome, index) => {
+            const brandId = brands[index].id;
+            if (outcome.status === 'fulfilled') {
+                succeeded.push(brandId);
+                return;
+            }
+            const message = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+            console.error(`Failed to invalidate landing caches for brand ${brandId}:`, outcome.reason);
+            failed.push({ brandId, error: message });
+        });
+
+        return { succeeded, failed };
     }
 
     private async clearCacheLayers(

@@ -62,6 +62,11 @@ type ProgramDetail = {
   requirementsDescription?: string | null;
   benefitsDescription?: string | null;
   termsAndConditions?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  contactWhatsapp?: string | null;
+  contactAddress?: string | null;
+  landingContent?: import("@/app/platform/api").ProgramLandingContent;
   metaTitle?: string | null;
   metaDescription?: string | null;
   brand?: {
@@ -219,6 +224,13 @@ function toProgramSpecificsData(detail: ProgramDetail): ProgramSpecificsData {
       benefitsDescription: formatDisplayValue(detail.benefitsDescription),
       termsAndConditions: formatDisplayValue(detail.termsAndConditions),
     },
+    contact: {
+      contactEmail: detail.contactEmail ?? null,
+      contactPhone: detail.contactPhone ?? null,
+      contactWhatsapp: detail.contactWhatsapp ?? null,
+      contactAddress: detail.contactAddress ?? null,
+    },
+    landingContent: detail.landingContent ?? {},
   };
 }
 
@@ -567,7 +579,12 @@ export default function ProgramDetailsPage({
           ) : activeTab === "exchange-rate" ? (
             <ExchangeRateTab programId={resolvedProgramId} />
           ) : programSpecificsData ? (
-            <ProgramSpecificsTab data={programSpecificsData} />
+            <ProgramSpecificsTab
+              data={programSpecificsData}
+              programId={resolvedProgramId}
+              brandId={programDetail?.brand?.id ?? ""}
+              onDataChanged={() => void refreshProgramDetail()}
+            />
           ) : (
             <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-6 text-sm text-zinc-600">
               No program details available.

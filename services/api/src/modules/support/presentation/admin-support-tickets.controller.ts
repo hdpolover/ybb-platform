@@ -27,6 +27,7 @@ import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { resolveActiveProgramContact } from '@shared/utils/resolve-active-program-contact';
 
 class SupportTicketAttachmentInputDto {
   @IsString()
@@ -472,11 +473,12 @@ export class AdminSupportTicketsController {
         where: { id: ticket.participantId },
         select: {
           fullName: true,
-          user: { select: { email: true, brand: true } },
+          user: { select: { email: true, brandId: true, brand: { select: { name: true, websiteUrl: true, logoUrl: true } } } },
         },
       });
 
       if (participantUser?.user?.email) {
+        const activeProgramContact = await resolveActiveProgramContact(this.prisma, participantUser.user.brandId);
         await this.rabbitmqProducer.emit('support.ticket.replied', {
           ticketId: ticket.id,
           ticketNumber: ticket.ticketNumber,
@@ -492,7 +494,7 @@ export class AdminSupportTicketsController {
                 name: participantUser.user.brand.name,
                 websiteUrl: participantUser.user.brand.websiteUrl,
                 logoUrl: participantUser.user.brand.logoUrl,
-                contactEmail: participantUser.user.brand.contactEmail,
+                contactEmail: activeProgramContact.contactEmail,
               }
             : undefined,
         });
@@ -600,11 +602,12 @@ export class AdminSupportTicketsController {
         where: { id: ticket.participantId },
         select: {
           fullName: true,
-          user: { select: { email: true, brand: true } },
+          user: { select: { email: true, brandId: true, brand: { select: { name: true, websiteUrl: true, logoUrl: true } } } },
         },
       });
 
       if (participantUser?.user?.email) {
+        const activeProgramContact = await resolveActiveProgramContact(this.prisma, participantUser.user.brandId);
         await this.rabbitmqProducer.emit('support.ticket.status-updated', {
           ticketId: updated.id,
           ticketNumber: updated.ticketNumber,
@@ -618,7 +621,7 @@ export class AdminSupportTicketsController {
                 name: participantUser.user.brand.name,
                 websiteUrl: participantUser.user.brand.websiteUrl,
                 logoUrl: participantUser.user.brand.logoUrl,
-                contactEmail: participantUser.user.brand.contactEmail,
+                contactEmail: activeProgramContact.contactEmail,
               }
             : undefined,
         });

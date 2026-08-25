@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HomeStrategy } from './home.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
+import { PlatformSettingRepository } from '@modules/platform-settings/infrastructure/persistence/platform-setting.repository';
+import { activeProgramQuery, anyProgramFallbackQuery } from '@shared/utils/active-program-resolver';
 
 describe('HomeStrategy', () => {
     let strategy: HomeStrategy;
@@ -41,12 +43,17 @@ describe('HomeStrategy', () => {
         invalidateByPattern: jest.fn().mockResolvedValue(undefined),
     };
 
+    const mockPlatformSettingRepository = {
+        get: jest.fn().mockResolvedValue(null),
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 HomeStrategy,
                 { provide: PrismaService, useValue: mockPrismaService },
                 { provide: CacheService, useValue: mockCacheService },
+                { provide: PlatformSettingRepository, useValue: mockPlatformSettingRepository },
             ],
         }).compile();
 
@@ -197,5 +204,164 @@ describe('HomeStrategy', () => {
                 },
             },
         });
+    });
+
+    it('reads benefits/features/promo_cta/moments_shorts/further_information/payment_info from Program.landingContent, not Brand.metadata, and impact_stats from PlatformSetting, not Brand.metadata', async () => {
+        const category = {
+            id: 'cat-1', name: 'Test Brand', bannerUrl: 'http://banner.jpg', websiteUrl: 'http://brand.com',
+            vision: 'Vision', mission: 'Mission',
+            // Brand-level metadata carries DIFFERENT values for the same keys
+            // — proves the assertions below are reading Program/PlatformSetting,
+            // not falling back to (or accidentally still reading) this.
+            metadata: {
+                benefits: { eyebrow: 'BRAND eyebrow', title: 'BRAND title', groups: [] },
+                features: [{ id: 'brand-f', icon: 'x', title: 'BRAND feature', description: '' }],
+                promo_cta: { title: 'BRAND promo' },
+                moments_shorts: { eyebrow: 'BRAND shorts' },
+                further_information: { title: 'BRAND further info' },
+                payment_info: { eyebrow: 'BRAND payment', title: 'x', introText: 'x', items: [], note: 'x' },
+                impact_stats: { total_alumni: 'BRAND-STALE-999' },
+            },
+        };
+
+        mockPrismaService.program.findFirst.mockResolvedValueOnce({
+            id: 'prog-1', name: 'Main Program',
+            gallery: [], pricingTiers: [], resources: [], objectives: [], awards: [],
+            landingContent: {
+                benefits: { eyebrow: 'PROGRAM eyebrow', title: 'PROGRAM title', groups: [] },
+                features: [{ id: 'prog-f', icon: 'y', title: 'PROGRAM feature', description: '' }],
+                promo_cta: { title: 'PROGRAM promo' },
+                moments_shorts: { eyebrow: 'PROGRAM shorts' },
+                further_information: { title: 'PROGRAM further info' },
+                payment_info: { eyebrow: 'PROGRAM payment', title: 'y', introText: 'y', items: [], note: 'y' },
+            },
+        });
+        mockPrismaService.programGallery.findMany.mockResolvedValue([]);
+        mockPrismaService.sponsor.findMany.mockResolvedValue([]);
+        mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([]);
+        mockPrismaService.program.findMany.mockResolvedValue([]);
+        mockPrismaService.programTestimonial.findMany.mockResolvedValue([]);
+        mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
+        mockPlatformSettingRepository.get.mockResolvedValue({
+            key: 'impact_stats',
+            value: { total_alumni: '1700+', editions_held: '15+', total_countries: '50+', total_participants: '1700+' },
+            updatedAt: new Date(), updatedBy: null,
+        });
+
+        const result: any = await strategy.getData(category as any);
+        const sections = result.sections;
+
+        expect(sections.find((s: any) => s.type === 'program_benefits')?.content.eyebrow).toBe('PROGRAM eyebrow');
+        expect(sections.find((s: any) => s.type === 'program_features')?.content.items[0].title).toBe('PROGRAM feature');
+        expect(sections.find((s: any) => s.type === 'program_shorts')?.content.eyebrow).toBe('PROGRAM shorts');
+        expect(sections.find((s: any) => s.type === 'further_information')?.content.title).toBe('PROGRAM further info');
+        expect(sections.find((s: any) => s.type === 'payment_info')?.content.eyebrow).toBe('PROGRAM payment');
+        // promo_cta merges via object spread (`...programLandingContent.promo_cta`)
+        // rather than reading individual named sub-fields — assert the actual
+        // merge behavior instead: the spread value for a key present in the
+        // patch (title) wins over the section's own default.
+        expect(sections.find((s: any) => s.type === 'promo_cta')?.content.title).toBe('PROGRAM promo');
+
+        expect(sections.find((s: any) => s.type === 'program_impact')?.content.stats).toEqual([
+            { id: 'participants', label: 'Total Participants', value: '1700+', icon: 'participants' },
+            { id: 'countries', label: 'Total Countries', value: '50+', icon: 'countries' },
+            { id: 'alumni', label: 'Total Alumni', value: '1700+', icon: 'alumni' },
+        ]);
+        expect(mockPlatformSettingRepository.get).toHaveBeenCalledWith('impact_stats');
+    });
+
+    it('program_objectives renders from the real ProgramObjective relation even when Brand.metadata.program_objectives is set — the override is removed, not merely deprioritized', async () => {
+        const category = {
+            id: 'cat-1', name: 'Test Brand', bannerUrl: 'http://banner.jpg', websiteUrl: 'http://brand.com',
+            vision: 'Vision', mission: 'Mission',
+            metadata: { program_objectives: { eyebrow: 'STALE override', title: 'STALE title', items: ['Stale item'] } },
+        };
+
+        mockPrismaService.program.findFirst.mockResolvedValueOnce({
+            id: 'prog-1', name: 'Main Program',
+            gallery: [], pricingTiers: [], resources: [],
+            objectives: [{ id: 'obj-1', description: 'Real relation objective', order: 1 }],
+            awards: [],
+        });
+        mockPrismaService.programGallery.findMany.mockResolvedValue([]);
+        mockPrismaService.sponsor.findMany.mockResolvedValue([]);
+        mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([]);
+        mockPrismaService.program.findMany.mockResolvedValue([]);
+        mockPrismaService.programTestimonial.findMany.mockResolvedValue([]);
+        mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
+
+        const result: any = await strategy.getData(category as any);
+        const objectives = result.sections.find((s: any) => s.type === 'program_objectives');
+
+        expect(objectives?.content.eyebrow).toBe('Program Objective'); // hardcoded default, not 'STALE override'
+        expect(objectives?.content.items).toEqual([{ id: 'obj-1', description: 'Real relation objective', order: 1 }]);
+    });
+
+    // The two real brands this whole change exists for (resolver addendum).
+    // Both fail rule 1 (isPublished && isActive) and must recover via the
+    // resolver's rule-2 fallback — proving the ENTIRE home page (not just
+    // the landingContent-sourced sections above) resolves against the same
+    // program settings.strategy.ts resolves for contact info, not `null`.
+    // Before this task's deviation from its own brief (which left the
+    // program.findFirst query's where/orderBy untouched), these two brands'
+    // home pages would render every program-derived section empty.
+    it('resolves the whole home page via rule-2 fallback for the Vietnam shape (published=true, isActive=false)', async () => {
+        const category = {
+            id: 'brand-vys', name: 'Vietnam Youth Summit', bannerUrl: 'http://banner.jpg', websiteUrl: 'http://brand.com',
+            vision: 'Vision', mission: 'Mission', metadata: {},
+        };
+        const vietnamProgram = {
+            id: 'p-vys', name: 'Vietnam Youth Summit 2026', isPublished: true, isActive: false,
+            gallery: [], pricingTiers: [{ id: 'tier-1', name: 'Basic', price: 100, currency: 'USD' }],
+            resources: [], objectives: [], awards: [],
+            landingContent: { benefits: { eyebrow: 'VYS eyebrow' } },
+        };
+        mockPrismaService.program.findFirst
+            .mockResolvedValueOnce(null) // rule 1: isPublished && isActive finds nothing
+            .mockResolvedValueOnce(vietnamProgram); // rule 2: most recent non-deleted program
+        mockPrismaService.programGallery.findMany.mockResolvedValue([]);
+        mockPrismaService.sponsor.findMany.mockResolvedValue([]);
+        mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([]);
+        mockPrismaService.program.findMany.mockResolvedValue([]);
+        mockPrismaService.programTestimonial.findMany.mockResolvedValue([]);
+        mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
+
+        const result: any = await strategy.getData(category as any);
+
+        expect(mockPrismaService.program.findFirst).toHaveBeenNthCalledWith(1, expect.objectContaining(activeProgramQuery('brand-vys')));
+        expect(mockPrismaService.program.findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining(anyProgramFallbackQuery('brand-vys')));
+        const overview = result.sections.find((s: any) => s.type === 'registration_overview');
+        expect(overview?.content.registration_types).toHaveLength(1);
+        expect(result.sections.find((s: any) => s.type === 'program_benefits')?.content.eyebrow).toBe('VYS eyebrow');
+    });
+
+    it('resolves the whole home page via rule-2 fallback for the Korea shape (isPublished=false, isActive=true)', async () => {
+        const category = {
+            id: 'brand-kys', name: 'Korea Youth Summit', bannerUrl: 'http://banner.jpg', websiteUrl: 'http://brand.com',
+            vision: 'Vision', mission: 'Mission', metadata: {},
+        };
+        const koreaProgram = {
+            id: 'p-kys', name: '4th Korea Youth Summit', isPublished: false, isActive: true,
+            gallery: [], pricingTiers: [{ id: 'tier-1', name: 'Basic', price: 100, currency: 'USD' }],
+            resources: [], objectives: [], awards: [],
+            landingContent: { benefits: { eyebrow: 'KYS eyebrow' } },
+        };
+        mockPrismaService.program.findFirst
+            .mockResolvedValueOnce(null) // rule 1: isPublished && isActive finds nothing
+            .mockResolvedValueOnce(koreaProgram); // rule 2: most recent non-deleted program
+        mockPrismaService.programGallery.findMany.mockResolvedValue([]);
+        mockPrismaService.sponsor.findMany.mockResolvedValue([]);
+        mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([]);
+        mockPrismaService.program.findMany.mockResolvedValue([]);
+        mockPrismaService.programTestimonial.findMany.mockResolvedValue([]);
+        mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
+
+        const result: any = await strategy.getData(category as any);
+
+        expect(mockPrismaService.program.findFirst).toHaveBeenNthCalledWith(1, expect.objectContaining(activeProgramQuery('brand-kys')));
+        expect(mockPrismaService.program.findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining(anyProgramFallbackQuery('brand-kys')));
+        const overview = result.sections.find((s: any) => s.type === 'registration_overview');
+        expect(overview?.content.registration_types).toHaveLength(1);
+        expect(result.sections.find((s: any) => s.type === 'program_benefits')?.content.eyebrow).toBe('KYS eyebrow');
     });
 });

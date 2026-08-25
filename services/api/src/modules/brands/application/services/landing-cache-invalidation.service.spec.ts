@@ -8,6 +8,9 @@ const makePrismaService = () => ({
     brandLandingSnapshot: {
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
+    brand: {
+        findMany: jest.fn().mockResolvedValue([]),
+    },
 });
 
 const makeCacheService = () => ({
@@ -265,6 +268,97 @@ describe('LandingCacheInvalidationService', () => {
 
             // Assert
             expect(cache.invalidateByPattern).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('invalidateForAllBrands', () => {
+        it('enumerates only active, non-deleted brands and purges each one', async () => {
+            // Arrange
+            const prisma = makePrismaService();
+            prisma.brand.findMany.mockResolvedValue([{ id: 'brand-1' }, { id: 'brand-2' }]);
+            const cache = makeCacheService();
+            const landingRevalidation = makeLandingRevalidation();
+            const service = await buildService(prisma, cache, landingRevalidation);
+
+            // Act
+            const result = await service.invalidateForAllBrands({ revalidate: { kind: 'homeAndSettings' } });
+
+            // Assert: query scoped to active, non-deleted brands (matches
+            // available_brands' own predicate — see this method's docstring)
+            expect(prisma.brand.findMany).toHaveBeenCalledWith({
+                where: { isActive: true, deletedAt: null },
+                select: { id: true },
+            });
+            expect(cache.invalidateBrandLandingCaches).toHaveBeenCalledWith('brand-1');
+            expect(cache.invalidateBrandLandingCaches).toHaveBeenCalledWith('brand-2');
+            expect(landingRevalidation.revalidateHomeAndSettingsForBrand).toHaveBeenCalledWith('brand-1');
+            expect(landingRevalidation.revalidateHomeAndSettingsForBrand).toHaveBeenCalledWith('brand-2');
+            expect(result).toEqual({ succeeded: ['brand-1', 'brand-2'], failed: [] });
+        });
+
+        it('isolates one failing brand: the rest still get purged, and the failure is reported, not swallowed as success', async () => {
+            // Arrange: brand-2's Redis layer explodes; brand-1 and brand-3 are healthy.
+            const prisma = makePrismaService();
+            prisma.brand.findMany.mockResolvedValue([{ id: 'brand-1' }, { id: 'brand-2' }, { id: 'brand-3' }]);
+            const cache = makeCacheService();
+            cache.invalidateBrandLandingCaches.mockImplementation((brandId: string) =>
+                brandId === 'brand-2' ? Promise.reject(new Error('redis down for brand-2')) : Promise.resolve(undefined),
+            );
+            const landingRevalidation = makeLandingRevalidation();
+            const service = await buildService(prisma, cache, landingRevalidation);
+
+            // Act
+            const result = await service.invalidateForAllBrands({ revalidate: { kind: 'homeAndSettings' } });
+
+            // Assert: brand-1 and brand-3 still purged despite brand-2's failure —
+            // one bad brand must never halt the fan-out for the others.
+            expect(landingRevalidation.revalidateHomeAndSettingsForBrand).toHaveBeenCalledWith('brand-1');
+            expect(landingRevalidation.revalidateHomeAndSettingsForBrand).toHaveBeenCalledWith('brand-3');
+
+            // Assert: brand-2's failure is reported explicitly, never folded into `succeeded` —
+            // this is the guard against "a partial purge that reports success".
+            expect(result.succeeded.sort()).toEqual(['brand-1', 'brand-3']);
+            expect(result.failed).toEqual([{ brandId: 'brand-2', error: 'redis down for brand-2' }]);
+        });
+
+        it('forces swallowErrors:false per brand regardless of what the caller passed, so a real failure is observable here', async () => {
+            // Arrange: caller passes swallowErrors: true (the write-path default) — this
+            // method must override it internally, since it needs the rejection to record failure.
+            const prisma = makePrismaService();
+            prisma.brand.findMany.mockResolvedValue([{ id: 'brand-1' }]);
+            const cache = makeCacheService();
+            cache.invalidateBrandLandingCaches.mockRejectedValue(new Error('redis down'));
+            const landingRevalidation = makeLandingRevalidation();
+            const service = await buildService(prisma, cache, landingRevalidation);
+
+            // Act
+            const result = await service.invalidateForAllBrands({
+                swallowErrors: true,
+                revalidate: { kind: 'homeAndSettings' },
+            });
+
+            // Assert: NOT reported as succeeded despite swallowErrors: true being passed in
+            expect(result.succeeded).toEqual([]);
+            expect(result.failed).toEqual([{ brandId: 'brand-1', error: 'redis down' }]);
+            // Assert: revalidation hook never fired for the failed brand (clearCacheLayers
+            // threw before fireRevalidation ran, matching swallowErrors:false semantics)
+            expect(landingRevalidation.revalidateHomeAndSettingsForBrand).not.toHaveBeenCalled();
+        });
+
+        it('returns an empty result with no Prisma writes when there are no active brands', async () => {
+            // Arrange
+            const prisma = makePrismaService();
+            prisma.brand.findMany.mockResolvedValue([]);
+            const cache = makeCacheService();
+            const landingRevalidation = makeLandingRevalidation();
+            const service = await buildService(prisma, cache, landingRevalidation);
+
+            // Act
+            const result = await service.invalidateForAllBrands({ revalidate: { kind: 'homeAndSettings' } });
+
+            // Assert
+            expect(result).toEqual({ succeeded: [], failed: [] });
+            expect(cache.invalidateBrandLandingCaches).not.toHaveBeenCalled();
         });
     });
 });
