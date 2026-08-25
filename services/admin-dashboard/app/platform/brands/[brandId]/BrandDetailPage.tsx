@@ -37,6 +37,7 @@ import {
   SheetTitle,
 } from "@/src/ui/sheet";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { LogoOverrideWarning } from "@/src/admin/components/logo-override-warning";
 import { formatDate, parseApiDate, toLocalDatetimeInputValue } from "@/lib/utils";
 import {
   listProgramMedia,
@@ -285,6 +286,7 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
             {/* Logo */}
             <div className="space-y-1.5">
               <Label htmlFor="logoUpload">Logo</Label>
+              <LogoOverrideWarning activeProgram={brand.activeProgram} brandLogoUrl={brand.logoUrl ?? null} />
               <div className="flex items-center gap-3">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50">
                   {logoPreview ? (
