@@ -10,6 +10,7 @@ import {
   ManagePeriodsAction
 } from "./PaymentOptionActions";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
+import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 
 export interface PaymentOptionRow {
   id: number;
@@ -47,6 +48,7 @@ export function ProgramPaymentsTable({
   programUsdInIdr: number | null;
 }) {
   const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
+  const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -61,6 +63,13 @@ export function ProgramPaymentsTable({
             className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
           >
             <span>Copy from program</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCopyFromTemplateOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+          >
+            <span>Copy from template</span>
           </button>
           <AddPaymentOptionAction programId={programId} programUsdInIdr={programUsdInIdr} onSaved={onRefresh} />
         </div>
@@ -177,18 +186,32 @@ export function ProgramPaymentsTable({
         </table>
       </div>
       {programId ? (
-        <CopyFromProgramDialog
-          open={copyFromProgramOpen}
-          entityKey="payments"
-          entityLabel="Payment Options"
-          programId={programId}
-          supportsAppend
-          onClose={() => setCopyFromProgramOpen(false)}
-          onApplied={() => {
-            setCopyFromProgramOpen(false);
-            onRefresh?.();
-          }}
-        />
+        <>
+          <CopyFromProgramDialog
+            open={copyFromProgramOpen}
+            entityKey="payments"
+            entityLabel="Payment Options"
+            programId={programId}
+            supportsAppend
+            onClose={() => setCopyFromProgramOpen(false)}
+            onApplied={() => {
+              setCopyFromProgramOpen(false);
+              onRefresh?.();
+            }}
+          />
+          <CopyFromTemplateDialog
+            open={copyFromTemplateOpen}
+            entityKey="payments"
+            entityLabel="Payment Options"
+            programId={programId}
+            supportsAppend
+            onClose={() => setCopyFromTemplateOpen(false)}
+            onApplied={() => {
+              setCopyFromTemplateOpen(false);
+              onRefresh?.();
+            }}
+          />
+        </>
       ) : null}
     </div>
   );
