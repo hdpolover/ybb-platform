@@ -145,6 +145,10 @@
       "ts"
     ],
     "rootDir": "src",
+    "roots": [
+      "<rootDir>",
+      "<rootDir>/../test/utils"
+    ],
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
@@ -158,7 +162,8 @@
       "^@core/(.*)$": "<rootDir>/core/$1",
       "^@modules/(.*)$": "<rootDir>/modules/$1",
       "^@shared/(.*)$": "<rootDir>/shared/$1",
-      "^@common/(.*)$": "<rootDir>/common/$1"
+      "^@common/(.*)$": "<rootDir>/common/$1",
+      "^@test/(.*)$": "<rootDir>/../test/$1"
     }
   },
   "prisma": {
