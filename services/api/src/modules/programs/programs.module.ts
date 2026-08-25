@@ -101,6 +101,7 @@ import {
   CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
   UpdateProgramPaymentInfoHandler,
   UpdateProgramContactHandler,
+  UpdateProgramLandingContentHandler,
 } from './application/commands/handlers/manage-program-content.handlers';
 import {
   CreateApplicationFormFieldHandler,
@@ -200,6 +201,7 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
     CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
     UpdateProgramPaymentInfoHandler,
     UpdateProgramContactHandler,
+    UpdateProgramLandingContentHandler,
     // Form Field Handlers
     CreateApplicationFormFieldHandler,
     UpdateApplicationFormFieldHandler,
