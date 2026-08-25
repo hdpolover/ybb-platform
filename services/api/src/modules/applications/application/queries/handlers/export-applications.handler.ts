@@ -10,6 +10,7 @@ import { buildE164Phone, extractAndSanitizePhone, extractPhoneFromPersonalData }
 import { resolveApplicationBirthdate } from '@shared/utils/birthdate-resolution';
 import { isRenderableEssayQuestion, coalesceStr } from '../../helpers/application-coalesce.helpers';
 import { resolveCountryName } from '@shared/utils/country-groups';
+import { ACTIVE_PARTICIPANT_WHERE } from '@shared/utils/active-participant.filter';
 
 type ApplicationExportPayload = Prisma.ParticipantApplicationGetPayload<{
     select: {
@@ -286,6 +287,9 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
 
         const where: Prisma.ParticipantApplicationWhereInput = {
             program: { brand: { id: query.brandId } },
+            // Deactivated/deleted accounts stay visible in admin views but
+            // never leave the building in an export.
+            participant: ACTIVE_PARTICIPANT_WHERE,
         };
         if (query.programId) where.programId = query.programId;
         if (query.status) where.status = query.status;

@@ -6,6 +6,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { buildParticipantPaymentsUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { isManualPaymentMethod } from '@modules/payments/application/utils/payment-method.util';
+import { isActiveParticipant } from '@shared/utils/active-participant.filter';
 import { PaymentServiceHttpClient } from './payment-service-http.client';
 import { PaymentGatewayClient } from './payment-gateway.client';
 
@@ -77,7 +78,8 @@ const PROCESSING_INVOICE_INCLUDE = {
                 select: {
                     fullName: true,
                     userId: true,
-                    user: { select: { email: true } },
+                    deletedAt: true,
+                    user: { select: { email: true, isActive: true, deletedAt: true } },
                 },
             },
             program: {
@@ -793,6 +795,15 @@ export class PaymentReconciliationService {
         if (!email) {
             this.logger.warn(
                 `[payment-reconciliation] skipping payment.reminder for invoice ${invoice.id}: participant email not found`,
+            );
+            return;
+        }
+
+        // Invoice state above is still reconciled regardless of account status
+        // (money must reconcile either way) - only the reminder email is gated.
+        if (!isActiveParticipant(invoice.application?.participant)) {
+            this.logger.log(
+                `[payment-reconciliation] skipping payment.reminder for invoice ${invoice.id}: participant deactivated`,
             );
             return;
         }

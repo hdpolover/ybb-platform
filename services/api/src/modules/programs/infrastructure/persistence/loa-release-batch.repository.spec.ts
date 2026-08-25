@@ -143,6 +143,20 @@ describe('LoaReleaseBatchRepository', () => {
     expect(result).toEqual([{ userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' }]);
   });
 
+  it('findEligibleRecipients excludes deactivated/deleted accounts from the LOA-ready query', async () => {
+    (prisma.participantApplication.findMany as jest.Mock).mockResolvedValue([]);
+
+    await repo.findEligibleRecipients('prog-1', new Date('2026-01-01'), new Date('2026-03-31'));
+
+    expect(prisma.participantApplication.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          participant: { deletedAt: null, user: { isActive: true, deletedAt: null } },
+        }),
+      }),
+    );
+  });
+
   it('unrelease clears releasedAt', async () => {
     (prisma.loaReleaseBatch.update as jest.Mock).mockResolvedValue({ ...mockBatch, releasedAt: null });
     await repo.unrelease('batch-1');

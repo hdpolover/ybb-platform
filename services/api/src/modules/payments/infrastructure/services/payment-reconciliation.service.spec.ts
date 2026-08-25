@@ -26,7 +26,12 @@ const makeInvoice = (overrides: Record<string, unknown> = {}) => ({
     application: {
         id: 'app-1',
         programId: 'prog-1',
-        participant: { fullName: 'John', userId: 'user-1', user: { email: 'john@test.com' } },
+        participant: {
+            fullName: 'John',
+            userId: 'user-1',
+            deletedAt: null,
+            user: { email: 'john@test.com', isActive: true, deletedAt: null },
+        },
         program: { brand: { landingUrl: 'https://example.com', websiteUrl: null } },
     },
     ...overrides,
@@ -206,6 +211,45 @@ describe('PaymentReconciliationService', () => {
                 expect.anything(),
                 expect.anything(),
             );
+            expect(mockRabbitmq.emit).toHaveBeenCalledWith('payment.reminder', expect.anything());
+        });
+
+        it('still reverts and cancels for a deactivated participant, but skips the reminder email', async () => {
+            const invoice = makeInvoice({
+                status: 'processing',
+                externalIntentId: 'intent-1',
+                externalTransactionId: 'txn-1',
+                updatedAt: new Date('2020-01-01'),
+                application: {
+                    id: 'app-1',
+                    programId: 'prog-1',
+                    participant: {
+                        fullName: 'John',
+                        userId: 'user-1',
+                        deletedAt: null,
+                        user: { email: 'john@test.com', isActive: false, deletedAt: null },
+                    },
+                    program: { brand: { landingUrl: 'https://example.com', websiteUrl: null } },
+                },
+            });
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([invoice]);
+            mockPaymentClient.get.mockResolvedValue({
+                data: { status: 'REQUIRES_PAYMENT_METHOD', transactions: [] },
+            });
+            mockPaymentClient.post.mockResolvedValue({});
+            mockPrisma.$transaction.mockResolvedValue([{}, {}]);
+
+            const report = await service.reconcileProcessingInvoices({ apply: true, graceMinutes: 1440 });
+
+            // The financial state still reconciles regardless of account status.
+            expect(report.details[0].outcome).toBe('reverted_unpaid');
+            expect(mockPaymentClient.post).toHaveBeenCalledWith(
+                expect.stringContaining('/cancel'),
+                expect.anything(),
+                expect.anything(),
+            );
+            // But the automated nudge email does not go out.
+            expect(mockRabbitmq.emit).not.toHaveBeenCalledWith('payment.reminder', expect.anything());
         });
     });
 
