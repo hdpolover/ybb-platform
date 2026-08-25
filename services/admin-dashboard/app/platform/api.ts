@@ -126,6 +126,7 @@ function normalizePlatformBrandDetail(raw: RawPlatformBrand): PlatformBrandDetai
       raw.settings && typeof raw.settings === "object" && !Array.isArray(raw.settings)
         ? (raw.settings as PlatformBrandDetail["settings"])
         : null,
+    activeProgram: raw.activeProgram ?? null,
   };
 }
 
@@ -247,6 +248,11 @@ export type PlatformBrandDetail = PlatformBrand & {
     // and edit like any other field.
     capiTestEventCode?: string | null;
   } | null;
+  // The brand's active program (see api/src/shared/utils/active-program-resolver.ts).
+  // settings.strategy.ts prefers this program's own logoUrl over the brand's
+  // logoUrl on the public site, so a non-empty value here means editing the
+  // brand logo below will not change what visitors see.
+  activeProgram?: { id: string; slug: string; logoUrl: string | null } | null;
 };
 
 export function listPlatformBrands(): Promise<PlatformBrand[]> {

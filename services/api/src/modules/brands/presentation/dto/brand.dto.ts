@@ -81,6 +81,16 @@ export class BrandResponseDto {
 
     @ApiProperty({ required: false, nullable: true, description: 'Brand-specific settings like footer config.' })
     settings?: Record<string, unknown> | null; // Detailed settings object
+
+    @ApiProperty({
+        required: false,
+        nullable: true,
+        description:
+            'The brand\'s active program (see active-program-resolver.ts), used by the admin UI to warn ' +
+            'when the program\'s own logoUrl is shadowing this brand\'s logo on the public site ' +
+            '(settings.strategy.ts prefers program.logoUrl over brand.logoUrl).',
+    })
+    activeProgram?: { id: string; slug: string; logoUrl: string | null } | null;
 }
 
 export class SponsorResponseDto {
