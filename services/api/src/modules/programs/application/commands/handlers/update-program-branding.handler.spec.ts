@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { UpdateProgramBrandingHandler } from './update-program-branding.handler';
 import { UpdateProgramBrandingCommand } from '../update-program-branding.command';
 import { StorageService } from '../../../../files/application/storage.service';
@@ -74,5 +74,70 @@ describe('UpdateProgramBrandingHandler', () => {
             swallowErrors: true,
             revalidate: { kind: 'homeAndSettings' },
         });
+    });
+
+    // --- Clear-logo/banner/thumbnail feature ---
+
+    const runClear = (dto: Record<string, unknown>) =>
+        handler.execute(new UpdateProgramBrandingCommand('prog-1', dto as any, 'user-1', {}));
+
+    it('clear-only request writes null and invalidates via the shared cache service', async () => {
+        const program = { id: 'prog-1', brandId: 'brand-1' };
+        prisma.program.findUnique.mockResolvedValue(program);
+        prisma.program.update.mockResolvedValue({ ...program, logoUrl: null });
+
+        const result = await runClear({ clearLogo: true });
+
+        expect(prisma.program.update).toHaveBeenCalledWith({
+            where: { id: 'prog-1' },
+            data: { logoUrl: null },
+        });
+        expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-1', {
+            clearSnapshot: true,
+            bustProgramCache: true,
+            swallowErrors: true,
+            revalidate: { kind: 'homeAndSettings' },
+        });
+        expect((result as any).logoUrl).toBeNull();
+    });
+
+    it('the string "false" does not clear the logo', async () => {
+        // Simulates a DTO that was NOT run through the multipart boolean
+        // Transform (or a caller passing the raw string) — must not be
+        // treated as truthy.
+        const program = { id: 'prog-1', brandId: 'brand-1' };
+        prisma.program.findUnique.mockResolvedValue(program);
+
+        await runClear({ clearLogo: 'false' as unknown as boolean });
+
+        expect(prisma.program.update).not.toHaveBeenCalled();
+        expect(landingCacheInvalidation.invalidate).not.toHaveBeenCalled();
+    });
+
+    it('rejects a request that both uploads and clears the same asset', async () => {
+        const program = { id: 'prog-1', brandId: 'brand-1' };
+        prisma.program.findUnique.mockResolvedValue(program);
+        const files = { logo: { originalname: 'new.png' } as any };
+
+        await expect(
+            handler.execute(new UpdateProgramBrandingCommand('prog-1', { clearLogo: true } as any, 'user-1', files)),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.program.update).not.toHaveBeenCalled();
+    });
+
+    it('clearing one asset leaves the others untouched', async () => {
+        const program = { id: 'prog-1', brandId: 'brand-1' };
+        prisma.program.findUnique.mockResolvedValue(program);
+        prisma.program.update.mockResolvedValue({ ...program, bannerUrl: null });
+
+        await runClear({ clearBanner: true });
+
+        expect(prisma.program.update).toHaveBeenCalledWith({
+            where: { id: 'prog-1' },
+            data: { bannerUrl: null },
+        });
+        const data = prisma.program.update.mock.calls[0][0].data;
+        expect(data).not.toHaveProperty('logoUrl');
+        expect(data).not.toHaveProperty('thumbnailUrl');
     });
 });
