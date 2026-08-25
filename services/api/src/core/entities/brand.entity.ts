@@ -19,10 +19,6 @@ export class Brand {
         public readonly mission: string | null,
 
         // Contact
-        public readonly contactEmail: string | null,
-        public readonly contactPhone: string | null,
-        public readonly contactWhatsapp: string | null,
-        public readonly contactAddress: string | null,
         public readonly socialMediaLinks: Record<string, string> | null,
 
         // Location
@@ -34,11 +30,6 @@ export class Brand {
         public readonly requireEmailVerification: boolean,
         public readonly defaultCurrency: string,
         public readonly enableMultiCurrency: boolean,
-
-        // SEO
-        public readonly metaTitle: string | null,
-        public readonly metaDescription: string | null,
-        public readonly metaKeywords: string | null,
 
         public readonly createdAt: Date,
         public readonly updatedAt: Date,

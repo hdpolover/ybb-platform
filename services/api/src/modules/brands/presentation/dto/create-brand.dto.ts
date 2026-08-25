@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsUrl, IsEmail, IsBoolean, IsHexColor, MaxLength } from 'class-validator';
-import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
+import { IsString, IsOptional, IsUrl, IsBoolean, IsHexColor, MaxLength } from 'class-validator';
 
 export class CreateBrandDto {
     @ApiProperty({ description: 'Name of the brand/program category', example: 'Istanbul Youth Summit' })
@@ -55,12 +54,6 @@ export class CreateBrandDto {
     @IsHexColor()
     @MaxLength(7)
     primaryColor?: string;
-
-    @ApiProperty({ required: false })
-    @IsOptional()
-    @NormalizeEmail()
-    @IsEmail()
-    contactEmail?: string;
 
     @ApiProperty({ required: false, default: true })
     @IsOptional()

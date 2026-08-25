@@ -88,10 +88,6 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
         dto.about = brand.about;
         dto.vision = brand.vision;
         dto.mission = brand.mission;
-        dto.contactEmail = brand.contactEmail;
-        dto.contactPhone = brand.contactPhone;
-        dto.contactWhatsapp = brand.contactWhatsapp;
-        dto.contactAddress = brand.contactAddress;
         dto.socialMediaLinks = brand.socialMediaLinks;
         dto.defaultLocation = brand.defaultLocation;
         dto.defaultCountry = brand.defaultCountry;
@@ -99,9 +95,6 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
         dto.requireEmailVerification = brand.requireEmailVerification;
         dto.defaultCurrency = brand.defaultCurrency;
         dto.enableMultiCurrency = brand.enableMultiCurrency;
-        dto.metaTitle = brand.metaTitle;
-        dto.metaDescription = brand.metaDescription;
-        dto.metaKeywords = brand.metaKeywords;
         dto.createdAt = brand.createdAt;
         dto.updatedAt = brand.updatedAt;
         dto.deletedAt = brand.deletedAt;
