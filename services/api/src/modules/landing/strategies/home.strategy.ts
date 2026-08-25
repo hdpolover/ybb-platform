@@ -10,16 +10,11 @@ import {
   normalizeCountryGroups,
   resolveCountryName,
 } from '@shared/utils/country-groups';
+import { resolveActiveProgram } from '@shared/utils/active-program-resolver';
+import { PlatformSettingRepository } from '@modules/platform-settings/infrastructure/persistence/platform-setting.repository';
 
 const FULLY_FUNDED_PROCESS_COPY =
   'Complete the registration fee, submit the required documents and essay, and participate in the interview process.';
-
-type ProgramObjectivesMetadata = {
-  eyebrow?: string;
-  title?: string;
-  intro?: string;
-  items?: string[];
-};
 
 type FurtherInformationMetadata = {
   eyebrow?: string;
@@ -94,6 +89,7 @@ export class HomeStrategy implements ILandingPageStrategy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService,
+    private readonly platformSettingRepository: PlatformSettingRepository,
   ) { }
 
   async getData(brand: Brand | null) {
@@ -117,58 +113,77 @@ export class HomeStrategy implements ILandingPageStrategy {
 
     const brandMeta = (brand as Brand & { metadata?: Record<string, unknown> }).metadata || {};
 
-    const [program, brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, registeredApplications] = await Promise.all([
-      this.prisma.program.findFirst({
-        where: {
-          brandId: brand.id, // Scoped to brand
-          isPublished: true,
-          isActive: true,
-        },
-        orderBy: { startDate: 'desc' },
-        include: {
-          gallery: {
-            where: { isActive: true, deletedAt: null, type: 'short' },
-            take: 30,
-            orderBy: { order: 'asc' },
-          },
-          pricingTiers: {
-            where: { isActive: true, deletedAt: null },
-            orderBy: { order: 'asc' },
-            include: {
-              validityPeriods: {
-                orderBy: { startDate: 'asc' },
+    // Shared resolver (Phase 3 resolver addendum), NOT the old
+    // isPublished/isActive-only query ordered by `startDate desc`. That
+    // orderBy was a second, independently-drifting definition of "the
+    // active program" from settings.strategy.ts's (`year desc, createdAt
+    // desc`) — flagged as a live hazard in this phase's pre-flight scan:
+    // for brands with several published+active programs (Istanbul, MEYS,
+    // Korea, Japan, World Youth Fest, Youth Academic Forum) the two orderings
+    // are not guaranteed to agree, which would mean this page's sections and
+    // the settings endpoint's contact info silently describe two different
+    // programs for the same brand. Task 12's backfill already resolves once
+    // per brand via this identical builder and writes both contact fields
+    // and landingContent onto that one program — this call must resolve the
+    // same program that write did, including via the rule-2 fallback for
+    // Vietnam Youth Summit (published, inactive) and Korea Youth Summit
+    // (unpublished, active), or their entire home page — not just contact
+    // info — renders empty.
+    const { program } = await resolveActiveProgram(
+      (args) =>
+        this.prisma.program.findFirst({
+          ...args,
+          include: {
+            gallery: {
+              where: { isActive: true, deletedAt: null, type: 'short' },
+              take: 30,
+              orderBy: { order: 'asc' },
+            },
+            pricingTiers: {
+              where: { isActive: true, deletedAt: null },
+              orderBy: { order: 'asc' },
+              include: {
+                validityPeriods: {
+                  orderBy: { startDate: 'asc' },
+                },
               },
             },
+            resources: {
+              where: { isActive: true, isPublic: true },
+              take: 5,
+              // Secondary key keeps ties deterministic — duplicate `order` values
+              // otherwise surface in arbitrary DB order (see MEYS IDN/ENG mixup).
+              orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+            },
+            objectives: {
+              where: { isActive: true },
+              orderBy: { order: 'asc' }
+            },
+            // Also used by the program_awards section further below — merged here
+            // to avoid a duplicate program.findFirst with the identical where/orderBy.
+            awards: {
+              where: { isActive: true },
+              orderBy: { order: 'asc' }
+            }
           },
-          resources: {
-            where: { isActive: true, isPublic: true },
-            take: 5,
-            // Secondary key keeps ties deterministic — duplicate `order` values
-            // otherwise surface in arbitrary DB order (see MEYS IDN/ENG mixup).
-            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-          },
-          objectives: {
-            where: { isActive: true },
-            orderBy: { order: 'asc' }
-          },
-          // Also used by the program_awards section further below — merged here
-          // to avoid a duplicate program.findFirst with the identical where/orderBy.
-          awards: {
-            where: { isActive: true },
-            orderBy: { order: 'asc' }
-          }
-        },
-      }),
+        }),
+      brand.id,
+    );
+
+    const [brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, registeredApplications, platformImpactStatsRow] = await Promise.all([
       this.prisma.programGallery.findMany({
         where: {
           type: 'image',
           isActive: true,
           deletedAt: null,
-          program: {
-            brandId: brand.id,
-            isPublished: true,
-            isActive: true,
-          },
+          // Scope to the SAME program resolveActiveProgram picked above, not a
+          // second inlined isPublished/isActive predicate. The old predicate
+          // matched zero rows for Vietnam Youth Summit (published, inactive)
+          // and Korea Youth Summit (unpublished, active), so their gallery,
+          // objectives and highlights rendered titled-but-imageless — the exact
+          // two brands the rule-2 fallback exists to serve. See
+          // shared/utils/active-program-resolver.ts.
+          ...(program ? { programId: program.id } : { program: { brandId: brand.id } }),
         },
         orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
         take: 60,
@@ -267,6 +282,7 @@ export class HomeStrategy implements ILandingPageStrategy {
           },
         },
       }),
+      this.platformSettingRepository.get('impact_stats'),
     ]);
 
     const guidebookResources = await Promise.all(
@@ -311,8 +327,14 @@ export class HomeStrategy implements ILandingPageStrategy {
       caption: img.title,
     }));
 
-    const objectivesMeta = (brandMeta.program_objectives as ProgramObjectivesMetadata | undefined) ?? {};
-    const furtherInformationMeta = normalizeFurtherInformationContent(brandMeta.further_information);
+    // Program-owned landing sections (Task 1's Program.landingContent), not
+    // Brand.metadata, as of Phase 3's ownership split — see
+    // docs/superpowers/specs/2026-08-23-program-content-copy-design.md,
+    // "Brand and program ownership split". section_background stays reading
+    // brandMeta below: it is explicitly Brand-owned ("global across landing
+    // sections" per its own original comment) and unaffected by this switch.
+    const programLandingContent = (program?.landingContent as Record<string, unknown>) ?? {};
+    const furtherInformationMeta = normalizeFurtherInformationContent(programLandingContent.further_information);
     const globalBg = (brandMeta.section_background as SectionBackgroundMetadata | undefined);
     // Resolve background URLs: global section_background → legacy per-section fields → undefined (no image)
     const sectionBgDesktop =
@@ -329,14 +351,6 @@ export class HomeStrategy implements ILandingPageStrategy {
       description: obj.description,
       order: obj.order,
     }));
-    const objectiveItemsFromMetadata = (objectivesMeta.items ?? [])
-      .map((item) => (typeof item === 'string' ? item.trim() : ''))
-      .filter((item) => item.length > 0)
-      .map((description, index) => ({
-        id: `meta-objective-${index + 1}`,
-        description,
-        order: index + 1,
-      }));
 
     const participantCountryGroups = normalizeCountryGroups(
       registeredApplications.map((application) => ({
@@ -411,12 +425,15 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'program_objectives',
           content: {
-            eyebrow: (objectivesMeta.eyebrow || '').trim() || 'Program Objective',
-            title: (objectivesMeta.title || '').trim() || 'Program Objectives',
-            intro:
-              (objectivesMeta.intro || '').trim() ||
-              `The ${brand.name} program is carefully designed to shape delegates into impactful young leaders. Through a mix of forums, competitions, and collaborative projects, participants are guided to grow in character, skills, and global perspective.`,
-            items: objectiveItemsFromMetadata.length > 0 ? objectiveItemsFromMetadata : fallbackObjectiveItems,
+            // No metadata override any more — objectives have exactly one
+            // owner, the ProgramObjective relation (fallbackObjectiveItems).
+            // The spec's audit confirmed no production brand had a
+            // program_objectives override set, so this is a zero-behavior-
+            // change removal, not a data-loss risk.
+            eyebrow: 'Program Objective',
+            title: 'Program Objectives',
+            intro: `The ${brand.name} program is carefully designed to shape delegates into impactful young leaders. Through a mix of forums, competitions, and collaborative projects, participants are guided to grow in character, skills, and global perspective.`,
+            items: fallbackObjectiveItems,
             // `gallery` is canonical; keep `images` for backwards compatibility.
             gallery: objectiveImages,
             images: objectiveImages,
@@ -441,7 +458,7 @@ export class HomeStrategy implements ILandingPageStrategy {
         },
         {
           type: 'payment_info',
-          content: normalizePaymentInfoContent(brandMeta.payment_info) || {
+          content: normalizePaymentInfoContent(programLandingContent.payment_info) || {
             eyebrow: 'Payment & Selection',
             title: 'Important information before you apply',
             introText: 'Understand how the payment schedule and fully funded selection work so you can choose the best registration type for you.',
@@ -484,9 +501,9 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'program_shorts',
           content: {
-            eyebrow: (brandMeta.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.eyebrow || 'Short Highlights',
-            title: (brandMeta.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.title || 'Discover Our Moments in 60 Seconds',
-            description: (brandMeta.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.description || `Watch bite-sized highlights from ${brand.name}'s workshops and cultural sessions.`,
+            eyebrow: (programLandingContent.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.eyebrow || 'Short Highlights',
+            title: (programLandingContent.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.title || 'Discover Our Moments in 60 Seconds',
+            description: (programLandingContent.moments_shorts as { eyebrow?: string; title?: string; description?: string } | undefined)?.description || `Watch bite-sized highlights from ${brand.name}'s workshops and cultural sessions.`,
             background_image_url: sectionBgDesktop,
             text_color_scheme: sectionTextColorScheme,
             items: shortsGallery.map(s => ({
@@ -501,11 +518,15 @@ export class HomeStrategy implements ILandingPageStrategy {
           content: {
             eyebrow: 'Global Reach',
             title: 'Global Program Impact',
-            stats: brandMeta.impact_stats
+            // Platform-wide, not brand-scoped — see Task 3/12. Was
+            // brandMeta.impact_stats (byte-identical across three brands,
+            // i.e. already a de-facto platform value that had merely been
+            // triplicated); now a single PlatformSetting row every brand reads.
+            stats: platformImpactStatsRow?.value
               ? [
-                  { id: 'participants', label: 'Total Participants', value: (brandMeta.impact_stats as { total_participants?: unknown; total_countries?: unknown; total_alumni?: unknown } | undefined)?.total_participants, icon: 'participants' },
-                  { id: 'countries', label: 'Total Countries', value: (brandMeta.impact_stats as { total_participants?: unknown; total_countries?: unknown; total_alumni?: unknown } | undefined)?.total_countries, icon: 'countries' },
-                  { id: 'alumni', label: 'Total Alumni', value: (brandMeta.impact_stats as { total_participants?: unknown; total_countries?: unknown; total_alumni?: unknown } | undefined)?.total_alumni, icon: 'alumni' },
+                  { id: 'participants', label: 'Total Participants', value: (platformImpactStatsRow.value as { total_participants?: unknown; total_countries?: unknown; total_alumni?: unknown }).total_participants, icon: 'participants' },
+                  { id: 'countries', label: 'Total Countries', value: (platformImpactStatsRow.value as { total_participants?: unknown; total_countries?: unknown; total_alumni?: unknown }).total_countries, icon: 'countries' },
+                  { id: 'alumni', label: 'Total Alumni', value: (platformImpactStatsRow.value as { total_participants?: unknown; total_countries?: unknown; total_alumni?: unknown }).total_alumni, icon: 'alumni' },
                 ]
               : [],
           },
@@ -516,7 +537,7 @@ export class HomeStrategy implements ILandingPageStrategy {
             eyebrow: 'What Sets Us Apart',
             title: `What Makes ${brand.name} Special`,
             subtitle: `Discover the pillars that make ${brand.name} a truly transformative leadership experience.`,
-            items: ((brandMeta['features'] || []) as Array<{ id?: unknown; icon?: unknown; title?: unknown; description?: unknown }>).map((f) => ({
+            items: ((programLandingContent['features'] || []) as Array<{ id?: unknown; icon?: unknown; title?: unknown; description?: unknown }>).map((f) => ({
               id: f.id,
               icon: f.icon,
               title: f.title,
@@ -527,7 +548,7 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'program_benefits',
           content: {
-            ...(brandMeta.benefits || {
+            ...(programLandingContent.benefits || {
               eyebrow: 'Program Benefits',
               title: 'Built for Students, University Students & Professionals',
               groups: [],
@@ -643,13 +664,13 @@ export class HomeStrategy implements ILandingPageStrategy {
             subtitle: 'Be part of a global community of young leaders and innovators who are creating real impact through international programs.',
             primary_cta_label: 'Apply Now',
             primary_cta_href: '/apply',
-            ...((brandMeta.promo_cta as Record<string, unknown>) || {}),
+            ...((programLandingContent.promo_cta as Record<string, unknown>) || {}),
             background_image_url: sectionBgDesktop,
             background_image_mobile_url: sectionBgMobile,
             text_color_scheme: sectionTextColorScheme,
-            video_url: (brandMeta.promo_cta as { video_url?: string } | undefined)?.video_url || program?.videoUrl || null,
-            video_title: (brandMeta.promo_cta as { video_title?: string } | undefined)?.video_title || (program ? `${program.name} Registration Guideline` : null),
-            video_description: (brandMeta.promo_cta as { video_description?: string } | undefined)?.video_description || null,
+            video_url: (programLandingContent.promo_cta as { video_url?: string } | undefined)?.video_url || program?.videoUrl || null,
+            video_title: (programLandingContent.promo_cta as { video_title?: string } | undefined)?.video_title || (program ? `${program.name} Registration Guideline` : null),
+            video_description: (programLandingContent.promo_cta as { video_description?: string } | undefined)?.video_description || null,
           },
         },
       ],

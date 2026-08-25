@@ -19,6 +19,9 @@ describe('ForgotPasswordHandler - account enumeration hardening', () => {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    program: {
+      findFirst: jest.fn(),
+    },
   };
 
   const mockRabbitmqProducer = {
@@ -71,6 +74,14 @@ describe('ForgotPasswordHandler - account enumeration hardening', () => {
     // but resolveBrandId still touches brand.findFirst only when brandId is absent).
     mockPrismaService.brand.findFirst.mockResolvedValue(activeBrand);
     mockPrismaService.brand.findUnique.mockResolvedValue(fullBrand);
+
+    // resolveActiveProgramContact's rule-1 lookup — only exercised when a user is found.
+    mockPrismaService.program.findFirst.mockResolvedValue({
+      contactEmail: 'contact@example.com',
+      contactPhone: null,
+      contactWhatsapp: null,
+      contactAddress: null,
+    });
 
     // Happy-path downstream calls, only exercised when a user is found.
     mockPrismaService.user.update.mockResolvedValue(existingUser);

@@ -326,36 +326,6 @@ export type User = {
   updatedAt: string;
 };
 
-export type BrandDetail = {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  logoUrl: string | null;
-  bannerUrl: string | null;
-  websiteUrl: string | null;
-  primaryColor: string | null;
-  isActive: boolean;
-  tagline: string | null;
-  vision: string | null;
-  mission: string | null;
-  contactEmail: string | null;
-  contactPhone: string | null;
-  whatsappNumber: string | null;
-  address: string | null;
-  country: string | null;
-  city: string | null;
-  socialMedia: Record<string, string> | null;
-  settings?: {
-    usdInIdr: number | null;
-    defaultCurrency: string | null;
-    timezone: string | null;
-    footerNavigation: unknown | null;
-  } | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
 export type AdminAnalytics = {
   programs: {
     total: number;
@@ -988,56 +958,6 @@ export function resendVerificationEmail(
       );
     }
     return res.json();
-  });
-}
-
-// ─── Brands / Settings ───────────────────────────────────────────────────────
-
-export function getBrand(id: string): Promise<BrandDetail> {
-  return request<BrandDetail>(`/brands/${id}`);
-}
-
-export function updateBrandDetails(
-  id: string,
-  input: Partial<{
-    name: string;
-    tagline: string;
-    description: string;
-    vision: string;
-    mission: string;
-    contactEmail: string;
-    contactPhone: string;
-    whatsappNumber: string;
-    address: string;
-    country: string;
-    city: string;
-    socialMedia: Record<string, string>;
-  }>,
-): Promise<BrandDetail> {
-  const formData = new FormData();
-  for (const [k, v] of Object.entries(input)) {
-    if (v !== undefined) {
-      formData.set(k, typeof v === "object" ? JSON.stringify(v) : String(v));
-    }
-  }
-  return request<BrandDetail>(`/brands/${id}/details`, {
-    method: "PUT",
-    body: formData,
-  });
-}
-
-export function updateBrandSettings(
-  id: string,
-  input: Partial<{
-    usdInIdr: number;
-    defaultCurrency: string;
-    timezone: string;
-    footerNavigation: unknown;
-  }>,
-): Promise<BrandDetail> {
-  return request<BrandDetail>(`/brands/${id}/settings`, {
-    method: "PUT",
-    body: JSON.stringify(input),
   });
 }
 

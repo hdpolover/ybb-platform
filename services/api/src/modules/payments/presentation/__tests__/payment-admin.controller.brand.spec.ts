@@ -20,6 +20,10 @@ const MOCK_ADMIN_USER: CurrentUserData = {
     adminId: 'admin-id-1',
 };
 
+// contactEmail/contactAddress live on Program as of Phase 3
+// (docs/superpowers/specs/2026-08-23-program-content-copy-design.md) — the
+// controller reads them as siblings of `brand`, not nested inside it, so
+// the fixture below puts them on `program`, not MOCK_BRAND.
 const MOCK_BRAND = {
     id: 'brand-1',
     name: 'Test Brand',
@@ -27,8 +31,6 @@ const MOCK_BRAND = {
     logoUrl: 'https://example.com/logo.png',
     websiteUrl: 'https://example.com',
     landingUrl: 'https://example.com',
-    contactEmail: 'info@example.com',
-    contactAddress: '123 Test St',
     socialMediaLinks: {},
     settings: {
         footerNavigation: [],
@@ -51,6 +53,8 @@ const MOCK_INVOICE = {
             user: { email: 'john@example.com' },
         },
         program: {
+            contactEmail: 'info@example.com',
+            contactAddress: '123 Test St',
             brand: MOCK_BRAND,
         },
     },
@@ -119,6 +123,8 @@ describe('PaymentAdminController — payment.rejected brand emission', () => {
                     name: 'Test Brand',
                     primaryColor: '#FF5500',
                     logoUrl: 'https://example.com/logo.png',
+                    contactEmail: 'info@example.com',
+                    contactAddress: '123 Test St',
                     settings: expect.objectContaining({
                         supportEmail: 'support@example.com',
                     }),

@@ -4,6 +4,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { randomBytes } from 'crypto';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
+import { resolveActiveProgramContact } from '@shared/utils/resolve-active-program-contact';
 
 // Returned for both existing and non-existent accounts. Must stay a single
 // constant: any divergence between the two paths re-opens account enumeration.
@@ -115,14 +116,15 @@ export class ForgotPasswordHandler {
                 settings: true
             }
         });
+        const activeProgramContact = brand ? await resolveActiveProgramContact(this.prisma, brand.id) : null;
 
         const programCategory = brand ? {
             name: brand.name,
             primaryColor: brand.primaryColor,
             logoUrl: brand.logoUrl,
             websiteUrl: brand.websiteUrl,
-            contactEmail: brand.contactEmail,
-            contactAddress: brand.contactAddress, // Send address
+            contactEmail: activeProgramContact?.contactEmail ?? null,
+            contactAddress: activeProgramContact?.contactAddress ?? null, // Send address
             socialMediaLinks: brand.socialMediaLinks,
             website: brand.websiteUrl, // for legacy templates using .website
             settings: brand.settings ? {

@@ -65,14 +65,15 @@ export class PaymentEventsController {
                 return;
             }
             const rawBrand = invoiceWithBrand?.application?.program?.brand ?? null;
+            const rawProgram = invoiceWithBrand?.application?.program ?? null;
             const brandPayload = rawBrand
                 ? {
                       name: rawBrand.name,
                       primaryColor: rawBrand.primaryColor,
                       logoUrl: rawBrand.logoUrl,
                       websiteUrl: rawBrand.websiteUrl,
-                      contactEmail: rawBrand.contactEmail,
-                      contactAddress: rawBrand.contactAddress,
+                      contactEmail: rawProgram?.contactEmail ?? null,
+                      contactAddress: rawProgram?.contactAddress ?? null,
                       socialMediaLinks: rawBrand.socialMediaLinks,
                       settings: rawBrand.settings
                           ? {
@@ -211,14 +212,15 @@ export class PaymentEventsController {
                 });
             }
             const rawBrand = invoiceWithBrand?.application?.program?.brand ?? null;
+            const rawProgram = invoiceWithBrand?.application?.program ?? null;
             const brandPayload = rawBrand
                 ? {
                       name: rawBrand.name,
                       primaryColor: rawBrand.primaryColor,
                       logoUrl: rawBrand.logoUrl,
                       websiteUrl: rawBrand.websiteUrl,
-                      contactEmail: rawBrand.contactEmail,
-                      contactAddress: rawBrand.contactAddress,
+                      contactEmail: rawProgram?.contactEmail ?? null,
+                      contactAddress: rawProgram?.contactAddress ?? null,
                       socialMediaLinks: rawBrand.socialMediaLinks,
                       settings: rawBrand.settings
                           ? {
@@ -354,14 +356,15 @@ export class PaymentEventsController {
                           })
                         : null;
                     const rawBrand = invoiceWithBrand?.application?.program?.brand ?? null;
+                    const rawProgram = invoiceWithBrand?.application?.program ?? null;
                     const brandPayload = rawBrand
                         ? {
                               name: rawBrand.name,
                               primaryColor: rawBrand.primaryColor,
                               logoUrl: rawBrand.logoUrl,
                               websiteUrl: rawBrand.websiteUrl,
-                              contactEmail: rawBrand.contactEmail,
-                              contactAddress: rawBrand.contactAddress,
+                              contactEmail: rawProgram?.contactEmail ?? null,
+                              contactAddress: rawProgram?.contactAddress ?? null,
                               socialMediaLinks: rawBrand.socialMediaLinks,
                               settings: rawBrand.settings
                                   ? {
@@ -686,14 +689,15 @@ export class PaymentEventsController {
                         },
                     });
                     const rawBrand = invoiceWithBrand?.application?.program?.brand ?? null;
+                    const rawProgram = invoiceWithBrand?.application?.program ?? null;
                     const brandPayload = rawBrand
                         ? {
                               name: rawBrand.name,
                               primaryColor: rawBrand.primaryColor,
                               logoUrl: rawBrand.logoUrl,
                               websiteUrl: rawBrand.websiteUrl,
-                              contactEmail: rawBrand.contactEmail,
-                              contactAddress: rawBrand.contactAddress,
+                              contactEmail: rawProgram?.contactEmail ?? null,
+                              contactAddress: rawProgram?.contactAddress ?? null,
                               socialMediaLinks: rawBrand.socialMediaLinks,
                               settings: rawBrand.settings
                                   ? {

@@ -9,6 +9,7 @@ import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service
 import { SupportTicketPriorityClassifierService } from '@modules/support/application/services/support-ticket-priority-classifier.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { resolveActiveProgramContact } from '@shared/utils/resolve-active-program-contact';
 
 @CommandHandler(CreateSupportTicketCommand)
 export class CreateSupportTicketHandler implements ICommandHandler<CreateSupportTicketCommand> {
@@ -112,6 +113,7 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
         });
 
         if (ticketOwner?.email) {
+            const activeProgramContact = await resolveActiveProgramContact(this.prisma, ticketOwner.brandId);
             await this.rabbitmqProducer.emit('support.ticket.created', {
                 ticketId: ticket.id,
                 ticketNumber: ticket.ticketNumber,
@@ -128,7 +130,7 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
                         name: ticketOwner.brand.name,
                         websiteUrl: ticketOwner.brand.websiteUrl,
                         logoUrl: ticketOwner.brand.logoUrl,
-                        contactEmail: ticketOwner.brand.contactEmail,
+                        contactEmail: activeProgramContact.contactEmail,
                     }
                     : undefined,
                 aiClassification: {
