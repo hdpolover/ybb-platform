@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ImageIcon, Save, Upload } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ImageIcon, Save, Upload } from "lucide-react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { PageHeader } from "@/src/admin/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
@@ -148,6 +148,52 @@ function CheckboxField({
         <Label htmlFor={id} className="cursor-pointer">{label}</Label>
         {hint && <p className="text-xs text-zinc-400">{hint}</p>}
       </div>
+    </div>
+  );
+}
+
+// Public logo resolution (services/api/src/modules/landing/strategies/settings.strategy.ts)
+// always prefers the brand's active program's own logoUrl over the brand's
+// logoUrl. That's intentional for programs with a real program-specific
+// logo, but it's invisible here: an admin can save a new brand logo and see
+// nothing change on the public site because a program row is shadowing it.
+function LogoOverrideWarning({
+  activeProgram,
+  brandLogoUrl,
+}: {
+  activeProgram: PlatformBrandDetail["activeProgram"];
+  brandLogoUrl: string | null;
+}) {
+  if (!activeProgram?.logoUrl) return null;
+  const isRedundantCopy = brandLogoUrl != null && activeProgram.logoUrl === brandLogoUrl;
+  const programBrandingHref = `/programs/${activeProgram.slug}/master-data/program-details`;
+
+  return (
+    <div className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+      <p className="text-xs text-amber-700">
+        {isRedundantCopy ? (
+          <>
+            This brand&rsquo;s active program has its own logo set, and it&rsquo;s currently just a copy of this brand
+            logo. It serves no purpose other than blocking edits here (the program logo always wins on the
+            public site). Clear it on the{" "}
+            <Link href={programBrandingHref} className="font-medium underline hover:text-amber-900">
+              program&rsquo;s branding page
+            </Link>{" "}
+            so this brand logo takes effect again.
+          </>
+        ) : (
+          <>
+            This brand&rsquo;s active program has its own logo set, and it overrides this brand logo on the public
+            site (program logo always wins). Saving a new logo here will not change what visitors see until
+            you also update it on the{" "}
+            <Link href={programBrandingHref} className="font-medium underline hover:text-amber-900">
+              program&rsquo;s branding page
+            </Link>
+            .
+          </>
+        )}
+      </p>
     </div>
   );
 }
@@ -326,6 +372,7 @@ function IdentityTab({
           {/* Logo */}
           <div className="space-y-2">
             <Label>Logo</Label>
+            <LogoOverrideWarning activeProgram={brand.activeProgram} brandLogoUrl={brand.logoUrl ?? null} />
             <div className="flex items-center gap-4">
               <div
                 className="flex h-20 w-20 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-zinc-300 bg-zinc-50 hover:border-zinc-400"
