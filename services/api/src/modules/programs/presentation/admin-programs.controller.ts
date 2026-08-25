@@ -94,6 +94,12 @@ export class AdminProgramsController {
         paymentInfoHtml: program.paymentInfoHtml ?? null,
         metaTitle: program.metaTitle ?? null,
         metaDescription: program.metaDescription ?? null,
+        metaKeywords: program.metaKeywords ?? null,
+        contactEmail: program.contactEmail ?? null,
+        contactPhone: program.contactPhone ?? null,
+        contactWhatsapp: program.contactWhatsapp ?? null,
+        contactAddress: program.contactAddress ?? null,
+        landingContent: (program.landingContent as Record<string, unknown>) ?? {},
         deletedAt: program.deletedAt ?? null,
         brand: program.brand,
     };
