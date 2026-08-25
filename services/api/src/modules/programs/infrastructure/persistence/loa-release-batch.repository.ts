@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
 import { LoaBatchReleasedRecipient } from '../../../../common/types/events';
+import { ACTIVE_PARTICIPANT_WHERE } from '../../../../shared/utils/active-participant.filter';
 
 export interface CreateLoaBatchData {
   programId: string;
@@ -106,6 +107,9 @@ export class LoaReleaseBatchRepository {
         status: { in: [...ELIGIBLE_APPLICATION_STATUSES] },
         submittedAt: { gte: submissionFrom, lte: submissionTo },
         deletedAt: null,
+        // Deactivated/deleted accounts stay in the applications list for
+        // history but never get the automated LOA-ready email.
+        participant: ACTIVE_PARTICIPANT_WHERE,
       },
       select: {
         participant: {

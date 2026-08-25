@@ -77,6 +77,10 @@ describe('SubmissionDeadlineReminderService', () => {
       expect(call.where.deletedAt).toBeNull();
       expect(call.where.program.applicationDeadline.gte).toEqual(dayStart);
       expect(call.where.program.applicationDeadline.lt).toEqual(dayEnd);
+      expect(call.where.participant).toEqual({
+        deletedAt: null,
+        user: { isActive: true, deletedAt: null },
+      });
     });
   });
 
