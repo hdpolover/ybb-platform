@@ -40,14 +40,21 @@ describe('SupportAccessService.exchangeImpersonationToken', () => {
       dataChangeLog: { create: jest.fn() },
       $transaction: jest.fn().mockResolvedValue([]),
     };
-    const jwt = { sign: jest.fn().mockReturnValue('signed.jwt.token') } as unknown as JwtService;
+    // Distinct access/refresh return values so the exact-value assertions below
+    // (`res.accessToken`/`res.refreshToken`) pin each token to a specific mock
+    // call rather than two calls returning the same constant. Order matches
+    // production: accessToken is signed first, refreshToken second
+    // (support-access.service.ts exchangeImpersonationToken).
+    const jwt = {
+      sign: jest.fn().mockReturnValueOnce('access.jwt').mockReturnValueOnce('refresh.jwt'),
+    } as unknown as JwtService;
     const config = { get: jest.fn((_k: string, d: string) => d) } as unknown as ConfigService;
     const service = new SupportAccessService(
       prisma as never,
       jwt,
       config,
     );
-    return { service, prisma };
+    return { service, prisma, jwt };
   }
 
   const baseTicket = {
@@ -61,10 +68,36 @@ describe('SupportAccessService.exchangeImpersonationToken', () => {
   };
 
   it('issues a session for a fresh, unconsumed, in-TTL ticket', async () => {
-    const { service, prisma } = buildService({ ...baseTicket });
+    const { service, prisma, jwt } = buildService({ ...baseTicket });
     const res = await service.exchangeImpersonationToken('tok', '1.1.1.1', 'ua');
     expect(res.accessToken).toBeDefined();
     expect(res.refreshToken).toBeDefined();
+    // A constant mock return value can't tell a correct session apart from one
+    // that authenticates as the wrong identity -- assert the signed claims, not
+    // just truthiness. The dangerous copy-paste bug here is `sub: ticket.adminId`
+    // (the impersonating ADMIN) instead of `sub: user.id` (the actual target
+    // participant being impersonated), which would authenticate the session as
+    // the admin rather than the participant.
+    expect(jwt.sign).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ sub: activeUser.id }),
+      expect.anything(),
+    );
+    expect(jwt.sign).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ sub: activeUser.id }),
+      expect.anything(),
+    );
+    // Exact-value assertions, not `.not.toBe()`: two *distinct* mock values are
+    // still distinct after being swapped, so `expect(res.accessToken).not.toBe(
+    // res.refreshToken)` cannot detect `accessToken`/`refreshToken` being
+    // returned in the wrong slots -- it passes identically whether the service
+    // wires them correctly or swaps them. Pinning to the exact literal each
+    // mock returns also verifies the signing order production relies on:
+    // accessToken is signed first (support-access.service.ts L244), refreshToken
+    // second (L255).
+    expect(res.accessToken).toBe('access.jwt');
+    expect(res.refreshToken).toBe('refresh.jwt');
     expect(res.redirectTo).toBe('/dashboard');
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
