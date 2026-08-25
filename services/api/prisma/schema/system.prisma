@@ -38,4 +38,18 @@ model MigrationTracking {
   @@map("migration_tracking")
 }
 
+// Organisation-wide, non-brand-scoped values. Distinct from BrandSetting
+// (brand-scoped) — see docs/superpowers/specs/2026-08-23-program-content-copy-design.md,
+// "There is no platform-level settings home" finding. Generic key/value so a
+// second platform setting never needs a schema migration.
+model PlatformSetting {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  key       String   @unique @db.VarChar(100)
+  value     Json     @db.Json
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  @@map("platform_settings")
+}
+
 // AuditLog model has been consolidated into DataChangeLog (see audit.prisma)
