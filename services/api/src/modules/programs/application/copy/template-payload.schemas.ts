@@ -217,7 +217,45 @@ const landingContentItemSchema = z
   .object(Object.fromEntries(PROGRAM_LANDING_CONTENT_KEYS.map((key) => [key, z.unknown().optional()])))
   .strict();
 
-// Keyed by ProgramCopier.key — adding an eighth copier means adding one
+const speakersItemSchema = z
+  .object({
+    name: z.string().min(1),
+    title: z.string().nullable(),
+    organization: z.string().nullable(),
+    bio: z.string().nullable(),
+    photoUrl: z.string().nullable(),
+    email: z.string().nullable(),
+    linkedinUrl: z.string().nullable(),
+    twitterUrl: z.string().nullable(),
+    instagramUrl: z.string().nullable(),
+    sessionTitle: z.string().nullable(),
+    sessionDescription: z.string().nullable(),
+    sessionTime: nullableDateTimeSchema,
+    isKeynote: z.boolean(),
+    expertiseAreas: z.string().nullable(),
+    isActive: z.boolean(),
+  })
+  .strict();
+
+const testimonialsItemSchema = z
+  .object({
+    name: z.string().min(1),
+    role: z.string().nullable(),
+    company: z.string().nullable(),
+    testimonial: z.string().min(1),
+    category: z.string(),
+    type: z.string(),
+    videoUrl: z.string().nullable(),
+    thumbnailUrl: z.string().nullable(),
+    avatarUrl: z.string().nullable(),
+    rating: z.number().nullable(),
+    alumniYear: z.number().nullable(),
+    isFeatured: z.boolean(),
+    isActive: z.boolean(),
+  })
+  .strict();
+
+// Keyed by ProgramCopier.key — adding another copier means adding one
 // entry here, not touching any call site.
 const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
   'form-fields': formFieldsItemSchema,
@@ -229,6 +267,8 @@ const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
   'program-details': programDetailsItemSchema,
   contact: contactItemSchema,
   landing: landingContentItemSchema,
+  speakers: speakersItemSchema,
+  testimonials: testimonialsItemSchema,
 };
 
 /**

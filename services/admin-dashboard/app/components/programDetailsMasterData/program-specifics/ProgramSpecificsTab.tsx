@@ -25,6 +25,7 @@ import { FurtherInformationSheet } from "../landing-content/FurtherInformationSh
 import { MomentsShortsSheet } from "../landing-content/MomentsShortsSheet";
 import { PaymentInfoSheet } from "../landing-content/PaymentInfoSheet";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
+import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 
 export interface ProgramSpecificsData {
   schedule: {
@@ -121,6 +122,8 @@ function LandingContentCard({
 export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }: ProgramSpecificsTabProps) {
   const [copyContactOpen, setCopyContactOpen] = useState(false);
   const [copyLandingOpen, setCopyLandingOpen] = useState(false);
+  const [copyContactTemplateOpen, setCopyContactTemplateOpen] = useState(false);
+  const [copyLandingTemplateOpen, setCopyLandingTemplateOpen] = useState(false);
   const lc = data.landingContent;
 
   const benefitsGroupCount = lc.benefits?.groups?.length ?? 0;
@@ -281,6 +284,13 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
               >
                 Copy from program
               </button>
+              <button
+                type="button"
+                onClick={() => setCopyContactTemplateOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              >
+                Copy from template
+              </button>
               <ProgramContactSheet programId={programId} initial={data.contact} onSaved={onDataChanged} />
             </div>
           </div>
@@ -323,6 +333,13 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
               className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
             >
               Copy from program
+            </button>
+            <button
+              type="button"
+              onClick={() => setCopyLandingTemplateOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+            >
+              Copy from template
             </button>
           </div>
         </div>
@@ -402,6 +419,18 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
           onDataChanged();
         }}
       />
+      <CopyFromTemplateDialog
+        open={copyContactTemplateOpen}
+        entityKey="contact"
+        entityLabel="Contact Information"
+        programId={programId}
+        supportsAppend={false}
+        onClose={() => setCopyContactTemplateOpen(false)}
+        onApplied={() => {
+          setCopyContactTemplateOpen(false);
+          onDataChanged();
+        }}
+      />
       <CopyFromProgramDialog
         open={copyLandingOpen}
         entityKey="landing"
@@ -411,6 +440,18 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
         onClose={() => setCopyLandingOpen(false)}
         onApplied={() => {
           setCopyLandingOpen(false);
+          onDataChanged();
+        }}
+      />
+      <CopyFromTemplateDialog
+        open={copyLandingTemplateOpen}
+        entityKey="landing"
+        entityLabel="Landing Page Content"
+        programId={programId}
+        supportsAppend={false}
+        onClose={() => setCopyLandingTemplateOpen(false)}
+        onApplied={() => {
+          setCopyLandingTemplateOpen(false);
           onDataChanged();
         }}
       />
