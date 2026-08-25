@@ -5,6 +5,7 @@ import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
 import { LandingSettingsResponseDto } from '../dto/landing-settings.dto';
 import { LandingSnapshotService } from '../services/landing-snapshot.service';
+import { resolveActiveProgram } from '@shared/utils/active-program-resolver';
 
 function readBrandMetadataString(category: Brand, key: string): string | undefined {
     const raw = (category.metadata as Record<string, unknown> | null)?.[key];
@@ -76,7 +77,17 @@ export class SettingsStrategy {
             };
         }
 
-        const program = await this.prisma.program.findFirst({ where: { brandId: category.id, isPublished: true, isActive: true }, orderBy: [{ year: 'desc' }, { createdAt: 'desc' }] });
+        // Shared resolver (Phase 3 resolver addendum), NOT an inlined
+        // isPublished/isActive predicate — see active-program-resolver.ts.
+        // Rule 1 (published+active) matches this query's old behavior
+        // exactly for every brand that already resolved; rule 2 recovers
+        // Vietnam Youth Summit (published, inactive) and Korea Youth Summit
+        // (unpublished, active), whose contact data Task 12's backfill wrote
+        // onto the SAME program this resolves to.
+        const { program } = await resolveActiveProgram(
+            (args) => this.prisma.program.findFirst(args),
+            category.id,
+        );
         const settings = await this.prisma.brandSetting.findUnique({
             where: { brandId: category.id }
         });
@@ -104,12 +115,12 @@ export class SettingsStrategy {
                 apple_icon_url: appleIconUrl || category.logoIconUrl || program?.logoUrl || category.logoUrl || undefined,
                 primary_color: category.primaryColor || undefined,
                 description: category.about || category.description || undefined,
-                support_email: settings?.supportEmail || category.contactEmail || undefined,
+                support_email: settings?.supportEmail || program?.contactEmail || undefined,
                 google_analytics_id: settings?.googleAnalyticsId || undefined,
                 pixel_id: settings?.pixelId || undefined,
-                contact_phone: category.contactPhone || undefined,
-                contact_whatsapp: category.contactWhatsapp || undefined,
-                address: category.contactAddress || undefined,
+                contact_phone: program?.contactPhone || undefined,
+                contact_whatsapp: program?.contactWhatsapp || undefined,
+                address: program?.contactAddress || undefined,
                 social_media: (category.socialMediaLinks || undefined) as unknown as Record<string, string> | undefined
             },
             footer_navigation: ((settings?.footerNavigation as Record<string, unknown>[] | null) || []) as unknown as import('../dto/landing-settings.dto').FooterColumnDto[],
