@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ImageIcon, Save, Upload } from "lucide-react";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { LogoOverrideWarning } from "@/src/admin/components/logo-override-warning";
 import { PageHeader } from "@/src/admin/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/src/ui/tabs";
@@ -326,6 +327,7 @@ function IdentityTab({
           {/* Logo */}
           <div className="space-y-2">
             <Label>Logo</Label>
+            <LogoOverrideWarning activeProgram={brand.activeProgram} brandLogoUrl={brand.logoUrl ?? null} />
             <div className="flex items-center gap-4">
               <div
                 className="flex h-20 w-20 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-dashed border-zinc-300 bg-zinc-50 hover:border-zinc-400"
