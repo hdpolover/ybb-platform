@@ -7,6 +7,7 @@ import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitm
 import { startOfWibDay, addDays } from '@shared/utils/wib-time';
 import { resolveSubmissionCutoff } from '@shared/utils/submission-deadline.util';
 import { buildParticipantSubmissionUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
+import { ACTIVE_PARTICIPANT_WHERE } from '@shared/utils/active-participant.filter';
 
 /**
  * Days before Program.applicationDeadline at which a participant with a
@@ -128,6 +129,8 @@ export class SubmissionDeadlineReminderService {
           program: {
             applicationDeadline: { gte: targetDayStart, lt: targetDayEnd },
           },
+          // Deactivated/deleted accounts don't get nudged to submit.
+          participant: ACTIVE_PARTICIPANT_WHERE,
         },
         select: REMINDER_CANDIDATE_SELECT,
       });
