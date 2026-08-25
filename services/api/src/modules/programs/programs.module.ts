@@ -42,6 +42,8 @@ import { PaymentsCopier } from './application/copy/copiers/payments.copier';
 import { ProgramDetailsCopier } from './application/copy/copiers/program-details.copier';
 import { ContactCopier } from './application/copy/copiers/contact.copier';
 import { LandingCopier } from './application/copy/copiers/landing.copier';
+import { SpeakersCopier } from './application/copy/copiers/speakers.copier';
+import { TestimonialsCopier } from './application/copy/copiers/testimonials.copier';
 import {
   GetContentTemplatesHandler,
   GetContentTemplateByIdHandler,
@@ -231,6 +233,8 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
     ProgramDetailsCopier,
     ContactCopier,
     LandingCopier,
+    SpeakersCopier,
+    TestimonialsCopier,
     {
       provide: ProgramCopierRegistry,
       useFactory: (...copiers: ProgramCopier[]) => new ProgramCopierRegistry(...copiers),
@@ -244,6 +248,8 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
         ProgramDetailsCopier,
         ContactCopier,
         LandingCopier,
+        SpeakersCopier,
+        TestimonialsCopier,
       ],
     },
 
