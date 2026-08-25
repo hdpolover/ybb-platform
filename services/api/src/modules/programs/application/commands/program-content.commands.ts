@@ -17,6 +17,7 @@ import {
     CreateDocumentTemplateDto, UpdateDocumentTemplateDto,
     UpdateProgramPaymentInfoDto,
 } from '../../presentation/dto/create-update-program-content.dto';
+import { UpdateProgramContactDto } from '../../presentation/dto/update-program-contact.dto';
 
 // Timeline
 export class CreateProgramTimelineCommand {
@@ -270,6 +271,15 @@ export class UpdateProgramPaymentInfoCommand {
     constructor(
         public readonly programId: string,
         public readonly dto: UpdateProgramPaymentInfoDto,
+        public readonly userId: string,
+    ) { }
+}
+
+// Program-level contact info
+export class UpdateProgramContactCommand {
+    constructor(
+        public readonly programId: string,
+        public readonly dto: UpdateProgramContactDto,
         public readonly userId: string,
     ) { }
 }
