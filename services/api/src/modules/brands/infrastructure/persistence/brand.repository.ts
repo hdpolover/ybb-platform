@@ -71,7 +71,6 @@ export class BrandRepository implements IBrandRepository {
                 websiteUrl: data.websiteUrl,
                 landingUrl: data.landingUrl,
                 primaryColor: data.primaryColor,
-                contactEmail: data.contactEmail,
                 isActive: data.isActive ?? true,
             },
             include: { settings: true },
@@ -119,10 +118,6 @@ export class BrandRepository implements IBrandRepository {
                 vision: data.vision,
                 mission: data.mission,
 
-                contactEmail: data.contactEmail,
-                contactPhone: data.contactPhone,
-                contactWhatsapp: data.contactWhatsapp,
-                contactAddress: data.contactAddress,
                 socialMediaLinks: data.socialMediaLinks ?? undefined,
 
                 defaultLocation: data.defaultLocation,
@@ -133,9 +128,6 @@ export class BrandRepository implements IBrandRepository {
                 defaultCurrency: data.defaultCurrency,
                 enableMultiCurrency: data.enableMultiCurrency,
 
-                metaTitle: data.metaTitle,
-                metaDescription: data.metaDescription,
-                metaKeywords: data.metaKeywords,
                 tagline: data.tagline,
 
                 isActive: data.isActive,
@@ -224,10 +216,6 @@ export class BrandRepository implements IBrandRepository {
             prismaEntity.vision,
             prismaEntity.mission,
 
-            prismaEntity.contactEmail,
-            prismaEntity.contactPhone,
-            prismaEntity.contactWhatsapp,
-            prismaEntity.contactAddress,
             prismaEntity.socialMediaLinks as unknown as Record<string, string> | null,
 
             prismaEntity.defaultLocation,
@@ -237,10 +225,6 @@ export class BrandRepository implements IBrandRepository {
             prismaEntity.requireEmailVerification ?? true,
             prismaEntity.defaultCurrency ?? 'USD',
             prismaEntity.enableMultiCurrency ?? false,
-
-            prismaEntity.metaTitle,
-            prismaEntity.metaDescription,
-            prismaEntity.metaKeywords,
 
             prismaEntity.createdAt,
             prismaEntity.updatedAt,

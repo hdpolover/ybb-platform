@@ -43,18 +43,6 @@ export class BrandResponseDto {
     @ApiProperty({ required: false, nullable: true })
     mission?: string | null;
 
-    @ApiProperty({ required: false, nullable: true })
-    contactEmail?: string | null;
-
-    @ApiProperty({ required: false, nullable: true })
-    contactPhone?: string | null;
-
-    @ApiProperty({ required: false, nullable: true })
-    contactWhatsapp?: string | null;
-
-    @ApiProperty({ required: false, nullable: true })
-    contactAddress?: string | null;
-
     @ApiProperty({ required: false, nullable: true, example: { instagram: '...' } })
     socialMediaLinks?: Record<string, string> | null;
 
@@ -75,15 +63,6 @@ export class BrandResponseDto {
 
     @ApiProperty()
     enableMultiCurrency: boolean;
-
-    @ApiProperty({ required: false, nullable: true })
-    metaTitle?: string | null;
-
-    @ApiProperty({ required: false, nullable: true })
-    metaDescription?: string | null;
-
-    @ApiProperty({ required: false, nullable: true })
-    metaKeywords?: string | null;
 
     @ApiProperty()
     isActive: boolean;

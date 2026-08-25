@@ -32,10 +32,6 @@ model Brand {
   primaryColor String? @map("primary_color") @db.VarChar(7) // Hex color
 
   // Contact Information
-  contactEmail     String? @map("contact_email") @db.VarChar(255)
-  contactPhone     String? @map("contact_phone") @db.VarChar(50)
-  contactWhatsapp  String? @map("contact_whatsapp") @db.VarChar(50)
-  contactAddress   String? @map("contact_address") @db.Text
   socialMediaLinks Json?   @default("{}") @map("social_media_links") @db.Json // {instagram, facebook, linkedin, etc}
 
   // Location
@@ -47,11 +43,6 @@ model Brand {
   requireEmailVerification Boolean @default(true) @map("require_email_verification")
   defaultCurrency          String  @default("USD") @map("default_currency") @db.VarChar(3)
   enableMultiCurrency      Boolean @default(false) @map("enable_multi_currency")
-
-  // SEO
-  metaTitle       String? @map("meta_title") @db.VarChar(255)
-  metaDescription String? @map("meta_description") @db.Text
-  metaKeywords    String? @map("meta_keywords") @db.Text
 
   // Flexible brand-scoped content (impact stats, features, recognition, etc.)
   metadata Json @default("{}") @db.Json
