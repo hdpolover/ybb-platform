@@ -181,6 +181,21 @@ const programDetailsItemSchema = z
   })
   .strict();
 
+// ContactCopier (Task 7): four scalars on the Program row, same shape as
+// programDetailsItemSchema above. No length caps here — none of this
+// codebase's other template schemas enforce a column's VarChar width either
+// (e.g. participationCategoriesItemSchema's `name` is VarChar(255) with no
+// `.max()`), so this stays consistent with that existing precedent rather
+// than inventing a new one.
+const contactItemSchema = z
+  .object({
+    contactEmail: z.string().nullable(),
+    contactPhone: z.string().nullable(),
+    contactWhatsapp: z.string().nullable(),
+    contactAddress: z.string().nullable(),
+  })
+  .strict();
+
 // Keyed by ProgramCopier.key — adding an eighth copier means adding one
 // entry here, not touching any call site.
 const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
@@ -191,6 +206,7 @@ const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
   faqs: faqsItemSchema,
   payments: paymentsItemSchema,
   'program-details': programDetailsItemSchema,
+  contact: contactItemSchema,
 };
 
 /**
