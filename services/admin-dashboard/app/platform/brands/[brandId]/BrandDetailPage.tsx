@@ -2966,6 +2966,11 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <Link href={`/platform/brands/${brand.id}/edit`}>
+            <Button size="sm" variant="outline">
+              <Pencil className="mr-1.5 h-3.5 w-3.5" /> Advanced Edit
+            </Button>
+          </Link>
           <IdentitySheet brand={brand} onSaved={() => load(true)} />
         </div>
       </div>
