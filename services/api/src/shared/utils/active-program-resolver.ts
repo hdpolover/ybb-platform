@@ -16,6 +16,15 @@
  * silently-drifted copy of the query.
  *
  * Resolution order:
+ *   0. isPublished && isActive AND registration is currently open (a null
+ *      open/close date counts as open). Added because rule 1's `year desc`
+ *      ordering picks a FUTURE program over the one actually taking
+ *      registrations: set MEYS 2027 (registration opens September) active
+ *      while MEYS 2026 is still open until December and every rule-1 caller
+ *      silently switches to the program nobody can register for yet.
+ *      Purely additive — it only changes the outcome when two or more
+ *      programs pass rule 1, which is exactly the broken case. When it
+ *      matches nothing (every window closed) rule 1 answers as before.
  *   1. isPublished && isActive, most recent by year desc, createdAt desc,
  *      id asc — unchanged from every call site's behavior before this
  *      addendum, so no currently-working brand changes behavior.
@@ -28,11 +37,14 @@
  * year and createdAt resolves identically across every call site and every
  * run/process — not a change to which program wins in the non-tied case.
  *
- * Deliberately OUT OF SCOPE: get-auth-context.handler.ts:55 (participant
- * auth context — a different question, with its own known
- * resolveActiveProgramId/availableIds[0] bug in the participant portal). Do
- * not repoint it onto this resolver; see the addendum for the full
- * reasoning.
+ * Deliberately still OUT OF SCOPE for the FULL resolver:
+ * get-auth-context.handler.ts (participant auth context — a different
+ * question, with its own known resolveActiveProgramId/availableIds[0] bug
+ * in the participant portal). Do not repoint it onto resolveActiveProgram;
+ * its rule 2 fallback would hand a program to brands that correctly get
+ * null today, changing where new participants register. That handler does
+ * reuse `openRegistrationProgramQuery` alone, which only re-orders among
+ * programs it would already have picked from.
  */
 import { Prisma } from '@prisma/client';
 
@@ -47,6 +59,32 @@ type ActiveProgramFindFirstArgs = {
     where: Prisma.ProgramWhereInput;
     orderBy: Prisma.ProgramOrderByWithRelationInput[];
 };
+
+/**
+ * Rule 0: published + active AND registration currently open, most recent
+ * first. A null open or close date means "no bound", i.e. open — the same
+ * reading every other registration gate in the codebase uses.
+ */
+export function openRegistrationProgramQuery(
+    brandId: string,
+    now: Date,
+): ActiveProgramFindFirstArgs {
+    return {
+        where: {
+            brandId,
+            deletedAt: null,
+            isPublished: true,
+            isActive: true,
+            // Two separate OR groups, so they must be nested under AND —
+            // sibling `OR` keys would overwrite each other.
+            AND: [
+                { OR: [{ registrationOpenDate: null }, { registrationOpenDate: { lte: now } }] },
+                { OR: [{ registrationCloseDate: null }, { registrationCloseDate: { gte: now } }] },
+            ],
+        },
+        orderBy: ACTIVE_PROGRAM_ORDER_BY,
+    };
+}
 
 /** Rule 1: published + active, most recent first. */
 export function activeProgramQuery(brandId: string): ActiveProgramFindFirstArgs {
@@ -64,7 +102,7 @@ export function anyProgramFallbackQuery(brandId: string): ActiveProgramFindFirst
     };
 }
 
-export type ActiveProgramResolutionRule = 1 | 2 | 3;
+export type ActiveProgramResolutionRule = 0 | 1 | 2 | 3;
 
 export interface ActiveProgramResolution<T> {
     program: T | null;
@@ -81,7 +119,11 @@ export interface ActiveProgramResolution<T> {
 export async function resolveActiveProgram<T>(
     findFirst: (args: ActiveProgramFindFirstArgs) => Promise<T | null>,
     brandId: string,
+    now: Date = new Date(),
 ): Promise<ActiveProgramResolution<T>> {
+    const viaRule0 = await findFirst(openRegistrationProgramQuery(brandId, now));
+    if (viaRule0) return { program: viaRule0, rule: 0 };
+
     const viaRule1 = await findFirst(activeProgramQuery(brandId));
     if (viaRule1) return { program: viaRule1, rule: 1 };
 
@@ -94,6 +136,8 @@ export async function resolveActiveProgram<T>(
 /** Human-readable label for dry-run logging — e.g. "fallback rule 2". */
 export function describeActiveProgramRule(rule: ActiveProgramResolutionRule): string {
     switch (rule) {
+        case 0:
+            return 'rule 0 (registration open)';
         case 1:
             return 'rule 1';
         case 2:
