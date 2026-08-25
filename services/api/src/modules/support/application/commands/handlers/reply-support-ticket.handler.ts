@@ -9,6 +9,7 @@ import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service
 import { SupportTicketStatus } from '@prisma/client';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { resolveActiveProgramContact } from '@shared/utils/resolve-active-program-contact';
 
 @CommandHandler(ReplySupportTicketCommand)
 export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTicketCommand> {
@@ -90,6 +91,7 @@ export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTi
             const resolvedStatus = (ticket.status === 'waiting_response' || ticket.status === 'resolved')
                 ? SupportTicketStatus.open
                 : ticket.status as SupportTicketStatus;
+            const activeProgramContact = await resolveActiveProgramContact(this.prisma, ticketOwner.brandId);
 
             await this.rabbitmqProducer.emit('support.ticket.replied', {
                 ticketId: ticket.id,
@@ -108,7 +110,7 @@ export class ReplySupportTicketHandler implements ICommandHandler<ReplySupportTi
                         name: ticketOwner.brand.name,
                         websiteUrl: ticketOwner.brand.websiteUrl,
                         logoUrl: ticketOwner.brand.logoUrl,
-                        contactEmail: ticketOwner.brand.contactEmail,
+                        contactEmail: activeProgramContact.contactEmail,
                     }
                     : undefined,
             });
