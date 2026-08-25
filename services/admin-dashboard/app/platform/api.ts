@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { redirectToLogin } from "@/src/shared/login-redirect";
 import {
   requestAdminProfileRefresh,
@@ -32,10 +31,6 @@ type RawPlatformBrand = Partial<PlatformBrandDetail> & {
   created_at?: string;
   updated_at?: string;
   deleted_at?: string | null;
-  contact_email?: string | null;
-  contact_phone?: string | null;
-  contact_whatsapp?: string | null;
-  contact_address?: string | null;
   social_media_links?: Record<string, string> | null;
   default_location?: string | null;
   default_country?: string | null;
@@ -43,9 +38,6 @@ type RawPlatformBrand = Partial<PlatformBrandDetail> & {
   require_email_verification?: boolean;
   default_currency?: string;
   enable_multi_currency?: boolean;
-  meta_title?: string | null;
-  meta_description?: string | null;
-  meta_keywords?: string | null;
 };
 
 export type PlatformProgram = {
@@ -123,10 +115,6 @@ function normalizePlatformBrandDetail(raw: RawPlatformBrand): PlatformBrandDetai
     about: raw.about ?? null,
     vision: raw.vision ?? null,
     mission: raw.mission ?? null,
-    contactEmail: raw.contactEmail ?? raw.contact_email ?? null,
-    contactPhone: raw.contactPhone ?? raw.contact_phone ?? null,
-    contactWhatsapp: raw.contactWhatsapp ?? raw.contact_whatsapp ?? null,
-    contactAddress: raw.contactAddress ?? raw.contact_address ?? null,
     socialMediaLinks: raw.socialMediaLinks ?? raw.social_media_links ?? null,
     defaultLocation: raw.defaultLocation ?? raw.default_location ?? null,
     defaultCountry: raw.defaultCountry ?? raw.default_country ?? null,
@@ -134,9 +122,6 @@ function normalizePlatformBrandDetail(raw: RawPlatformBrand): PlatformBrandDetai
     requireEmailVerification: raw.requireEmailVerification ?? raw.require_email_verification ?? false,
     defaultCurrency: raw.defaultCurrency ?? raw.default_currency ?? "USD",
     enableMultiCurrency: raw.enableMultiCurrency ?? raw.enable_multi_currency ?? false,
-    metaTitle: raw.metaTitle ?? raw.meta_title ?? null,
-    metaDescription: raw.metaDescription ?? raw.meta_description ?? null,
-    metaKeywords: raw.metaKeywords ?? raw.meta_keywords ?? null,
     settings:
       raw.settings && typeof raw.settings === "object" && !Array.isArray(raw.settings)
         ? (raw.settings as PlatformBrandDetail["settings"])
@@ -241,10 +226,6 @@ export type PlatformBrandDetail = PlatformBrand & {
   about?: string | null;
   vision?: string | null;
   mission?: string | null;
-  contactEmail?: string | null;
-  contactPhone?: string | null;
-  contactWhatsapp?: string | null;
-  contactAddress?: string | null;
   socialMediaLinks?: Record<string, string> | null;
   defaultLocation?: string | null;
   defaultCountry?: string | null;
@@ -252,9 +233,6 @@ export type PlatformBrandDetail = PlatformBrand & {
   requireEmailVerification?: boolean;
   defaultCurrency?: string;
   enableMultiCurrency?: boolean;
-  metaTitle?: string | null;
-  metaDescription?: string | null;
-  metaKeywords?: string | null;
   settings?: {
     isMaintenanceMode: boolean;
     maintenanceMessage?: string | null;
@@ -288,7 +266,6 @@ export async function updatePlatformBrandIdentity(
     websiteUrl?: string;
     landingUrl?: string;
     primaryColor?: string;
-    contactEmail?: string;
     isActive?: boolean;
     logo?: File | null;
     banner?: File | null;
@@ -341,7 +318,6 @@ export async function updatePlatformBrandIdentity(
   if (input.websiteUrl != null) formData.set("websiteUrl", input.websiteUrl);
   if (input.landingUrl != null) formData.set("landingUrl", input.landingUrl);
   if (input.primaryColor != null) formData.set("primaryColor", input.primaryColor);
-  if (input.contactEmail != null) formData.set("contactEmail", input.contactEmail);
   if (input.isActive != null) formData.set("isActive", String(input.isActive));
   if (logoUrl) formData.set("logoUrl", logoUrl);
   if (bannerUrl) formData.set("bannerUrl", bannerUrl);
@@ -371,35 +347,21 @@ export function updatePlatformBrandDetails(
     about?: string;
     vision?: string;
     mission?: string;
-    contactEmail?: string;
-    contactPhone?: string;
-    contactWhatsapp?: string;
-    contactAddress?: string;
     socialMediaLinks?: Record<string, string>;
     defaultLocation?: string;
     defaultCountry?: string;
     defaultTimezone?: string;
-    metaTitle?: string;
-    metaDescription?: string;
-    metaKeywords?: string;
   },
 ): Promise<PlatformBrandDetail> {
   const formData = new FormData();
   if (input.about != null) formData.set("about", input.about);
   if (input.vision != null) formData.set("vision", input.vision);
   if (input.mission != null) formData.set("mission", input.mission);
-  if (input.contactEmail != null) formData.set("contactEmail", input.contactEmail);
-  if (input.contactPhone != null) formData.set("contactPhone", input.contactPhone);
-  if (input.contactWhatsapp != null) formData.set("contactWhatsapp", input.contactWhatsapp);
-  if (input.contactAddress != null) formData.set("contactAddress", input.contactAddress);
   if (input.socialMediaLinks != null)
     formData.set("socialMediaLinks", JSON.stringify(input.socialMediaLinks));
   if (input.defaultLocation != null) formData.set("defaultLocation", input.defaultLocation);
   if (input.defaultCountry != null) formData.set("defaultCountry", input.defaultCountry);
   if (input.defaultTimezone != null) formData.set("defaultTimezone", input.defaultTimezone);
-  if (input.metaTitle != null) formData.set("metaTitle", input.metaTitle);
-  if (input.metaDescription != null) formData.set("metaDescription", input.metaDescription);
-  if (input.metaKeywords != null) formData.set("metaKeywords", input.metaKeywords);
   return request<RawPlatformBrand>(`/brands/${brandId}/details`, { method: "PUT", body: formData }).then(normalizePlatformBrandDetail);
 }
 
@@ -489,13 +451,6 @@ export type BrandFeature = {
   description: string;
 };
 
-export type BrandImpactStats = {
-  total_participants?: string;
-  total_countries?: string;
-  total_alumni?: string;
-  editions_held?: string;
-};
-
 export type BrandSectionBackground = {
   desktop_url?: string;
   mobile_url?: string;
@@ -518,13 +473,6 @@ export type BrandMomentsShorts = {
   eyebrow?: string;
   title?: string;
   description?: string;
-};
-
-export type BrandProgramObjectives = {
-  eyebrow?: string;
-  title?: string;
-  intro?: string;
-  items?: string[];
 };
 
 export type BrandFurtherInformation = {
@@ -557,83 +505,23 @@ export type AffiliateCommissionMetadata = {
 };
 
 export type BrandMetadata = {
-  benefits?: { eyebrow: string; title: string; groups: BenefitGroup[] };
-  features?: BrandFeature[];
-  impact_stats?: BrandImpactStats;
-  promo_cta?: BrandPromoCta;
-  moments_shorts?: BrandMomentsShorts;
-  program_objectives?: BrandProgramObjectives;
-  further_information?: BrandFurtherInformation;
   /** Global background image used by all landing sections (benefits, shorts, promo CTA, further info). */
   section_background?: BrandSectionBackground;
   partners_canva_url?: string | null;
   affiliateCommission?: AffiliateCommissionMetadata | null;
   recognition?: Record<string, unknown>;
-  payment_info?: BrandPaymentInfo;
-  participant_demographics?: Record<string, unknown>;
   [key: string]: unknown;
 };
 
-// Legacy/malformed metadata records can reach the API with the wrong shape
-// for these array-bearing fields (e.g. `groups` missing, a group missing its
-// `items` array). The UI iterates over them directly (see LandingPageTab in
-// BrandDetailPage.tsx), so a bad shape throws a TypeError during render and
-// takes down the whole page. Sanitize defensively at the fetch boundary
-// instead of trusting the payload — never throw here, always fall back to a
-// safe default so `getBrandMetadata` itself can never reject/crash on bad data.
-const unknownArraySchema = z.array(z.unknown());
-
-function toSafeArray(value: unknown): unknown[] {
-  const result = unknownArraySchema.safeParse(value);
-  return result.success ? result.data : [];
-}
-
-function sanitizeBenefitGroup(group: unknown): BenefitGroup {
-  const record = group && typeof group === "object" ? (group as Record<string, unknown>) : {};
-  return {
-    ...record,
-    items: toSafeArray(record.items) as BenefitItem[],
-  } as BenefitGroup;
-}
-
-function sanitizeBenefits(benefits: BrandMetadata["benefits"]): BrandMetadata["benefits"] {
-  if (!benefits || typeof benefits !== "object") return benefits;
-  return {
-    ...benefits,
-    groups: toSafeArray(benefits.groups).map(sanitizeBenefitGroup),
-  };
-}
-
-function sanitizeProgramObjectives(
-  objectives: BrandMetadata["program_objectives"],
-): BrandMetadata["program_objectives"] {
-  if (!objectives || typeof objectives !== "object" || objectives.items === undefined) {
-    return objectives;
-  }
-  return {
-    ...objectives,
-    items: toSafeArray(objectives.items) as string[],
-  };
-}
-
+// Sanitization used to defend benefits/features/program_objectives against
+// legacy/malformed shapes reaching the API (a bad `groups`/`items` array
+// would throw a TypeError during render). All three keys moved to
+// Program.landingContent (Phase 3) and no longer exist on BrandMetadata, so
+// there is nothing left for this function to sanitize — kept as a named
+// pass-through rather than inlined at the one call site, in case a future
+// Brand.metadata key needs the same defensive treatment.
 function sanitizeBrandMetadata(raw: unknown): BrandMetadata {
-  if (!raw || typeof raw !== "object") return raw as BrandMetadata;
-
-  try {
-    const value = raw as BrandMetadata;
-    return {
-      ...value,
-      benefits: value.benefits !== undefined ? sanitizeBenefits(value.benefits) : value.benefits,
-      features: value.features !== undefined ? (toSafeArray(value.features) as BrandFeature[]) : value.features,
-      program_objectives:
-        value.program_objectives !== undefined
-          ? sanitizeProgramObjectives(value.program_objectives)
-          : value.program_objectives,
-    };
-  } catch {
-    // Last-resort safety net — never let sanitization itself crash the fetch.
-    return raw as BrandMetadata;
-  }
+  return raw as BrandMetadata;
 }
 
 export function getBrandMetadata(brandId: string): Promise<BrandMetadata> {
