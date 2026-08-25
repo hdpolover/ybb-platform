@@ -773,6 +773,8 @@ export class PaymentAdminController {
                         },
                         program: {
                             select: {
+                                contactEmail: true,
+                                contactAddress: true,
                                 brand: {
                                     select: {
                                         landingUrl: true,
@@ -780,8 +782,6 @@ export class PaymentAdminController {
                                         name: true,
                                         primaryColor: true,
                                         logoUrl: true,
-                                        contactEmail: true,
-                                        contactAddress: true,
                                         socialMediaLinks: true,
                                         settings: {
                                             select: {
@@ -901,6 +901,7 @@ export class PaymentAdminController {
                 const email = invoice.application?.participant?.user?.email;
                 if (email) {
                     const rawBrand = invoice.application?.program?.brand ?? null;
+                    const rawProgram = invoice.application?.program ?? null;
                     const paymentsPageUrl = this.buildParticipantPaymentsUrl(rawBrand);
                     if (!paymentsPageUrl) {
                         this.logger.warn(
@@ -913,8 +914,8 @@ export class PaymentAdminController {
                             primaryColor: rawBrand.primaryColor,
                             logoUrl: rawBrand.logoUrl,
                             websiteUrl: rawBrand.websiteUrl,
-                            contactEmail: rawBrand.contactEmail,
-                            contactAddress: rawBrand.contactAddress,
+                            contactEmail: rawProgram?.contactEmail ?? null,
+                            contactAddress: rawProgram?.contactAddress ?? null,
                             socialMediaLinks: rawBrand.socialMediaLinks,
                             settings: rawBrand.settings
                                 ? {
@@ -1003,6 +1004,8 @@ export class PaymentAdminController {
                             select: {
                                 id: true,
                                 name: true,
+                                contactEmail: true,
+                                contactAddress: true,
                                 brand: {
                                     select: {
                                         id: true,
@@ -1011,8 +1014,6 @@ export class PaymentAdminController {
                                         name: true,
                                         primaryColor: true,
                                         logoUrl: true,
-                                        contactEmail: true,
-                                        contactAddress: true,
                                         socialMediaLinks: true,
                                         settings: {
                                             select: {
@@ -1048,6 +1049,7 @@ export class PaymentAdminController {
             }
 
             const rawBrand = invoice.application?.program?.brand ?? null;
+            const rawProgram = invoice.application?.program ?? null;
             const paymentsPageUrl = this.buildParticipantPaymentsUrl(rawBrand);
             if (!paymentsPageUrl) {
                 this.logger.warn(
@@ -1060,8 +1062,8 @@ export class PaymentAdminController {
                     primaryColor: rawBrand.primaryColor,
                     logoUrl: rawBrand.logoUrl,
                     websiteUrl: rawBrand.websiteUrl,
-                    contactEmail: rawBrand.contactEmail,
-                    contactAddress: rawBrand.contactAddress,
+                    contactEmail: rawProgram?.contactEmail ?? null,
+                    contactAddress: rawProgram?.contactAddress ?? null,
                     socialMediaLinks: rawBrand.socialMediaLinks,
                     settings: rawBrand.settings
                         ? {
@@ -1136,6 +1138,9 @@ export class PaymentAdminController {
                             select: {
                                 id: true,
                                 name: true,
+                                contactEmail: true,
+                                contactPhone: true,
+                                contactAddress: true,
                                 brand: {
                                     select: {
                                         id: true,
@@ -1144,9 +1149,6 @@ export class PaymentAdminController {
                                         name: true,
                                         primaryColor: true,
                                         logoUrl: true,
-                                        contactEmail: true,
-                                        contactPhone: true,
-                                        contactAddress: true,
                                     },
                                 },
                             },
@@ -1170,14 +1172,15 @@ export class PaymentAdminController {
         }
 
         const rawBrand = invoice.application?.program?.brand ?? null;
+        const rawProgram = invoice.application?.program ?? null;
         const brandPayload = rawBrand
             ? {
                 name: rawBrand.name,
                 logoUrl: rawBrand.logoUrl,
                 primaryColor: rawBrand.primaryColor,
-                contactEmail: rawBrand.contactEmail,
-                contactPhone: rawBrand.contactPhone,
-                contactAddress: rawBrand.contactAddress,
+                contactEmail: rawProgram?.contactEmail ?? null,
+                contactPhone: rawProgram?.contactPhone ?? null,
+                contactAddress: rawProgram?.contactAddress ?? null,
                 websiteUrl: rawBrand.websiteUrl,
             }
             : null;
@@ -1449,14 +1452,15 @@ export class PaymentAdminController {
                     this.logger.warn(`receipt email skipped: no participant email for invoice ${id}`);
                 } else {
                     const rawBrand = updatedInvoice.application?.program?.brand ?? null;
+                    const rawProgram = updatedInvoice.application?.program ?? null;
                     const brandPayload = rawBrand
                         ? {
                             name: rawBrand.name,
                             primaryColor: rawBrand.primaryColor,
                             logoUrl: rawBrand.logoUrl,
                             websiteUrl: rawBrand.websiteUrl,
-                            contactEmail: rawBrand.contactEmail,
-                            contactAddress: rawBrand.contactAddress,
+                            contactEmail: rawProgram?.contactEmail ?? null,
+                            contactAddress: rawProgram?.contactAddress ?? null,
                             socialMediaLinks: rawBrand.socialMediaLinks,
                             settings: rawBrand.settings
                                 ? {

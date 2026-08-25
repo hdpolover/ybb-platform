@@ -24,6 +24,10 @@ const MOCK_ADMIN_USER: CurrentUserData = {
     adminId: 'admin-id-1',
 };
 
+// contactEmail/contactPhone/contactAddress live on Program as of Phase 3
+// (docs/superpowers/specs/2026-08-23-program-content-copy-design.md) — the
+// controller's select pulls them as siblings of `brand`, not nested inside
+// it, so the fixture below puts them on `program`, not `MOCK_BRAND`.
 const MOCK_BRAND = {
     id: 'brand-1',
     name: 'Test Brand',
@@ -31,9 +35,6 @@ const MOCK_BRAND = {
     logoUrl: 'https://example.com/logo.png',
     websiteUrl: 'https://example.com',
     landingUrl: 'https://example.com',
-    contactEmail: 'info@example.com',
-    contactPhone: '+62-812-0000-0000',
-    contactAddress: '123 Test St',
 };
 
 function makePaidInvoice(overrides: Record<string, unknown> = {}) {
@@ -55,6 +56,9 @@ function makePaidInvoice(overrides: Record<string, unknown> = {}) {
             program: {
                 id: 'program-1',
                 name: 'YBB Program',
+                contactEmail: 'info@example.com',
+                contactPhone: '+62-812-0000-0000',
+                contactAddress: '123 Test St',
                 brand: MOCK_BRAND,
             },
         },

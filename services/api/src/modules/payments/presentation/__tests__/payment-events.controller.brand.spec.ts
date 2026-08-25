@@ -11,6 +11,10 @@ import { RmqContext } from '@nestjs/microservices';
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
+// contactEmail/contactAddress live on Program as of Phase 3
+// (docs/superpowers/specs/2026-08-23-program-content-copy-design.md) — the
+// controllers read them as siblings of `brand`, not nested inside it, so
+// the fixture below puts them on MOCK_PROGRAM, not MOCK_BRAND.
 const MOCK_BRAND = {
     id: 'brand-1',
     name: 'Test Brand',
@@ -18,8 +22,6 @@ const MOCK_BRAND = {
     logoUrl: 'https://example.com/logo.png',
     websiteUrl: 'https://example.com',
     landingUrl: 'https://example.com',
-    contactEmail: 'info@example.com',
-    contactAddress: '123 Test St',
     socialMediaLinks: {},
     settings: {
         footerNavigation: [],
@@ -37,6 +39,8 @@ const MOCK_PARTICIPANT = {
 const MOCK_PROGRAM = {
     id: 'program-1',
     usdInIdr: null,
+    contactEmail: 'info@example.com',
+    contactAddress: '123 Test St',
     brand: MOCK_BRAND,
 };
 
@@ -194,6 +198,9 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
                         name: 'Test Brand',
                         primaryColor: '#FF5500',
                         logoUrl: 'https://example.com/logo.png',
+                        // Sourced from Program, not Brand, as of Phase 3.
+                        contactEmail: 'info@example.com',
+                        contactAddress: '123 Test St',
                         settings: expect.objectContaining({
                             supportEmail: 'support@example.com',
                         }),
@@ -279,6 +286,8 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
                     brand: expect.objectContaining({
                         name: 'Test Brand',
                         primaryColor: '#FF5500',
+                        contactEmail: 'info@example.com',
+                        contactAddress: '123 Test St',
                         settings: expect.objectContaining({
                             supportEmail: 'support@example.com',
                         }),
@@ -340,6 +349,8 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
                     brand: expect.objectContaining({
                         name: 'Test Brand',
                         primaryColor: '#FF5500',
+                        contactEmail: 'info@example.com',
+                        contactAddress: '123 Test St',
                         settings: expect.objectContaining({
                             supportEmail: 'support@example.com',
                         }),
@@ -375,6 +386,8 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
                     brand: expect.objectContaining({
                         name: 'Test Brand',
                         primaryColor: '#FF5500',
+                        contactEmail: 'info@example.com',
+                        contactAddress: '123 Test St',
                     }),
                 }),
             );

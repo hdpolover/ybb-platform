@@ -165,6 +165,8 @@ export class AmbassadorAdminController {
       select: {
         id: true,
         brandId: true,
+        contactEmail: true,
+        contactAddress: true,
         brand: {
           select: {
             id: true,
@@ -172,8 +174,6 @@ export class AmbassadorAdminController {
             websiteUrl: true,
             primaryColor: true,
             logoUrl: true,
-            contactEmail: true,
-            contactAddress: true,
             socialMediaLinks: true,
           },
         },
@@ -227,7 +227,12 @@ export class AmbassadorAdminController {
 
     // Best-effort: emit welcome/credentials email. Never fail the create.
     try {
-      const brand = program.brand;
+      // Merge program-owned contact fields back onto the emitted `brand`
+      // shape — services/notification reads brand.contactEmail/contactAddress
+      // from this event payload's field names, unchanged by this phase.
+      const brand = program.brand
+        ? { ...program.brand, contactEmail: program.contactEmail, contactAddress: program.contactAddress }
+        : null;
       let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
       if (brand?.websiteUrl) baseUrl = brand.websiteUrl.replace(/\/$/, '');
       const normalizedBaseUrl = /^https?:\/\//i.test(baseUrl) ? baseUrl : `https://${baseUrl}`;
@@ -260,6 +265,8 @@ export class AmbassadorAdminController {
         program: {
           select: {
             id: true,
+            contactEmail: true,
+            contactAddress: true,
             brand: {
               select: {
                 id: true,
@@ -267,8 +274,6 @@ export class AmbassadorAdminController {
                 websiteUrl: true,
                 primaryColor: true,
                 logoUrl: true,
-                contactEmail: true,
-                contactAddress: true,
                 socialMediaLinks: true,
               },
             },
@@ -282,7 +287,9 @@ export class AmbassadorAdminController {
     const email = ambassador.user?.email;
     if (!email) throw new BadRequestException('Ambassador has no email address on record');
 
-    const brand = ambassador.program?.brand;
+    const brand = ambassador.program?.brand
+      ? { ...ambassador.program.brand, contactEmail: ambassador.program.contactEmail, contactAddress: ambassador.program.contactAddress }
+      : null;
     let baseUrl = this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
     if (brand?.websiteUrl) baseUrl = brand.websiteUrl.replace(/\/$/, '');
     const normalizedBaseUrl = /^https?:\/\//i.test(baseUrl) ? baseUrl : `https://${baseUrl}`;
