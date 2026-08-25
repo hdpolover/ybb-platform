@@ -1,7 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUrl, IsEmail, IsHexColor, MaxLength } from 'class-validator';
+import { IsOptional, IsString, IsUrl, IsHexColor, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 
 export class UpdateBrandDetailsDto {
     @ApiProperty({ required: false, description: 'Brief description of the brand/program category.' })
@@ -67,27 +66,6 @@ export class UpdateBrandDetailsDto {
     @IsUrl()
     landingUrl?: string;
 
-    @ApiProperty({ required: false, example: 'contact@example.com' })
-    @IsOptional()
-    @NormalizeEmail()
-    @IsEmail()
-    contactEmail?: string;
-
-    @ApiProperty({ required: false, example: '+628123456789' })
-    @IsOptional()
-    @IsString()
-    contactPhone?: string;
-
-    @ApiProperty({ required: false, example: '628123456789' })
-    @IsOptional()
-    @IsString()
-    contactWhatsapp?: string;
-
-    @ApiProperty({ required: false })
-    @IsOptional()
-    @IsString()
-    contactAddress?: string;
-
     @ApiProperty({
         required: false,
         description: 'JSON object of social media links (e.g., {"instagram": "...", "linkedin": "..."})',
@@ -116,19 +94,4 @@ export class UpdateBrandDetailsDto {
     @IsOptional()
     @IsString()
     defaultTimezone?: string;
-
-    @ApiProperty({ required: false, description: 'SEO Meta Title' })
-    @IsOptional()
-    @IsString()
-    metaTitle?: string;
-
-    @ApiProperty({ required: false, description: 'SEO Meta Description' })
-    @IsOptional()
-    @IsString()
-    metaDescription?: string;
-
-    @ApiProperty({ required: false, description: 'SEO Keywords (comma separated)' })
-    @IsOptional()
-    @IsString()
-    metaKeywords?: string;
 }
