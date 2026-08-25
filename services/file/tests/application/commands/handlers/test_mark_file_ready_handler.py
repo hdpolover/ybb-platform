@@ -70,3 +70,19 @@ def test_mark_ready_succeeds_for_matching_user_and_brand():
 
     assert result.status == FileStatus.READY
     assert repo.saved is True
+
+
+def test_mark_ready_succeeds_even_when_caller_brand_differs_from_file_brand():
+    # Regression for fix/file-brand-attribution: a file's brand_id is derived from its
+    # PROGRAM at creation time, not the uploader's JWT home brand. A multi-brand admin's
+    # JWT brand_id can legitimately differ from the file's brand_id — ownership is by
+    # user_id only, so this must still succeed.
+    file_obj = _build_file()
+    repo = _Repo(file_obj)
+    handler = MarkFileReadyHandler(_Storage(exists=True), repo)
+    command = MarkFileReadyCommand(file_id="file-1", brand_id="some-other-brand", user_id="user-1")
+
+    result = asyncio.run(handler.execute(command))
+
+    assert result.status == FileStatus.READY
+    assert repo.saved is True

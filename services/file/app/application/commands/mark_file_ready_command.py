@@ -7,9 +7,11 @@ from typing import Optional
 class MarkFileReadyCommand:
     """Transition a File row from PROCESSING to READY after the client uploads to storage.
 
-    `brand_id` and `user_id` are required so the caller cannot flip the status
-    of a file they don't own
-    (defense-in-depth even though the gateway also enforces auth).
+    `user_id` is the ownership credential the handler checks against the stored file row
+    (defense-in-depth even though the gateway also enforces auth). `brand_id` is carried
+    for logging/back-compat only — it is NOT checked, since a program-scoped file's
+    brand_id is derived from its program and can legitimately differ from the caller's
+    JWT home brand (e.g. a multi-brand admin).
     """
 
     file_id: str
