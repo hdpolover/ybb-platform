@@ -91,8 +91,6 @@ async function seedProgramCategories() {
       about: record[5]?.length > 10 ? record[5] : null,
       logoUrl: record[6],
       bannerUrl: record[7],
-      contactEmail: record[8],
-      contactPhone: record[9],
       // social: record[10] // We need to parse into JSON if we want to use it
       defaultLocation: record[11],
       legacyId: legacyId,
