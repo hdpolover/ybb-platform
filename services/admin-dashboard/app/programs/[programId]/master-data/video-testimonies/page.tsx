@@ -9,6 +9,8 @@ import {
   type VideoTestimonyRow,
 } from "@/app/components/videoTestimonialsMasterData/VideoTestimonialsTable";
 import { listProgramTestimonials } from "@/src/shared/api-client";
+import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
+import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 
 export default function VideoTestimonialsPage() {
   const params = useParams<{ programId: string }>();
@@ -18,6 +20,8 @@ export default function VideoTestimonialsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
+  const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
 
   const program = accessiblePrograms.find((p) => p.programId === params.programId);
   const programName = program?.programName ?? "Selected Program";
@@ -74,6 +78,22 @@ export default function VideoTestimonialsPage() {
               Manage video testimonial content shown on the program landing pages.
             </p>
           </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setCopyFromProgramOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+            >
+              <span>Copy from program</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCopyFromTemplateOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+            >
+              <span>Copy from template</span>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -91,6 +111,32 @@ export default function VideoTestimonialsPage() {
           onRefresh={load}
         />
       </section>
+
+      <CopyFromProgramDialog
+        open={copyFromProgramOpen}
+        entityKey="testimonials"
+        entityLabel="Testimonials"
+        programId={resolvedProgramId}
+        supportsAppend
+        onClose={() => setCopyFromProgramOpen(false)}
+        onApplied={() => {
+          setCopyFromProgramOpen(false);
+          load();
+        }}
+      />
+
+      <CopyFromTemplateDialog
+        open={copyFromTemplateOpen}
+        entityKey="testimonials"
+        entityLabel="Testimonials"
+        programId={resolvedProgramId}
+        supportsAppend
+        onClose={() => setCopyFromTemplateOpen(false)}
+        onApplied={() => {
+          setCopyFromTemplateOpen(false);
+          load();
+        }}
+      />
     </main>
   );
 }
