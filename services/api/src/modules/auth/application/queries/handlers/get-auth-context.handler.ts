@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { openRegistrationProgramQuery } from '../../../../../shared/utils/active-program-resolver';
 import { GetAuthContextQuery } from '../get-auth-context.query';
 import { AuthContextResponseDto } from '../../../presentation/dto/auth-context.dto';
 
@@ -51,11 +52,24 @@ export class GetAuthContextHandler {
             };
         }
 
-        const program = await this.prisma.program.findFirst({
-            where: { brandId: brand.id, isPublished: true, isActive: true },
-            orderBy: [{ year: 'desc' }, { createdAt: 'desc' }],
-            select: { id: true, slug: true, requireEmailVerification: true },
-        });
+        // Prefer the program actually taking registrations right now. Without
+        // this, `year desc` alone sends every new registrant to a future
+        // program the moment an admin publishes it — e.g. MEYS 2027 (opens
+        // September) stealing MEYS 2026, which is open until December.
+        // Deliberately NOT resolveActiveProgram(): its rule 2 fallback would
+        // hand a program to brands that correctly resolve to null here.
+        const select = { id: true, slug: true, requireEmailVerification: true };
+
+        const program =
+            (await this.prisma.program.findFirst({
+                ...openRegistrationProgramQuery(brand.id, new Date()),
+                select,
+            })) ??
+            (await this.prisma.program.findFirst({
+                where: { brandId: brand.id, deletedAt: null, isPublished: true, isActive: true },
+                orderBy: [{ year: 'desc' }, { createdAt: 'desc' }],
+                select,
+            }));
 
         // Program-level setting is authoritative when a program is found;
         // brand-level is the fallback. Read uncached — if a cache is added

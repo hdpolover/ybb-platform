@@ -106,13 +106,14 @@ describe('SettingsStrategy', () => {
             contactAddress: 'Ho Chi Minh City & Hanoi, Vietnam',
         };
         mockPrisma.program.findFirst
+            .mockResolvedValueOnce(null) // rule 0: no open registration window
             .mockResolvedValueOnce(null) // rule 1: isPublished && isActive finds nothing
             .mockResolvedValueOnce(vietnamProgram); // rule 2: most recent non-deleted program
 
         const result: any = await strategy.getData({ ...category, id: 'brand-vys' });
 
-        expect(mockPrisma.program.findFirst).toHaveBeenNthCalledWith(1, activeProgramQuery('brand-vys'));
-        expect(mockPrisma.program.findFirst).toHaveBeenNthCalledWith(2, anyProgramFallbackQuery('brand-vys'));
+        expect(mockPrisma.program.findFirst).toHaveBeenNthCalledWith(2, activeProgramQuery('brand-vys'));
+        expect(mockPrisma.program.findFirst).toHaveBeenNthCalledWith(3, anyProgramFallbackQuery('brand-vys'));
         expect(result.brand.support_email).toBe('vys@ybbfoundation.com');
         expect(result.brand.contact_phone).toBe('+84 123-456-789');
         expect(result.brand.address).toBe('Ho Chi Minh City & Hanoi, Vietnam');
@@ -126,13 +127,14 @@ describe('SettingsStrategy', () => {
             contactAddress: 'Seoul, South Korea',
         };
         mockPrisma.program.findFirst
+            .mockResolvedValueOnce(null) // rule 0: no open registration window
             .mockResolvedValueOnce(null) // rule 1: isPublished && isActive finds nothing
             .mockResolvedValueOnce(koreaProgram); // rule 2: most recent non-deleted program
 
         const result: any = await strategy.getData({ ...category, id: 'brand-kys' });
 
-        expect(mockPrisma.program.findFirst).toHaveBeenNthCalledWith(1, activeProgramQuery('brand-kys'));
-        expect(mockPrisma.program.findFirst).toHaveBeenNthCalledWith(2, anyProgramFallbackQuery('brand-kys'));
+        expect(mockPrisma.program.findFirst).toHaveBeenNthCalledWith(2, activeProgramQuery('brand-kys'));
+        expect(mockPrisma.program.findFirst).toHaveBeenNthCalledWith(3, anyProgramFallbackQuery('brand-kys'));
         expect(result.brand.support_email).toBe('koreayouthsummit@gmail.com');
         expect(result.brand.contact_phone).toBe('+6285173386622');
         expect(result.brand.address).toBe('Seoul, South Korea');
