@@ -33,6 +33,7 @@ import {
     DeleteProgramPricingTierHandler,
     DeleteValidityPeriodHandler,
     UpdateProgramPaymentInfoHandler,
+    UpdateProgramContactHandler,
 } from './manage-program-content.handlers';
 import {
     CreateProgramEssayCommand,
@@ -65,6 +66,7 @@ import {
     DeleteProgramPricingTierCommand,
     DeleteValidityPeriodCommand,
     UpdateProgramPaymentInfoCommand,
+    UpdateProgramContactCommand,
 } from '../program-content.commands';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
@@ -1089,6 +1091,55 @@ describe('ManageProgramContentHandlers', () => {
             await handler.execute(new UpdateProgramPaymentInfoCommand('prog-1', { paymentInfoHtml: '<p>Pay here</p>' } as any, 'user-1'));
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-p', revalidateOptions);
+        });
+    });
+
+    describe('UpdateProgramContactHandler', () => {
+        it('replaces all four contact fields and invalidates landing caches', async () => {
+            const programRepository = { findById: jest.fn().mockResolvedValue({ id: 'prog-1' }), update: jest.fn().mockResolvedValue({ id: 'prog-1' }) };
+            const prisma = { program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-1' }) } };
+            const landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+            const handler = new UpdateProgramContactHandler(programRepository as any, prisma as any, landingCacheInvalidation as any);
+
+            await handler.execute(new UpdateProgramContactCommand('prog-1', {
+                contactEmail: 'hello@example.com',
+                contactPhone: '+62811',
+                contactWhatsapp: '62811',
+                contactAddress: 'Jakarta',
+            }, 'user-1'));
+
+            expect(programRepository.update).toHaveBeenCalledWith('prog-1', {
+                contactEmail: 'hello@example.com',
+                contactPhone: '+62811',
+                contactWhatsapp: '62811',
+                contactAddress: 'Jakarta',
+            });
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-1', expect.objectContaining({ revalidate: { kind: 'homeAndSettings' } }));
+        });
+
+        it('clears a field when the DTO sends it as undefined/omitted — omitted fields become null, not left unchanged', async () => {
+            // Matches UpdateProgramPaymentInfoHandler's documented resolution: this
+            // endpoint replaces the whole contact block, it does not patch.
+            const programRepository = { findById: jest.fn().mockResolvedValue({ id: 'prog-1' }), update: jest.fn().mockResolvedValue({ id: 'prog-1' }) };
+            const prisma = { program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-1' }) } };
+            const landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+            const handler = new UpdateProgramContactHandler(programRepository as any, prisma as any, landingCacheInvalidation as any);
+
+            await handler.execute(new UpdateProgramContactCommand('prog-1', { contactEmail: 'hello@example.com' }, 'user-1'));
+
+            expect(programRepository.update).toHaveBeenCalledWith('prog-1', {
+                contactEmail: 'hello@example.com',
+                contactPhone: null,
+                contactWhatsapp: null,
+                contactAddress: null,
+            });
+        });
+
+        it('throws NotFoundException when the program does not exist, without touching the repository update', async () => {
+            const programRepository = { findById: jest.fn().mockResolvedValue(null), update: jest.fn() };
+            const handler = new UpdateProgramContactHandler(programRepository as any, {} as any, {} as any);
+            await expect(handler.execute(new UpdateProgramContactCommand('missing', {}, 'user-1'))).rejects.toBeInstanceOf(NotFoundException);
+            expect(programRepository.update).not.toHaveBeenCalled();
         });
     });
 });
