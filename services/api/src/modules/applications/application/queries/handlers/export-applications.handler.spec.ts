@@ -194,6 +194,28 @@ describe('ExportApplicationsHandler', () => {
     expect(row['e_essay-uuid-1']).toBe('About me text');
   });
 
+  it('excludes deactivated/deleted accounts from the export query', async () => {
+    const prisma = buildPrismaMock({
+      distinctProgramIds: ['prog-1'],
+      applications: [APP_1],
+      fields: PROGRAM_1_FIELDS,
+      essays: PROGRAM_1_ESSAYS,
+    });
+    const excel = buildExcelMock();
+    const handler = new ExportApplicationsHandler(prisma as never, excel as never);
+
+    await handler.execute(new ExportApplicationsQuery('brand-1', 'prog-1'));
+
+    const findManyApplications = prisma.participantApplication.findMany as jest.Mock;
+    for (const call of findManyApplications.mock.calls) {
+      expect(call[0].where).toEqual(
+        expect.objectContaining({
+          participant: { deletedAt: null, user: { isActive: true, deletedAt: null } },
+        }),
+      );
+    }
+  });
+
   it('unions columns across a multi-program export without misaligning values between programs', async () => {
     const prisma = buildPrismaMock({
       distinctProgramIds: ['prog-1', 'prog-2'],
