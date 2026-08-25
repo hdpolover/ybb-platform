@@ -34,6 +34,7 @@ import {
     DeleteValidityPeriodHandler,
     UpdateProgramPaymentInfoHandler,
     UpdateProgramContactHandler,
+    UpdateProgramLandingContentHandler,
 } from './manage-program-content.handlers';
 import {
     CreateProgramEssayCommand,
@@ -67,6 +68,7 @@ import {
     DeleteValidityPeriodCommand,
     UpdateProgramPaymentInfoCommand,
     UpdateProgramContactCommand,
+    UpdateProgramLandingContentCommand,
 } from '../program-content.commands';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
@@ -74,6 +76,21 @@ import { StorageService } from '../../../../files/application/storage.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
+
+// BadRequestException here carries a structured { code, message } response
+// body, and Nest's HttpException surfaces that body's own `message` string
+// as the thrown error's `.message` — not the `code` — so
+// `.rejects.toThrow(/code/)` can never match. Asserting on `.getResponse().code`
+// is this codebase's established way to check a structured exception's code
+// (see rundowns.copier.spec.ts).
+async function captureError(promise: Promise<unknown>): Promise<any> {
+    try {
+        await promise;
+    } catch (err) {
+        return err;
+    }
+    throw new Error('expected promise to reject');
+}
 
 const homeAndSettingsOptions = {
     clearSnapshot: true,
@@ -1139,6 +1156,46 @@ describe('ManageProgramContentHandlers', () => {
             const programRepository = { findById: jest.fn().mockResolvedValue(null), update: jest.fn() };
             const handler = new UpdateProgramContactHandler(programRepository as any, {} as any, {} as any);
             await expect(handler.execute(new UpdateProgramContactCommand('missing', {}, 'user-1'))).rejects.toBeInstanceOf(NotFoundException);
+            expect(programRepository.update).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('UpdateProgramLandingContentHandler', () => {
+        it('merges the patch into the existing landingContent', async () => {
+            const programRepository = {
+                findById: jest.fn().mockResolvedValue({ id: 'prog-1', landingContent: { benefits: { title: 'Old' } } }),
+                update: jest.fn().mockResolvedValue({ id: 'prog-1' }),
+            };
+            const prisma = { program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-1' }) } };
+            const landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+            const handler = new UpdateProgramLandingContentHandler(programRepository as any, prisma as any, landingCacheInvalidation as any);
+
+            await handler.execute(new UpdateProgramLandingContentCommand('prog-1', { patch: { features: [{ title: 'New' }] } } as any, 'user-1'));
+
+            expect(programRepository.update).toHaveBeenCalledWith('prog-1', {
+                landingContent: { benefits: { title: 'Old' }, features: [{ title: 'New' }] },
+            });
+        });
+
+        it('rejects a patch containing a key outside the 7-key allow-list, does not write, and reports a structured code', async () => {
+            const programRepository = { findById: jest.fn().mockResolvedValue({ id: 'prog-1', landingContent: {} }), update: jest.fn() };
+            const handler = new UpdateProgramLandingContentHandler(programRepository as any, {} as any, {} as any);
+
+            const error = await captureError(
+                handler.execute(new UpdateProgramLandingContentCommand('prog-1', { patch: { tagline: 'nope' } } as any, 'user-1')),
+            );
+
+            expect(error).toBeInstanceOf(BadRequestException);
+            expect((error.getResponse() as { code: string }).code).toBe('unknown_landing_content_key');
+            expect(programRepository.update).not.toHaveBeenCalled();
+        });
+
+        it('throws NotFoundException when the program does not exist', async () => {
+            const programRepository = { findById: jest.fn().mockResolvedValue(null), update: jest.fn() };
+            const handler = new UpdateProgramLandingContentHandler(programRepository as any, {} as any, {} as any);
+            await expect(
+                handler.execute(new UpdateProgramLandingContentCommand('missing', { patch: {} } as any, 'user-1')),
+            ).rejects.toBeInstanceOf(NotFoundException);
             expect(programRepository.update).not.toHaveBeenCalled();
         });
     });
