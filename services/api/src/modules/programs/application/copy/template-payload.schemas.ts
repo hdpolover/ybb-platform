@@ -10,6 +10,7 @@ import {
   TimelineType,
 } from '@prisma/client';
 import { z } from 'zod';
+import { PROGRAM_LANDING_CONTENT_KEYS } from './program-landing-content.constants';
 
 // Prisma serializes a Decimal to JSON as a *string* (e.g. "55.00"), and a
 // raw Decimal instance fails z.number() outright — verified empirically
@@ -196,6 +197,20 @@ const contactItemSchema = z
   })
   .strict();
 
+// LandingCopier (Task 8): one JSON bucket, built from
+// PROGRAM_LANDING_CONTENT_KEYS rather than a hand-copied literal list, so
+// this schema can't silently drift from that single source of truth (see
+// its own comment: "imported by ... the landing copier (Task 8) ... so the
+// three can never drift out of sync with each other"). Every key is
+// optional+unknown — landingContent's per-key shape is deliberately untyped
+// (program-landing-content.constants.ts), and a template item only carries
+// whichever keys were populated on the source program. `.strict()` still
+// catches a stray top-level key outside the allow-list, matching every
+// other schema in this file.
+const landingContentItemSchema = z
+  .object(Object.fromEntries(PROGRAM_LANDING_CONTENT_KEYS.map((key) => [key, z.unknown().optional()])))
+  .strict();
+
 // Keyed by ProgramCopier.key — adding an eighth copier means adding one
 // entry here, not touching any call site.
 const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
@@ -207,6 +222,7 @@ const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
   payments: paymentsItemSchema,
   'program-details': programDetailsItemSchema,
   contact: contactItemSchema,
+  landing: landingContentItemSchema,
 };
 
 /**
