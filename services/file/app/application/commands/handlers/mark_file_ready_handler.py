@@ -26,8 +26,13 @@ class MarkFileReadyHandler:
         if not file:
             raise FileNotFoundException(command.file_id)
 
-        # Ownership check — caller must match both brand and user
-        if file.brand_id != command.brand_id or file.user_id != command.user_id:
+        # Ownership check — caller must match the uploading user. brand_id is NOT part
+        # of the ownership check: it's derived server-side from the file's program at
+        # creation time (see api's FilesController.resolveUploadBrandId), so a caller's
+        # JWT-home brand_id can legitimately differ from the file's brand_id (e.g. a
+        # multi-brand admin uploading to another brand's program). Gating on brand here
+        # would reject that legitimate case; user_id is the actual ownership credential.
+        if file.user_id != command.user_id:
             raise FileNotFoundException(command.file_id)
 
         # Idempotent: re-marking a READY file is a no-op
