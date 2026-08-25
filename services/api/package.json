@@ -103,7 +103,8 @@
     "swagger-ui-express": "^5.0.0",
     "uuid": "^13.0.0",
     "winston": "^3.19.0",
-    "winston-loki": "^6.1.4"
+    "winston-loki": "^6.1.4",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.2.1",

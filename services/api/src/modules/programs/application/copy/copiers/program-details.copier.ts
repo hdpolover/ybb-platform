@@ -1,7 +1,8 @@
 // services/api/src/modules/programs/application/copy/copiers/program-details.copier.ts
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { CopyInput, CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier } from '../program-copier.interface';
+import { CopyInput, CopyMode, CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier, TemplatePayload } from '../program-copier.interface';
+import { parseTemplateItems } from '../template-payload.schemas';
 
 /**
  * The only scalar copier: it copies three columns on the Program row itself
@@ -164,5 +165,62 @@ export class ProgramDetailsCopier implements ProgramCopier {
     // `replaced` additionally reports whether the target actually had prior
     // content overwritten, for callers that do inspect it.
     return { created: 1, skipped: 0, replaced: targetHadContent ? 1 : 0 };
+  }
+
+  async exportTemplate(programId: string): Promise<TemplatePayload> {
+    // itemIds is not accepted — this copier has exactly one exportable unit
+    // (the whole three-field bundle), matching preview()'s single-item shape.
+    const program = await this.prisma.program.findUnique({ where: { id: programId }, select: SELECT });
+    if (!program) {
+      throw new NotFoundException(`Program ${programId} not found`);
+    }
+    return {
+      entityType: this.key,
+      payloadVersion: 1,
+      items: [
+        {
+          requirementsDescription: program.requirementsDescription,
+          benefitsDescription: program.benefitsDescription,
+          termsAndConditions: program.termsAndConditions,
+        },
+      ],
+    };
+  }
+
+  async applyTemplate(tx: PrismaTx, payload: TemplatePayload, targetProgramId: string, mode: CopyMode): Promise<CopyResult> {
+    if (mode !== 'replace') {
+      throw new BadRequestException({
+        code: 'append_not_supported',
+        message: 'program-details only supports replace mode.',
+      });
+    }
+
+    const items = parseTemplateItems(this.key, payload.items) as unknown as ProgramContentScalars[];
+    const item = items[0];
+
+    // Same shape as copy()'s guard: a template with no content in any of
+    // the three fields would overwrite the target's populated text with
+    // three blanks. Reuses isBlankRichText/contentFieldCount — no second
+    // emptiness notion. Refused before any mutation.
+    if (!item || contentFieldCount(item) === 0) {
+      throw new BadRequestException({
+        code: 'empty_replace_source',
+        message: 'This template has no content in Requirements, Benefits, or Terms & Conditions to apply.',
+      });
+    }
+
+    await tx.program.update({
+      where: { id: targetProgramId },
+      data: {
+        requirementsDescription: item.requirementsDescription,
+        benefitsDescription: item.benefitsDescription,
+        termsAndConditions: item.termsAndConditions,
+      },
+    });
+
+    // created: 1 on success, matching copy()'s semantics — see this file's
+    // comment on copy()'s return for why (the shared dialog's toast is built
+    // as `Copied ${result.created} item(s).`).
+    return { created: 1, skipped: 0, replaced: 0 };
   }
 }

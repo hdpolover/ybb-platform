@@ -18,8 +18,8 @@ import {
  * genuinely unused in production today does not make this untestable.
  *
  * The element shape is a union: `{ label, value }` objects (the shape shared
- * with the actively-used ApplicationFormTemplateField.options and
- * SystemFormFieldDefinition.defaultOptions sibling fields, same "choices for
+ * with SystemFormFieldDefinition.defaultOptions, and formerly with
+ * ApplicationFormTemplateField.options before that model was dropped, same "choices for
  * select/checkbox" concept per the Prisma schema comment on ProgramRequirement.options)
  * and legacy plain strings.
  */

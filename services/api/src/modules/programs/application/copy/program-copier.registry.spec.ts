@@ -11,6 +11,8 @@ function fakeCopier(key: string): ProgramCopier {
     countFor: jest.fn(),
     preview: jest.fn(),
     copy: jest.fn(),
+    exportTemplate: jest.fn(),
+    applyTemplate: jest.fn(),
   };
 }
 

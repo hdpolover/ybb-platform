@@ -95,3 +95,63 @@ export async function postCopyEntity(
   );
   return jsonOrThrow<CopyResult>(response);
 }
+
+export type CopyRegistryEntry = {
+  key: string;
+  label: string;
+  supportsAppend: boolean;
+  count: number;
+};
+
+/** Every registered copier's key/label/supportsAppend/count against one program. */
+export async function fetchCopyRegistry(programId: string): Promise<CopyRegistryEntry[]> {
+  const response = await fetch(
+    buildApiUrl(`/programs/${encodeURIComponent(programId)}/copy/registry`),
+    { headers: authHeaders() },
+  );
+  return jsonOrThrow<CopyRegistryEntry[]>(response);
+}
+
+/**
+ * Applies a saved content template into `targetProgramId`. Mirrors
+ * postCopyEntity's confirm-on-replace behavior.
+ */
+export async function postApplyTemplate(
+  entityKey: string,
+  targetProgramId: string,
+  params: { templateId: string; mode: "append" | "replace" },
+): Promise<CopyResult> {
+  const body: Record<string, unknown> = { templateId: params.templateId, mode: params.mode };
+  if (params.mode === "replace") {
+    body.confirm = true;
+  }
+  const response = await fetch(
+    buildApiUrl(`/programs/${encodeURIComponent(targetProgramId)}/copy/${encodeURIComponent(entityKey)}/apply-template`),
+    {
+      method: "POST",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  return jsonOrThrow<CopyResult>(response);
+}
+
+/** Runs every selected copier's copy() against targetProgramId in one transaction. */
+export async function postCloneFrom(
+  targetProgramId: string,
+  params: { sourceProgramId: string; entities: Array<{ key: string; mode: "append" | "replace" }> },
+): Promise<Record<string, CopyResult>> {
+  const body: Record<string, unknown> = { sourceProgramId: params.sourceProgramId, entities: params.entities };
+  if (params.entities.some((e) => e.mode === "replace")) {
+    body.confirmReplace = true;
+  }
+  const response = await fetch(
+    buildApiUrl(`/programs/${encodeURIComponent(targetProgramId)}/clone-from`),
+    {
+      method: "POST",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  return jsonOrThrow<Record<string, CopyResult>>(response);
+}

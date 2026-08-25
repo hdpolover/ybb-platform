@@ -20,9 +20,10 @@ export class DocumentTemplatePlaceholderDto {
 }
 
 // Requirement option choice (for select/checkbox-style requirements).
-// Shape shared with the actively-used ApplicationFormTemplateField.options and
-// SystemFormFieldDefinition.defaultOptions sibling fields (see
-// form-template.dto.ts and manage-system-form-field.dto.ts). ProgramRequirement
+// Shape shared with SystemFormFieldDefinition.defaultOptions (see
+// manage-system-form-field.dto.ts). It was also shared with
+// ApplicationFormTemplateField.options until that model was migrated into
+// ContentTemplate and dropped. ProgramRequirement
 // has no current admin-dashboard producer, but the "for select/checkbox"
 // comment on the Prisma column and the shared "options" concept across the
 // form-field system make this the evidenced shape rather than an invented one.

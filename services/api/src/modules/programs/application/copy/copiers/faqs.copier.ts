@@ -1,8 +1,9 @@
 // services/api/src/modules/programs/application/copy/copiers/faqs.copier.ts
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { CopyInput, CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier } from '../program-copier.interface';
-import { copyScopedRows, ScopedRowsDelegate } from '../copy-scoped-rows';
+import { CopyInput, CopyMode, CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier, TemplatePayload } from '../program-copier.interface';
+import { applyScopedTemplate, copyScopedRows, ScopedRowsDelegate } from '../copy-scoped-rows';
+import { parseTemplateItems } from '../template-payload.schemas';
 
 type FaqRow = {
   id: string;
@@ -12,6 +13,8 @@ type FaqRow = {
   order: number;
   isActive: boolean;
 };
+
+type TemplateItem = { question: string; answer: string; category: string; isActive: boolean };
 
 @Injectable()
 export class FaqsCopier implements ProgramCopier {
@@ -51,6 +54,56 @@ export class FaqsCopier implements ProgramCopier {
       dedupeKey: (row) => row.question,
       fields: (row, order) => ({
         programId: input.targetProgramId,
+        question: row.question,
+        answer: row.answer,
+        category: row.category,
+        order,
+        isActive: row.isActive,
+      }),
+      replaceData: { deletedAt: new Date(), isActive: false },
+    });
+  }
+
+  async exportTemplate(programId: string, itemIds?: string[]): Promise<TemplatePayload> {
+    let rows = await this.prisma.programFaq.findMany({
+      where: { programId, deletedAt: null },
+      orderBy: { order: 'asc' },
+    });
+    if (itemIds && itemIds.length > 0) {
+      const idSet = new Set(itemIds);
+      rows = rows.filter((r) => idSet.has(r.id));
+    }
+    const items: TemplateItem[] = (rows as unknown as FaqRow[]).map((r) => ({
+      question: r.question,
+      answer: r.answer,
+      category: r.category,
+      isActive: r.isActive,
+    }));
+    return { entityType: this.key, payloadVersion: 1, items: items as unknown as Record<string, unknown>[] };
+  }
+
+  async applyTemplate(tx: PrismaTx, payload: TemplatePayload, targetProgramId: string, mode: CopyMode): Promise<CopyResult> {
+    const items = parseTemplateItems(this.key, payload.items) as unknown as TemplateItem[];
+    const sourceRows: FaqRow[] = items.map((item, index) => ({
+      id: '',
+      question: item.question,
+      answer: item.answer,
+      category: item.category,
+      order: index,
+      isActive: item.isActive,
+    }));
+    const delegate = tx.programFaq as unknown as ScopedRowsDelegate<FaqRow>;
+    return applyScopedTemplate<FaqRow>({
+      delegate,
+      scopeField: 'programId',
+      targetProgramId,
+      sourceRows,
+      mode,
+      activeFilter: { deletedAt: null },
+      idOf: (row) => row.id,
+      dedupeKey: (row) => row.question,
+      fields: (row, order) => ({
+        programId: targetProgramId,
         question: row.question,
         answer: row.answer,
         category: row.category,

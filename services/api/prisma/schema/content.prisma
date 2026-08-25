@@ -622,3 +622,26 @@ model PartnershipEnquiry {
   @@index([status])
   @@map("partnership_enquiries")
 }
+
+// Generic, platform-wide template store. Replaces ApplicationFormTemplate /
+// ApplicationFormTemplateField (applications.prisma), which were strongly
+// typed to form-field shape and had no entityType discriminator. One row per
+// template, any entityType; `payload` is JSON but not a free-for-all — each
+// entityType has a zod schema (template-payload.schemas.ts) validated on
+// write and on apply.
+model ContentTemplate {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name           String    @db.VarChar(255)
+  description    String?   @db.Text
+  entityType     String    @map("entity_type") @db.VarChar(64) // matches ProgramCopier.key exactly
+  payload        Json // { entityType, payloadVersion, items: [...] } — see TemplatePayload
+  payloadVersion Int       @default(1) @map("payload_version")
+  isDefault      Boolean   @default(false) @map("is_default")
+  createdBy      String?   @map("created_by") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([entityType, deletedAt])
+  @@map("content_templates")
+}
