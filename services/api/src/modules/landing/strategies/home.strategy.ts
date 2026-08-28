@@ -240,11 +240,15 @@ export class HomeStrategy implements ILandingPageStrategy {
           category: 'alumni',
           isActive: true
         },
+        // Videos first: this section is a video reel, and text-only alumni
+        // testimonials used to eat the take window so most of a brand's videos
+        // never reached the page ('type' desc puts 'video' before 'text').
         orderBy: [
           { isFeatured: 'desc' },
+          { type: 'desc' },
           { order: 'asc' }
         ],
-        take: 10
+        take: 40
       }),
       this.prisma.programTestimonial.findMany({
         where: {
