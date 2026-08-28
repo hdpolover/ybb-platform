@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { statSync } from 'node:fs';
 import { Injectable } from '@nestjs/common';
 import { Prisma, type Brand } from '@prisma/client';
 import { LandingPageResponseDto } from '../dto/landing-page.dto';
@@ -15,7 +17,27 @@ const FAQS_PAGE = 'faqs';
 const PARTNERS_PAGE = 'partners-sponsors';
 const ANNOUNCEMENTS_PAGE = 'announcements';
 const SETTINGS_PAGE = 'settings';
-const DEFAULT_SNAPSHOT_SCHEMA_VERSION = 1;
+/**
+ * Snapshots are cached for CACHE_TTL.HOUR in Redis *and* persisted in
+ * brand_landing_snapshots, and nothing busts either one when the payload
+ * shape changes. A deploy that alters a landing strategy therefore kept
+ * serving the pre-deploy payload for up to an hour, and the only way to see
+ * the new shape was to delete the rows and Redis keys by hand.
+ *
+ * Deriving the version from the compiled bundle's mtime makes every deploy a
+ * new version: stable across restarts of the same image, different for each
+ * new one, and no constant for anyone to remember to bump. Hashed into a
+ * signed-int range because schema_version is a Postgres int4. A collision
+ * would only mean one snapshot lives out its TTL, so cheap entropy is fine.
+ */
+const SNAPSHOT_SCHEMA_VERSION = ((): number => {
+  try {
+    const fingerprint = String(statSync(__filename).mtimeMs);
+    return parseInt(createHash('sha1').update(fingerprint).digest('hex').slice(0, 7), 16);
+  } catch {
+    return 1;
+  }
+})();
 
 type SnapshotBuilder<T> = () => Promise<T>;
 type SnapshotValidator<T> = (payload: Prisma.JsonValue) => T | null;
@@ -149,7 +171,9 @@ export class LandingSnapshotService {
     validate: SnapshotValidator<T>,
   ): Promise<T> {
     const normalizedSlug = slug || ROOT_SLUG;
-    const cacheKey = CACHE_KEYS.LANDING_SNAPSHOT(brand.id, page, normalizedSlug);
+    // Version in the key so a deploy cannot serve a previous build's Redis
+    // entry either. Orphaned keys expire on their own TTL.
+    const cacheKey = `${CACHE_KEYS.LANDING_SNAPSHOT(brand.id, page, normalizedSlug)}:v${SNAPSHOT_SCHEMA_VERSION}`;
     const cached = await this.cacheService.get<T>(cacheKey);
     if (cached) {
       return cached;
@@ -165,7 +189,9 @@ export class LandingSnapshotService {
       },
     });
 
-    if (snapshot && this.isSnapshotFresh(snapshot.publishedAt, ttl)) {
+    // A snapshot built by an older bundle can hold a payload shape this build
+    // no longer produces, so version mismatch means stale regardless of age.
+    if (snapshot && snapshot.schemaVersion === SNAPSHOT_SCHEMA_VERSION && this.isSnapshotFresh(snapshot.publishedAt, ttl)) {
       const payload = validate(snapshot.payloadJson);
       if (payload) {
         await this.cacheService.set(cacheKey, payload, ttl);
@@ -188,12 +214,12 @@ export class LandingSnapshotService {
         page,
         slug: normalizedSlug,
         payloadJson,
-        schemaVersion: DEFAULT_SNAPSHOT_SCHEMA_VERSION,
+        schemaVersion: SNAPSHOT_SCHEMA_VERSION,
         publishedAt: new Date(),
       },
       update: {
         payloadJson,
-        schemaVersion: DEFAULT_SNAPSHOT_SCHEMA_VERSION,
+        schemaVersion: SNAPSHOT_SCHEMA_VERSION,
         publishedAt: new Date(),
       },
     });
