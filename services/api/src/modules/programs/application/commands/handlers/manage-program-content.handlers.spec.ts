@@ -11,6 +11,9 @@ import {
     UpdateValidityPeriodHandler,
     invalidateLandingCacheByProgramId,
     CreateProgramGalleryHandler,
+    CreateProgramTestimonialHandler,
+    UpdateProgramTestimonialHandler,
+    DeleteProgramTestimonialHandler,
     UpdateProgramFaqHandler,
     DeleteDocumentTemplateHandler,
     DeleteProgramTimelineHandler,
@@ -45,6 +48,9 @@ import {
     CreateValidityPeriodCommand,
     UpdateValidityPeriodCommand,
     CreateProgramGalleryCommand,
+    CreateProgramTestimonialCommand,
+    UpdateProgramTestimonialCommand,
+    DeleteProgramTestimonialCommand,
     UpdateProgramFaqCommand,
     DeleteDocumentTemplateCommand,
     DeleteProgramTimelineCommand,
@@ -702,6 +708,67 @@ describe('ManageProgramContentHandlers', () => {
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-x', homeAndSettingsOptions);
             expect(cache.invalidateByPattern).toHaveBeenCalledWith('portal:documents:*');
+        });
+    });
+
+    // Testimonial handlers used to clear the snapshot and Redis inline without
+    // firing the revalidate hook, so an edit left the participant frontend's
+    // Next.js unstable_cache serving the old copy until its TTL lapsed.
+    describe('Testimonial handlers fire the frontend revalidation hook', () => {
+        let repo: any;
+        let prisma: any;
+        let landingCacheInvalidation: any;
+
+        beforeEach(() => {
+            repo = {
+                createTestimonial: jest.fn().mockResolvedValue({ id: 't-1' }),
+                updateTestimonial: jest.fn().mockResolvedValue({ id: 't-1' }),
+                deleteTestimonial: jest.fn().mockResolvedValue(undefined),
+            };
+            prisma = {
+                programTestimonial: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-kys' }) },
+            };
+            landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+        });
+
+        async function build<T>(HandlerCtor: new (...args: any[]) => T): Promise<T> {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    HandlerCtor,
+                    { provide: 'IProgramContentRepository', useValue: repo },
+                    { provide: PrismaService, useValue: prisma },
+                    { provide: CacheService, useValue: { invalidateByPattern: jest.fn(), invalidateBrandLandingCaches: jest.fn() } },
+                    { provide: LandingCacheInvalidationService, useValue: landingCacheInvalidation },
+                ],
+            }).compile();
+            return module.get(HandlerCtor);
+        }
+
+        it('CreateProgramTestimonialHandler revalidates the brand it was filed under', async () => {
+            const handler = await build(CreateProgramTestimonialHandler);
+
+            await handler.execute(new CreateProgramTestimonialCommand(
+                { brandId: 'brand-kys', name: 'Alum', testimonial: 'Great', type: 'video' } as any,
+                'user-1',
+            ));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-kys', homeAndSettingsOptions);
+        });
+
+        it('UpdateProgramTestimonialHandler revalidates after updating', async () => {
+            const handler = await build(UpdateProgramTestimonialHandler);
+
+            await handler.execute(new UpdateProgramTestimonialCommand('t-1', { name: 'Renamed' } as any, 'user-1'));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-kys', homeAndSettingsOptions);
+        });
+
+        it('DeleteProgramTestimonialHandler revalidates after deleting', async () => {
+            const handler = await build(DeleteProgramTestimonialHandler);
+
+            await handler.execute(new DeleteProgramTestimonialCommand('t-1', 'user-1'));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-kys', homeAndSettingsOptions);
         });
     });
 

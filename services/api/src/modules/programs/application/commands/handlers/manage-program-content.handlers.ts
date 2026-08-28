@@ -144,18 +144,26 @@ async function invalidatePricingTierCachesByPricingTierId(
     } catch { /* non-critical — cache failure must not break the mutation */ }
 }
 
+/**
+ * Brand-scoped sibling of invalidateLandingCacheByProgramId, for mutations
+ * that already know the brand and need no program lookup.
+ *
+ * This used to clear the snapshot and Redis inline, which is the copy-paste
+ * the header comment above warns about: it never fired the revalidate hook,
+ * so a testimonial edit busted the API caches but left the participant
+ * frontend's Next.js unstable_cache to expire on its own TTL. Delegating to
+ * the shared service keeps the third layer wired.
+ */
 async function invalidateLandingCacheByBrandId(
     brandId: string,
-    prisma: PrismaService,
-    cacheService: CacheService,
+    landingCacheInvalidation: LandingCacheInvalidationService,
 ): Promise<void> {
-    try {
-        await Promise.all([
-            prisma.brandLandingSnapshot.deleteMany({ where: { brandId } }),
-            cacheService.invalidateBrandLandingCaches(brandId),
-            cacheService.invalidateByPattern('program:*'),
-        ]);
-    } catch { /* non-critical */ }
+    await landingCacheInvalidation.invalidate(brandId, {
+        clearSnapshot: true,
+        bustProgramCache: true,
+        swallowErrors: true,
+        revalidate: { kind: 'homeAndSettings' },
+    });
 }
 async function invalidatePortalDocumentCaches(
     cacheService: CacheService,
@@ -609,8 +617,7 @@ export class DeleteProgramGalleryHandler implements ICommandHandler<DeleteProgra
 export class CreateProgramTestimonialHandler implements ICommandHandler<CreateProgramTestimonialCommand> {
     constructor(
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
-        private readonly prisma: PrismaService,
-        private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: CreateProgramTestimonialCommand) {
         const { brandId, ...rest } = command.dto;
@@ -619,7 +626,7 @@ export class CreateProgramTestimonialHandler implements ICommandHandler<CreatePr
             brandId: brandId,
         };
         const result = await this.repository.createTestimonial(dto);
-        if (brandId) await invalidateLandingCacheByBrandId(brandId, this.prisma, this.cacheService);
+        if (brandId) await invalidateLandingCacheByBrandId(brandId, this.landingCacheInvalidation);
         return result;
     }
 }
@@ -628,7 +635,7 @@ export class UpdateProgramTestimonialHandler implements ICommandHandler<UpdatePr
     constructor(
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
-        private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: UpdateProgramTestimonialCommand) {
         const result = await this.repository.updateTestimonial(command.id, command.dto);
@@ -637,7 +644,7 @@ export class UpdateProgramTestimonialHandler implements ICommandHandler<UpdatePr
                 where: { id: command.id },
                 select: { brandId: true },
             });
-            if (testimonial?.brandId) await invalidateLandingCacheByBrandId(testimonial.brandId, this.prisma, this.cacheService);
+            if (testimonial?.brandId) await invalidateLandingCacheByBrandId(testimonial.brandId, this.landingCacheInvalidation);
         } catch { /* non-critical */ }
         return result;
     }
@@ -647,7 +654,7 @@ export class DeleteProgramTestimonialHandler implements ICommandHandler<DeletePr
     constructor(
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
-        private readonly cacheService: CacheService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
     ) {}
     async execute(command: DeleteProgramTestimonialCommand) {
         const testimonial = await this.prisma.programTestimonial.findUnique({
@@ -655,7 +662,7 @@ export class DeleteProgramTestimonialHandler implements ICommandHandler<DeletePr
             select: { brandId: true },
         });
         const result = await this.repository.deleteTestimonial(command.id);
-        if (testimonial?.brandId) await invalidateLandingCacheByBrandId(testimonial.brandId, this.prisma, this.cacheService);
+        if (testimonial?.brandId) await invalidateLandingCacheByBrandId(testimonial.brandId, this.landingCacheInvalidation);
         return result;
     }
 }
