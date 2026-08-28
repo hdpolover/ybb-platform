@@ -366,4 +366,46 @@ describe('HomeStrategy', () => {
         expect(overview?.content.registration_types).toHaveLength(1);
         expect(result.sections.find((s: any) => s.type === 'program_benefits')?.content.eyebrow).toBe('KYS eyebrow');
     });
+
+    it('falls back to sibling-program images when the active program has none, and prefers its own when it has some', async () => {
+        const category = {
+            id: 'brand-kys', name: 'Korea Youth Summit', bannerUrl: '', websiteUrl: '',
+            vision: '', mission: '', metadata: {},
+        };
+        const activeProgram = {
+            id: 'p-kys-4th', name: 'Korea Youth Summit 4th', isPublished: true, isActive: true,
+            gallery: [], pricingTiers: [], resources: [], objectives: [], awards: [],
+            landingContent: {},
+        };
+        const setupMocks = () => {
+            mockPrismaService.program.findFirst.mockReset();
+            mockPrismaService.program.findFirst.mockResolvedValue(activeProgram);
+            mockPrismaService.sponsor.findMany.mockResolvedValue([]);
+            mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([]);
+            mockPrismaService.program.findMany.mockResolvedValue([]);
+            mockPrismaService.programTestimonial.findMany.mockResolvedValue([]);
+            mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
+        };
+        const objectiveUrls = (result: any) =>
+            result.sections
+                .find((s: any) => s.type === 'program_objectives')
+                ?.content.images.map((i: any) => i.url)
+                .sort();
+
+        // Active program has zero uploads: the 2025 sibling's images fill the collage.
+        setupMocks();
+        mockPrismaService.programGallery.findMany.mockResolvedValue([
+            { id: 'i1', type: 'image', imageUrl: 'kys2025-a.jpg', title: 'A', programId: 'p-kys-2025' },
+            { id: 'i2', type: 'image', imageUrl: 'kys2025-b.jpg', title: 'B', programId: 'p-kys-2025' },
+        ]);
+        expect(objectiveUrls(await strategy.getData(category as any))).toEqual(['kys2025-a.jpg', 'kys2025-b.jpg']);
+
+        // Once it has its own, siblings are excluded again.
+        setupMocks();
+        mockPrismaService.programGallery.findMany.mockResolvedValue([
+            { id: 'i1', type: 'image', imageUrl: 'kys2025-a.jpg', title: 'A', programId: 'p-kys-2025' },
+            { id: 'i3', type: 'image', imageUrl: 'kys4th-own.jpg', title: 'C', programId: 'p-kys-4th' },
+        ]);
+        expect(objectiveUrls(await strategy.getData(category as any))).toEqual(['kys4th-own.jpg']);
+    });
 });

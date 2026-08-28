@@ -176,22 +176,22 @@ export class HomeStrategy implements ILandingPageStrategy {
           type: 'image',
           isActive: true,
           deletedAt: null,
-          // Scope to the SAME program resolveActiveProgram picked above, not a
-          // second inlined isPublished/isActive predicate. The old predicate
-          // matched zero rows for Vietnam Youth Summit (published, inactive)
-          // and Korea Youth Summit (unpublished, active), so their gallery,
-          // objectives and highlights rendered titled-but-imageless — the exact
-          // two brands the rule-2 fallback exists to serve. See
+          // Fetch brand-wide, then prefer the active program's own images below.
+          // Scoping the query itself to resolveActiveProgram's pick left the
+          // section imageless whenever the newest program had no uploads yet.
+          // Korea Youth Summit 4th has zero rows while KYS 2025 has 18, so the
+          // objectives collage rendered as empty frames. See
           // shared/utils/active-program-resolver.ts.
-          ...(program ? { programId: program.id } : { program: { brandId: brand.id } }),
+          program: { brandId: brand.id },
         },
         orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
-        take: 60,
+        take: 200,
         select: {
           id: true,
           title: true,
           imageUrl: true,
           type: true,
+          programId: true,
         },
       }),
       this.prisma.sponsor.findMany({
@@ -306,9 +306,15 @@ export class HomeStrategy implements ILandingPageStrategy {
     // Separate gallery by type
     const shortsGallery = program?.gallery || [];
 
-    // Shuffle image gallery once — all sections below draw from this randomised pool.
+    // Prefer the active program's own images, falling back to every other
+    // program in the brand so a newly created program is never left with
+    // empty frames.
+    const ownImages = program ? brandImageGallery.filter(img => img.programId === program.id) : [];
+    const galleryPool = ownImages.length > 0 ? ownImages : brandImageGallery;
+
+    // Shuffle image gallery once. All sections below draw from this randomised pool.
     // Fisher-Yates shuffle ensures an unbiased random order per cache-miss (i.e. per deploy / TTL expiry).
-    const imageGallery = brandImageGallery
+    const imageGallery = galleryPool
       .map(img => ({ img, sort: Math.random() }))
       .sort((a, b) => a.sort - b.sort)
       .map(({ img }) => img);
