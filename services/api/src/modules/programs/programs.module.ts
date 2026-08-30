@@ -87,6 +87,7 @@ import {
   ListProgramSubthemesHandler,
   ListDocumentTemplatesHandler,
 } from './application/queries/handlers/list-program-content.handlers';
+import { GetPricingTierAlertsSummaryHandler } from './application/queries/handlers/get-pricing-tier-alerts-summary.handler';
 import {
   CreateProgramTimelineHandler, UpdateProgramTimelineHandler, DeleteProgramTimelineHandler,
   CreateProgramScheduleHandler, UpdateProgramScheduleHandler, DeleteProgramScheduleHandler,
@@ -183,6 +184,7 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
     ListProgramPricingTiersHandler,
     GetPricingTierByIdHandler,
     GetPricingTierAlertsHandler,
+    GetPricingTierAlertsSummaryHandler,
     ListProgramRequirementsHandler,
     ListProgramEssaysHandler,
     ListProgramParticipationCategoriesHandler,

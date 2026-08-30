@@ -17,6 +17,7 @@ interface AuthenticatedRequest extends ExpressRequest {
 import {
   ProgramPricingTierResponseDto,
   PricingTierAlertsResponseDto,
+  PricingTierAlertsSummaryItemDto,
   ProgramRequirementResponseDto,
   ProgramEssayResponseDto,
   ProgramEssayGuidelinesResponseDto,
@@ -45,7 +46,12 @@ import {
   ListProgramParticipationCategoriesHandler,
   ListProgramSubthemesHandler,
 } from '../application/queries/handlers/list-program-content.handlers';
+import {
+  GetPricingTierAlertsSummaryQuery,
+  GetPricingTierAlertsSummaryHandler,
+} from '../application/queries/handlers/get-pricing-tier-alerts-summary.handler';
 import { GetApplicationFormFieldsHandler } from '../application/queries/handlers/get-application-form-fields.handler';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 
 import {
   CreateProgramPricingTierDto, UpdateProgramPricingTierDto,
@@ -94,6 +100,7 @@ export class ProgramApplicationConfigController {
     private readonly listProgramPricingTiersHandler: ListProgramPricingTiersHandler,
     private readonly getPricingTierByIdHandler: GetPricingTierByIdHandler,
     private readonly getPricingTierAlertsHandler: GetPricingTierAlertsHandler,
+    private readonly getPricingTierAlertsSummaryHandler: GetPricingTierAlertsSummaryHandler,
     private readonly listProgramRequirementsHandler: ListProgramRequirementsHandler,
     private readonly listProgramEssaysHandler: ListProgramEssaysHandler,
     private readonly listProgramParticipationCategoriesHandler: ListProgramParticipationCategoriesHandler,
@@ -149,6 +156,21 @@ export class ProgramApplicationConfigController {
   @ApiResponse({ status: 200, type: PricingTierAlertsResponseDto })
   async getPricingTierAlerts(@Param('id') id: string): Promise<PricingTierAlertsResponseDto> {
     return this.getPricingTierAlertsHandler.execute(new GetPricingTierAlertsQuery(id)) as unknown as Promise<PricingTierAlertsResponseDto>;
+  }
+
+  @Get('pricing-tiers/alerts/summary')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Bulk pricing-tier alert counts across every program the caller can access, for the dashboard-home coverage-gap badge. Programs with no alerts are omitted.',
+  })
+  @ApiResponse({ status: 200, type: [PricingTierAlertsSummaryItemDto] })
+  async getPricingTierAlertsSummary(@CurrentUser() user: CurrentUserData): Promise<PricingTierAlertsSummaryItemDto[]> {
+    return this.getPricingTierAlertsSummaryHandler.execute(
+      new GetPricingTierAlertsSummaryQuery(user),
+    ) as unknown as Promise<PricingTierAlertsSummaryItemDto[]>;
   }
 
   @Post(':id/pricing-tiers')

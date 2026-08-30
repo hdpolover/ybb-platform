@@ -1188,6 +1188,25 @@ export function getPricingTierAlerts(programId: string): Promise<PricingTierAler
   );
 }
 
+export type PricingTierAlertsSummaryItem = {
+  programId: string;
+  lapsedCount: number;
+  expiringCount: number;
+};
+
+/**
+ * Bulk counterpart to getPricingTierAlerts, for the dashboard-home program list
+ * badge: the per-program banner is reactive (only seen after opening that
+ * program), so the list needs every program's alert counts in one call rather
+ * than fanning out one request per card. Fails soft to an empty list so a
+ * broken endpoint never breaks the dashboard home, only hides the badge.
+ */
+export function getPricingTierAlertsSummary(): Promise<PricingTierAlertsSummaryItem[]> {
+  return request<PricingTierAlertsSummaryItem[]>("/programs/pricing-tiers/alerts/summary").catch(
+    () => [],
+  );
+}
+
 export function getPricingTierById(tierId: string): Promise<PricingTier | null> {
   return request<RawPricingTier | null>(`/programs/pricing-tiers/${tierId}`).then((tier) =>
     tier ? normalizePricingTier(tier) : null,

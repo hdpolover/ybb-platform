@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bars3Icon,
   ChevronRightIcon,
@@ -9,6 +9,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { parseApiDate } from "@/lib/utils";
+import { getPricingTierAlertsSummary, type PricingTierAlertsSummaryItem } from "@/app/platform/api";
 
 type ProgramListProps = {
   onSelectProgram: (programId: string) => void;
@@ -35,6 +36,35 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
       }`}
     >
       {isActive ? "ACTIVE" : "INACTIVE"}
+    </span>
+  );
+}
+
+// Surfaces the "silent lapse" defect (China Youth Summit's fully-funded category
+// went silently unpurchasable for 9 days) on the program list itself, not just
+// the per-program payments page banner. Lapsed (rose) means an active outage
+// right now; expiring-only (amber) is the leading indicator. Not a <button> and
+// carries no hover/cursor styling of its own — the card it sits on is already
+// the click target.
+function CoverageGapBadge({ summary }: { summary: PricingTierAlertsSummaryItem }) {
+  const isLapsed = summary.lapsedCount > 0;
+  const count = isLapsed ? summary.lapsedCount : summary.expiringCount;
+  const label = isLapsed
+    ? `${count} categor${count === 1 ? "y" : "ies"} not purchasable`
+    : `${count} categor${count === 1 ? "y" : "ies"} losing coverage soon`;
+
+  return (
+    <span
+      title={
+        isLapsed
+          ? "No validity period currently covers this category. Participants cannot see or pay for it."
+          : "This category's coverage ends before registration closes."
+      }
+      className={`inline-flex items-center rounded-sm px-2 py-[2px] text-[11px] font-semibold ${
+        isLapsed ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+      }`}
+    >
+      {label}
     </span>
   );
 }
@@ -66,10 +96,12 @@ function ProgramCard({
   program,
   onSelectProgram,
   viewMode,
+  alertSummary,
 }: {
   program: ReturnType<typeof useAuth>["accessiblePrograms"][number];
   onSelectProgram: (programId: string) => void;
   viewMode: ProgramViewMode;
+  alertSummary?: PricingTierAlertsSummaryItem;
 }) {
   if (viewMode === "list") {
     return (
@@ -83,6 +115,7 @@ function ProgramCard({
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="truncate font-semibold text-zinc-900">{program.programName}</h4>
             <StatusBadge isActive={program.isActive} />
+            {alertSummary ? <CoverageGapBadge summary={alertSummary} /> : null}
           </div>
           <p className="mt-1 text-xs text-zinc-500">
             {program.brandName} • {program.programSlug}
@@ -121,6 +154,11 @@ function ProgramCard({
           <span>•</span>
           <span>{program.programYear}</span>
         </div>
+        {alertSummary ? (
+          <div className="mt-1">
+            <CoverageGapBadge summary={alertSummary} />
+          </div>
+        ) : null}
       </div>
     </button>
   );
@@ -132,12 +170,14 @@ function ProgramSection({
   programs,
   onSelectProgram,
   viewMode,
+  alertsByProgramId,
 }: {
   title: string;
   description: string;
   programs: ReturnType<typeof useAuth>["accessiblePrograms"];
   onSelectProgram: (programId: string) => void;
   viewMode: ProgramViewMode;
+  alertsByProgramId: Map<string, PricingTierAlertsSummaryItem>;
 }) {
   if (programs.length === 0) {
     return null;
@@ -160,6 +200,7 @@ function ProgramSection({
             program={program}
             onSelectProgram={onSelectProgram}
             viewMode={viewMode}
+            alertSummary={alertsByProgramId.get(program.programId)}
           />
         ))}
       </div>
@@ -172,6 +213,23 @@ export function ProgramList({ onSelectProgram }: ProgramListProps) {
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [viewMode, setViewMode] = useState<ProgramViewMode>("grid");
   const [showInactivePrograms, setShowInactivePrograms] = useState(false);
+  const [alertsByProgramId, setAlertsByProgramId] = useState<Map<string, PricingTierAlertsSummaryItem>>(
+    new Map(),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    // getPricingTierAlertsSummary already fails soft to [] on error, so a
+    // broken endpoint just leaves the map empty (no badges) instead of
+    // breaking the dashboard home.
+    getPricingTierAlertsSummary().then((items) => {
+      if (cancelled) return;
+      setAlertsByProgramId(new Map(items.map((item) => [item.programId, item])));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const brands = useMemo(() => {
     const brandMap = new Map<string, { id: string; name: string }>();
@@ -292,6 +350,7 @@ export function ProgramList({ onSelectProgram }: ProgramListProps) {
         programs={activePrograms}
         onSelectProgram={onSelectProgram}
         viewMode={viewMode}
+        alertsByProgramId={alertsByProgramId}
       />
 
       {inactivePrograms.length > 0 ? (
@@ -322,6 +381,7 @@ export function ProgramList({ onSelectProgram }: ProgramListProps) {
               programs={inactivePrograms}
               onSelectProgram={onSelectProgram}
               viewMode={viewMode}
+              alertsByProgramId={alertsByProgramId}
             />
           ) : null}
         </section>

@@ -253,6 +253,17 @@ export class PricingTierAlertsResponseDto {
     expiring: ExpiringPricingTierAlertDto[];
 }
 
+export class PricingTierAlertsSummaryItemDto {
+    @ApiProperty()
+    programId: string;
+
+    @ApiProperty({ description: 'Number of tiers currently unpurchasable (no validity period covers now).' })
+    lapsedCount: number;
+
+    @ApiProperty({ description: "Number of tiers whose coverage ends before the program's registration close date." })
+    expiringCount: number;
+}
+
 export class ProgramPricingTierValidityPeriodDto {
     @ApiProperty()
     startDate: Date;
