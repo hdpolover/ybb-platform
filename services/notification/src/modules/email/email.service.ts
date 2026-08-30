@@ -864,6 +864,76 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
+  /**
+   * Internal ops digest for detectPricingTierAlerts() (see
+   * pricing-tier-alerts.util.ts in the API service) - NOT a brand-templated
+   * participant email, so it deliberately skips resolveEmailContent()/the
+   * shared layout.hbs: that footer's copy ("you registered for {{brand.name}}")
+   * would be actively wrong for an internal recipient, and there is no brand
+   * to key a managed-template override on. Built as a plain self-contained
+   * table instead.
+   */
+  async sendPricingTierCoverageAlertEmail(
+    to: string,
+    data: { programs: Array<{ programId: string; programName: string; brandName: string; tiers: Array<{ tierId: string; tierName: string; state: 'lapsed' | 'expiring'; sinceDate?: string; daysDark?: number; coverageEndDate?: string }> }> },
+  ) {
+    const lapsedRows: string[] = [];
+    const expiringRows: string[] = [];
+
+    for (const program of data.programs) {
+      for (const tier of program.tiers) {
+        const row = `
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(program.brandName)} / ${escapeHtml(program.programName)}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(tier.tierName)}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${
+              tier.state === 'lapsed'
+                ? `Dark since ${formatDate(tier.sinceDate)} (${tier.daysDark ?? 0} day${tier.daysDark === 1 ? '' : 's'})`
+                : `Coverage ends ${formatDate(tier.coverageEndDate)}`
+            }</td>
+          </tr>`;
+        if (tier.state === 'lapsed') lapsedRows.push(row);
+        else expiringRows.push(row);
+      }
+    }
+
+    const lapsedCount = lapsedRows.length;
+    const expiringCount = expiringRows.length;
+    const subject =
+      lapsedCount > 0
+        ? `[Action Required] ${lapsedCount} pricing tier(s) unpurchasable right now`
+        : `[Heads Up] ${expiringCount} pricing tier(s) losing coverage soon`;
+
+    const table = (title: string, rows: string[]) =>
+      rows.length === 0
+        ? ''
+        : `
+        <h3 style="margin:24px 0 8px;font-size:16px;color:#111827;">${title}</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;">
+          <thead>
+            <tr style="text-align:left;">
+              <th style="padding:8px 12px;border-bottom:2px solid #e5e7eb;">Program</th>
+              <th style="padding:8px 12px;border-bottom:2px solid #e5e7eb;">Tier</th>
+              <th style="padding:8px 12px;border-bottom:2px solid #e5e7eb;">Detail</th>
+            </tr>
+          </thead>
+          <tbody>${rows.join('')}</tbody>
+        </table>`;
+
+    const html = `
+      <div style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto;padding:24px;color:#111827;">
+        <h2 style="margin:0 0 8px;font-size:20px;">Pricing tier coverage alert</h2>
+        <p style="margin:0 0 16px;color:#4b5563;">
+          Daily scan found ${lapsedCount} lapsed and ${expiringCount} expiring pricing tier(s) across published programs.
+          Lapsed tiers are currently unpurchasable by participants.
+        </p>
+        ${table('Lapsed (active outage)', lapsedRows)}
+        ${table('Expiring soon', expiringRows)}
+      </div>`;
+
+    return this.sendRawEmail(to, subject, html);
+  }
+
   async sendPaymentRefundedEmail(to: string, paymentData: any) {
     const templateData = {
       name: paymentData.name,
@@ -1042,4 +1112,18 @@ export class EmailService {
   private resolveSupportUrl(brand?: any): string {
     return `${this.resolvePortalBaseUrl(brand, 'resolveSupportUrl')}/dashboard/support-tickets`;
   }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function formatDate(iso: string | undefined): string {
+  if (!iso) return 'unknown date';
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? 'unknown date' : date.toLocaleDateString();
 }

@@ -49,6 +49,8 @@ describe('GetPricingTierAlertsSummaryHandler', () => {
             {
                 // lapsed: opened, no period covers now
                 id: 'prog-lapsed',
+                name: 'Lapsed Program',
+                brand: { name: 'Brand A' },
                 registrationCloseDate: null,
                 pricingTiers: [
                     { id: 't1', name: 'Fully Funded', validityPeriods: [period('2026-08-01', '2026-08-20')] },
@@ -57,6 +59,8 @@ describe('GetPricingTierAlertsSummaryHandler', () => {
             {
                 // expiring: covers now, but coverage ends before registration close
                 id: 'prog-expiring',
+                name: 'Expiring Program',
+                brand: { name: 'Brand B' },
                 registrationCloseDate: new Date('2026-11-02T17:00:00.000Z'),
                 pricingTiers: [
                     { id: 't2', name: 'Regular', validityPeriods: [period('2026-08-25', '2026-09-01')] },
@@ -65,6 +69,8 @@ describe('GetPricingTierAlertsSummaryHandler', () => {
             {
                 // clean: fully covered through registration close
                 id: 'prog-clean',
+                name: 'Clean Program',
+                brand: { name: 'Brand C' },
                 registrationCloseDate: new Date('2026-09-05T17:00:00.000Z'),
                 pricingTiers: [
                     { id: 't3', name: 'Regular', validityPeriods: [period('2026-08-25', '2026-09-10')] },
@@ -75,6 +81,8 @@ describe('GetPricingTierAlertsSummaryHandler', () => {
                 // pricingTiers already excludes it — this program reaches the
                 // handler with an empty tiers array, same as one with none configured.
                 id: 'prog-soft-deleted-tier-only',
+                name: 'Soft Deleted Tier Only',
+                brand: { name: 'Brand D' },
                 registrationCloseDate: null,
                 pricingTiers: [],
             },

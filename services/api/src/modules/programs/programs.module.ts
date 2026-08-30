@@ -141,6 +141,7 @@ import {
 import { PreviewLoaTemplateHandler } from './application/handlers/loa-preview.handler';
 import { PortalModule } from '@modules/portal/portal.module';
 import { LoaPreviewParticipantService } from './application/services/loa-preview-participant.service';
+import { PricingTierCoverageAlertService } from './application/services/pricing-tier-coverage-alert.service';
 
 @Module({
   imports: [CqrsModule, HttpModule, AuthModule, UsersModule, FilesModule, RabbitMQModule, PortalModule],
@@ -280,6 +281,7 @@ import { LoaPreviewParticipantService } from './application/services/loa-preview
     GetLoaDownloadsHandler,
     PreviewLoaTemplateHandler,
     LoaPreviewParticipantService,
+    PricingTierCoverageAlertService,
 
     CacheService,
     LandingRevalidationService,

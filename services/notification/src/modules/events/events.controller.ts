@@ -14,6 +14,20 @@ import {
 type EventPayload = Record<string, unknown>;
 type ReceiptItem = { name: string; quantity: number; price: number };
 type LoaRecipient = { userId: string; email: string; fullName: string };
+type PricingTierAlertTier = {
+  tierId: string;
+  tierName: string;
+  state: 'lapsed' | 'expiring';
+  sinceDate?: string;
+  daysDark?: number;
+  coverageEndDate?: string;
+};
+type PricingTierAlertProgram = {
+  programId: string;
+  programName: string;
+  brandName: string;
+  tiers: PricingTierAlertTier[];
+};
 type RmqMessage = {
   content?: Buffer;
   properties?: {
@@ -439,6 +453,45 @@ export class EventsController {
             undefined,
           brand: asRecord(payload.brand) ?? undefined,
         });
+      },
+    );
+  }
+
+  @EventPattern('ops.pricing_tier_coverage_alert')
+  async handlePricingTierCoverageAlert(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'ops.pricing_tier_coverage_alert',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received ops.pricing_tier_coverage_alert event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const recipients = getStringArray(payload, 'recipients');
+        if (recipients.length === 0) return;
+
+        const programs = getPricingTierAlertPrograms(payload, 'programs');
+        if (programs.length === 0) return;
+
+        // One ops digest to every recipient; per-recipient errors are caught
+        // and logged rather than thrown so one bad address doesn't nack the
+        // whole message and cause the rest to be retried or skipped (same
+        // reasoning as the loa.batch.released fan-out above).
+        for (const recipient of recipients) {
+          try {
+            await this.emailService.sendPricingTierCoverageAlertEmail(recipient, { programs });
+          } catch (error) {
+            this.logger.error(
+              `[pricing-tier-coverage-alert] failed to send to=${maskEmail(recipient)}`,
+              error instanceof Error ? error.stack : String(error),
+            );
+          }
+        }
       },
     );
   }
@@ -1017,6 +1070,53 @@ function getLoaRecipients(
       userId: getString(recipient, 'userId') || '',
       email,
       fullName: getString(recipient, 'fullName') || '',
+    });
+  }
+
+  return normalized;
+}
+
+function getStringArray(source: Record<string, unknown>, key: string): string[] {
+  return getArray(source, key).filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+}
+
+function getPricingTierAlertPrograms(
+  source: Record<string, unknown>,
+  key: string,
+): PricingTierAlertProgram[] {
+  const rawPrograms = getArray(source, key);
+  const normalized: PricingTierAlertProgram[] = [];
+
+  for (const rawProgram of rawPrograms) {
+    const program = asRecord(rawProgram);
+    const programId = getString(program, 'programId');
+    const programName = getString(program, 'programName');
+    if (!programId || !programName) continue;
+
+    const tiers: PricingTierAlertTier[] = [];
+    for (const rawTier of getArray(program, 'tiers')) {
+      const tier = asRecord(rawTier);
+      const tierId = getString(tier, 'tierId');
+      const tierName = getString(tier, 'tierName');
+      const state = getString(tier, 'state');
+      if (!tierId || !tierName || (state !== 'lapsed' && state !== 'expiring')) continue;
+
+      tiers.push({
+        tierId,
+        tierName,
+        state,
+        sinceDate: getString(tier, 'sinceDate'),
+        daysDark: getNumber(tier, 'daysDark'),
+        coverageEndDate: getString(tier, 'coverageEndDate'),
+      });
+    }
+    if (tiers.length === 0) continue;
+
+    normalized.push({
+      programId,
+      programName,
+      brandName: getString(program, 'brandName') || 'Unknown Brand',
+      tiers,
     });
   }
 
