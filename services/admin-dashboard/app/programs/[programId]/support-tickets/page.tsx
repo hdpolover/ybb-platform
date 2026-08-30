@@ -34,6 +34,7 @@ import {
   stripUploadedScreenshotsSection,
   STATUS_OPTIONS,
   PRIORITY_OPTIONS,
+  SUPPORT_TICKETS_CHANGED,
   toTitleCase,
 } from "@/app/components/support/types";
 
@@ -236,6 +237,10 @@ export default function SupportTicketsPage() {
       });
       setTickets(response.data ?? []);
       setTotal(response.meta?.total ?? 0);
+      // Neither the status-tab counts nor the sidebar badge re-run on their own
+      // after a ticket is answered, since that changes no route and no filter.
+      void loadCounts();
+      window.dispatchEvent(new Event(SUPPORT_TICKETS_CHANGED));
       if (!selectedIdRef.current && response.data.length > 0) {
         setSelectedId(response.data[0].id);
       }
@@ -249,7 +254,7 @@ export default function SupportTicketsPage() {
     } finally {
       setLoadingList(false);
     }
-  }, [limit, page, priorityFilter, programId, searchQuery, statusFilter]);
+  }, [limit, loadCounts, page, priorityFilter, programId, searchQuery, statusFilter]);
 
   const loadTicketDetail = useCallback(async () => {
     if (!programId || !selectedId) {

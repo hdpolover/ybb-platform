@@ -3,6 +3,10 @@
 import Image from "next/image";
 import React, { useEffect, useMemo, useState } from "react";
 import { listProgramSupportTickets } from "@/src/shared/api-client";
+import { SUPPORT_TICKETS_CHANGED } from "@/app/components/support/types";
+
+/** How long a foregrounded sidebar may show a stale open-ticket count. */
+const TICKET_BADGE_POLL_MS = 60_000;
 import { useAuth } from "@/app/contexts/AuthContext";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -357,7 +361,7 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
 
   useEffect(() => {
     let isMounted = true;
-    void (async () => {
+    const refresh = async () => {
       if (!resolvedProgramId) {
         if (isMounted) setOpenTicketCount(0);
         return;
@@ -368,9 +372,32 @@ export function Sidebar({ collapsed, selectedProgramId }: SidebarProps) {
       } catch {
         // Non-critical
       }
-    })();
+    };
+    void refresh();
+
+    // Answering a ticket changes no route, so without these the badge keeps
+    // showing the count from the first render for the rest of the session.
+    // Three triggers, cheapest first: this tab's own edits, coming back to the
+    // tab (catches another admin's replies immediately), then a slow poll so a
+    // sidebar left open in the foreground still goes stale by at most a minute.
+    const onChanged = () => void refresh();
+    const onVisible = () => {
+      if (!document.hidden) void refresh();
+    };
+    window.addEventListener(SUPPORT_TICKETS_CHANGED, onChanged);
+    window.addEventListener("focus", onVisible);
+    document.addEventListener("visibilitychange", onVisible);
+    const poll = window.setInterval(() => {
+      // Background tabs poll nothing; the visibility handler covers the catch-up.
+      if (!document.hidden) void refresh();
+    }, TICKET_BADGE_POLL_MS);
+
     return () => {
       isMounted = false;
+      window.removeEventListener(SUPPORT_TICKETS_CHANGED, onChanged);
+      window.removeEventListener("focus", onVisible);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(poll);
     };
   }, [resolvedProgramId]);
   const [activeId, setActiveId] = useState<string | null>(() => {
