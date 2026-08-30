@@ -17,6 +17,7 @@ import {
   ListProgramParticipationCategoriesHandler,
   ListProgramSubthemesHandler,
 } from '../application/queries/handlers/list-program-content.handlers';
+import { GetPricingTierAlertsSummaryHandler } from '../application/queries/handlers/get-pricing-tier-alerts-summary.handler';
 import { GetApplicationFormFieldsHandler } from '../application/queries/handlers/get-application-form-fields.handler';
 
 import {
@@ -45,7 +46,7 @@ describe('ProgramApplicationConfigController', () => {
     // Function to create providers list
     const createMockProviders = () => {
         const handlers = [
-            ListProgramPricingTiersHandler, GetPricingTierByIdHandler, GetPricingTierAlertsHandler, ListProgramRequirementsHandler,
+            ListProgramPricingTiersHandler, GetPricingTierByIdHandler, GetPricingTierAlertsHandler, GetPricingTierAlertsSummaryHandler, ListProgramRequirementsHandler,
             ListProgramEssaysHandler, ListProgramParticipationCategoriesHandler, ListProgramSubthemesHandler,
             GetApplicationFormFieldsHandler,
 
