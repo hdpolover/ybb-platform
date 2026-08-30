@@ -111,3 +111,6 @@ export function timeAgo(dateStr: string): string {
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
 }
+
+/** Fired when the ticket list changes so the sidebar badge can refetch its count. */
+export const SUPPORT_TICKETS_CHANGED = "support-tickets-changed";
