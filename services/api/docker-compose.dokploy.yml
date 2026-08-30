@@ -69,6 +69,10 @@ services:
       CIRCUIT_BREAKER_FAILURE_THRESHOLD: ${CIRCUIT_BREAKER_FAILURE_THRESHOLD:-5}
       CIRCUIT_BREAKER_SUCCESS_THRESHOLD: ${CIRCUIT_BREAKER_SUCCESS_THRESHOLD:-3}
       CIRCUIT_BREAKER_TIMEOUT: ${CIRCUIT_BREAKER_TIMEOUT:-60000}
+      # Ops alerts (pricing-tier coverage cron) - comma-separated recipient list.
+      # Must be listed here or the value set in the Dokploy panel never reaches
+      # the container (same gap that broke SETTINGS_REVALIDATE_SECRET above).
+      OPS_ALERT_EMAILS: ${OPS_ALERT_EMAILS}
       # Observability
       LOKI_URL: ${LOKI_URL}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
