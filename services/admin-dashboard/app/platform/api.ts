@@ -1162,6 +1162,32 @@ export function getPricingTiers(programId: string): Promise<PricingTier[]> {
   );
 }
 
+export type PricingTierAlert = {
+  tierId: string;
+  tierName: string;
+  sinceDate?: string;
+  coverageEndDate?: string;
+  registrationCloseDate?: string;
+  gapDays?: number;
+};
+
+export type PricingTierAlerts = {
+  lapsed: PricingTierAlert[];
+  expiring: PricingTierAlert[];
+};
+
+/**
+ * Surfaces the "silent lapse" defect that took China Youth Summit 2026's
+ * fully-funded category offline for nine days: admins extend a tier by
+ * appending validity periods, and when the chain of appends stops, the
+ * tier goes invisible to participants with no signal anywhere.
+ */
+export function getPricingTierAlerts(programId: string): Promise<PricingTierAlerts> {
+  return request<PricingTierAlerts>(`/programs/${programId}/pricing-tiers/alerts`).catch(
+    () => ({ lapsed: [], expiring: [] }),
+  );
+}
+
 export function getPricingTierById(tierId: string): Promise<PricingTier | null> {
   return request<RawPricingTier | null>(`/programs/pricing-tiers/${tierId}`).then((tier) =>
     tier ? normalizePricingTier(tier) : null,

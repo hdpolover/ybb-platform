@@ -217,6 +217,42 @@ export class ProgramResourceResponseDto {
 }
 
 
+export class LapsedPricingTierAlertDto {
+    @ApiProperty()
+    tierId: string;
+
+    @ApiProperty()
+    tierName: string;
+
+    @ApiProperty({ description: 'The date the tier became unpurchasable (no validity period covers it).' })
+    sinceDate: Date;
+}
+
+export class ExpiringPricingTierAlertDto {
+    @ApiProperty()
+    tierId: string;
+
+    @ApiProperty()
+    tierName: string;
+
+    @ApiProperty({ description: "The last date this tier's configured validity periods cover." })
+    coverageEndDate: Date;
+
+    @ApiProperty()
+    registrationCloseDate: Date;
+
+    @ApiProperty({ description: 'Days between coverageEndDate and registrationCloseDate.' })
+    gapDays: number;
+}
+
+export class PricingTierAlertsResponseDto {
+    @ApiProperty({ type: [LapsedPricingTierAlertDto] })
+    lapsed: LapsedPricingTierAlertDto[];
+
+    @ApiProperty({ type: [ExpiringPricingTierAlertDto] })
+    expiring: ExpiringPricingTierAlertDto[];
+}
+
 export class ProgramPricingTierValidityPeriodDto {
     @ApiProperty()
     startDate: Date;

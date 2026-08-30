@@ -11,6 +11,7 @@ import {
 import {
   ListProgramPricingTiersHandler,
   GetPricingTierByIdHandler,
+  GetPricingTierAlertsHandler,
   ListProgramRequirementsHandler,
   ListProgramEssaysHandler,
   ListProgramParticipationCategoriesHandler,
@@ -44,7 +45,7 @@ describe('ProgramApplicationConfigController', () => {
     // Function to create providers list
     const createMockProviders = () => {
         const handlers = [
-            ListProgramPricingTiersHandler, GetPricingTierByIdHandler, ListProgramRequirementsHandler,
+            ListProgramPricingTiersHandler, GetPricingTierByIdHandler, GetPricingTierAlertsHandler, ListProgramRequirementsHandler,
             ListProgramEssaysHandler, ListProgramParticipationCategoriesHandler, ListProgramSubthemesHandler,
             GetApplicationFormFieldsHandler,
 

@@ -2,6 +2,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import { IProgramContentRepository } from '../../../../../core/interfaces/repositories/program-content.repository.interface';
 import { IProgramRepository } from '../../../../../core/interfaces/repositories/program.repository.interface';
 import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '@modules/files/application/private-file-url-resolver.service';
+import { detectPricingTierAlerts } from '../../services/pricing-tier-alerts.util';
 import {
     ListProgramTimelineQuery,
     ListProgramSchedulesQuery,
@@ -14,6 +15,7 @@ import {
     ListProgramResourcesQuery,
     ListProgramPricingTiersQuery,
     GetPricingTierByIdQuery,
+    GetPricingTierAlertsQuery,
     ListProgramRequirementsQuery,
     ListProgramEssaysQuery,
     ListProgramParticipationCategoriesQuery,
@@ -326,6 +328,31 @@ export class GetPricingTierByIdHandler {
                 updatedAt: toIsoOrNull((vp as { updatedAt?: unknown }).updatedAt),
             })),
         };
+    }
+}
+
+@Injectable()
+export class GetPricingTierAlertsHandler {
+    constructor(
+        @Inject('IProgramContentRepository')
+        private readonly repository: IProgramContentRepository,
+        @Inject('IProgramRepository')
+        private readonly programRepository: IProgramRepository,
+    ) { }
+
+    async execute(query: GetPricingTierAlertsQuery) {
+        const programId = await resolveProgramId(this.programRepository, query.programId);
+        if (!programId) return { lapsed: [], expiring: [] };
+
+        const program = await this.programRepository.findById(programId);
+        // Only surface this for programs participants can currently register on -
+        // a draft or paused program going "unpurchasable" isn't the incident.
+        if (!program || !program.isPublished || !program.isActive || program.status !== 'published') {
+            return { lapsed: [], expiring: [] };
+        }
+
+        const tiers = await this.repository.findPricingTiersByProgramId(programId);
+        return detectPricingTierAlerts(tiers, program.registrationCloseDate, new Date());
     }
 }
 
