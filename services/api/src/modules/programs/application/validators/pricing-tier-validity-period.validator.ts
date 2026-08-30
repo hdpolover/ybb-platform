@@ -96,6 +96,9 @@ export function assertNoDuplicatePeriod(
  * looser than the half-open model here. Flagging boundary-touching periods
  * as a warning would just relabel the existing, harmless contiguous-data
  * convention as a problem, so we don't.
+ * NOTE: `resolveTierPeriod` referenced above now lives in
+ * `shared/utils/tier-period.util.ts` (previously duplicated across
+ * `get-portal-payments.handler.ts` and `calculate-portal-total-required.ts`).
  */
 export function findOverlappingPeriods(
   candidate: ValidityPeriodRange,

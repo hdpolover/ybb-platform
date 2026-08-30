@@ -33,6 +33,11 @@ export function startOfWibDay(date: Date): Date {
   );
 }
 
+/** The last instant (23:59:59.999) of the WIB calendar day containing `date`. */
+export function endOfWibDay(date: Date): Date {
+  return new Date(addDays(startOfWibDay(date), 1).getTime() - 1);
+}
+
 /** The instant at which the WIB week containing `date` began. Weeks start Monday. */
 export function startOfWibWeek(date: Date): Date {
   const daysFromMonday = (toWibWallClock(date).getUTCDay() + 6) % 7;

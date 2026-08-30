@@ -12,6 +12,7 @@ import {
     AvailablePaymentDto
 } from '../../../presentation/dto/portal-payment.dto';
 import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
+import { resolveTierPeriod } from '@shared/utils/tier-period.util';
 
 function getFeeTypePriority(feeType?: string | null): number {
     const normalized = String(feeType ?? '').toLowerCase();
@@ -44,17 +45,6 @@ function resolveTierDualPrices(tier: {
             ? Number(idrRaw)
             : (legacyCurrency === 'IDR' ? legacyPrice : 0),
     };
-}
-
-function resolveTierPeriod(
-    periods: Array<{ startDate: Date; endDate: Date }>,
-    referenceDate: Date,
-    now: Date,
-): { startDate: Date; endDate: Date } | undefined {
-    const byReference = periods.find((period) => period.startDate <= referenceDate && period.endDate >= referenceDate);
-    const activeOrUpcoming = periods.find((period) => period.endDate >= now);
-    const fallbackLatest = periods.length > 0 ? periods[periods.length - 1] : undefined;
-    return byReference ?? activeOrUpcoming ?? fallbackLatest;
 }
 
 @Injectable()

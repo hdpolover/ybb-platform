@@ -20,6 +20,8 @@
  * `get-portal-payments.handler.ts` and is left out here to keep the blast radius small.
  */
 
+import { resolveTierPeriod } from '@shared/utils/tier-period.util';
+
 type TotalRequiredInvoice = {
     status: string;
     amount: unknown;
@@ -45,21 +47,6 @@ const SETTLED_OR_INFLIGHT_STATUSES = new Set(['paid', 'processing']);
 function toFiniteAmount(value: unknown): number {
     const parsed = Number(value ?? NaN);
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-}
-
-// Mirror of `resolveTierPeriod` in get-portal-payments.handler.ts so the
-// "has this tier's window started?" decision matches the payments page.
-function resolveTierPeriod(
-    periods: ValidityPeriod[],
-    referenceDate: Date,
-    now: Date,
-): ValidityPeriod | undefined {
-    const byReference = periods.find(
-        (period) => period.startDate <= referenceDate && period.endDate >= referenceDate,
-    );
-    const activeOrUpcoming = periods.find((period) => period.endDate >= now);
-    const fallbackLatest = periods.length > 0 ? periods[periods.length - 1] : undefined;
-    return byReference ?? activeOrUpcoming ?? fallbackLatest;
 }
 
 function hasWindowStarted(periods: ValidityPeriod[] | null | undefined, now: Date): boolean {

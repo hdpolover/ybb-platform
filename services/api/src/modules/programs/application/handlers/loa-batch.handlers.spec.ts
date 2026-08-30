@@ -55,11 +55,11 @@ describe('CreateLoaBatchHandler', () => {
       new CreateLoaBatchCommand('prog-1', 'Wave 1', new Date('2026-01-01'), new Date('2026-03-31'), 'admin-1'),
     );
     expect(result.name).toBe('Wave 1');
-    // The handler normalizes the range to whole UTC days (startOfUtcDay/endOfUtcDay),
-    // so an end date of 2026-03-31 covers that entire day rather than its midnight
-    // boundary. Assert the normalized values the repository actually receives.
-    const submissionFrom = new Date('2026-01-01T00:00:00.000Z');
-    const submissionTo = new Date('2026-03-31T23:59:59.999Z');
+    // The handler normalizes the range to whole WIB days (startOfWibDay/endOfWibDay),
+    // so an end date of 2026-03-31 covers that entire WIB day rather than its UTC
+    // midnight boundary. Assert the normalized values the repository actually receives.
+    const submissionFrom = new Date('2025-12-31T17:00:00.000Z');
+    const submissionTo = new Date('2026-03-31T16:59:59.999Z');
     expect(mockRepo.findOverlapping).toHaveBeenCalledWith('prog-1', submissionFrom, submissionTo);
     expect(mockRepo.create).toHaveBeenCalledWith({
       programId: 'prog-1',
