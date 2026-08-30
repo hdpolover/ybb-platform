@@ -6,6 +6,7 @@ import { SwitchApplicationCategoryCommand } from '../switch-application-category
 import { ApplicationResponseDto } from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { ApplicationStatus } from '@core/entities/participant-application.entity';
+import { hasTierPeriodEnded } from '@shared/utils/tier-period.util';
 
 @Injectable()
 export class SwitchApplicationCategoryHandler {
@@ -110,7 +111,8 @@ export class SwitchApplicationCategoryHandler {
     // Definition (must match the dashboard flag): among the active
     // registration_fee FF tiers, a tier exists AND every such tier is
     // configured with validity windows AND all those windows have ended
-    // (endDate < now). A tier with no validityPeriods counts as "not closed".
+    // (per `hasTierPeriodEnded`, WIB end-of-day inclusive). A tier with no
+    // validityPeriods counts as "not closed".
     //
     // Only ever blocks switching INTO fully_funded — switching to
     // self_funded must never be affected.
@@ -131,7 +133,7 @@ export class SwitchApplicationCategoryHandler {
         const periods = (tier as unknown as {
           validityPeriods?: { startDate: Date; endDate: Date }[];
         }).validityPeriods ?? [];
-        return periods.length > 0 && periods.every((period) => period.endDate < now);
+        return periods.length > 0 && periods.every((period) => hasTierPeriodEnded(period, now));
       });
     };
 

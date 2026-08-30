@@ -14,6 +14,7 @@ import {
   DeleteLoaBatchCommand,
 } from '../commands/loa-batch.commands';
 import { GetLoaBatchesQuery, GetLoaDownloadsQuery } from '../queries/loa-batch.queries';
+import { endOfWibDay, startOfWibDay } from '@shared/utils/wib-time';
 
 // ─── LOA_DOCUMENT_TYPE ────────────────────────────────────────────────────────
 // ParticipantDocument.type is a plain string column — no Prisma enum.
@@ -23,25 +24,8 @@ const LOA_DOCUMENT_TYPE = 'letter_of_acceptance';
 // Admin UI sends whole-day picks (e.g. "12 Jul") as midnight UTC. Without
 // normalization, submissionTo lands at the START of its day, which excludes
 // every submission made later that same day from eligibility. Normalize the
-// batch window server-side so it's always inclusive of both full UTC days,
-// regardless of what the client sends. Pure Date math, immutable (returns a
-// new Date, does not mutate the input).
-//
-// Known limitation: this normalizes on UTC day boundaries. YBB's users are
-// mostly WIB (UTC+7), so a submission in the few UTC-hours around local
-// midnight can still fall just outside the window. Accepted for now —
-// full timezone-awareness is out of scope for this fix.
-function startOfUtcDay(date: Date): Date {
-  const normalized = new Date(date);
-  normalized.setUTCHours(0, 0, 0, 0);
-  return normalized;
-}
-
-function endOfUtcDay(date: Date): Date {
-  const normalized = new Date(date);
-  normalized.setUTCHours(23, 59, 59, 999);
-  return normalized;
-}
+// batch window server-side so it's always inclusive of both full WIB days
+// (YBB's users are mostly WIB/UTC+7), using the shared wib-time helpers.
 
 // ─── Command Handlers ─────────────────────────────────────────────────────────
 
@@ -51,8 +35,8 @@ export class CreateLoaBatchHandler implements ICommandHandler<CreateLoaBatchComm
 
   async execute(command: CreateLoaBatchCommand) {
     const { programId, name, adminUserId } = command;
-    const submissionFrom = startOfUtcDay(command.submissionFrom);
-    const submissionTo = endOfUtcDay(command.submissionTo);
+    const submissionFrom = startOfWibDay(command.submissionFrom);
+    const submissionTo = endOfWibDay(command.submissionTo);
 
     if (submissionFrom > submissionTo) {
       throw new BadRequestException('submissionFrom must be on or before submissionTo');
@@ -75,8 +59,8 @@ export class UpdateLoaBatchHandler implements ICommandHandler<UpdateLoaBatchComm
 
   async execute(command: UpdateLoaBatchCommand) {
     const { batchId, programId, name } = command;
-    const submissionFrom = command.submissionFrom ? startOfUtcDay(command.submissionFrom) : undefined;
-    const submissionTo = command.submissionTo ? endOfUtcDay(command.submissionTo) : undefined;
+    const submissionFrom = command.submissionFrom ? startOfWibDay(command.submissionFrom) : undefined;
+    const submissionTo = command.submissionTo ? endOfWibDay(command.submissionTo) : undefined;
 
     const existing = await this.batchRepo.findById(batchId);
     if (!existing || existing.programId !== programId) {

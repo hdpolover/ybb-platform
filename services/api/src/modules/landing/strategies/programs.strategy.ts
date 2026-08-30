@@ -5,6 +5,7 @@ import { CacheService } from '../../../shared/infrastructure/cache/cache.service
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
+import { startOfWibDay } from '@shared/utils/wib-time';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -150,7 +151,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 // Logic: Either explicitly completed OR endDate in past
                 OR: [
                     { status: 'completed' },
-                    { endDate: { lt: new Date() } }
+                    { endDate: { lt: startOfWibDay(new Date()) } }
                 ]
             },
             orderBy: { startDate: 'desc' },
@@ -204,7 +205,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 id: { not: currentProgram?.id },
                 isPublished: true,
                 isActive: true,
-                endDate: { gt: new Date() }
+                endDate: { gte: startOfWibDay(new Date()) }
             },
             orderBy: { startDate: 'asc' },
             select: {
@@ -747,7 +748,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 id: { not: program.id },
                 isPublished: true,
                 isActive: true,
-                endDate: { gt: new Date() }
+                endDate: { gte: startOfWibDay(new Date()) }
             },
             orderBy: { startDate: 'asc' },
             select: {
@@ -773,7 +774,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 brandId: program.brandId,
                 id: { not: program.id },
                 // Logic for "previous": end date in past
-                endDate: { lt: new Date() },
+                endDate: { lt: startOfWibDay(new Date()) },
                 isPublished: true
             },
             orderBy: { startDate: 'desc' },

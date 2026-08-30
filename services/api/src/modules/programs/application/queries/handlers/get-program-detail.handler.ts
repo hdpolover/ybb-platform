@@ -255,56 +255,6 @@ export class GetProgramDetailHandler {
       updatedAt: program.updatedAt,
     };
 
-    /*
-    // Transform payments with current period info
-    if (program.payments) {
-      response.payments = program.payments.map((payment: any) => {
-        const currentPeriod = payment.periods.find(
-          (p: any) =>
-            p.isActive && new Date(p.startDate) <= now && new Date(p.endDate) >= now,
-        );
-
-        return {
-          id: payment.id,
-          name: payment.name,
-          description: payment.description,
-          paymentType: payment.paymentType,
-          amount: Number(payment.amount),
-          currency: payment.currency,
-          isRequired: payment.isRequired,
-          order: payment.order,
-          periods: payment.periods.map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            startDate: p.startDate,
-            endDate: p.endDate,
-            amount: p.amount ? Number(p.amount) : Number(payment.amount),
-            isActive: p.isActive,
-          })),
-          currentPeriod: currentPeriod
-            ? {
-              id: currentPeriod.id,
-              name: currentPeriod.name,
-              startDate: currentPeriod.startDate,
-              endDate: currentPeriod.endDate,
-              amount: currentPeriod.amount
-                ? Number(currentPeriod.amount)
-                : Number(payment.amount),
-              isActive: currentPeriod.isActive,
-            }
-            : null,
-          isCurrentlyAvailable: !!currentPeriod,
-        };
-      });
-
-      // Calculate total cost based on current periods
-      response.totalCost = response.payments.reduce((sum: number, p: any) => {
-        const amount = p.currentPeriod ? p.currentPeriod.amount : p.amount;
-        return sum + amount;
-      }, 0);
-    }
-    */
-
     // Transform other relations
     if (program.faqs) {
       response.faqs = program.faqs;

@@ -3,6 +3,7 @@
 import {
     addDays,
     addWibMonths,
+    endOfWibDay,
     parseWibFilterDate,
     startOfWibDay,
     startOfWibMonth,
@@ -38,6 +39,25 @@ describe('wib-time', () => {
             expect(startOfWibDay(new Date('2026-07-15T17:00:00Z')).toISOString()).toBe(
                 '2026-07-15T17:00:00.000Z',
             );
+        });
+    });
+
+    describe('endOfWibDay', () => {
+        it('lands on 16:59:59.999 UTC, which is 23:59:59.999 WIB', () => {
+            expect(endOfWibDay(new Date('2026-07-15T10:00:00Z')).toISOString()).toBe(
+                '2026-07-15T16:59:59.999Z',
+            );
+        });
+
+        it('keeps a late-morning WIB instant on its own day close', () => {
+            expect(endOfWibDay(new Date('2026-07-15T00:30:00Z')).toISOString()).toBe(
+                '2026-07-15T16:59:59.999Z',
+            );
+        });
+
+        it('is exactly 1ms before the next WIB day starts', () => {
+            const date = new Date('2026-07-15T10:00:00Z');
+            expect(endOfWibDay(date).getTime()).toBe(startOfWibDay(addDays(date, 1)).getTime() - 1);
         });
     });
 
