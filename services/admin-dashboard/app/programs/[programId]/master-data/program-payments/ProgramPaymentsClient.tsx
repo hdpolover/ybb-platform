@@ -7,9 +7,10 @@ import type { PaymentOptionRow } from "@/app/components/programPaymentsMasterDat
 import {
   getPlatformProgramById,
   getPricingTiers,
+  getPricingTierAlerts,
   updateProgramPaymentInfo,
 } from "@/app/platform/api";
-import type { PricingTier } from "@/app/platform/api";
+import type { PricingTier, PricingTierAlerts } from "@/app/platform/api";
 import { getExchangeRate } from "@/src/shared/api-client";
 import { parseApiDate } from "@/lib/utils";
 import { formatInBusinessTz } from "@/lib/datetime";
@@ -236,6 +237,7 @@ export function ProgramPaymentsClient({
   const [rows, setRows] = useState<PaymentOptionRow[]>([]);
   const [programUsdInIdr, setProgramUsdInIdr] = useState<number | null>(null);
   const [paymentInfoHtml, setPaymentInfoHtml] = useState<string | null>(null);
+  const [tierAlerts, setTierAlerts] = useState<PricingTierAlerts>({ lapsed: [], expiring: [] });
   const [loading, setLoading] = useState(true);
   const [search] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -244,17 +246,20 @@ export function ProgramPaymentsClient({
     setLoading(true);
     setError(null);
     try {
-      // Fetch tiers, exchange rate, and program detail in parallel. Rate and
-      // program lookups are non-blocking — if either fails, the page still
-      // renders the options table with sensible fallbacks.
-      const [tiers, rate, program] = await Promise.all([
+      // Fetch tiers, exchange rate, program detail, and tier alerts in
+      // parallel. Rate, program, and alerts lookups are non-blocking — if
+      // any fail, the page still renders the options table with sensible
+      // fallbacks (getPricingTierAlerts already swallows its own errors).
+      const [tiers, rate, program, alerts] = await Promise.all([
         getPricingTiers(resolvedProgramId),
         getExchangeRate(resolvedProgramId).catch(() => null),
         getPlatformProgramById(resolvedProgramId).catch(() => null),
+        getPricingTierAlerts(resolvedProgramId),
       ]);
       setRows(tiers.map((t, i) => tierToRow(t, i)));
       setProgramUsdInIdr(rate?.usdInIdr ?? null);
       setPaymentInfoHtml(program?.paymentInfoHtml ?? null);
+      setTierAlerts(alerts);
     } catch (err) {
       setRows([]);
       setError(
@@ -310,6 +315,54 @@ export function ProgramPaymentsClient({
         initialHtml={paymentInfoHtml}
         onSaved={setPaymentInfoHtml}
       />
+
+      {tierAlerts.lapsed.length > 0 && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+          <div className="flex items-start gap-3">
+            <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 flex-none text-rose-500" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-rose-900">
+                {tierAlerts.lapsed.length} tier{tierAlerts.lapsed.length === 1 ? "" : "s"} have no
+                active pricing window right now
+              </p>
+              <ul className="mt-1 space-y-0.5 text-xs text-rose-800">
+                {tierAlerts.lapsed.map((tier) => (
+                  <li key={tier.tierId}>
+                    {tier.tierName} has no active pricing window since{" "}
+                    {formatInBusinessTz(tier.sinceDate, { day: "numeric", month: "short", year: "numeric" })}.
+                    Participants cannot see or pay for this category.
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tierAlerts.expiring.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 flex-none text-amber-500" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-amber-900">
+                {tierAlerts.expiring.length} tier{tierAlerts.expiring.length === 1 ? "" : "s"} will
+                run out of pricing coverage before registration closes
+              </p>
+              <ul className="mt-1 space-y-0.5 text-xs text-amber-800">
+                {tierAlerts.expiring.map((tier) => (
+                  <li key={tier.tierId}>
+                    {tier.tierName} is only covered through{" "}
+                    {formatInBusinessTz(tier.coverageEndDate, { day: "numeric", month: "short", year: "numeric" })},
+                    but registration closes{" "}
+                    {formatInBusinessTz(tier.registrationCloseDate, { day: "numeric", month: "short", year: "numeric" })}
+                    {" "}({tier.gapDays} day{tier.gapDays === 1 ? "" : "s"} short). Add another validity period.
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {needsBackfillReview && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">

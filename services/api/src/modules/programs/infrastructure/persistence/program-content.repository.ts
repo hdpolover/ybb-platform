@@ -111,7 +111,9 @@ export class ProgramContentRepository implements IProgramContentRepository {
 
     async findPricingTiersByProgramId(programId: string): Promise<ProgramPricingTierWithPeriods[]> {
         const rows = await this.prisma.programPricingTier.findMany({
-            where: { programId, isActive: true },
+            // Soft-deleted tiers stay is_active=true (China has two deleted in
+            // April), so filtering on isActive alone leaks them to every caller.
+            where: { programId, isActive: true, deletedAt: null },
             orderBy: { order: 'asc' },
             include: {
                 validityPeriods: true

@@ -16,6 +16,7 @@ interface AuthenticatedRequest extends ExpressRequest {
 
 import {
   ProgramPricingTierResponseDto,
+  PricingTierAlertsResponseDto,
   ProgramRequirementResponseDto,
   ProgramEssayResponseDto,
   ProgramEssayGuidelinesResponseDto,
@@ -27,6 +28,7 @@ import {
 import {
   ListProgramPricingTiersQuery,
   GetPricingTierByIdQuery,
+  GetPricingTierAlertsQuery,
   ListProgramRequirementsQuery,
   ListProgramEssaysQuery,
   ListProgramParticipationCategoriesQuery,
@@ -37,6 +39,7 @@ import { GetApplicationFormFieldsQuery } from '../application/queries/get-applic
 import {
   ListProgramPricingTiersHandler,
   GetPricingTierByIdHandler,
+  GetPricingTierAlertsHandler,
   ListProgramRequirementsHandler,
   ListProgramEssaysHandler,
   ListProgramParticipationCategoriesHandler,
@@ -90,6 +93,7 @@ export class ProgramApplicationConfigController {
     @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
     private readonly listProgramPricingTiersHandler: ListProgramPricingTiersHandler,
     private readonly getPricingTierByIdHandler: GetPricingTierByIdHandler,
+    private readonly getPricingTierAlertsHandler: GetPricingTierAlertsHandler,
     private readonly listProgramRequirementsHandler: ListProgramRequirementsHandler,
     private readonly listProgramEssaysHandler: ListProgramEssaysHandler,
     private readonly listProgramParticipationCategoriesHandler: ListProgramParticipationCategoriesHandler,
@@ -133,6 +137,18 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Get a single pricing tier with its validity periods' })
   async getPricingTierById(@Param('tierId') tierId: string) {
     return this.getPricingTierByIdHandler.execute(new GetPricingTierByIdQuery(tierId));
+  }
+
+  @Get(':id/pricing-tiers/alerts')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get pricing tiers that are unpurchasable now (lapsed) or about to run out of coverage before registration closes (expiring)',
+  })
+  @ApiResponse({ status: 200, type: PricingTierAlertsResponseDto })
+  async getPricingTierAlerts(@Param('id') id: string): Promise<PricingTierAlertsResponseDto> {
+    return this.getPricingTierAlertsHandler.execute(new GetPricingTierAlertsQuery(id)) as unknown as Promise<PricingTierAlertsResponseDto>;
   }
 
   @Post(':id/pricing-tiers')
