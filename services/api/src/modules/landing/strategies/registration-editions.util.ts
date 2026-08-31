@@ -103,6 +103,20 @@ export async function resolveEditionGuidebooks(prisma: PrismaService, resources:
   );
 }
 
+/** Whether an edition's registration is currently open, given `now`. Shared
+ * by `buildRegistrationEditions` and `resolveEditionSlug` so both agree on
+ * which edition is "running". */
+export function editionStatus(
+  program: Pick<OpenRegistrationProgram, 'isActive' | 'registrationOpenDate' | 'registrationCloseDate'>,
+  now: Date,
+): 'open' | 'closed' {
+  return program.isActive &&
+    (!program.registrationOpenDate || program.registrationOpenDate <= now) &&
+    (!program.registrationCloseDate || program.registrationCloseDate >= now)
+    ? 'open'
+    : 'closed';
+}
+
 /** Maps `fetchOpenRegistrationPrograms` results to the `programs[]` edition
  * shape (program_id, program_name, program_slug, year, status,
  * registration_dates, registration_types, guidelines). Each entry's own
@@ -125,12 +139,7 @@ export async function buildRegistrationEditions(
     program_name: editionProgram.name,
     program_slug: editionProgram.slug,
     year: editionProgram.year,
-    status:
-      editionProgram.isActive &&
-      (!editionProgram.registrationOpenDate || editionProgram.registrationOpenDate <= now) &&
-      (!editionProgram.registrationCloseDate || editionProgram.registrationCloseDate >= now)
-        ? 'open'
-        : 'closed',
+    status: editionStatus(editionProgram, now),
     registration_dates: {
       open: editionProgram.registrationOpenDate?.toISOString() ?? null,
       close: editionProgram.registrationCloseDate?.toISOString() ?? null,
@@ -138,4 +147,36 @@ export async function buildRegistrationEditions(
     registration_types: mapPricingTiersToRegistrationTypes(editionProgram.pricingTiers),
     guidelines: guidelinesByProgramId.get(editionProgram.id) ?? [],
   }));
+}
+
+/** Picks the edition slug a /programs request should render, WITHOUT paying
+ * for buildRegistrationEditions' guidebook resolution — this only needs to
+ * exist to build the RESOLVED cache key up front, before either the
+ * persisted-snapshot or the strategy's own cache is consulted (see MEYS 6th/
+ * 7th concurrent-active-programs bug: the cache key must reflect the
+ * resolved edition, or one edition's page can be served for another).
+ * `requestedSlug` wins when it matches a currently-relevant edition; else
+ * the running edition with the closest deadline (soonest-close-first order
+ * from `fetchOpenRegistrationPrograms`); else the newest by year. Returns
+ * null only when the brand has no currently-relevant editions at all — an
+ * unmatched/malformed slug never errors, it just falls through to the
+ * default. */
+export async function resolveEditionSlug(
+  prisma: PrismaService,
+  brandId: string,
+  requestedSlug: string | undefined,
+  now: Date,
+): Promise<string | null> {
+  const editions = await fetchOpenRegistrationPrograms(prisma, brandId, now);
+  if (editions.length === 0) return null;
+
+  if (requestedSlug) {
+    const match = editions.find((edition) => edition.slug === requestedSlug);
+    if (match) return match.slug;
+  }
+
+  const openEdition = editions.find((edition) => editionStatus(edition, now) === 'open');
+  if (openEdition) return openEdition.slug;
+
+  return editions.reduce((newest, edition) => (edition.year > newest.year ? edition : newest), editions[0]).slug;
 }

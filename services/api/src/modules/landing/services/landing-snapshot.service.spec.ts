@@ -84,4 +84,25 @@ describe('LandingSnapshotService', () => {
         const version = await currentVersion();
         expect(cache.get).toHaveBeenLastCalledWith(expect.stringContaining(`:v${version}`));
     });
+
+    // MEYS 6th/7th concurrent-active-programs bug: the /programs snapshot
+    // must be keyed by the RESOLVED edition slug, or one edition's page gets
+    // served for another.
+    it('persists the programs snapshot under the resolved edition slug, not a shared row', async () => {
+        prisma.brandLandingSnapshot.findUnique.mockResolvedValue(null);
+
+        await service.getOrBuildProgramsSnapshot(brand, 'meys-6th', async () => validPayload('sixth') as never);
+        await service.getOrBuildProgramsSnapshot(brand, 'meys-7th', async () => validPayload('seventh') as never);
+
+        const slugs = prisma.brandLandingSnapshot.upsert.mock.calls.map((call) => call[0].create.slug);
+        expect(slugs).toEqual(['meys-6th', 'meys-7th']);
+    });
+
+    it('keeps a single default row for brands with no currently-open edition', async () => {
+        prisma.brandLandingSnapshot.findUnique.mockResolvedValue(null);
+
+        await service.getOrBuildProgramsSnapshot(brand, null, async () => validPayload('default') as never);
+
+        expect(prisma.brandLandingSnapshot.upsert.mock.calls[0][0].create.slug).toBe('');
+    });
 });

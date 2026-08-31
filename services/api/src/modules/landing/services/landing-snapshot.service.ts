@@ -79,12 +79,18 @@ export class LandingSnapshotService {
 
   async getOrBuildProgramsSnapshot(
     brand: Brand,
+    editionSlug: string | null,
     build: SnapshotBuilder<LandingPageResponseDto>,
   ): Promise<LandingPageResponseDto> {
+    // `editionSlug` is the RESOLVED edition (see ProgramsStrategy.resolveEditionSlug),
+    // not the raw `edition` query param, so this snapshot never serves one
+    // edition's hero/overview/activities/schedules/FAQs for another (MEYS
+    // 6th/7th concurrent-active-programs bug). Brands with no currently-open
+    // editions pass null and keep today's single ROOT_SLUG row.
     return this.getOrBuildSnapshot(
       brand,
       PROGRAMS_PAGE,
-      ROOT_SLUG,
+      editionSlug ?? ROOT_SLUG,
       build,
       CACHE_TTL.HOUR,
       this.toLandingPagePayload.bind(this),
