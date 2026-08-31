@@ -221,6 +221,7 @@ export class HomeStrategy implements ILandingPageStrategy {
         where: {
           brandId: brand.id,
           isPublished: true,
+          status: { not: 'draft' },
         },
         orderBy: { year: 'desc' },
         take: 5,

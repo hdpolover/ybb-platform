@@ -51,6 +51,7 @@ export class CacheWarmingService implements OnModuleInit {
                 where: {
                     isPublished: true,
                     deletedAt: null,
+                    status: { not: 'draft' },
                 },
                 take: 50, // Limit to top 50 programs
                 orderBy: { updatedAt: 'desc' },
