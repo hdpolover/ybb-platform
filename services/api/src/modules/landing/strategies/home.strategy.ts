@@ -10,7 +10,7 @@ import {
   normalizeCountryGroups,
   resolveCountryName,
 } from '@shared/utils/country-groups';
-import { resolveActiveProgram } from '@shared/utils/active-program-resolver';
+import { resolveActiveProgram, ACTIVE_PROGRAM_ORDER_BY } from '@shared/utils/active-program-resolver';
 import { PlatformSettingRepository } from '@modules/platform-settings/infrastructure/persistence/platform-setting.repository';
 
 const FULLY_FUNDED_PROCESS_COPY =
@@ -62,6 +62,40 @@ function normalizePaymentInfoContent(value: unknown): Record<string, unknown> | 
       return paymentItem;
     }),
   };
+}
+
+/** Shared shape for a program's pricing tiers, reused by the single-program
+ * `registration_types` field and by each entry in the new `programs` array
+ * (see MEYS 6th/7th concurrent-active-programs bug). */
+type PricingTierForRegistrationSection = {
+  id: string;
+  name: string;
+  description: string | null;
+  price: unknown;
+  currency: string;
+  feeType: string;
+  allowedCategories: string[];
+  benefits: string[];
+  requirements: string[];
+  validityPeriods?: { startDate: Date; endDate: Date }[];
+};
+
+function mapPricingTiersToRegistrationTypes(tiers: PricingTierForRegistrationSection[] | undefined) {
+  return (tiers ?? []).map((tier) => ({
+    id: tier.id,
+    name: tier.name,
+    description: tier.description,
+    price: tier.price,
+    currency: tier.currency,
+    fee_type: tier.feeType,
+    allowed_categories: tier.allowedCategories,
+    benefits: tier.benefits,
+    requirements: tier.requirements,
+    validity_periods: tier.validityPeriods?.map((vp) => ({
+      start_date: vp.startDate,
+      end_date: vp.endDate,
+    })) ?? [],
+  }));
 }
 
 function normalizeFurtherInformationContent(value: unknown): FurtherInformationMetadata | null {
@@ -170,7 +204,9 @@ export class HomeStrategy implements ILandingPageStrategy {
       brand.id,
     );
 
-    const [brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, registeredApplications, platformImpactStatsRow] = await Promise.all([
+    const nowForRegistrationWindow = new Date();
+
+    const [brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, registeredApplications, platformImpactStatsRow, openRegistrationPrograms] = await Promise.all([
       this.prisma.programGallery.findMany({
         where: {
           type: 'image',
@@ -287,6 +323,44 @@ export class HomeStrategy implements ILandingPageStrategy {
         },
       }),
       this.platformSettingRepository.get('impact_stats'),
+      // Every currently-relevant edition for this brand (see MEYS 6th/7th
+      // concurrent-active-programs bug: two published+active programs can
+      // both have open registration at once, and `program` above resolves
+      // only ONE of them). Filtered on close date only — "not already
+      // ended" per the bug report, not on open date, so an edition whose
+      // registration hasn't opened yet still shows a (closed) card instead
+      // of vanishing. Ordered soonest-close-first, nulls (no bound) last,
+      // tie-broken with the same ordering active-program-resolver.ts uses
+      // everywhere else so this list and `program`'s own resolution never
+      // silently disagree on ties.
+      this.prisma.program.findMany({
+        where: {
+          brandId: brand.id,
+          deletedAt: null,
+          isPublished: true,
+          isActive: true,
+          status: 'published',
+          OR: [
+            { registrationCloseDate: null },
+            { registrationCloseDate: { gte: nowForRegistrationWindow } },
+          ],
+        },
+        orderBy: [
+          { registrationCloseDate: { sort: 'asc', nulls: 'last' } },
+          ...ACTIVE_PROGRAM_ORDER_BY,
+        ],
+        include: {
+          pricingTiers: {
+            where: { isActive: true, deletedAt: null },
+            orderBy: { order: 'asc' },
+            include: {
+              validityPeriods: {
+                orderBy: { startDate: 'asc' },
+              },
+            },
+          },
+        },
+      }),
     ]);
 
     const guidebookResources = await Promise.all(
@@ -376,6 +450,29 @@ export class HomeStrategy implements ILandingPageStrategy {
     );
     const countryLevels = buildParticipantDistributionLevels(countryParticipants);
 
+    // Additive `programs` array for the registration_overview section (see
+    // MEYS 6th/7th bug above). Each entry's own `status` still checks the
+    // open date too, unlike the findMany's where clause above — a program
+    // whose registration hasn't started yet is included in the list (so it
+    // doesn't disappear) but must render as closed, not open.
+    const registrationEditions = openRegistrationPrograms.map((editionProgram) => ({
+      program_id: editionProgram.id,
+      program_name: editionProgram.name,
+      program_slug: editionProgram.slug,
+      year: editionProgram.year,
+      status:
+        editionProgram.isActive &&
+        (!editionProgram.registrationOpenDate || editionProgram.registrationOpenDate <= nowForRegistrationWindow) &&
+        (!editionProgram.registrationCloseDate || editionProgram.registrationCloseDate >= nowForRegistrationWindow)
+          ? 'open'
+          : 'closed',
+      registration_dates: {
+        open: editionProgram.registrationOpenDate?.toISOString() ?? null,
+        close: editionProgram.registrationCloseDate?.toISOString() ?? null,
+      },
+      registration_types: mapPricingTiersToRegistrationTypes(editionProgram.pricingTiers),
+    }));
+
     const result = {
       slug: 'home',
       title: brand.name,
@@ -398,27 +495,23 @@ export class HomeStrategy implements ILandingPageStrategy {
               imageUrl: feed.imageUrl,
               caption: feed.caption
             })),
-            registration_types: program?.pricingTiers.map((tier) => ({
-              id: tier.id,
-              name: tier.name,
-              description: tier.description,
-              price: tier.price,
-              currency: tier.currency,
-              fee_type: tier.feeType,
-              allowed_categories: tier.allowedCategories,
-              benefits: tier.benefits,
-              requirements: tier.requirements,
-              validity_periods: tier.validityPeriods?.map((vp) => ({
-                start_date: vp.startDate,
-                end_date: vp.endDate,
-              })) ?? [],
-            })) || [],
+            registration_types: mapPricingTiersToRegistrationTypes(program?.pricingTiers),
             guidelines: program?.resources.map((res) => ({
               id: res.id,
               title: res.title,
               type: res.type,
               url: guidebookUrlById.get(res.id) ?? (res.sourceType === 'link' ? res.linkUrl : res.fileUrl),
             })) || [],
+            // Additive: every currently-relevant edition, soonest-close-first.
+            // The fields above stay driven by `program` (resolveActiveProgram's
+            // pick) exactly as before — untouched, so a brand with one open
+            // program renders identically. `programs[0]` and `program` are the
+            // same program for every brand with a single open edition; they can
+            // only diverge for a brand resolveActiveProgram had to fall back
+            // for (published+inactive or unpublished+active), which this
+            // stricter list correctly excludes rather than fabricating a card
+            // for registration that was never actually open.
+            programs: registrationEditions,
           },
         },
         {

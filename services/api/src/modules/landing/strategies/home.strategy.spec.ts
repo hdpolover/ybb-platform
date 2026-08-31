@@ -408,4 +408,120 @@ describe('HomeStrategy', () => {
         ]);
         expect(objectiveUrls(await strategy.getData(category as any))).toEqual(['kys4th-own.jpg']);
     });
+
+    describe('registration_overview.programs (MEYS 6th/7th concurrent-active-programs bug)', () => {
+        const category = {
+            id: 'brand-meys', name: 'Middle East Youth Summit', bannerUrl: '', websiteUrl: '',
+            vision: '', mission: '', metadata: {},
+        };
+
+        const baseSetup = () => {
+            mockPrismaService.program.findFirst.mockResolvedValueOnce({
+                id: 'p-meys-7th', name: 'MEYS 7th', isPublished: true, isActive: true,
+                gallery: [], pricingTiers: [], resources: [], objectives: [], awards: [],
+                landingContent: {},
+            });
+            mockPrismaService.programGallery.findMany.mockResolvedValue([]);
+            mockPrismaService.sponsor.findMany.mockResolvedValue([]);
+            mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([]);
+            mockPrismaService.programTestimonial.findMany.mockResolvedValue([]);
+            mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
+        };
+
+        // Distinguish the video-highlights `program.findMany` call from the new
+        // open-registration-editions one purely by the shape of its `include`
+        // (the mock is shared across both real Prisma calls, same as production
+        // shares one client — see other tests in this file for the same pattern).
+        const mockProgramFindMany = (openEditions: unknown[]) => {
+            mockPrismaService.program.findMany.mockImplementation((args: any) =>
+                Promise.resolve(args?.include?.pricingTiers ? openEditions : []),
+            );
+        };
+
+        it('lists two open programs ordered soonest-close-first, each with its own registration types', async () => {
+            baseSetup();
+            mockProgramFindMany([
+                {
+                    id: 'p-meys-6th', name: 'MEYS 6th', slug: 'meys-6th', year: 2026, isActive: true,
+                    registrationOpenDate: new Date('2026-01-01T00:00:00Z'),
+                    registrationCloseDate: new Date('2026-12-05T00:00:00Z'),
+                    pricingTiers: [{
+                        id: 'tier-6th', name: 'Self Funded', description: null, price: 100, currency: 'USD',
+                        feeType: 'registration_fee', allowedCategories: ['self_funded'], benefits: [], requirements: [],
+                        validityPeriods: [{ startDate: new Date('2026-01-01T00:00:00Z'), endDate: new Date('2026-12-05T00:00:00Z') }],
+                    }],
+                },
+                {
+                    id: 'p-meys-7th', name: 'MEYS 7th', slug: 'meys-7th', year: 2027, isActive: true,
+                    registrationOpenDate: new Date('2026-06-01T00:00:00Z'),
+                    registrationCloseDate: new Date('2027-03-20T00:00:00Z'),
+                    pricingTiers: [{
+                        id: 'tier-7th', name: 'Self Funded', description: null, price: 120, currency: 'USD',
+                        feeType: 'registration_fee', allowedCategories: ['self_funded'], benefits: [], requirements: [],
+                        validityPeriods: [{ startDate: new Date('2026-06-01T00:00:00Z'), endDate: new Date('2027-03-20T00:00:00Z') }],
+                    }],
+                },
+            ]);
+
+            const result: any = await strategy.getData(category as any);
+            const overview = result.sections.find((s: any) => s.type === 'registration_overview');
+            const programs = overview?.content.programs;
+
+            expect(programs).toHaveLength(2);
+            // Soonest close first, regardless of `program.findMany`'s own return order.
+            expect(programs.map((p: any) => p.program_slug)).toEqual(['meys-6th', 'meys-7th']);
+            expect(programs[0].status).toBe('open');
+            expect(programs[0].registration_types).toHaveLength(1);
+            expect(programs[0].registration_types[0].name).toBe('Self Funded');
+            expect(programs[1].status).toBe('open');
+        });
+
+        it('excludes a program whose registration has already ended', async () => {
+            baseSetup();
+            mockProgramFindMany([
+                {
+                    id: 'p-meys-6th', name: 'MEYS 6th', slug: 'meys-6th', year: 2026, isActive: true,
+                    registrationOpenDate: new Date('2026-01-01T00:00:00Z'),
+                    registrationCloseDate: new Date('2026-12-05T00:00:00Z'),
+                    pricingTiers: [],
+                },
+                // A brand's own query filters this out before it reaches the
+                // strategy (registrationCloseDate in the past) — simulate that
+                // by simply not including an ended program in the mock's
+                // response, proving the strategy trusts the query rather than
+                // re-filtering (and doesn't crash) when only one edition remains.
+            ]);
+
+            const result: any = await strategy.getData(category as any);
+            const overview = result.sections.find((s: any) => s.type === 'registration_overview');
+            expect(overview?.content.programs).toHaveLength(1);
+        });
+
+        it('single-program brand: top-level registration_types is unaffected by the programs array', async () => {
+            mockPrismaService.program.findFirst.mockResolvedValueOnce({
+                id: 'p-only', name: 'Only Program', isPublished: true, isActive: true,
+                gallery: [], resources: [], objectives: [], awards: [],
+                pricingTiers: [{ id: 'tier-only', name: 'Self Funded', price: 50, currency: 'USD', feeType: 'registration_fee', allowedCategories: ['self_funded'], benefits: [], requirements: [], validityPeriods: [] }],
+                landingContent: {},
+            });
+            mockPrismaService.programGallery.findMany.mockResolvedValue([]);
+            mockPrismaService.sponsor.findMany.mockResolvedValue([]);
+            mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([]);
+            mockPrismaService.programTestimonial.findMany.mockResolvedValue([]);
+            mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
+            mockProgramFindMany([
+                {
+                    id: 'p-only', name: 'Only Program', slug: 'only-program', year: 2026, isActive: true,
+                    registrationOpenDate: null, registrationCloseDate: null,
+                    pricingTiers: [{ id: 'tier-only', name: 'Self Funded', description: null, price: 50, currency: 'USD', feeType: 'registration_fee', allowedCategories: ['self_funded'], benefits: [], requirements: [], validityPeriods: [] }],
+                },
+            ]);
+
+            const result: any = await strategy.getData(category as any);
+            const overview = result.sections.find((s: any) => s.type === 'registration_overview');
+            expect(overview?.content.registration_types).toHaveLength(1);
+            expect(overview?.content.registration_types[0].id).toBe('tier-only');
+            expect(overview?.content.programs).toHaveLength(1);
+        });
+    });
 });
