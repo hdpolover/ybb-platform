@@ -1,0 +1,51 @@
+#!/bin/sh
+# .githooks/pre-push
+#
+# Pushing to dev deploys the API and the admin dashboard straight to
+# production, so a bad push is a live outage rather than a red CI run.
+#
+# The rsc-boundary check is here because nothing else catches its bug class: a
+# helper exported from a 'use client' file and called from a server component
+# type checks fine, passes tests, and `next build` still exits 0, because these
+# pages are server rendered on demand so the build never renders them. It only
+# throws on a real request. That took the participant site down on 2026-08-31.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+# Emergency bypass:       git push --no-verify
+
+DEPLOY_BRANCH="refs/heads/dev"
+run_gate=0
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  [ "$remote_ref" = "$DEPLOY_BRANCH" ] && run_gate=1
+done
+
+if [ "$run_gate" -eq 0 ]; then
+  echo "pre-push: not pushing $DEPLOY_BRANCH, skipping the gate."
+  exit 0
+fi
+
+echo "pre-push: pushing dev (auto-deploys to production). Running the gate."
+
+echo "pre-push: [1/5] admin dashboard rsc boundary"
+( cd services/admin-dashboard && node scripts/check-rsc-boundary.mjs ) \
+  || { echo "pre-push: BLOCKED, a server component imports a function from a client module."; exit 1; }
+
+echo "pre-push: [2/5] api typecheck"
+( cd services/api && npx tsc --noEmit ) \
+  || { echo "pre-push: BLOCKED, api typecheck failed."; exit 1; }
+
+echo "pre-push: [3/5] api tests"
+( cd services/api && npx jest --silent ) \
+  || { echo "pre-push: BLOCKED, api tests failed."; exit 1; }
+
+echo "pre-push: [4/5] admin dashboard typecheck"
+( cd services/admin-dashboard && npx tsc --noEmit ) \
+  || { echo "pre-push: BLOCKED, admin dashboard typecheck failed."; exit 1; }
+
+echo "pre-push: [5/5] admin dashboard build"
+( cd services/admin-dashboard && npx next build ) \
+  || { echo "pre-push: BLOCKED, admin dashboard build failed."; exit 1; }
+
+echo "pre-push: all five passed."
+exit 0
