@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Bars3Icon,
   ChevronRightIcon,
@@ -44,24 +45,50 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
 // went silently unpurchasable for 9 days) on the program list itself, not just
 // the per-program payments page banner. Lapsed (rose) means an active outage
 // right now; expiring-only (amber) is the leading indicator. Not a <button> and
-// carries no hover/cursor styling of its own — the card it sits on is already
-// the click target.
-function CoverageGapBadge({ summary }: { summary: PricingTierAlertsSummaryItem }) {
+// is itself clickable, routing to the screen that fixes it.
+function CoverageGapBadge({
+  summary,
+  programId,
+}: {
+  summary: PricingTierAlertsSummaryItem;
+  programId: string;
+}) {
+  const router = useRouter();
   const isLapsed = summary.lapsedCount > 0;
   const count = isLapsed ? summary.lapsedCount : summary.expiringCount;
+  const noun = `categor${count === 1 ? "y" : "ies"}`;
   const label = isLapsed
-    ? `${count} categor${count === 1 ? "y" : "ies"} not purchasable`
-    : `${count} categor${count === 1 ? "y" : "ies"} losing coverage soon`;
+    ? `${count} ${noun} cannot be paid right now`
+    : `${count} ${noun} stops selling before registration closes`;
+  const explanation = isLapsed
+    ? `No pricing window covers today, so participants cannot see or pay for ${count === 1 ? "this fee" : "these fees"}. Click to open Program Payments and add a window.`
+    : `The pricing windows end before this program's registration close date, so ${count === 1 ? "this fee" : "these fees"} stop selling while registration is still open. Click to open Program Payments and extend ${count === 1 ? "it" : "them"}.`;
 
+  const openPayments = () => {
+    router.push(`/programs/${programId}/master-data/program-payments`);
+  };
+
+  // Sits inside the card's <button>, so it cannot be an <a> (invalid HTML).
+  // It stops propagation and routes itself, with keyboard support.
   return (
     <span
-      title={
+      role="link"
+      tabIndex={0}
+      title={explanation}
+      onClick={(event) => {
+        event.stopPropagation();
+        openPayments();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        event.stopPropagation();
+        openPayments();
+      }}
+      className={`inline-flex cursor-pointer items-center rounded-sm px-2 py-[2px] text-[11px] font-semibold underline decoration-dotted underline-offset-2 ${
         isLapsed
-          ? "No validity period currently covers this category. Participants cannot see or pay for it."
-          : "This category's coverage ends before registration closes."
-      }
-      className={`inline-flex items-center rounded-sm px-2 py-[2px] text-[11px] font-semibold ${
-        isLapsed ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+          ? "bg-rose-100 text-rose-700 hover:bg-rose-200"
+          : "bg-amber-100 text-amber-700 hover:bg-amber-200"
       }`}
     >
       {label}
@@ -115,7 +142,7 @@ function ProgramCard({
           <div className="flex flex-wrap items-center gap-2">
             <h4 className="truncate font-semibold text-zinc-900">{program.programName}</h4>
             <StatusBadge isActive={program.isActive} />
-            {alertSummary ? <CoverageGapBadge summary={alertSummary} /> : null}
+            {alertSummary ? <CoverageGapBadge summary={alertSummary} programId={program.programId} /> : null}
           </div>
           <p className="mt-1 text-xs text-zinc-500">
             {program.brandName} • {program.programSlug}
@@ -156,7 +183,7 @@ function ProgramCard({
         </div>
         {alertSummary ? (
           <div className="mt-1">
-            <CoverageGapBadge summary={alertSummary} />
+            <CoverageGapBadge summary={alertSummary} programId={program.programId} />
           </div>
         ) : null}
       </div>
