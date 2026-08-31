@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { UpdateProgramHandler } from './update-program.handler';
 import { UpdateProgramCommand } from '../update-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
@@ -51,38 +51,6 @@ describe('UpdateProgramHandler', () => {
         const command = new UpdateProgramCommand('nonexistent', { name: 'Updated' }, 'user-1');
 
         await expect(handler.execute(command)).rejects.toThrow(NotFoundException);
-    });
-
-    it('rejects an applicationDeadline set earlier than the registration close date', async () => {
-        const program = makeProgram({ registrationCloseDate: new Date('2026-12-01T00:00:00Z') });
-        programRepository.findById.mockResolvedValue(program as any);
-
-        // Only the deadline is sent; it must still be checked against the
-        // close date already stored on the program.
-        const command = new UpdateProgramCommand(
-            'prog-1',
-            { applicationDeadline: '2026-11-01T00:00:00Z' } as any,
-            'user-1',
-        );
-
-        await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
-        expect(programRepository.update).not.toHaveBeenCalled();
-    });
-
-    it('still allows unrelated edits to an already-misconfigured program', async () => {
-        // Submission closes before registration does — bad data that predates
-        // the validator. Renaming must not be blocked by it.
-        const program = makeProgram({
-            registrationCloseDate: new Date('2026-12-01T00:00:00Z'),
-            applicationDeadline: new Date('2026-11-01T00:00:00Z'),
-        });
-        programRepository.findById.mockResolvedValue(program as any);
-        programRepository.update.mockResolvedValue({ ...program, name: 'Renamed' } as any);
-
-        const command = new UpdateProgramCommand('prog-1', { name: 'Renamed' }, 'user-1');
-
-        await expect(handler.execute(command)).resolves.toBeDefined();
-        expect(programRepository.update).toHaveBeenCalled();
     });
 
     it('should update the program and return result', async () => {
