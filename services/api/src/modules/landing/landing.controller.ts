@@ -75,12 +75,14 @@ export class LandingController {
   @Get('programs')
   @ApiOperation({ summary: 'Get programs listing page' })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
+  @ApiQuery({ name: 'edition', required: false, description: 'Program slug of the edition to render. Falls back to the running edition with the closest deadline (or the newest, if none are open) when absent or unrecognized.' })
   @ApiResponse({ status: 200, description: 'Return programs listing structure', type: LandingPageResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid brand identification' })
   async getPrograms(
     @BrandDomain() brandDomain?: string,
+    @Query('edition') edition?: string,
   ): Promise<LandingPageResponseDto> {
-    return this.landingService.getPrograms(brandDomain);
+    return this.landingService.getPrograms(brandDomain, edition);
   }
 
   @Get('programs/:slug')

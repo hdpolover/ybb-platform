@@ -22,6 +22,32 @@ function formatUtcDateOnly(value: Date): string {
     return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, '0')}-${String(value.getUTCDate()).padStart(2, '0')}`;
 }
 
+/**
+ * Picks the edition the whole /programs page should render. `requestedSlug`
+ * wins when it matches a currently-relevant edition; otherwise the running
+ * edition with the closest deadline (`editions` arrives soonest-close-first,
+ * see registration-editions.util.ts), mirroring the frontend's
+ * pickDefaultEditionIndex. An unmatched/malformed slug silently falls
+ * through to that default instead of erroring. Returns null only when the
+ * brand has no currently-relevant editions at all.
+ */
+function resolveTargetEdition<T extends { program_slug: string; status: string; year: number }>(
+    editions: T[],
+    requestedSlug?: string,
+): T | null {
+    if (editions.length === 0) return null;
+
+    if (requestedSlug) {
+        const match = editions.find((edition) => edition.program_slug === requestedSlug);
+        if (match) return match;
+    }
+
+    const openEdition = editions.find((edition) => edition.status === 'open');
+    if (openEdition) return openEdition;
+
+    return editions.reduce((newest, edition) => (edition.year > newest.year ? edition : newest), editions[0]);
+}
+
 function resolveScheduleDate(day: string | null | undefined, programStartDate: Date | null): string | null {
     const rawDay = (day ?? '').trim();
     const dayMatch = rawDay.match(/Day (\d+)/i);
@@ -67,25 +93,48 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         private readonly cacheService: CacheService,
     ) { }
 
-    async getData(brand: Brand | null) {
+    async getData(brand: Brand | null, editionSlug?: string) {
         if (!brand) {
             return { slug: 'programs', title: 'Our Programs', sections: [] };
         }
 
-        // Check cache first
-        const cacheKey = CACHE_KEYS.LANDING_PROGRAMS(brand.id);
+        // Resolve which edition the whole page should describe BEFORE
+        // touching the cache: hero, overview, activities, schedules and FAQs
+        // must all come from the same program as the registration tabs (see
+        // MEYS 6th/7th concurrent-active-programs bug). `editionSlug` picks a
+        // currently-relevant edition by slug; absent/unknown falls back to
+        // the running edition with the closest deadline (editions arrive
+        // soonest-close-first, same rule as the frontend's
+        // pickDefaultEditionIndex); no open editions at all falls back to
+        // today's newest-by-year behaviour so nothing regresses.
+        const now = new Date();
+        const openRegistrationPrograms = await fetchOpenRegistrationPrograms(this.prisma, brand.id, now);
+        const registrationEditions = await buildRegistrationEditions(this.prisma, openRegistrationPrograms, now);
+        const targetEdition = resolveTargetEdition(registrationEditions, editionSlug);
+
+        // Cache key includes the RESOLVED edition slug (not the raw query
+        // param) so one edition's payload can never be served for another,
+        // and an arbitrary/bogus `edition` value can't spam new cache
+        // entries — it collapses onto the same default entry every brand
+        // without open editions already used before this change.
+        const cacheKey = `${CACHE_KEYS.LANDING_PROGRAMS(brand.id)}:${targetEdition?.program_slug ?? 'default'}`;
         const cached = await this.cacheService.get(cacheKey);
         if (cached) {
             return this.normalizeProgramsPayload(cached);
         }
 
-        // 1. Fetch Latest Active Program for this Brand
+        // 1. Fetch the resolved edition's program, or (no open editions)
+        // today's newest-by-year pick.
+        // `status: { not: 'draft' }` on the newest-by-year fallback: without
+        // it, a program with isPublished=true/isActive=true but status still
+        // 'draft' wins the orderBy on its startDate and gets served publicly
+        // (live incident: MEYS 7th). targetEdition never needs this — it's
+        // only ever a program from fetchOpenRegistrationPrograms, which
+        // already requires status: 'published'.
         let currentProgram = await this.prisma.program.findFirst({
-            where: {
-                brandId: brand.id,
-                isPublished: true,
-                isActive: true,
-            },
+            where: targetEdition
+                ? { id: targetEdition.program_id, brandId: brand.id, isPublished: true }
+                : { brandId: brand.id, isPublished: true, isActive: true, status: { not: 'draft' } },
             orderBy: { startDate: 'desc' }, // Latest start date
             include: {
                 objectives: {
@@ -123,13 +172,14 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             }
         });
 
-        // Fallback: If no active program, find the latest published one (even if closed/completed)
+        // Fallback: If no active program, find the latest published one (even
+        // if closed/completed — status can legitimately be 'ongoing',
+        // 'completed' or 'cancelled' here, just never 'draft').
         if (!currentProgram) {
             currentProgram = await this.prisma.program.findFirst({
-                where: {
-                    brandId: brand.id,
-                    isPublished: true,
-                },
+                where: targetEdition
+                    ? { id: targetEdition.program_id, brandId: brand.id }
+                    : { brandId: brand.id, isPublished: true, status: { not: 'draft' } },
                 orderBy: { startDate: 'desc' },
                 include: {
                     objectives: { where: { isActive: true }, orderBy: { order: 'asc' } },
@@ -283,7 +333,6 @@ export class ProgramsStrategy implements ILandingPageStrategy {
 
             // Section 3: Registration/Pricing Types & Instructions
             // Logic to determine if registration is open
-            const now = new Date();
             const isRegistrationOpen = currentProgram.isActive &&
                 currentProgram.allowRegistration &&
                 (!currentProgram.registrationOpenDate || currentProgram.registrationOpenDate <= now) &&
@@ -293,11 +342,9 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             // programs bug): every currently-relevant edition for this brand,
             // soonest-close-first, same shape/helper home.strategy.ts's
             // `registration_overview` section uses (registration-editions.util.ts).
-            // The fields below stay driven by `currentProgram` exactly as
-            // today — untouched, so a brand with one open program renders
-            // identically and cached payloads keep their existing shape.
-            const openRegistrationPrograms = await fetchOpenRegistrationPrograms(this.prisma, brand.id, now);
-            const registrationEditions = await buildRegistrationEditions(this.prisma, openRegistrationPrograms, now);
+            // `registrationEditions` was already fetched above to resolve
+            // `currentProgram` itself, so it's reused here rather than
+            // re-queried.
 
             sections.push({
                 type: 'registration_info',

@@ -14,6 +14,7 @@ import { LandingPageResponseDto } from './dto/landing-page.dto';
 import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
 import { LandingActivityResponseDto } from './dto/landing-activity.dto';
 import { LandingSnapshotService } from './services/landing-snapshot.service';
+import { resolveEditionSlug } from './strategies/registration-editions.util';
 
 const DEFAULT_FAQ_LIMIT = 200;
 
@@ -115,15 +116,21 @@ export class LandingService {
     return this.aboutStrategy.getData(brand) as Promise<LandingPageResponseDto>;
   }
 
-  async getPrograms(url?: string): Promise<LandingPageResponseDto> {
+  async getPrograms(url?: string, edition?: string): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
     if (brand) {
+      // Resolved (not raw) edition slug, so the snapshot cache key can never
+      // mix up two editions' pages (see MEYS 6th/7th concurrent-active-
+      // programs bug). `programsStrategy.getData` re-resolves the same slug
+      // from the same DB state internally to build the actual payload.
+      const resolvedEditionSlug = await resolveEditionSlug(this.prisma, brand.id, edition, new Date());
       return this.landingSnapshotService.getOrBuildProgramsSnapshot(
         brand,
-        () => this.programsStrategy.getData(brand) as Promise<LandingPageResponseDto>,
+        resolvedEditionSlug,
+        () => this.programsStrategy.getData(brand, edition) as Promise<LandingPageResponseDto>,
       );
     }
-    return this.programsStrategy.getData(brand) as Promise<LandingPageResponseDto>;
+    return this.programsStrategy.getData(brand, edition) as Promise<LandingPageResponseDto>;
   }
 
   async getProgramDetail(slug: string, url?: string): Promise<LandingPageResponseDto> {
