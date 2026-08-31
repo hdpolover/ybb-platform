@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { DocumentTextIcon, MapPinIcon, IdentificationIcon } from "@heroicons/react/24/solid";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { FormSection } from "@/src/ui/drawer/form-section";
@@ -47,6 +49,8 @@ export function EditProgramSpecificsModal({
   errorMessage,
   onClose,
 }: EditProgramSpecificsModalProps) {
+  const params = useParams<{ programId?: string }>();
+  const programId = params?.programId ?? null;
   const [formValues, setFormValues] = useState<ProgramSpecificsFormValues>(initialValues);
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -222,7 +226,21 @@ export function EditProgramSpecificsModal({
               onChange={(event) => updateField("registrationCloseDate", event.target.value)}
               className={INPUT_CLS}
             />
-            <p className="mt-1.5 text-xs text-zinc-500">Leave blank to clear this bound.</p>
+            <p className="mt-1.5 text-xs text-zinc-500">
+              Leave blank to clear this bound. This bound alone does not make a category
+              purchasable: that is driven by each pricing tier's validity windows in{" "}
+              {programId ? (
+                <Link
+                  href={`/programs/${programId}/master-data/program-payments`}
+                  className="cursor-pointer font-medium text-blue-700 underline underline-offset-2 hover:text-blue-900"
+                >
+                  Program Payments
+                </Link>
+              ) : (
+                "Program Payments"
+              )}
+              .
+            </p>
           </div>
           <div className="md:col-span-2">
             <label className="mb-1.5 block text-xs font-medium text-zinc-500">Application Deadline</label>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { Program } from "./ProgramsTable";
 import {
   Sheet,
@@ -217,6 +218,18 @@ export function ProgramFormModal({
 
               <div className="sm:col-span-2 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
                 Program-specific settings like fees, capacity, registration windows, and venue details are managed inside the program admin workspace.
+                {program?.id ? (
+                  <>
+                    {" "}
+                    <Link
+                      href={`/programs/${program.id}/master-data/program-details?tab=specifics`}
+                      className="cursor-pointer font-semibold underline underline-offset-2 hover:text-blue-900"
+                    >
+                      Open registration windows
+                    </Link>
+                    {" (registration opens, registration closes) for this program."}
+                  </>
+                ) : null}
               </div>
 
               <label className="flex items-center gap-2 text-sm text-zinc-700">
