@@ -6,7 +6,6 @@ import { Program } from '@core/entities/program.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
-import { assertDeadlineNotBeforeRegistrationClose } from '../../validators/program-deadline-order.validator';
 
 @CommandHandler(UpdateProgramCommand)
 export class UpdateProgramHandler implements ICommandHandler<UpdateProgramCommand> {
@@ -36,30 +35,6 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
         if (programData.applicationDeadline) programData.applicationDeadline = new Date(programData.applicationDeadline as string);
         if (programData.registrationOpenDate) programData.registrationOpenDate = new Date(programData.registrationOpenDate as string);
         if (programData.registrationCloseDate) programData.registrationCloseDate = new Date(programData.registrationCloseDate as string);
-
-        // Only validate when this request actually touches one of the two
-        // fields: an already-misconfigured program must stay editable, or an
-        // admin renaming it would get a 400 with no way to save anything.
-        const touchesDeadlines =
-            programData.applicationDeadline !== undefined ||
-            programData.registrationCloseDate !== undefined;
-
-        // Merge with existing values so a partial update (e.g. only
-        // applicationDeadline sent) is still validated against the other
-        // field's current DB value, not silently skipped.
-        const nextApplicationDeadline = (
-            programData.applicationDeadline !== undefined
-                ? programData.applicationDeadline
-                : existingProgram.applicationDeadline
-        ) as Date | undefined;
-        const nextRegistrationCloseDate = (
-            programData.registrationCloseDate !== undefined
-                ? programData.registrationCloseDate
-                : existingProgram.registrationCloseDate
-        ) as Date | null | undefined;
-        if (touchesDeadlines) {
-            assertDeadlineNotBeforeRegistrationClose(nextApplicationDeadline, nextRegistrationCloseDate);
-        }
 
         const updatedProgram = await this.programRepository.update(programId, programData);
 
