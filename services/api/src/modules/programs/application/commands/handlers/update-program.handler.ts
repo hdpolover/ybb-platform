@@ -6,6 +6,9 @@ import { Program } from '@core/entities/program.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
+import { assertProgramDeadlineOrder } from '../../validators/program-deadline-order.validator';
+
+const DEADLINE_ORDER_FIELDS = ['registrationOpenDate', 'registrationCloseDate', 'applicationDeadline'] as const;
 
 @CommandHandler(UpdateProgramCommand)
 export class UpdateProgramHandler implements ICommandHandler<UpdateProgramCommand> {
@@ -35,6 +38,22 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
         if (programData.applicationDeadline) programData.applicationDeadline = new Date(programData.applicationDeadline as string);
         if (programData.registrationOpenDate) programData.registrationOpenDate = new Date(programData.registrationOpenDate as string);
         if (programData.registrationCloseDate) programData.registrationCloseDate = new Date(programData.registrationCloseDate as string);
+
+        // Only validate when this request actually touches one of the three date
+        // fields; an already-misconfigured program must stay editable on unrelated
+        // fields. `in` (not truthiness) so an explicit `null` still counts as touched.
+        const touchesDeadlineFields = DEADLINE_ORDER_FIELDS.some((field) => field in updateProgramDto);
+        if (touchesDeadlineFields) {
+            const mergedDate = (field: typeof DEADLINE_ORDER_FIELDS[number]): Date | null | undefined =>
+                field in updateProgramDto
+                    ? (programData[field] as Date | null | undefined)
+                    : existingProgram[field];
+            assertProgramDeadlineOrder({
+                registrationOpenDate: mergedDate('registrationOpenDate'),
+                registrationCloseDate: mergedDate('registrationCloseDate'),
+                applicationDeadline: mergedDate('applicationDeadline'),
+            });
+        }
 
         const updatedProgram = await this.programRepository.update(programId, programData);
 

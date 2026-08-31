@@ -6,6 +6,7 @@ import { Program } from '@core/entities/program.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
+import { assertProgramDeadlineOrder } from '../../validators/program-deadline-order.validator';
 
 @CommandHandler(CreateProgramCommand)
 export class CreateProgramHandler implements ICommandHandler<CreateProgramCommand> {
@@ -31,6 +32,12 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
         if (mutableData.applicationDeadline) mutableData.applicationDeadline = new Date(mutableData.applicationDeadline as string);
         if (mutableData.registrationOpenDate) mutableData.registrationOpenDate = new Date(mutableData.registrationOpenDate as string);
         if (mutableData.registrationCloseDate) mutableData.registrationCloseDate = new Date(mutableData.registrationCloseDate as string);
+
+        assertProgramDeadlineOrder({
+            registrationOpenDate: mutableData.registrationOpenDate as Date | null | undefined,
+            registrationCloseDate: mutableData.registrationCloseDate as Date | null | undefined,
+            applicationDeadline: mutableData.applicationDeadline as Date | null | undefined,
+        });
 
         const program = await this.programRepository.create(mutableData as Partial<Program>);
 

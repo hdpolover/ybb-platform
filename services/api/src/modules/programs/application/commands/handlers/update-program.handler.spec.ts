@@ -107,6 +107,62 @@ describe('UpdateProgramHandler', () => {
         );
     });
 
+    it('does NOT block an unrelated edit to a program with pre-existing bad dates', async () => {
+        // registrationCloseDate already earlier than registrationOpenDate on the existing
+        // record. Editing only `name` must not trip the deadline-order validator.
+        const program = makeProgram({
+            registrationOpenDate: new Date('2026-12-10T00:00:00Z'),
+            registrationCloseDate: new Date('2026-12-05T00:00:00Z'),
+            applicationDeadline: new Date('2026-12-20T00:00:00Z'),
+        });
+        programRepository.findById.mockResolvedValue(program as any);
+        programRepository.update.mockResolvedValue({ ...program, name: 'Renamed' } as any);
+
+        const command = new UpdateProgramCommand('prog-1', { name: 'Renamed' }, 'user-1');
+        const result = await handler.execute(command);
+
+        expect(result.name).toBe('Renamed');
+    });
+
+    it('validates a touched date field against the existing (merged) values and rejects a bad ordering', async () => {
+        const program = makeProgram({
+            registrationOpenDate: new Date('2026-12-01T00:00:00Z'),
+            registrationCloseDate: new Date('2026-12-05T00:00:00Z'),
+            applicationDeadline: new Date('2026-12-10T00:00:00Z'),
+        });
+        programRepository.findById.mockResolvedValue(program as any);
+
+        // Only applicationDeadline is touched, moved earlier than the existing registrationCloseDate.
+        const command = new UpdateProgramCommand(
+            'prog-1',
+            { applicationDeadline: '2026-12-02T00:00:00.000Z' },
+            'user-1',
+        );
+
+        await expect(handler.execute(command)).rejects.toThrow(
+            /Application Deadline.*cannot be earlier than.*Registration Closes/s,
+        );
+        expect(programRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('allows a touched date field when it is consistent with the existing merged values', async () => {
+        const program = makeProgram({
+            registrationOpenDate: new Date('2026-12-01T00:00:00Z'),
+            registrationCloseDate: new Date('2026-12-05T00:00:00Z'),
+            applicationDeadline: new Date('2026-12-10T00:00:00Z'),
+        });
+        programRepository.findById.mockResolvedValue(program as any);
+        programRepository.update.mockResolvedValue({ ...program } as any);
+
+        const command = new UpdateProgramCommand(
+            'prog-1',
+            { applicationDeadline: '2026-12-06T00:00:00.000Z' },
+            'user-1',
+        );
+
+        await expect(handler.execute(command)).resolves.toBeDefined();
+    });
+
     it('caps the auto-generated slug at 255 chars (Program.slug is VarChar(255))', async () => {
         const program = makeProgram();
         programRepository.findById.mockResolvedValue(program as any);

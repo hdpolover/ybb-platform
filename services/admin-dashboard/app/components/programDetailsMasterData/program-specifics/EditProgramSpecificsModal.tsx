@@ -74,13 +74,17 @@ export function EditProgramSpecificsModal({
     formValues.registrationCloseDate < formValues.registrationOpenDate;
 
   // applicationDeadline is a date-only value ("YYYY-MM-DD"); compare against
-  // the date portion of the registration window bounds.
+  // the date portion of the registration window bounds. registrationCloseDate
+  // gates CREATING an application; applicationDeadline gates SUBMITTING it. A
+  // deadline earlier than either bound means someone could register (or even
+  // be blocked from registering) and never be able to submit, which is what
+  // the server now rejects (see program-deadline-order.validator.ts in the API).
   const applicationDeadlineOutsideWindow =
     formValues.applicationDeadline !== "" &&
     ((formValues.registrationOpenDate !== "" &&
       formValues.applicationDeadline < formValues.registrationOpenDate.slice(0, 10)) ||
       (formValues.registrationCloseDate !== "" &&
-        formValues.applicationDeadline > formValues.registrationCloseDate.slice(0, 10)));
+        formValues.applicationDeadline < formValues.registrationCloseDate.slice(0, 10)));
 
   const handleSubmit = async () => {
     if (registrationWindowInvalid) {
@@ -256,8 +260,8 @@ export function EditProgramSpecificsModal({
           </div>
           {applicationDeadlineOutsideWindow && !registrationWindowInvalid && (
             <div className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              The application deadline falls outside the registration window above. Participants may be able to
-              apply after registration has closed, or be blocked from applying before it opens.
+              The application deadline is earlier than the registration window above. Anyone who registers after
+              this deadline (or before registration opens) will never be able to submit their application.
             </div>
           )}
         </div>
