@@ -385,7 +385,9 @@ function TestimonialSheet({
   const [role, setRole] = useState(item?.role ?? "");
   const [company, setCompany] = useState(item?.company ?? "");
   const [testimonial, setTestimonial] = useState(item?.testimonial ?? "");
-  const [category, setCategory] = useState<"delegate" | "alumni">("delegate");
+  const [category, setCategory] = useState<"delegate" | "alumni" | "speaker">(
+    (item?.category as "delegate" | "alumni" | "speaker" | undefined) ?? "delegate"
+  );
   const [alumniYear, setAlumniYear] = useState<number | "">(item?.alumniYear ?? "");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(item?.avatarUrl ?? null);
@@ -399,7 +401,10 @@ function TestimonialSheet({
       setRole(item?.role ?? "");
       setCompany(item?.company ?? "");
       setTestimonial(item?.testimonial ?? "");
-      setCategory("delegate");
+      // Bug fix: this used to hardcode "delegate" here, silently reverting an
+      // alumni/speaker testimonial's category to delegate on every edit-open
+      // unless the admin happened to reselect it before saving.
+      setCategory((item?.category as "delegate" | "alumni" | "speaker" | undefined) ?? "delegate");
       setAlumniYear(item?.alumniYear ?? "");
       setSelectedFile(null);
       setPreviewUrl(item?.avatarUrl ?? null);
@@ -462,7 +467,7 @@ function TestimonialSheet({
           <SheetDescription>
             {isEdit
               ? "Update the person details and testimonial content."
-              : "Add a new testimonial from a delegate or alumnus."}
+              : "Add a new testimonial from a delegate, alumnus, or speaker."}
           </SheetDescription>
         </SheetHeader>
 
@@ -570,11 +575,12 @@ function TestimonialSheet({
             </label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value as "delegate" | "alumni")}
+              onChange={(e) => setCategory(e.target.value as "delegate" | "alumni" | "speaker")}
               className={inputCls}
             >
-              <option value="delegate">Delegate — shown in Testimonials section</option>
-              <option value="alumni">Alumni — shown in Alumni Stories section</option>
+              <option value="delegate">Delegate (shown in the Testimonials section)</option>
+              <option value="alumni">Alumni (shown in the Alumni Stories section)</option>
+              <option value="speaker">Speaker (not shown on the public site yet)</option>
             </select>
           </div>
 

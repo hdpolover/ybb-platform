@@ -349,11 +349,17 @@ export class HomeStrategy implements ILandingPageStrategy {
       type: img.type,
     }));
 
-    const programGallery = imageGallery.slice(0, 6).map((img) => ({
+    // Full pool (up to the 200-row take above) for the dedicated /programs/gallery
+    // page. `programGallery` below stays capped at 6 for the homepage teaser,
+    // which links out to that page via `cta.url`. Additive `full_gallery`
+    // field, `gallery`/`images` unchanged for backwards compatibility.
+    const fullProgramGallery = imageGallery.map((img) => ({
       id: img.id,
       url: img.imageUrl,
       caption: img.title,
     }));
+
+    const programGallery = fullProgramGallery.slice(0, 6);
 
     // Program-owned landing sections (Task 1's Program.landingContent), not
     // Brand.metadata, as of Phase 3's ownership split — see
@@ -498,6 +504,8 @@ export class HomeStrategy implements ILandingPageStrategy {
             // `gallery` is canonical; keep `images` for backwards compatibility.
             gallery: programGallery,
             images: programGallery,
+            // Untruncated pool for the full /programs/gallery page.
+            full_gallery: fullProgramGallery,
             cta: {
               label: 'See More',
               url: '/programs/gallery',
