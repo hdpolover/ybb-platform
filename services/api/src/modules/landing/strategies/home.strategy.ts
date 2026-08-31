@@ -3,15 +3,20 @@ import { ILandingPageStrategy } from './landing-page.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
-import { Brand, ProgramResource } from '@prisma/client';
-import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
+import { Brand } from '@prisma/client';
 import {
   buildParticipantDistributionLevels,
   normalizeCountryGroups,
   resolveCountryName,
 } from '@shared/utils/country-groups';
-import { resolveActiveProgram, ACTIVE_PROGRAM_ORDER_BY } from '@shared/utils/active-program-resolver';
+import { resolveActiveProgram } from '@shared/utils/active-program-resolver';
 import { PlatformSettingRepository } from '@modules/platform-settings/infrastructure/persistence/platform-setting.repository';
+import {
+  buildRegistrationEditions,
+  fetchOpenRegistrationPrograms,
+  mapPricingTiersToRegistrationTypes,
+  resolveEditionGuidebooks,
+} from './registration-editions.util';
 
 const FULLY_FUNDED_PROCESS_COPY =
   'Complete the registration fee, submit the required documents and essay, and participate in the interview process.';
@@ -62,40 +67,6 @@ function normalizePaymentInfoContent(value: unknown): Record<string, unknown> | 
       return paymentItem;
     }),
   };
-}
-
-/** Shared shape for a program's pricing tiers, reused by the single-program
- * `registration_types` field and by each entry in the new `programs` array
- * (see MEYS 6th/7th concurrent-active-programs bug). */
-type PricingTierForRegistrationSection = {
-  id: string;
-  name: string;
-  description: string | null;
-  price: unknown;
-  currency: string;
-  feeType: string;
-  allowedCategories: string[];
-  benefits: string[];
-  requirements: string[];
-  validityPeriods?: { startDate: Date; endDate: Date }[];
-};
-
-function mapPricingTiersToRegistrationTypes(tiers: PricingTierForRegistrationSection[] | undefined) {
-  return (tiers ?? []).map((tier) => ({
-    id: tier.id,
-    name: tier.name,
-    description: tier.description,
-    price: tier.price,
-    currency: tier.currency,
-    fee_type: tier.feeType,
-    allowed_categories: tier.allowedCategories,
-    benefits: tier.benefits,
-    requirements: tier.requirements,
-    validity_periods: tier.validityPeriods?.map((vp) => ({
-      start_date: vp.startDate,
-      end_date: vp.endDate,
-    })) ?? [],
-  }));
 }
 
 function normalizeFurtherInformationContent(value: unknown): FurtherInformationMetadata | null {
@@ -332,71 +303,14 @@ export class HomeStrategy implements ILandingPageStrategy {
       // of vanishing. Ordered soonest-close-first, nulls (no bound) last,
       // tie-broken with the same ordering active-program-resolver.ts uses
       // everywhere else so this list and `program`'s own resolution never
-      // silently disagree on ties.
-      this.prisma.program.findMany({
-        where: {
-          brandId: brand.id,
-          deletedAt: null,
-          isPublished: true,
-          isActive: true,
-          status: 'published',
-          OR: [
-            { registrationCloseDate: null },
-            { registrationCloseDate: { gte: nowForRegistrationWindow } },
-          ],
-        },
-        orderBy: [
-          { registrationCloseDate: { sort: 'asc', nulls: 'last' } },
-          ...ACTIVE_PROGRAM_ORDER_BY,
-        ],
-        include: {
-          pricingTiers: {
-            where: { isActive: true, deletedAt: null },
-            orderBy: { order: 'asc' },
-            include: {
-              validityPeriods: {
-                orderBy: { startDate: 'asc' },
-              },
-            },
-          },
-          // Each edition needs its own guidebooks (see MEYS 6th/7th bug:
-          // section-level `guidelines` only ever carried the single active
-          // program's resources, so the 7th's guidebook rendered next to the
-          // 6th's cards). Same shape/order as `program`'s own `resources`
-          // include above.
-          resources: {
-            where: { isActive: true, isPublic: true },
-            take: 5,
-            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
-          },
-        },
-      }),
+      // silently disagree on ties. Query + include shared with
+      // programs.strategy.ts via registration-editions.util.ts.
+      fetchOpenRegistrationPrograms(this.prisma, brand.id, nowForRegistrationWindow),
     ]);
 
-    // Shared by the section-level `guidelines` (single active program) and
-    // each edition's own `guidelines` in `programs[]` below.
-    const resolveGuidebooks = async (resources: ProgramResource[]) =>
-      Promise.all(
-        (resources ?? []).map(async (resource) => {
-          const activeUrl = resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl;
-          const resolvedUrl = activeUrl ? await resolveMaskedFileUrl(this.prisma, activeUrl) : null;
-          return {
-            id: resource.id,
-            title: resource.title,
-            type: resource.type,
-            url: resolvedUrl ?? (resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl),
-          };
-        }),
-      );
-
-    const guidebookResources = await resolveGuidebooks(program?.resources ?? []);
-    const editionGuidelines = new Map(
-      await Promise.all(
-        openRegistrationPrograms.map(
-          async (editionProgram) => [editionProgram.id, await resolveGuidebooks(editionProgram.resources)] as const,
-        ),
-      ),
-    );
+    // Shared with each edition's own `guidelines` in `programs[]` below (via
+    // buildRegistrationEditions, which resolves guidebooks the same way).
+    const guidebookResources = await resolveEditionGuidebooks(this.prisma, program?.resources ?? []);
     const sectionIgFeed = socialFeeds.map(feed => ({
       id: feed.id,
       permalink: feed.permalink,
@@ -481,33 +395,14 @@ export class HomeStrategy implements ILandingPageStrategy {
     const countryLevels = buildParticipantDistributionLevels(countryParticipants);
 
     // Additive `programs` array for the registration_overview section (see
-    // MEYS 6th/7th bug above). Each entry's own `status` still checks the
-    // open date too, unlike the findMany's where clause above — a program
-    // whose registration hasn't started yet is included in the list (so it
-    // doesn't disappear) but must render as closed, not open.
-    const registrationEditions = openRegistrationPrograms.map((editionProgram) => ({
-      program_id: editionProgram.id,
-      program_name: editionProgram.name,
-      program_slug: editionProgram.slug,
-      year: editionProgram.year,
-      status:
-        editionProgram.isActive &&
-        (!editionProgram.registrationOpenDate || editionProgram.registrationOpenDate <= nowForRegistrationWindow) &&
-        (!editionProgram.registrationCloseDate || editionProgram.registrationCloseDate >= nowForRegistrationWindow)
-          ? 'open'
-          : 'closed',
-      registration_dates: {
-        open: editionProgram.registrationOpenDate?.toISOString() ?? null,
-        close: editionProgram.registrationCloseDate?.toISOString() ?? null,
-      },
-      registration_types: mapPricingTiersToRegistrationTypes(editionProgram.pricingTiers),
-      // Per-edition guidebook + Instagram feed (see MEYS 6th/7th bug: these
-      // used to live only at section level, sourced from the single active
-      // program). ig_feed is brand-wide data (BrandSocialFeed has no
-      // programId), so it is intentionally identical across editions.
-      guidelines: editionGuidelines.get(editionProgram.id) ?? [],
-      ig_feed: sectionIgFeed,
-    }));
+    // MEYS 6th/7th bug above). Built by the shared editions helper (same one
+    // programs.strategy.ts's `registration_info` section uses), plus
+    // `ig_feed` appended here since that is brand-wide data (BrandSocialFeed
+    // has no programId), so it is intentionally identical across editions
+    // and only relevant to the home page's Instagram carousel.
+    const registrationEditions = (
+      await buildRegistrationEditions(this.prisma, openRegistrationPrograms, nowForRegistrationWindow)
+    ).map((edition) => ({ ...edition, ig_feed: sectionIgFeed }));
 
     const result = {
       slug: 'home',
