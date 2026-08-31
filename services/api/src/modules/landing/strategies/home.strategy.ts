@@ -3,7 +3,7 @@ import { ILandingPageStrategy } from './landing-page.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
-import { Brand } from '@prisma/client';
+import { Brand, ProgramResource } from '@prisma/client';
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 import {
   buildParticipantDistributionLevels,
@@ -359,20 +359,50 @@ export class HomeStrategy implements ILandingPageStrategy {
               },
             },
           },
+          // Each edition needs its own guidebooks (see MEYS 6th/7th bug:
+          // section-level `guidelines` only ever carried the single active
+          // program's resources, so the 7th's guidebook rendered next to the
+          // 6th's cards). Same shape/order as `program`'s own `resources`
+          // include above.
+          resources: {
+            where: { isActive: true, isPublic: true },
+            take: 5,
+            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+          },
         },
       }),
     ]);
 
-    const guidebookResources = await Promise.all(
-      (program?.resources ?? []).map(async (resource) => {
-        const activeUrl = resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl;
-        return {
-          ...resource,
-          resolvedUrl: activeUrl ? await resolveMaskedFileUrl(this.prisma, activeUrl) : null,
-        };
-      }),
+    // Shared by the section-level `guidelines` (single active program) and
+    // each edition's own `guidelines` in `programs[]` below.
+    const resolveGuidebooks = async (resources: ProgramResource[]) =>
+      Promise.all(
+        (resources ?? []).map(async (resource) => {
+          const activeUrl = resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl;
+          const resolvedUrl = activeUrl ? await resolveMaskedFileUrl(this.prisma, activeUrl) : null;
+          return {
+            id: resource.id,
+            title: resource.title,
+            type: resource.type,
+            url: resolvedUrl ?? (resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl),
+          };
+        }),
+      );
+
+    const guidebookResources = await resolveGuidebooks(program?.resources ?? []);
+    const editionGuidelines = new Map(
+      await Promise.all(
+        openRegistrationPrograms.map(
+          async (editionProgram) => [editionProgram.id, await resolveGuidebooks(editionProgram.resources)] as const,
+        ),
+      ),
     );
-    const guidebookUrlById = new Map(guidebookResources.map((resource) => [resource.id, resource.resolvedUrl]));
+    const sectionIgFeed = socialFeeds.map(feed => ({
+      id: feed.id,
+      permalink: feed.permalink,
+      imageUrl: feed.imageUrl,
+      caption: feed.caption
+    }));
 
     // Filter out programs that don't have any videos
     const programsWithVideos = videoPrograms.filter(p => p.gallery && p.gallery.length > 0);
@@ -471,6 +501,12 @@ export class HomeStrategy implements ILandingPageStrategy {
         close: editionProgram.registrationCloseDate?.toISOString() ?? null,
       },
       registration_types: mapPricingTiersToRegistrationTypes(editionProgram.pricingTiers),
+      // Per-edition guidebook + Instagram feed (see MEYS 6th/7th bug: these
+      // used to live only at section level, sourced from the single active
+      // program). ig_feed is brand-wide data (BrandSocialFeed has no
+      // programId), so it is intentionally identical across editions.
+      guidelines: editionGuidelines.get(editionProgram.id) ?? [],
+      ig_feed: sectionIgFeed,
     }));
 
     const result = {
@@ -489,19 +525,9 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'registration_overview',
           content: {
-            ig_feed: socialFeeds.map(feed => ({
-              id: feed.id,
-              permalink: feed.permalink,
-              imageUrl: feed.imageUrl,
-              caption: feed.caption
-            })),
+            ig_feed: sectionIgFeed,
             registration_types: mapPricingTiersToRegistrationTypes(program?.pricingTiers),
-            guidelines: program?.resources.map((res) => ({
-              id: res.id,
-              title: res.title,
-              type: res.type,
-              url: guidebookUrlById.get(res.id) ?? (res.sourceType === 'link' ? res.linkUrl : res.fileUrl),
-            })) || [],
+            guidelines: guidebookResources,
             // Additive: every currently-relevant edition, soonest-close-first.
             // The fields above stay driven by `program` (resolveActiveProgram's
             // pick) exactly as before — untouched, so a brand with one open
