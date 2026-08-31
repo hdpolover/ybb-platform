@@ -75,6 +75,11 @@ export function openRegistrationProgramQuery(
             deletedAt: null,
             isPublished: true,
             isActive: true,
+            // A program can carry isPublished and isActive while its status is
+            // still 'draft'. Without this, unpublishing does not remove a
+            // program from public surfaces: MEYS 7th sat in draft and still
+            // drove the landing countdown (2026-08-31).
+            status: { not: 'draft' },
             // Two separate OR groups, so they must be nested under AND —
             // sibling `OR` keys would overwrite each other.
             AND: [
@@ -86,10 +91,10 @@ export function openRegistrationProgramQuery(
     };
 }
 
-/** Rule 1: published + active, most recent first. */
+/** Rule 1: published + active and not a draft, most recent first. */
 export function activeProgramQuery(brandId: string): ActiveProgramFindFirstArgs {
     return {
-        where: { brandId, deletedAt: null, isPublished: true, isActive: true },
+        where: { brandId, deletedAt: null, isPublished: true, isActive: true, status: { not: 'draft' } },
         orderBy: ACTIVE_PROGRAM_ORDER_BY,
     };
 }

@@ -13,6 +13,7 @@ describe('activeProgramQuery / anyProgramFallbackQuery', () => {
             deletedAt: null,
             isPublished: true,
             isActive: true,
+            status: { not: 'draft' },
         });
         expect(anyProgramFallbackQuery('b1').where).toEqual({ brandId: 'b1', deletedAt: null });
     });
@@ -123,6 +124,7 @@ describe('openRegistrationProgramQuery (rule 0)', () => {
             deletedAt: null,
             isPublished: true,
             isActive: true,
+            status: { not: 'draft' },
             AND: [
                 { OR: [{ registrationOpenDate: null }, { registrationOpenDate: { lte: now } }] },
                 { OR: [{ registrationCloseDate: null }, { registrationCloseDate: { gte: now } }] },
@@ -186,4 +188,16 @@ describe('resolveActiveProgram — rule 0 precedence (the MEYS case)', () => {
         expect(result).toEqual({ program: vys, rule: 2 });
         expect(findFirst).toHaveBeenNthCalledWith(3, anyProgramFallbackQuery('brand-vys'));
     });
+
+  it('excludes a draft program from rules 0 and 1, so unpublishing removes it from public surfaces', () => {
+    // MEYS 7th sat with isPublished and isActive true while its status was
+    // 'draft', and still drove the landing countdown (2026-08-31).
+    const rule0 = openRegistrationProgramQuery('b1', new Date('2026-08-31T00:00:00Z'));
+    const rule1 = activeProgramQuery('b1');
+    expect((rule0.where as Record<string, unknown>).status).toEqual({ not: 'draft' });
+    expect((rule1.where as Record<string, unknown>).status).toEqual({ not: 'draft' });
+    // Rule 2 stays deliberately permissive: it is the last resort that keeps a
+    // brand page from rendering empty.
+    expect((anyProgramFallbackQuery('b1').where as Record<string, unknown>).status).toBeUndefined();
+  });
 });
