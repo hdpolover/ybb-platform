@@ -144,6 +144,13 @@ export async function buildRegistrationEditions(
       open: editionProgram.registrationOpenDate?.toISOString() ?? null,
       close: editionProgram.registrationCloseDate?.toISOString() ?? null,
     },
+    // The event dates, so a signup screen can tell two similarly named
+    // editions apart (MEYS 6th runs Dec 2026, MEYS 7th Mar 2027). Already
+    // loaded by the findMany above, so this costs no extra query.
+    program_dates: {
+      start: editionProgram.startDate?.toISOString() ?? null,
+      end: editionProgram.endDate?.toISOString() ?? null,
+    },
     registration_types: mapPricingTiersToRegistrationTypes(editionProgram.pricingTiers),
     guidelines: guidelinesByProgramId.get(editionProgram.id) ?? [],
   }));
