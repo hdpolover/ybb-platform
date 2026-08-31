@@ -45,8 +45,14 @@ describe('GetAuthContextHandler — concurrent active programs', () => {
 
         expect(result.programId).toBe('p-2027');
         expect(findFirst).toHaveBeenNthCalledWith(2, {
-            where: { brandId: 'brand-meys', deletedAt: null, isPublished: true, isActive: true },
-            orderBy: [{ year: 'desc' }, { createdAt: 'desc' }],
+            where: {
+                        brandId: 'brand-meys',
+                        deletedAt: null,
+                        isPublished: true,
+                        isActive: true,
+                        status: { not: 'draft' },
+                    },
+            orderBy: [{ year: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
             select: { id: true, slug: true, requireEmailVerification: true },
         });
     });

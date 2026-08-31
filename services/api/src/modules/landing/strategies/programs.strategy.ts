@@ -226,6 +226,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             where: {
                 brandId: { not: brand.id },
                 isPublished: true,
+                status: { not: 'draft' },
                 // isActive: true, // Removed requirement for program to be active
                 // endDate: { gt: new Date() } // Removed requirement for future end date
             },
@@ -256,6 +257,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 id: { not: currentProgram?.id },
                 isPublished: true,
                 isActive: true,
+                status: { not: 'draft' },
                 endDate: { gte: startOfWibDay(new Date()) }
             },
             orderBy: { startDate: 'asc' },
@@ -807,6 +809,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 id: { not: program.id },
                 isPublished: true,
                 isActive: true,
+                status: { not: 'draft' },
                 endDate: { gte: startOfWibDay(new Date()) }
             },
             orderBy: { startDate: 'asc' },
@@ -834,7 +837,8 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 id: { not: program.id },
                 // Logic for "previous": end date in past
                 endDate: { lt: startOfWibDay(new Date()) },
-                isPublished: true
+                isPublished: true,
+                status: { not: 'draft' }
             },
             orderBy: { startDate: 'desc' },
             take: 3,
@@ -862,6 +866,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
             where: {
                 brandId: { not: program.brandId },
                 isPublished: true,
+                status: { not: 'draft' },
                 // isActive: true // Relaxed constraints to show visibility of other brands
             },
             orderBy: { startDate: 'desc' },

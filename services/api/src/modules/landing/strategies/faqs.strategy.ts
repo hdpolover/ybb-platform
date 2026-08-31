@@ -80,6 +80,7 @@ export class FaqsStrategy implements ILandingPageStrategy {
                 ...programWhere,
                 isPublished: true,
                 isActive: true,
+                status: { not: 'draft' },
             },
             orderBy: { startDate: 'desc' },
         });
@@ -90,6 +91,7 @@ export class FaqsStrategy implements ILandingPageStrategy {
                 where: {
                     ...programWhere,
                     isPublished: true,
+                    status: { not: 'draft' },
                 },
                 orderBy: { startDate: 'desc' },
             });

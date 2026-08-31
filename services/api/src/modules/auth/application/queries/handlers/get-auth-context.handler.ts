@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
-import { openRegistrationProgramQuery } from '../../../../../shared/utils/active-program-resolver';
+import { activeProgramQuery, openRegistrationProgramQuery } from '../../../../../shared/utils/active-program-resolver';
 import { GetAuthContextQuery } from '../get-auth-context.query';
 import { AuthContextResponseDto } from '../../../presentation/dto/auth-context.dto';
 
@@ -65,9 +65,11 @@ export class GetAuthContextHandler {
                 ...openRegistrationProgramQuery(brand.id, new Date()),
                 select,
             })) ??
+            // Rule 1 from the shared resolver rather than a copy of its where
+            // clause: the copy missed the draft exclusion, so an unpublished
+            // program could still surface here as the auth target.
             (await this.prisma.program.findFirst({
-                where: { brandId: brand.id, deletedAt: null, isPublished: true, isActive: true },
-                orderBy: [{ year: 'desc' }, { createdAt: 'desc' }],
+                ...activeProgramQuery(brand.id),
                 select,
             }));
 
