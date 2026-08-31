@@ -6,6 +6,7 @@ import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 import { startOfWibDay } from '@shared/utils/wib-time';
+import { buildRegistrationEditions, fetchOpenRegistrationPrograms } from './registration-editions.util';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -288,6 +289,16 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 (!currentProgram.registrationOpenDate || currentProgram.registrationOpenDate <= now) &&
                 (!currentProgram.registrationCloseDate || currentProgram.registrationCloseDate >= now);
 
+            // Additive `programs` array (see MEYS 6th/7th concurrent-active-
+            // programs bug): every currently-relevant edition for this brand,
+            // soonest-close-first, same shape/helper home.strategy.ts's
+            // `registration_overview` section uses (registration-editions.util.ts).
+            // The fields below stay driven by `currentProgram` exactly as
+            // today — untouched, so a brand with one open program renders
+            // identically and cached payloads keep their existing shape.
+            const openRegistrationPrograms = await fetchOpenRegistrationPrograms(this.prisma, brand.id, now);
+            const registrationEditions = await buildRegistrationEditions(this.prisma, openRegistrationPrograms, now);
+
             sections.push({
                 type: 'registration_info',
                 content: {
@@ -298,6 +309,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                         open: currentProgram.registrationOpenDate?.toISOString() ?? null,
                         close: currentProgram.registrationCloseDate?.toISOString() ?? null
                     },
+                    programs: registrationEditions,
                     pricing_tiers: currentProgram.pricingTiers.map(tier => ({
                         id: tier.id,
                         name: tier.name,
