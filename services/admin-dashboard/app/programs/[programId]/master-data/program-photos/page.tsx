@@ -14,6 +14,8 @@ import {
 } from "@/src/shared/api-client";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/src/ui/sheet";
 import { MediaLibraryPicker } from "@/app/components/submissionsMasterData/form-fields/MediaLibraryPicker";
+import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
+import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 
 export default function ProgramPhotosPage() {
   const params = useParams<{ programId: string }>();
@@ -29,6 +31,8 @@ export default function ProgramPhotosPage() {
   const [editTarget, setEditTarget] = useState<ProgramGalleryItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProgramGalleryItem | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
+  const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
 
   const programName = accessiblePrograms.find((p) => p.programId === params.programId)?.programName ?? "Selected Program";
 
@@ -64,6 +68,20 @@ export default function ProgramPhotosPage() {
           <div className="flex gap-2">
             <button type="button" onClick={fetchItems} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50">
               <ArrowPathIcon className="h-3.5 w-3.5" />Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => setCopyFromProgramOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+            >
+              <span>Copy from program</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCopyFromTemplateOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+            >
+              <span>Copy from template</span>
             </button>
             <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600">
               <PlusIcon className="h-3.5 w-3.5" />Upload Photo
@@ -144,6 +162,32 @@ export default function ProgramPhotosPage() {
       {deleteTarget && (
         <ConfirmDelete name={deleteTarget.title ?? "this photo"} loading={deleteLoading} onCancel={() => setDeleteTarget(null)} onConfirm={handleDelete} />
       )}
+
+      <CopyFromProgramDialog
+        open={copyFromProgramOpen}
+        entityKey="photos"
+        entityLabel="Photos"
+        programId={resolvedProgramId}
+        supportsAppend
+        onClose={() => setCopyFromProgramOpen(false)}
+        onApplied={() => {
+          setCopyFromProgramOpen(false);
+          fetchItems();
+        }}
+      />
+
+      <CopyFromTemplateDialog
+        open={copyFromTemplateOpen}
+        entityKey="photos"
+        entityLabel="Photos"
+        programId={resolvedProgramId}
+        supportsAppend
+        onClose={() => setCopyFromTemplateOpen(false)}
+        onApplied={() => {
+          setCopyFromTemplateOpen(false);
+          fetchItems();
+        }}
+      />
     </main>
   );
 }

@@ -255,6 +255,26 @@ const testimonialsItemSchema = z
   })
   .strict();
 
+const photosItemSchema = z
+  .object({
+    imageUrl: z.string().min(1),
+    videoUrl: z.string().nullable(),
+    title: z.string().nullable(),
+    description: z.string().nullable(),
+    year: z.number().nullable(),
+    type: z.string(),
+    isActive: z.boolean(),
+  })
+  .strict();
+
+const subThemesItemSchema = z
+  .object({
+    name: z.string().min(1),
+    description: z.string().nullable(),
+    isActive: z.boolean(),
+  })
+  .strict();
+
 // Keyed by ProgramCopier.key — adding another copier means adding one
 // entry here, not touching any call site.
 const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
@@ -269,6 +289,8 @@ const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
   landing: landingContentItemSchema,
   speakers: speakersItemSchema,
   testimonials: testimonialsItemSchema,
+  photos: photosItemSchema,
+  'sub-themes': subThemesItemSchema,
 };
 
 /**
