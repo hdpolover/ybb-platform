@@ -66,6 +66,7 @@ type ProgramDetail = {
   contactPhone?: string | null;
   contactWhatsapp?: string | null;
   contactAddress?: string | null;
+  partnersCanvaUrl?: string | null;
   landingContent?: import("@/app/platform/api").ProgramLandingContent;
   metaTitle?: string | null;
   metaDescription?: string | null;
@@ -231,6 +232,7 @@ function toProgramSpecificsData(detail: ProgramDetail): ProgramSpecificsData {
       contactAddress: detail.contactAddress ?? null,
     },
     landingContent: detail.landingContent ?? {},
+    partnersCanvaUrl: detail.partnersCanvaUrl ?? null,
   };
 }
 

@@ -194,6 +194,14 @@ model Program {
   contactWhatsapp String? @map("contact_whatsapp") @db.VarChar(50)
   contactAddress  String? @map("contact_address") @db.Text
 
+  // Partners Page — per-program Canva embed. Replaces the single
+  // Brand.metadata.partners_canva_url slot, which could only show one
+  // embed even when two program editions of the same brand run
+  // concurrently. Backfilled from that brand-level value in migration
+  // 20260901120000_add_program_partners_canva_url; the brand-level key is
+  // left in place as a fallback (see partners-sponsors.strategy.ts).
+  partnersCanvaUrl String? @map("partners_canva_url") @db.VarChar(500)
+
   // SEO
   metaTitle       String? @map("meta_title") @db.VarChar(255)
   metaDescription String? @map("meta_description") @db.Text
