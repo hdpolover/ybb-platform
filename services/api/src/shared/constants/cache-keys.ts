@@ -21,6 +21,19 @@ export const CACHE_KEYS = {
   LANDING_PROGRAM_DETAIL: (brandId: string, slug: string) => `landing:program:${brandId}:${slug}`,
   LANDING_PARTNERS: (brandId: string) => `landing:partners:${brandId}`,
   LANDING_ANNOUNCEMENTS: (brandId: string) => `landing:announcements:${brandId}`,
+  // Filtered/paginated announcements cache key. Every filter dimension is part of the
+  // key so distinct filter combinations never collide; the unfiltered page-1 request
+  // never reaches this (it uses the brand_landing_snapshots-backed snapshot instead).
+  LANDING_ANNOUNCEMENTS_LIST: (
+    brandId: string,
+    page: number,
+    limit: number,
+    search: string,
+    category: string,
+    tag: string,
+    programId: string,
+    year: string,
+  ) => `landing:announcements:${brandId}:${page}:${limit}:${search}:${category}:${tag}:${programId}:${year}`,
   LANDING_FAQS: (brandId: string, page: number, limit: number, search: string) => `landing:faqs:${brandId}:${page}:${limit}:${search}`,
   LANDING_SETTINGS: (brandId: string) => `landing:settings:${brandId}`,
   LANDING_ACTIVITY: (brandId: string) => `landing:activity:${brandId}`,

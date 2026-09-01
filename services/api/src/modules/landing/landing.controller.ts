@@ -4,6 +4,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiHeader, ApiNotFoundRes
 import { LandingPageResponseDto } from './dto/landing-page.dto';
 import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
 import { LandingActivityResponseDto } from './dto/landing-activity.dto';
+import { ListAnnouncementsQueryDto } from './dto/landing-announcements-query.dto';
 import { Public } from '../../shared/decorators/public.decorator';
 import { BrandDomain } from '../../shared/decorators/brand-domain.decorator';
 
@@ -110,14 +111,25 @@ export class LandingController {
   }
 
   @Get('announcements')
-  @ApiOperation({ summary: 'Get announcements page' })
+  @ApiOperation({
+    summary: 'Get announcements page',
+    description: 'Paginated, filterable feed merging system-wide and program-level announcements for the resolved brand.',
+  })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number', type: Number })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (max 100)', type: Number })
+  @ApiQuery({ name: 'search', required: false, description: 'Search term matched against title/content' })
+  @ApiQuery({ name: 'category', required: false, description: 'Filter by category (e.g. News, General)' })
+  @ApiQuery({ name: 'tag', required: false, description: 'Filter by a single tag' })
+  @ApiQuery({ name: 'programId', required: false, description: 'Filter by program/edition id' })
+  @ApiQuery({ name: 'year', required: false, description: 'Filter to announcements published in this calendar year', type: Number })
   @ApiResponse({ status: 200, description: 'Return announcements page structure', type: LandingPageResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid brand identification' })
   async getAnnouncements(
+    @Query() query: ListAnnouncementsQueryDto,
     @BrandDomain() brandDomain?: string,
   ): Promise<LandingPageResponseDto> {
-    return this.landingService.getAnnouncements(brandDomain);
+    return this.landingService.getAnnouncements(brandDomain, query);
   }
 
   @Get('faqs')

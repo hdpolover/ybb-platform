@@ -70,6 +70,24 @@ export class LandingPageSectionContentDto {
 
   @ApiProperty({ description: 'Canonical gallery list for image-driven sections', required: false, isArray: true })
   gallery?: Record<string, unknown>[];
+
+  @ApiProperty({
+    description: 'Pagination metadata for list-type sections (e.g. announcement_list)',
+    required: false,
+    example: { total: 116, page: 1, limit: 20, total_pages: 6 },
+  })
+  pagination?: { total: number; page: number; limit: number; total_pages: number };
+
+  @ApiProperty({
+    description: 'Available filter values for list-type sections, so clients do not need to hardcode them',
+    required: false,
+    example: {
+      categories: ['News', 'General'],
+      tags: ['orientation', 'scholarship'],
+      programs: [{ id: 'b1e2...', title: 'Istanbul Youth Summit 2026' }],
+    },
+  })
+  filters?: { categories: string[]; tags: string[]; programs: { id: string; title: string }[] };
 }
 
 export class LandingPageSectionDto {

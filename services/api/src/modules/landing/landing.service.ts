@@ -15,6 +15,7 @@ import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
 import { LandingActivityResponseDto } from './dto/landing-activity.dto';
 import { LandingSnapshotService } from './services/landing-snapshot.service';
 import { resolveEditionSlug } from './strategies/registration-editions.util';
+import { ListAnnouncementsQueryDto } from './dto/landing-announcements-query.dto';
 
 const DEFAULT_FAQ_LIMIT = 200;
 
@@ -150,9 +151,9 @@ export class LandingService {
     return this.partnersSponsorsStrategy.getData(brand) as Promise<LandingPageResponseDto>;
   }
 
-  async getAnnouncements(url?: string): Promise<LandingPageResponseDto> {
+  async getAnnouncements(url?: string, query: ListAnnouncementsQueryDto = {}): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
-    return this.announcementsStrategy.getData(brand) as Promise<LandingPageResponseDto>;
+    return this.announcementsStrategy.getAnnouncements(brand, query) as Promise<LandingPageResponseDto>;
   }
 
   async getFaqs(url?: string, page: number = 1, limit: number = DEFAULT_FAQ_LIMIT, search?: string): Promise<LandingPageResponseDto> {
