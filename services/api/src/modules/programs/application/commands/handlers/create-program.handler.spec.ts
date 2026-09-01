@@ -143,4 +143,52 @@ describe('CreateProgramHandler', () => {
             revalidate: { kind: 'homeAndSettings' },
         });
     });
+
+    // Regression guard for the MEYS 7th incident: a program created with
+    // isPublished true but no explicit status must not default to 'draft'
+    // and go invisible on every public query (status !== 'draft' gate).
+    it('advances status to published when created with isPublished true and no explicit status', async () => {
+        const dto: CreateProgramDto = {
+            name: 'Test Program',
+            brandId: 'brand-1',
+            year: 2024,
+            startDate: '2024-01-01',
+            endDate: '2024-01-10',
+            applicationDeadline: '2023-12-31',
+            slug: 'test-program',
+            isPublished: true,
+        };
+        const command = new CreateProgramCommand(dto, 'user-1');
+
+        mockProgramRepository.create.mockImplementation((data) => Promise.resolve({ id: 'prog-1', ...data }));
+
+        await handler.execute(command);
+
+        expect(mockProgramRepository.create).toHaveBeenCalledWith(
+            expect.objectContaining({ isPublished: true, status: 'published' }),
+        );
+    });
+
+    it('respects an explicit draft status even when created with isPublished true', async () => {
+        const dto: CreateProgramDto = {
+            name: 'Test Program',
+            brandId: 'brand-1',
+            year: 2024,
+            startDate: '2024-01-01',
+            endDate: '2024-01-10',
+            applicationDeadline: '2023-12-31',
+            slug: 'test-program',
+            isPublished: true,
+            status: 'draft',
+        };
+        const command = new CreateProgramCommand(dto, 'user-1');
+
+        mockProgramRepository.create.mockImplementation((data) => Promise.resolve({ id: 'prog-1', ...data }));
+
+        await handler.execute(command);
+
+        expect(mockProgramRepository.create).toHaveBeenCalledWith(
+            expect.objectContaining({ isPublished: true, status: 'draft' }),
+        );
+    });
 });

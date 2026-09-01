@@ -17,6 +17,7 @@ import {
 } from "@/app/components/programDetailsMasterData/program-specifics/ProgramSpecificsTab";
 import {
   type ProgramSpecificsFormValues,
+  type ProgramStatus,
 } from "@/app/components/programDetailsMasterData/program-specifics/EditProgramSpecificsModal";
 import {
   type GeneralInformationFormValues,
@@ -257,6 +258,7 @@ function toSpecificsFormValues(detail: ProgramDetail): ProgramSpecificsFormValue
     startDate: toDateInputValue(detail.startDate),
     endDate: toDateInputValue(detail.endDate),
     applicationDeadline: toDateInputValue(detail.applicationDeadline),
+    status: (detail.status as ProgramStatus) ?? "draft",
     isPublished: detail.isPublished,
     location: detail.location ?? "",
     capacity: detail.capacity !== null && detail.capacity !== undefined ? String(detail.capacity) : "",
@@ -379,6 +381,7 @@ export default function ProgramDetailsPage({
         startDate: values.startDate || undefined,
         endDate: values.endDate || undefined,
         applicationDeadline: values.applicationDeadline || undefined,
+        status: values.status,
         isPublished: values.isPublished,
         location: values.location.trim() || undefined,
         capacity: values.capacity.trim() === "" ? undefined : Number(values.capacity),
