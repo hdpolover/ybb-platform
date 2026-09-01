@@ -10,6 +10,12 @@
 # pages are server rendered on demand so the build never renders them. It only
 # throws on a real request. That took the participant site down on 2026-08-31.
 #
+# Lint is gated on ERRORS only, not warnings: 45 errors had accumulated
+# unnoticed because tsc, tests and next build all stayed green, and ESLint
+# catches a class those three miss (dead code, unsafe regex escapes, hook
+# rule violations). Warnings stay advisory so the gate does not become noise
+# people bypass.
+#
 # Enable once per clone:  git config core.hooksPath .githooks
 # Emergency bypass:       git push --no-verify
 
@@ -27,25 +33,33 @@ fi
 
 echo "pre-push: pushing dev (auto-deploys to production). Running the gate."
 
-echo "pre-push: [1/5] admin dashboard rsc boundary"
+echo "pre-push: [1/7] admin dashboard rsc boundary"
 ( cd services/admin-dashboard && node scripts/check-rsc-boundary.mjs ) \
   || { echo "pre-push: BLOCKED, a server component imports a function from a client module."; exit 1; }
 
-echo "pre-push: [2/5] api typecheck"
+echo "pre-push: [2/7] api typecheck"
 ( cd services/api && npx tsc --noEmit ) \
   || { echo "pre-push: BLOCKED, api typecheck failed."; exit 1; }
 
-echo "pre-push: [3/5] api tests"
+echo "pre-push: [3/7] api tests"
 ( cd services/api && npx jest --silent ) \
   || { echo "pre-push: BLOCKED, api tests failed."; exit 1; }
 
-echo "pre-push: [4/5] admin dashboard typecheck"
+echo "pre-push: [4/7] api lint"
+( cd services/api && npx eslint src ) \
+  || { echo "pre-push: BLOCKED, api lint errors. Warnings are fine, errors are not."; exit 1; }
+
+echo "pre-push: [5/7] admin dashboard typecheck"
 ( cd services/admin-dashboard && npx tsc --noEmit ) \
   || { echo "pre-push: BLOCKED, admin dashboard typecheck failed."; exit 1; }
 
-echo "pre-push: [5/5] admin dashboard build"
+echo "pre-push: [6/7] admin dashboard build"
 ( cd services/admin-dashboard && npx next build ) \
   || { echo "pre-push: BLOCKED, admin dashboard build failed."; exit 1; }
 
-echo "pre-push: all five passed."
+echo "pre-push: [7/7] admin dashboard lint"
+( cd services/admin-dashboard && npx eslint app src ) \
+  || { echo "pre-push: BLOCKED, admin dashboard lint errors. Warnings are fine, errors are not."; exit 1; }
+
+echo "pre-push: all seven passed."
 exit 0

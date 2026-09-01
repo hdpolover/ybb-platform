@@ -13,6 +13,10 @@ import { MetricsController } from '@shared/presentation/metrics.controller';
 import { QueueController } from '@shared/presentation/queue.controller';
 import { WinstonModule } from 'nest-winston';
 import * as winston from 'winston';
+// This tsconfig has esModuleInterop off, and the `.default || LokiTransport`
+// fallback below needs whichever shape the CJS module actually exports. An
+// ESM import compiles to a bare default access here and breaks Loki logging.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const LokiTransport = require('winston-loki');
 import { trace, context } from '@opentelemetry/api';
 import { AchievementsModule } from '@modules/achievements/achievements.module';
