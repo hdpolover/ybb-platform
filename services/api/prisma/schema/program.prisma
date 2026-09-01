@@ -115,6 +115,10 @@ model BrandSetting {
 model BrandSocialFeed {
   id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   brandId   String   @map("brand_id") @db.Uuid
+  // Optional program (edition) association — null means the post is a
+  // brand-wide fallback shown on every edition's landing page that has no
+  // posts of its own. See home.strategy.ts for the per-edition resolution.
+  programId String?  @map("program_id") @db.Uuid
   platform  String   @default("instagram") @db.VarChar(50) // instagram, tiktok
   postId    String   @map("post_id") @db.VarChar(100) // External ID
   imageUrl  String   @map("image_url") @db.VarChar(500)
@@ -126,11 +130,13 @@ model BrandSocialFeed {
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  brand   Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  program Program? @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@index([brandId])
   @@index([platform])
   @@index([postedAt])
+  @@index([brandId, programId, isActive])
   @@map("brand_social_feeds")
 }
 
@@ -254,6 +260,7 @@ model Program {
   participationCategories  ProgramParticipationCategory[]
   exchangeRateHistory      ProgramExchangeRateHistory[]
   loaReleaseBatches        LoaReleaseBatch[]
+  socialFeeds              BrandSocialFeed[]
 
   @@unique([brandId, slug])
   @@index([brandId])

@@ -42,6 +42,13 @@ export class CreateSocialFeedHandler implements ICommandHandler<CreateSocialFeed
             throw new NotFoundException('Brand not found');
         }
 
+        if (dto.programId) {
+            const program = await this.prisma.program.findUnique({ where: { id: dto.programId } });
+            if (!program || program.brandId !== brandId) {
+                throw new BadRequestException('Program does not belong to this brand.');
+            }
+        }
+
         const platform = normalizePlatform(dto.platform);
         const permalink = parseInstagramPermalinkInput(dto.permalink);
         const metadata = await resolveSocialFeedMetadata(permalink).catch(() => ({
@@ -59,6 +66,7 @@ export class CreateSocialFeedHandler implements ICommandHandler<CreateSocialFeed
         const feed = await this.prisma.brandSocialFeed.create({
             data: {
                 brandId,
+                programId: dto.programId ?? null,
                 platform,
                 postId: derivePostId(dto.postId, permalink),
                 permalink,
@@ -84,6 +92,7 @@ export class CreateSocialFeedHandler implements ICommandHandler<CreateSocialFeed
             caption: feed.caption ?? undefined,
             postedAt: feed.postedAt,
             isActive: feed.isActive,
+            programId: feed.programId,
         };
     }
 }

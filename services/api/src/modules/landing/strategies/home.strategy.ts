@@ -236,6 +236,9 @@ export class HomeStrategy implements ILandingPageStrategy {
         },
         orderBy: { order: 'asc' },
       }),
+      // Fetched once for the whole brand (no take limit) so it can be grouped
+      // per-edition below without an N+1 query per program. Each edition is
+      // capped to IG_FEED_TAKE posts after grouping.
       this.prisma.brandSocialFeed.findMany({
         where: {
           brandId: brand.id,
@@ -243,7 +246,6 @@ export class HomeStrategy implements ILandingPageStrategy {
           platform: 'instagram',
         },
         orderBy: { postedAt: 'desc' },
-        take: 6
       }),
       this.prisma.program.findMany({
         where: {
@@ -352,12 +354,39 @@ export class HomeStrategy implements ILandingPageStrategy {
     // Shared with each edition's own `guidelines` in `programs[]` below (via
     // buildRegistrationEditions, which resolves guidebooks the same way).
     const guidebookResources = await resolveEditionGuidebooks(this.prisma, program?.resources ?? []);
-    const sectionIgFeed = socialFeeds.map(feed => ({
+
+    // Group the brand's Instagram posts by edition (programId), plus a
+    // separate brand-wide bucket (programId === null) used as a fallback.
+    // Both lists stay in postedAt-desc order because the query above is.
+    const IG_FEED_TAKE = 6;
+    const mappedSocialFeeds = socialFeeds.map(feed => ({
       id: feed.id,
       permalink: feed.permalink,
       imageUrl: feed.imageUrl,
-      caption: feed.caption
+      caption: feed.caption,
     }));
+    const igFeedsByProgramId = new Map<string, typeof mappedSocialFeeds>();
+    const brandWideIgFeed: typeof mappedSocialFeeds = [];
+    socialFeeds.forEach((feed, index) => {
+      const mapped = mappedSocialFeeds[index];
+      if (feed.programId) {
+        const existing = igFeedsByProgramId.get(feed.programId) ?? [];
+        existing.push(mapped);
+        igFeedsByProgramId.set(feed.programId, existing);
+      } else {
+        brandWideIgFeed.push(mapped);
+      }
+    });
+
+    // Edition-specific posts when the edition has any of its own; otherwise
+    // fall back to the brand-wide bucket. No mixed top-up — an edition with
+    // even one post of its own shows only its own posts.
+    const resolveIgFeedForProgram = (programId?: string | null) => {
+      const ownPosts = programId ? igFeedsByProgramId.get(programId) : undefined;
+      return (ownPosts && ownPosts.length > 0 ? ownPosts : brandWideIgFeed).slice(0, IG_FEED_TAKE);
+    };
+
+    const sectionIgFeed = resolveIgFeedForProgram(program?.id);
 
     // Filter out programs that don't have any videos
     const programsWithVideos = videoPrograms.filter(p => p.gallery && p.gallery.length > 0);
@@ -444,12 +473,13 @@ export class HomeStrategy implements ILandingPageStrategy {
     // Additive `programs` array for the registration_overview section (see
     // MEYS 6th/7th bug above). Built by the shared editions helper (same one
     // programs.strategy.ts's `registration_info` section uses), plus
-    // `ig_feed` appended here since that is brand-wide data (BrandSocialFeed
-    // has no programId), so it is intentionally identical across editions
-    // and only relevant to the home page's Instagram carousel.
+    // `ig_feed` appended here per-edition: each edition gets its own
+    // BrandSocialFeed posts (programId match) when it has any, falling back
+    // to the brand-wide bucket (programId === null) otherwise — see
+    // resolveIgFeedForProgram above.
     const registrationEditions = (
       await buildRegistrationEditions(this.prisma, openRegistrationPrograms, nowForRegistrationWindow)
-    ).map((edition) => ({ ...edition, ig_feed: sectionIgFeed }));
+    ).map((edition) => ({ ...edition, ig_feed: resolveIgFeedForProgram(edition.program_id) }));
 
     const result = {
       slug: 'home',

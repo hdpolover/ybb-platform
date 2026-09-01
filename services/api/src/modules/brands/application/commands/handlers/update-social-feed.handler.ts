@@ -51,6 +51,13 @@ export class UpdateSocialFeedHandler implements ICommandHandler<UpdateSocialFeed
             throw new NotFoundException('Social feed not found');
         }
 
+        if (dto.programId !== undefined && dto.programId !== null) {
+            const program = await this.prisma.program.findUnique({ where: { id: dto.programId } });
+            if (!program || program.brandId !== brandId) {
+                throw new BadRequestException('Program does not belong to this brand.');
+            }
+        }
+
         const nextPermalink = dto.permalink !== undefined
             ? parseInstagramPermalinkInput(dto.permalink)
             : feed.permalink;
@@ -79,6 +86,7 @@ export class UpdateSocialFeedHandler implements ICommandHandler<UpdateSocialFeed
         const updated = await this.prisma.brandSocialFeed.update({
             where: { id: socialFeedId },
             data: {
+                ...(dto.programId !== undefined ? { programId: dto.programId } : {}),
                 ...(dto.platform !== undefined ? { platform: normalizePlatform(dto.platform) } : {}),
                 ...(dto.postId !== undefined || dto.permalink !== undefined ? { postId: nextPostId } : {}),
                 ...(dto.permalink !== undefined ? { permalink: nextPermalink } : {}),
@@ -104,6 +112,7 @@ export class UpdateSocialFeedHandler implements ICommandHandler<UpdateSocialFeed
             caption: updated.caption ?? undefined,
             postedAt: updated.postedAt,
             isActive: updated.isActive,
+            programId: updated.programId,
         };
     }
 }
