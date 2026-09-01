@@ -7,6 +7,7 @@ import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-a
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
 import { assertProgramDeadlineOrder } from '../../validators/program-deadline-order.validator';
+import { deriveProgramStatus } from '../../validators/derive-program-status.util';
 
 @CommandHandler(CreateProgramCommand)
 export class CreateProgramHandler implements ICommandHandler<CreateProgramCommand> {
@@ -38,6 +39,15 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
             registrationCloseDate: mutableData.registrationCloseDate as Date | null | undefined,
             applicationDeadline: mutableData.applicationDeadline as Date | null | undefined,
         });
+
+        // A brand-new program defaults to status='draft' (see program.repository.ts
+        // create()). If the caller flips isPublished/isActive true without also
+        // sending status, advance it here too, for the same reason as
+        // update-program.handler.ts — see derive-program-status.util.ts.
+        const derivedStatus = deriveProgramStatus('draft', createProgramDto);
+        if (derivedStatus !== undefined) {
+            mutableData.status = derivedStatus;
+        }
 
         const program = await this.programRepository.create(mutableData as Partial<Program>);
 
@@ -91,8 +101,8 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
             .toLowerCase()
             .trim()
             .replace(/\s+/g, '-')     // Replace spaces with -
-            .replace(/[^\w\-]+/g, '') // Remove all non-word chars
-            .replace(/\-\-+/g, '-')  // Replace multiple - with single -
+            .replace(/[^\w-]+/g, '') // Remove all non-word chars
+            .replace(/--+/g, '-')  // Replace multiple - with single -
             .slice(0, 255);
     }
 }

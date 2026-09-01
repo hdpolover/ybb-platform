@@ -2,11 +2,11 @@ import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Inject, NotFoundException } from '@nestjs/common';
 import { UpdateProgramCommand } from '../update-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
-import { Program } from '@core/entities/program.entity';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
 import { UserActivityLog } from '@core/entities/user-activity-log.entity';
 import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
 import { assertProgramDeadlineOrder } from '../../validators/program-deadline-order.validator';
+import { deriveProgramStatus } from '../../validators/derive-program-status.util';
 
 const DEADLINE_ORDER_FIELDS = ['registrationOpenDate', 'registrationCloseDate', 'applicationDeadline'] as const;
 
@@ -53,6 +53,15 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
                 registrationCloseDate: mergedDate('registrationCloseDate'),
                 applicationDeadline: mergedDate('applicationDeadline'),
             });
+        }
+
+        // If this request flips isPublished/isActive true without also sending
+        // status, and the program is still 'draft', advance status alongside
+        // it so the two can't drift apart (see derive-program-status.util.ts —
+        // this is the write path that caused the MEYS 7th incident).
+        const derivedStatus = deriveProgramStatus(existingProgram.status, updateProgramDto);
+        if (derivedStatus !== undefined) {
+            programData.status = derivedStatus;
         }
 
         const updatedProgram = await this.programRepository.update(programId, programData);
@@ -107,8 +116,8 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
             .toLowerCase()
             .trim()
             .replace(/\s+/g, '-')     // Replace spaces with -
-            .replace(/[^\w\-]+/g, '') // Remove all non-word chars
-            .replace(/\-\-+/g, '-')  // Replace multiple - with single -
+            .replace(/[^\w-]+/g, '') // Remove all non-word chars
+            .replace(/--+/g, '-')  // Replace multiple - with single -
             .slice(0, 255);
     }
 }

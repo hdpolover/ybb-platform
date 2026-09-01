@@ -175,4 +175,60 @@ describe('UpdateProgramHandler', () => {
         const updatedSlug = (programRepository.update as jest.Mock).mock.calls[0][1].slug as string;
         expect(updatedSlug.length).toBeLessThanOrEqual(255);
     });
+
+    describe('status/isPublished drift guard (MEYS 7th incident)', () => {
+        it('advances status from draft to published when isPublished is set true without touching status', async () => {
+            const program = makeProgram({ status: 'draft' });
+            programRepository.findById.mockResolvedValue(program as any);
+            programRepository.update.mockImplementation((_id, data) => Promise.resolve({ ...program, ...data } as any));
+
+            const command = new UpdateProgramCommand('prog-1', { isPublished: true }, 'user-1');
+            await handler.execute(command);
+
+            expect(programRepository.update).toHaveBeenCalledWith(
+                'prog-1',
+                expect.objectContaining({ isPublished: true, status: 'published' }),
+            );
+        });
+
+        it('advances status from draft to published when isActive is set true without touching status', async () => {
+            const program = makeProgram({ status: 'draft' });
+            programRepository.findById.mockResolvedValue(program as any);
+            programRepository.update.mockImplementation((_id, data) => Promise.resolve({ ...program, ...data } as any));
+
+            const command = new UpdateProgramCommand('prog-1', { isActive: true }, 'user-1');
+            await handler.execute(command);
+
+            expect(programRepository.update).toHaveBeenCalledWith(
+                'prog-1',
+                expect.objectContaining({ isActive: true, status: 'published' }),
+            );
+        });
+
+        it('does not touch status when the request already sends an explicit status', async () => {
+            const program = makeProgram({ status: 'draft' });
+            programRepository.findById.mockResolvedValue(program as any);
+            programRepository.update.mockImplementation((_id, data) => Promise.resolve({ ...program, ...data } as any));
+
+            const command = new UpdateProgramCommand('prog-1', { isPublished: true, status: 'draft' }, 'user-1');
+            await handler.execute(command);
+
+            expect(programRepository.update).toHaveBeenCalledWith(
+                'prog-1',
+                expect.objectContaining({ isPublished: true, status: 'draft' }),
+            );
+        });
+
+        it('does not drag a completed program back to published when isPublished is re-saved true', async () => {
+            const program = makeProgram({ status: 'completed' });
+            programRepository.findById.mockResolvedValue(program as any);
+            programRepository.update.mockImplementation((_id, data) => Promise.resolve({ ...program, ...data } as any));
+
+            const command = new UpdateProgramCommand('prog-1', { isPublished: true }, 'user-1');
+            await handler.execute(command);
+
+            const updateArg = (programRepository.update as jest.Mock).mock.calls[0][1];
+            expect(updateArg.status).toBeUndefined();
+        });
+    });
 });

@@ -8,12 +8,23 @@ import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { FormSection } from "@/src/ui/drawer/form-section";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 
+export type ProgramStatus = "draft" | "published" | "ongoing" | "completed" | "cancelled";
+
+export const PROGRAM_STATUS_OPTIONS: Array<{ value: ProgramStatus; label: string }> = [
+  { value: "draft", label: "Draft" },
+  { value: "published", label: "Published" },
+  { value: "ongoing", label: "Ongoing" },
+  { value: "completed", label: "Completed" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
 export interface ProgramSpecificsFormValues {
   year: string;
   theme: string;
   startDate: string;
   endDate: string;
   applicationDeadline: string;
+  status: ProgramStatus;
   isPublished: boolean;
   location: string;
   capacity: string;
@@ -55,6 +66,10 @@ export function EditProgramSpecificsModal({
   const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Prop->state sync: initialValues is memoized by the caller (only
+    // changes when the underlying program data actually changes), and this
+    // effect doesn't write anything back into initialValues, so it can't loop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFormValues(initialValues);
     setValidationError(null);
   }, [initialValues]);
@@ -183,6 +198,20 @@ export function EditProgramSpecificsModal({
               className={INPUT_CLS}
             />
           </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Status</label>
+            <select
+              value={formValues.status}
+              onChange={(event) => updateField("status", event.target.value as ProgramStatus)}
+              className={INPUT_CLS}
+            >
+              {PROGRAM_STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="flex flex-col justify-end gap-2">
             <label className="flex items-center gap-3 rounded-md border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium text-zinc-700 shadow-sm">
               <input
@@ -194,6 +223,13 @@ export function EditProgramSpecificsModal({
               Published
             </label>
           </div>
+          {formValues.isPublished && formValues.status === "draft" && (
+            <div className="md:col-span-2 xl:col-span-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Status is still &quot;Draft&quot; while Published is checked. Every public query hides draft
+              programs regardless of Published/Active, so this program will stay invisible on the site
+              until Status is changed. Pick a status above (usually &quot;Published&quot;) to make it live.
+            </div>
+          )}
         </div>
       </FormSection>
 
@@ -232,7 +268,7 @@ export function EditProgramSpecificsModal({
             />
             <p className="mt-1.5 text-xs text-zinc-500">
               Leave blank to clear this bound. This bound alone does not make a category
-              purchasable: that is driven by each pricing tier's validity windows in{" "}
+              purchasable: that is driven by each pricing tier&apos;s validity windows in{" "}
               {programId ? (
                 <Link
                   href={`/programs/${programId}/master-data/program-payments`}

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { EmptyState } from "@/src/admin/empty-state";
+import { StatusBadge } from "@/src/admin/status-badge";
 import type { ProgramLandingContent } from "@/app/platform/api";
 import { ProgramContactSheet } from "./ProgramContactSheet";
 import { ProgramPartnersCanvaSheet } from "./ProgramPartnersCanvaSheet";
@@ -133,6 +134,15 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
   const featuresCount = lc.features?.length ?? 0;
   const paymentInfoItemCount = lc.payment_info?.items?.length ?? 0;
 
+  // Public queries gate on isPublished && isActive && status !== 'draft' (see
+  // shared/utils/active-program-resolver.ts in the API). A program can look
+  // live here (Published/Active badges green) while status is still 'draft'
+  // and stay invisible on every public surface — exactly what happened to
+  // Middle East Youth Summit 7th (2026-09-01). Flag that combination.
+  const isPublishedActiveDraftMismatch =
+    data.schedule.status.toLowerCase() === "draft" &&
+    (data.schedule.isPublished === "Published" || data.schedule.isActive === "Active");
+
   return (
     <div className="space-y-6 pt-2">
       {/* Program Shell Snapshot */}
@@ -183,7 +193,41 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
               {data.schedule.applicationDeadline}
             </dd>
           </div>
+          <div>
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Status</dt>
+            <dd>
+              <StatusBadge status={data.schedule.status} context="generic" />
+            </dd>
+          </div>
+          <div>
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Published</dt>
+            <dd>
+              <StatusBadge
+                status={data.schedule.isPublished === "Published" ? "published" : "draft"}
+                context="generic"
+                label={data.schedule.isPublished}
+              />
+            </dd>
+          </div>
+          <div>
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Active</dt>
+            <dd>
+              <StatusBadge
+                status={data.schedule.isActive === "Active" ? "active" : "inactive"}
+                context="generic"
+                label={data.schedule.isActive}
+              />
+            </dd>
+          </div>
         </dl>
+        {isPublishedActiveDraftMismatch && (
+          <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span className="font-semibold">Status is still &quot;Draft&quot;</span> even though Published
+            and/or Active is on. Every public query excludes draft programs regardless of Published/Active,
+            so this program is invisible on the site right now. Edit Program Specifics and set Status to
+            &quot;Published&quot; (or the appropriate lifecycle status) to fix this.
+          </div>
+        )}
       </section>
 
       {/* Registration & Operations */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Trash2, Eye, Layers } from "lucide-react";
+import { Pencil, Trash2, Eye, Layers, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import {
   Table,
@@ -80,7 +80,17 @@ export function ProgramsTable({ programs, onEdit, onDelete }: ProgramsTableProps
             </TableCell>
             <TableCell className="text-zinc-600">{program.year}</TableCell>
             <TableCell>
-              <StatusBadge status={program.status} context="generic" />
+              <div className="flex items-center gap-1.5">
+                <StatusBadge status={program.status} context="generic" />
+                {program.status === "draft" && (program.isPublished || program.isActive) && (
+                  <span
+                    title='Status is "Draft" but Published/Active is on — every public query hides draft programs, so this is invisible on the site despite looking live here.'
+                    className="inline-flex text-amber-500"
+                  >
+                    <TriangleAlert className="h-4 w-4" />
+                  </span>
+                )}
+              </div>
             </TableCell>
             <TableCell className="text-zinc-500">
               {program.applicationDeadline
