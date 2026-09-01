@@ -10,6 +10,7 @@ import {
   GetLoaDownloadsHandler,
 } from './loa-batch.handlers';
 import { LoaReleaseBatchRepository } from '../../infrastructure/persistence/loa-release-batch.repository';
+import { LoaBatchRecipientSendRepository } from '../../infrastructure/persistence/loa-batch-recipient-send.repository';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 
@@ -166,9 +167,15 @@ describe('ReleaseLoaBatchHandler', () => {
   let mockPrisma: any;
   let mockProducer: any;
   let mockUserNotificationRepo: any;
+  let mockRecipientSendRepo: any;
 
   const releasedBatch = { ...mockBatch, releasedAt: new Date('2026-07-01') };
-  const recipient = { userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' };
+  const recipient = {
+    participantId: 'participant-1',
+    userId: 'user-1',
+    email: 'jane@example.com',
+    fullName: 'Jane Doe',
+  };
 
   beforeEach(async () => {
     const { IUserNotificationRepository } = await import(
@@ -197,6 +204,10 @@ describe('ReleaseLoaBatchHandler', () => {
           useValue: { emit: jest.fn().mockResolvedValue(true) },
         },
         {
+          provide: LoaBatchRecipientSendRepository,
+          useValue: { markPending: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
           provide: IUserNotificationRepository,
           useValue: { create: jest.fn().mockResolvedValue(undefined) },
         },
@@ -207,6 +218,7 @@ describe('ReleaseLoaBatchHandler', () => {
     mockPrisma = module.get(PrismaService);
     mockProducer = module.get(RabbitMQProducerService);
     mockUserNotificationRepo = module.get(IUserNotificationRepository);
+    mockRecipientSendRepo = module.get(LoaBatchRecipientSendRepository);
   });
 
   it('releases the batch', async () => {
@@ -276,6 +288,59 @@ describe('ReleaseLoaBatchHandler', () => {
       'loa.batch.released',
       expect.objectContaining({ brand: null }),
     );
+  });
+
+  it('records a pending send row per recipient BEFORE publishing loa.batch.released', async () => {
+    mockRepo.findById.mockResolvedValue({ ...mockBatch });
+    mockRepo.release.mockResolvedValue({ batch: releasedBatch, transitioned: true });
+    mockRepo.findEligibleRecipients.mockResolvedValue([recipient]);
+    mockPrisma.program.findUnique.mockResolvedValue({ name: 'YBB Summit 2026', brand: null });
+
+    const order: string[] = [];
+    mockRecipientSendRepo.markPending.mockImplementation(async () => {
+      order.push('markPending');
+    });
+    mockProducer.emit.mockImplementation(async () => {
+      order.push('emit');
+      return true;
+    });
+
+    const { ReleaseLoaBatchCommand } = await import('../commands/loa-batch.commands');
+    await handler.execute(new ReleaseLoaBatchCommand('batch-1', 'prog-1'));
+
+    expect(mockRecipientSendRepo.markPending).toHaveBeenCalledWith('batch-1', 'prog-1', [recipient]);
+    // Ordering is the whole point: rows written first means "who was supposed
+    // to get this" survives a publish failure or a dead notification service.
+    expect(order).toEqual(['markPending', 'emit']);
+  });
+
+  it('still emits loa.batch.released when writing the send log fails — logging must not break sending', async () => {
+    mockRepo.findById.mockResolvedValue({ ...mockBatch });
+    mockRepo.release.mockResolvedValue({ batch: releasedBatch, transitioned: true });
+    mockRepo.findEligibleRecipients.mockResolvedValue([recipient]);
+    mockPrisma.program.findUnique.mockResolvedValue({ name: 'YBB Summit 2026', brand: null });
+    mockRecipientSendRepo.markPending.mockRejectedValue(new Error('table missing'));
+
+    const { ReleaseLoaBatchCommand } = await import('../commands/loa-batch.commands');
+    await expect(
+      handler.execute(new ReleaseLoaBatchCommand('batch-1', 'prog-1')),
+    ).resolves.toEqual(releasedBatch);
+
+    expect(mockProducer.emit).toHaveBeenCalledWith(
+      'loa.batch.released',
+      expect.objectContaining({ batchId: 'batch-1' }),
+    );
+  });
+
+  it('does not write send rows when the batch has no eligible recipients', async () => {
+    mockRepo.findById.mockResolvedValue({ ...mockBatch });
+    mockRepo.release.mockResolvedValue({ batch: releasedBatch, transitioned: true });
+    mockRepo.findEligibleRecipients.mockResolvedValue([]);
+
+    const { ReleaseLoaBatchCommand } = await import('../commands/loa-batch.commands');
+    await handler.execute(new ReleaseLoaBatchCommand('batch-1', 'prog-1'));
+
+    expect(mockRecipientSendRepo.markPending).not.toHaveBeenCalled();
   });
 
   it('does NOT re-notify when re-releasing an already-released batch (idempotent)', async () => {

@@ -114,6 +114,7 @@ export class LoaReleaseBatchRepository {
       select: {
         participant: {
           select: {
+            id: true,
             fullName: true,
             user: { select: { id: true, email: true } },
           },
@@ -122,6 +123,7 @@ export class LoaReleaseBatchRepository {
     });
 
     return applications.map((application) => ({
+      participantId: application.participant.id,
       userId: application.participant.user.id,
       email: application.participant.user.email,
       // Blank until onboarding completes; an LOA-release email addressed to

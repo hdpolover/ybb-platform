@@ -4268,3 +4268,57 @@ export function upsertApplicationReview(
     },
   );
 }
+
+/**
+ * Per-recipient delivery status for one LOA release batch.
+ * Mirrors GetLoaBatchRecipientSendsHandler (services/api).
+ */
+export type LoaRecipientSend = {
+  participantId: string;
+  participantName: string;
+  /** The address the email was actually addressed to, as of release time. */
+  email: string;
+  status: "pending" | "sent" | "failed";
+  providerMessageId: string | null;
+  errorMessage: string | null;
+  attemptCount: number;
+  /** ISO datetime string, null unless the send succeeded */
+  sentAt: string | null;
+};
+
+/**
+ * A submitted/accepted applicant whose submission date falls outside EVERY
+ * released batch window — they are never selected for the LOA-ready email and
+ * leave no trace anywhere, so they are surfaced explicitly.
+ */
+export type UncoveredParticipant = {
+  applicationId: string;
+  participantId: string;
+  participantName: string;
+  email: string;
+  /** ISO datetime string */
+  submittedAt: string | null;
+};
+
+export type LoaBatchRecipientSends = {
+  batchId: string;
+  /** False for batches released before per-recipient logging existed. */
+  hasSendLog: boolean;
+  summary: { total: number; pending: number; sent: number; failed: number };
+  recipients: LoaRecipientSend[];
+  /** True total; `uncoveredParticipants` below is capped at 100. */
+  uncoveredParticipantCount: number;
+  uncoveredParticipants: UncoveredParticipant[];
+  /** How many of the uncovered an existing UNRELEASED batch would cover. */
+  coveredByUnreleasedBatchCount: number;
+  unreleasedBatchNames: string[];
+};
+
+export function getLoaBatchRecipientSends(
+  programId: string,
+  batchId: string,
+): Promise<LoaBatchRecipientSends> {
+  return request<LoaBatchRecipientSends>(
+    `/programs/${programId}/loa-batches/${batchId}/recipient-sends`,
+  );
+}

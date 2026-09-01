@@ -14,10 +14,68 @@ model LoaReleaseBatch {
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  program              Program               @relation(fields: [programId], references: [id])
+  program              Program                 @relation(fields: [programId], references: [id])
   participantDocuments ParticipantDocument[]
+  recipientSends       LoaBatchRecipientSend[]
 
   @@index([programId])
   @@index([programId, submissionFrom, submissionTo])
   @@map("loa_release_batches")
+}
+
+// ============================================================================
+// LOA RECIPIENT SEND LOG
+// ============================================================================
+
+// Per-recipient audit trail for the "your Invitation Letter is ready" email
+// fanned out when a batch is released. Answers "did this participant get
+// their letter?", which was previously only answerable from container logs
+// (retained ~2 days, while batches are released weeks apart).
+//
+// Written in two phases:
+//   1. The API inserts one `pending` row per eligible recipient at release
+//      time, BEFORE publishing loa.batch.released — so "who was supposed to
+//      get it" survives a broker or notification-service outage entirely.
+//   2. services/notification reports each send outcome back over
+//      `loa.batch.send_result`; LoaSendResultsController flips the row to
+//      `sent` (with the provider message id) or `failed` (with the error).
+//
+// services/notification has no database access of its own (no Prisma or pg
+// dependency) and is a pure consumer, so the API stays the single writer —
+// see LoaBatchRecipientSendRepository.
+model LoaBatchRecipientSend {
+  id            String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  batchId       String @map("batch_id") @db.Uuid
+  programId     String @map("program_id") @db.Uuid
+  participantId String @map("participant_id") @db.Uuid
+  userId        String @map("user_id") @db.Uuid
+
+  // Snapshot of the address the email was actually addressed to. Deliberately
+  // denormalized: users can change their email after a release, and the audit
+  // question is "where did it go", not "where would it go today".
+  email String @db.VarChar(255)
+
+  // 'pending' | 'sent' | 'failed'. Plain varchar rather than a Prisma enum so
+  // the migration stays purely additive (no CREATE TYPE) — same choice as
+  // ParticipantDocument.type. Constrained by a CHECK in the migration.
+  status String @default("pending") @db.VarChar(20)
+
+  providerMessageId String? @map("provider_message_id") @db.VarChar(255)
+  errorMessage      String? @map("error_message") @db.Text
+
+  // Incremented on every reported delivery attempt. A re-release updates this
+  // row in place rather than appending a second one — the unique constraint
+  // below is what makes a re-release non-duplicating.
+  attemptCount Int @default(0) @map("attempt_count")
+
+  sentAt    DateTime? @map("sent_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  batch LoaReleaseBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, participantId], map: "loa_batch_recipient_sends_batch_participant_key")
+  @@index([batchId, status])
+  @@index([programId])
+  @@map("loa_batch_recipient_sends")
 }

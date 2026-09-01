@@ -34,6 +34,7 @@ import {
 
 import {
   GetLoaBatchesHandler,
+  GetLoaBatchRecipientSendsHandler,
   GetLoaDownloadsHandler,
 } from '../application/handlers/loa-batch.handlers';
 import { PreviewLoaTemplateHandler } from '../application/handlers/loa-preview.handler';
@@ -47,7 +48,11 @@ import {
   UnreleaseLoaBatchCommand,
   DeleteLoaBatchCommand,
 } from '../application/commands/loa-batch.commands';
-import { GetLoaBatchesQuery, GetLoaDownloadsQuery } from '../application/queries/loa-batch.queries';
+import {
+  GetLoaBatchesQuery,
+  GetLoaDownloadsQuery,
+  GetLoaBatchRecipientSendsQuery,
+} from '../application/queries/loa-batch.queries';
 
 describe('ProgramContentController', () => {
     let controller: ProgramContentController;
@@ -72,6 +77,7 @@ describe('ProgramContentController', () => {
             DeleteLoaBatchHandler,
             GetLoaBatchesHandler,
             GetLoaDownloadsHandler,
+            GetLoaBatchRecipientSendsHandler,
             PreviewLoaTemplateHandler,
         ];
 
@@ -215,6 +221,18 @@ describe('ProgramContentController', () => {
             const cmd = mockExecute.execute.mock.calls[0][0] as DeleteLoaBatchCommand;
             expect(cmd.batchId).toBe('b1');
             expect(cmd.programId).toBe('prog-1');
+        });
+    });
+
+    describe('getLoaBatchRecipientSends', () => {
+        it('dispatches GetLoaBatchRecipientSendsQuery with programId and batchId', async () => {
+            await controller.getLoaBatchRecipientSends('prog-1', 'b1');
+            expect(mockExecute.execute).toHaveBeenCalledWith(
+                expect.any(GetLoaBatchRecipientSendsQuery),
+            );
+            const q = mockExecute.execute.mock.calls[0][0] as GetLoaBatchRecipientSendsQuery;
+            expect(q.programId).toBe('prog-1');
+            expect(q.batchId).toBe('b1');
         });
     });
 

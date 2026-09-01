@@ -12,6 +12,7 @@ import { RoutingKeyDeserializer } from './shared/infrastructure/rabbitmq/routing
 import { AuditConsumerModule } from './bootstrap/audit-consumer.module';
 import { ReportingConsumerModule } from './bootstrap/reporting-consumer.module';
 import { PaymentEventsConsumerModule } from './bootstrap/payment-events-consumer.module';
+import { LoaEventsConsumerModule } from './bootstrap/loa-events-consumer.module';
 import { AppModule } from './app.module';
 import { setupSwagger } from './config/swagger.config';
 import { TransformInterceptor } from './shared/interceptors/transform.interceptor';
@@ -58,10 +59,12 @@ async function bootstrap() {
     auditQueueOptions,
     reportingQueueOptions,
     paymentEventsQueueOptions,
+    loaEventsQueueOptions,
   ] = await Promise.all([
     resolvePrimaryQueueOptions(rabbitMqUrl, 'audit_log_queue'),
     resolvePrimaryQueueOptions(rabbitMqUrl, 'reporting_queue'),
     resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-payment-events'),
+    resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-loa-events'),
   ]);
 
   await ensureRetryTopology(rabbitMqUrl, 'audit_log_queue', {
@@ -89,6 +92,20 @@ async function bootstrap() {
       exchange: 'payment-events',
       exchangeType: 'topic',
       routingKey: 'payment.#',
+    },
+  });
+  // Per-recipient LOA email outcomes reported back by services/notification,
+  // which has no database of its own. Narrow routing key (not 'loa.#') so
+  // this queue only ever carries the one event it handles — an unhandled
+  // pattern here would be ack-dropped, but a queue that only receives what it
+  // handles is easier to reason about when the DLQ is non-empty.
+  await ensureRetryTopology(rabbitMqUrl, 'api-service-loa-events', {
+    retryDelayMs,
+    primaryQueueOptions: loaEventsQueueOptions,
+    binding: {
+      exchange: 'ybb.events',
+      exchangeType: 'topic',
+      routingKey: 'loa.batch.send_result',
     },
   });
 
@@ -159,6 +176,7 @@ async function bootstrap() {
     { queue: 'audit_log_queue', module: AuditConsumerModule, queueOptions: auditQueueOptions },
     { queue: 'reporting_queue', module: ReportingConsumerModule, queueOptions: reportingQueueOptions },
     { queue: 'api-service-payment-events', module: PaymentEventsConsumerModule, queueOptions: paymentEventsQueueOptions },
+    { queue: 'api-service-loa-events', module: LoaEventsConsumerModule, queueOptions: loaEventsQueueOptions },
   ];
   const consumerApps = await Promise.all(
     consumerSpecs.map((spec) =>
