@@ -6,12 +6,13 @@
 // not for the content write.
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/src/ui/sheet";
 import { Button } from "@/src/ui/button";
 import { Input } from "@/src/ui/input";
-import { ImageIcon, Save, Upload, X } from "lucide-react";
+import { ExternalLink, ImageIcon, Save, Upload, X } from "lucide-react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { updateProgramLandingContent, type BrandFurtherInformation } from "@/app/platform/api";
 import { FieldInput, FieldTextarea, SheetMsg, clampFileTitle } from "./shared";
@@ -98,6 +99,25 @@ export function FurtherInformationSheet({ programId, brandId, initial, onSaved }
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <SheetMsg message={error} variant="error" />
+            {/* This sheet only edits the heading and the mockup image. The
+                guideline documents rendered inside that mockup are
+                ProgramResource rows, edited on a different page entirely, so
+                admins were changing this and reporting the guidelines as "not
+                synced". Point them at the real editor. */}
+            <div className="flex items-start gap-1.5 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5">
+              <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-600" />
+              <p className="text-xs text-blue-800">
+                This edits the heading and mockup image only. The guideline documents shown in the mockup are
+                managed on the{" "}
+                <Link
+                  href={`/programs/${programId}/documents/program-guidelines`}
+                  className="font-medium underline hover:text-blue-900"
+                >
+                  Program Guidelines page
+                </Link>
+                .
+              </p>
+            </div>
             <FieldInput
               label="Eyebrow"
               id="fi-eyebrow"

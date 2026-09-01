@@ -2786,6 +2786,12 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
         </div>
       </div>
 
+      {/* The same override notice the Identity sheet carries. It only rendered
+          inside that sheet, so an admin who never opened it saw a brand logo
+          here that the public site was quietly ignoring — which is exactly how
+          the China Youth Summit logo was reported as "not synced". */}
+      <LogoOverrideWarning activeProgram={brand.activeProgram} brandLogoUrl={brand.logoUrl ?? null} />
+
       <InfoStrip brand={brand} />
 
       <Tabs defaultValue="overview">
