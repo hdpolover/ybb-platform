@@ -463,6 +463,7 @@ function SocialMediaSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSa
     socialTwitter: brand.socialMediaLinks?.twitter ?? "",
     socialFacebook: brand.socialMediaLinks?.facebook ?? "",
     socialYoutube: brand.socialMediaLinks?.youtube ?? "",
+    socialTiktok: brand.socialMediaLinks?.tiktok ?? "",
   });
 
   function set<K extends keyof typeof form>(k: K, v: string) {
@@ -477,6 +478,7 @@ function SocialMediaSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSa
       socialTwitter: brand.socialMediaLinks?.twitter ?? "",
       socialFacebook: brand.socialMediaLinks?.facebook ?? "",
       socialYoutube: brand.socialMediaLinks?.youtube ?? "",
+    socialTiktok: brand.socialMediaLinks?.tiktok ?? "",
     });
     setError(null);
   }
@@ -490,6 +492,7 @@ function SocialMediaSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSa
     if (form.socialTwitter) socialMediaLinks.twitter = form.socialTwitter;
     if (form.socialFacebook) socialMediaLinks.facebook = form.socialFacebook;
     if (form.socialYoutube) socialMediaLinks.youtube = form.socialYoutube;
+    if (form.socialTiktok) socialMediaLinks.tiktok = form.socialTiktok;
     try {
       await updatePlatformBrandDetails(brand.id, {
         socialMediaLinks: Object.keys(socialMediaLinks).length > 0 ? socialMediaLinks : undefined,
@@ -518,6 +521,7 @@ function SocialMediaSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSa
             <FieldInput label="Twitter / X" id="socialTwitter" value={form.socialTwitter} onChange={(v) => set("socialTwitter", v)} placeholder="https://twitter.com/..." />
             <FieldInput label="Facebook" id="socialFacebook" value={form.socialFacebook} onChange={(v) => set("socialFacebook", v)} placeholder="https://facebook.com/..." />
             <FieldInput label="YouTube" id="socialYoutube" value={form.socialYoutube} onChange={(v) => set("socialYoutube", v)} placeholder="https://youtube.com/..." />
+            <FieldInput label="TikTok" id="socialTiktok" value={form.socialTiktok} onChange={(v) => set("socialTiktok", v)} placeholder="https://tiktok.com/@..." />
           </div>
           <SheetFooter className="mt-6">
             <Button onClick={handleSave} loading={saving} disabled={saving}>
