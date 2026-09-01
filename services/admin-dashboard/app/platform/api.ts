@@ -722,6 +722,9 @@ export function deleteBrandSponsor(brandId: string, sponsorId: string): Promise<
 
 export type BrandSocialFeed = {
   id: string;
+  brandId: string;
+  // null = brand-wide (shown regardless of the selected batch/edition tab).
+  programId: string | null;
   platform: string;
   postId: string;
   permalink: string;
@@ -742,6 +745,8 @@ function normalizeBrandSocialFeed(input: unknown): BrandSocialFeed {
 
   return {
     id: typeof value.id === "string" ? value.id : "",
+    brandId: typeof value.brandId === "string" ? value.brandId : "",
+    programId: typeof value.programId === "string" ? value.programId : null,
     platform: typeof value.platform === "string" ? value.platform : "instagram",
     postId: typeof value.postId === "string" ? value.postId : "",
     permalink: typeof value.permalink === "string" ? value.permalink : "",
@@ -767,6 +772,8 @@ export function createBrandSocialFeed(
     caption?: string | null;
     postedAt?: string;
     isActive?: boolean;
+    // null/omitted = brand-wide.
+    programId?: string | null;
   },
 ): Promise<BrandSocialFeed> {
   return request<unknown>(`/brands/${brandId}/social-feeds`, {
@@ -788,6 +795,8 @@ export function updateBrandSocialFeed(
     caption?: string | null;
     postedAt?: string;
     isActive?: boolean;
+    // null clears the scoping back to brand-wide.
+    programId?: string | null;
   },
 ): Promise<BrandSocialFeed> {
   return request<unknown>(`/brands/${brandId}/social-feeds/${socialFeedId}`, {

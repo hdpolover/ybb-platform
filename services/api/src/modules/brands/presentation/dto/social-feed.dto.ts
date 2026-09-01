@@ -1,12 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsDateString, IsOptional, IsString, IsUrl } from 'class-validator';
+import { IsBoolean, IsDateString, IsOptional, IsString, IsUrl, IsUUID } from 'class-validator';
 
 export class CreateSocialFeedDto {
     @ApiProperty({ required: false, example: 'instagram' })
     @IsOptional()
     @IsString()
     platform?: string;
+
+    @ApiProperty({ required: false, nullable: true, description: 'Program (edition) this post belongs to. Omit or null for a brand-wide fallback post.' })
+    @IsOptional()
+    @IsUUID()
+    programId?: string;
 
     @ApiProperty({ required: false, example: 'DI0abcd1234' })
     @IsOptional()
@@ -44,6 +49,11 @@ export class UpdateSocialFeedDto {
     @IsOptional()
     @IsString()
     platform?: string;
+
+    @ApiProperty({ required: false, nullable: true, description: 'Program (edition) this post belongs to. Pass null to make it a brand-wide fallback post.' })
+    @IsOptional()
+    @IsUUID()
+    programId?: string | null;
 
     @ApiProperty({ required: false, example: 'DI0abcd1234' })
     @IsOptional()

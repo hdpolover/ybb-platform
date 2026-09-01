@@ -26,6 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/src/ui/dialog";
 import { Input } from "@/src/ui/input";
 import { Label } from "@/src/ui/label";
+import { Select } from "@/src/ui/select";
 import { Skeleton } from "@/src/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/src/ui/tabs";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
@@ -121,6 +122,23 @@ function FieldInput({
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
       <Input id={id} type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+      {hint && <p className="text-xs text-zinc-400">{hint}</p>}
+    </div>
+  );
+}
+
+function FieldSelect({
+  label, id, value, onChange, hint, disabled, children,
+}: {
+  label: string; id: string; value: string; onChange: (v: string) => void;
+  hint?: string; disabled?: boolean; children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Select id={id} value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+        {children}
+      </Select>
       {hint && <p className="text-xs text-zinc-400">{hint}</p>}
     </div>
   );
@@ -1339,7 +1357,12 @@ type SponsorForm = {
 type SocialFeedForm = {
   permalink: string;
   isActive: boolean;
+  // "" = brand-wide (all editions).
+  programId: string;
 };
+
+// Value used for the "Brand-wide (all editions)" option in the program picker.
+const BRAND_WIDE_PROGRAM_VALUE = "";
 
 function toDatetimeLocal(value?: string | null): string {
   return value ? toLocalDatetimeInputValue(value) : "";
@@ -1368,7 +1391,12 @@ function buildInitialSocialFeedForm(feed?: BrandSocialFeed): SocialFeedForm {
   return {
     permalink: feed?.permalink ?? "",
     isActive: feed?.isActive ?? true,
+    programId: feed?.programId ?? BRAND_WIDE_PROGRAM_VALUE,
   };
+}
+
+function formatProgramOptionLabel(program: PlatformProgram): string {
+  return `${program.name} (${program.year})`;
 }
 
 function SponsorSheet({
@@ -1965,11 +1993,23 @@ function SocialFeedSheet({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<SocialFeedForm>(buildInitialSocialFeedForm(socialFeed));
+  const [programs, setPrograms] = useState<PlatformProgram[]>([]);
+  const [programsLoading, setProgramsLoading] = useState(false);
+  const [programsError, setProgramsError] = useState<string | null>(null);
 
   function handleOpenChange(next: boolean) {
     if (next) {
       setForm(buildInitialSocialFeedForm(socialFeed));
       setError(null);
+      setProgramsLoading(true);
+      setProgramsError(null);
+      listPlatformPrograms({ brandId, limit: 100 })
+        .then((result) => setPrograms(result.data))
+        .catch((err) => {
+          setPrograms([]);
+          setProgramsError(err instanceof Error ? err.message : "Failed to load editions.");
+        })
+        .finally(() => setProgramsLoading(false));
     }
     setOpen(next);
   }
@@ -1992,6 +2032,7 @@ function SocialFeedSheet({
       const payload = {
         permalink: form.permalink.trim(),
         isActive: form.isActive,
+        programId: form.programId ? form.programId : null,
       };
 
       if (socialFeed) {
@@ -2027,6 +2068,25 @@ function SocialFeedSheet({
               placeholder="https://instagram.com/p/..."
               hint="Paste the Instagram post link or the full Instagram embed code. The system will extract the permalink and auto-fill preview metadata."
             />
+            <FieldSelect
+              label="Edition"
+              id="feed-program"
+              value={form.programId}
+              onChange={(value) => setField("programId", value)}
+              disabled={programsLoading}
+              hint={
+                programsError
+                  ? programsError
+                  : "Scope this post to one edition's registration overview, or leave it brand-wide to show on every edition's landing page."
+              }
+            >
+              <option value={BRAND_WIDE_PROGRAM_VALUE}>Brand-wide (all editions)</option>
+              {programs.map((program) => (
+                <option key={program.id} value={program.id}>
+                  {formatProgramOptionLabel(program)}
+                </option>
+              ))}
+            </FieldSelect>
             <FieldCheckbox
               label="Active on landing page"
               id="feed-active"
@@ -2058,6 +2118,7 @@ function SocialFeedSheet({
 
 function SocialFeedsTab({ brandId }: { brandId: string }) {
   const [feeds, setFeeds] = useState<BrandSocialFeed[]>([]);
+  const [programsById, setProgramsById] = useState<Record<string, PlatformProgram>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -2065,36 +2126,18 @@ function SocialFeedsTab({ brandId }: { brandId: string }) {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    listBrandSocialFeeds(brandId)
-      .then(setFeeds)
+    Promise.all([listBrandSocialFeeds(brandId), listPlatformPrograms({ brandId, limit: 100 })])
+      .then(([items, programsResult]) => {
+        setFeeds(items);
+        setProgramsById(Object.fromEntries(programsResult.data.map((program) => [program.id, program])));
+      })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load social feeds."))
       .finally(() => setLoading(false));
   }, [brandId]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    listBrandSocialFeeds(brandId)
-      .then((items) => {
-        if (!cancelled) {
-          setFeeds(items);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load social feeds.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
+    load();
+  }, [load]);
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this social feed item? This cannot be undone.")) return;
@@ -2137,6 +2180,7 @@ function SocialFeedsTab({ brandId }: { brandId: string }) {
             <thead>
               <tr className="border-b border-zinc-100">
                 <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Post</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Edition</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Posted</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Status</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Link</th>
@@ -2165,6 +2209,13 @@ function SocialFeedsTab({ brandId }: { brandId: string }) {
                         </p>
                       </div>
                     </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {feed.programId && programsById[feed.programId] ? (
+                      <Badge variant="info">{formatProgramOptionLabel(programsById[feed.programId])}</Badge>
+                    ) : (
+                      <Badge variant="secondary">Brand-wide (all editions)</Badge>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-zinc-600">{formatFeedTimestamp(feed.postedAt)}</td>
                   <td className="px-4 py-3">

@@ -497,11 +497,8 @@ describe('HomeStrategy', () => {
             expect(overview?.content.programs).toHaveLength(1);
         });
 
-        it('gives each edition its own guidelines (resources), and a shared ig_feed (brand-wide data)', async () => {
+        it('gives each edition its own guidelines (resources)', async () => {
             baseSetup();
-            mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([
-                { id: 'feed-1', permalink: 'https://instagram.com/p/1', imageUrl: 'feed1.jpg', caption: 'Post 1' },
-            ]);
             mockProgramFindMany([
                 {
                     id: 'p-meys-6th', name: 'MEYS 6th', slug: 'meys-6th', year: 2026, isActive: true,
@@ -531,11 +528,103 @@ describe('HomeStrategy', () => {
             expect(programs[0].guidelines).toEqual([{ id: 'res-6th', title: '6th Guidebook', type: 'pdf', url: 'guide-6th.pdf' }]);
             expect(programs[1].program_slug).toBe('meys-7th');
             expect(programs[1].guidelines).toEqual([{ id: 'res-7th', title: '7th Guidebook', type: 'pdf', url: 'guide-7th.pdf' }]);
+        });
 
-            // ig_feed has no programId in the schema (brand-wide only) — every
-            // edition intentionally carries the same feed, not a fabricated split.
-            expect(programs[0].ig_feed).toEqual([{ id: 'feed-1', permalink: 'https://instagram.com/p/1', imageUrl: 'feed1.jpg', caption: 'Post 1' }]);
-            expect(programs[1].ig_feed).toEqual(programs[0].ig_feed);
+        it('gives an edition with its own Instagram posts only its own posts (not the other edition\'s, not brand-wide)', async () => {
+            baseSetup();
+            mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([
+                { id: 'feed-6th', programId: 'p-meys-6th', permalink: 'https://instagram.com/p/6th', imageUrl: 'feed6th.jpg', caption: '6th post' },
+                { id: 'feed-7th', programId: 'p-meys-7th', permalink: 'https://instagram.com/p/7th', imageUrl: 'feed7th.jpg', caption: '7th post' },
+                { id: 'feed-brand', programId: null, permalink: 'https://instagram.com/p/brand', imageUrl: 'feedbrand.jpg', caption: 'brand-wide post' },
+            ]);
+            mockProgramFindMany([
+                {
+                    id: 'p-meys-6th', name: 'MEYS 6th', slug: 'meys-6th', year: 2026, isActive: true,
+                    registrationOpenDate: new Date('2026-01-01T00:00:00Z'),
+                    registrationCloseDate: new Date('2026-12-05T00:00:00Z'),
+                    pricingTiers: [], resources: [],
+                },
+                {
+                    id: 'p-meys-7th', name: 'MEYS 7th', slug: 'meys-7th', year: 2027, isActive: true,
+                    registrationOpenDate: new Date('2026-06-01T00:00:00Z'),
+                    registrationCloseDate: new Date('2027-03-20T00:00:00Z'),
+                    pricingTiers: [], resources: [],
+                },
+            ]);
+
+            const result: any = await strategy.getData(category as any);
+            const overview = result.sections.find((s: any) => s.type === 'registration_overview');
+            const programs = overview?.content.programs;
+
+            expect(programs[0].program_slug).toBe('meys-6th');
+            expect(programs[0].ig_feed).toEqual([
+                { id: 'feed-6th', permalink: 'https://instagram.com/p/6th', imageUrl: 'feed6th.jpg', caption: '6th post' },
+            ]);
+            expect(programs[1].program_slug).toBe('meys-7th');
+            expect(programs[1].ig_feed).toEqual([
+                { id: 'feed-7th', permalink: 'https://instagram.com/p/7th', imageUrl: 'feed7th.jpg', caption: '7th post' },
+            ]);
+        });
+
+        it('falls back to brand-wide Instagram posts for an edition with none of its own', async () => {
+            baseSetup();
+            mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([
+                { id: 'feed-6th', programId: 'p-meys-6th', permalink: 'https://instagram.com/p/6th', imageUrl: 'feed6th.jpg', caption: '6th post' },
+                { id: 'feed-brand', programId: null, permalink: 'https://instagram.com/p/brand', imageUrl: 'feedbrand.jpg', caption: 'brand-wide post' },
+            ]);
+            mockProgramFindMany([
+                {
+                    id: 'p-meys-6th', name: 'MEYS 6th', slug: 'meys-6th', year: 2026, isActive: true,
+                    registrationOpenDate: new Date('2026-01-01T00:00:00Z'),
+                    registrationCloseDate: new Date('2026-12-05T00:00:00Z'),
+                    pricingTiers: [], resources: [],
+                },
+                {
+                    // No posts of its own — must fall back to the brand-wide bucket.
+                    id: 'p-meys-7th', name: 'MEYS 7th', slug: 'meys-7th', year: 2027, isActive: true,
+                    registrationOpenDate: new Date('2026-06-01T00:00:00Z'),
+                    registrationCloseDate: new Date('2027-03-20T00:00:00Z'),
+                    pricingTiers: [], resources: [],
+                },
+            ]);
+
+            const result: any = await strategy.getData(category as any);
+            const overview = result.sections.find((s: any) => s.type === 'registration_overview');
+            const programs = overview?.content.programs;
+
+            expect(programs[0].program_slug).toBe('meys-6th');
+            expect(programs[0].ig_feed).toEqual([
+                { id: 'feed-6th', permalink: 'https://instagram.com/p/6th', imageUrl: 'feed6th.jpg', caption: '6th post' },
+            ]);
+            expect(programs[1].program_slug).toBe('meys-7th');
+            expect(programs[1].ig_feed).toEqual([
+                { id: 'feed-brand', permalink: 'https://instagram.com/p/brand', imageUrl: 'feedbrand.jpg', caption: 'brand-wide post' },
+            ]);
+        });
+
+        it('fetches brandSocialFeed once for the whole brand, not once per edition (no N+1)', async () => {
+            baseSetup();
+            mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([
+                { id: 'feed-brand', programId: null, permalink: 'https://instagram.com/p/brand', imageUrl: 'feedbrand.jpg', caption: 'brand-wide post' },
+            ]);
+            mockProgramFindMany([
+                {
+                    id: 'p-meys-6th', name: 'MEYS 6th', slug: 'meys-6th', year: 2026, isActive: true,
+                    registrationOpenDate: new Date('2026-01-01T00:00:00Z'),
+                    registrationCloseDate: new Date('2026-12-05T00:00:00Z'),
+                    pricingTiers: [], resources: [],
+                },
+                {
+                    id: 'p-meys-7th', name: 'MEYS 7th', slug: 'meys-7th', year: 2027, isActive: true,
+                    registrationOpenDate: new Date('2026-06-01T00:00:00Z'),
+                    registrationCloseDate: new Date('2027-03-20T00:00:00Z'),
+                    pricingTiers: [], resources: [],
+                },
+            ]);
+
+            await strategy.getData(category as any);
+
+            expect(mockPrismaService.brandSocialFeed.findMany).toHaveBeenCalledTimes(1);
         });
 
         it('single-program brand: top-level registration_types is unaffected by the programs array', async () => {

@@ -143,4 +143,7 @@ export class SocialFeedResponseDto {
 
     @ApiProperty()
     isActive: boolean;
+
+    @ApiProperty({ required: false, nullable: true, description: 'Program (edition) this post belongs to, or null for a brand-wide fallback post.' })
+    programId?: string | null;
 }

@@ -31,6 +31,7 @@ export class ListBrandSocialFeedsHandler implements IQueryHandler<ListBrandSocia
             caption: feed.caption ?? undefined,
             postedAt: feed.postedAt,
             isActive: feed.isActive,
+            programId: feed.programId,
         }));
     }
 }
