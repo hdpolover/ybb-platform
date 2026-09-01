@@ -409,6 +409,52 @@ describe('HomeStrategy', () => {
         expect(objectiveUrls(await strategy.getData(category as any))).toEqual(['kys4th-own.jpg']);
     });
 
+    it('caps the homepage program_gallery teaser at 8 while full_gallery carries the whole pool, and prefers the active program\'s own images', async () => {
+        const category = {
+            id: 'brand-kys', name: 'Korea Youth Summit', bannerUrl: '', websiteUrl: '',
+            vision: '', mission: '', metadata: {},
+        };
+        const activeProgram = {
+            id: 'p-kys-4th', name: 'Korea Youth Summit 4th', isPublished: true, isActive: true,
+            gallery: [], pricingTiers: [], resources: [], objectives: [], awards: [],
+            landingContent: {},
+        };
+        const setupMocks = () => {
+            mockPrismaService.program.findFirst.mockReset();
+            mockPrismaService.program.findFirst.mockResolvedValue(activeProgram);
+            mockPrismaService.sponsor.findMany.mockResolvedValue([]);
+            mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([]);
+            mockPrismaService.program.findMany.mockResolvedValue([]);
+            mockPrismaService.programTestimonial.findMany.mockResolvedValue([]);
+            mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
+        };
+        const gallerySection = (result: any) =>
+            result.sections.find((s: any) => s.type === 'program_gallery');
+
+        // Active program has 10 of its own images and the brand has 3 more from a sibling.
+        // The teaser must cap at 8, drawn only from the active program's own pool, while
+        // full_gallery keeps all 10 own images (siblings excluded because own pool is non-empty).
+        setupMocks();
+        const ownImages = Array.from({ length: 10 }, (_, i) => ({
+            id: `own-${i}`, type: 'image', imageUrl: `own-${i}.jpg`, title: `Own ${i}`, programId: 'p-kys-4th',
+        }));
+        const siblingImages = [
+            { id: 'sib-1', type: 'image', imageUrl: 'sibling-1.jpg', title: 'Sibling 1', programId: 'p-kys-2025' },
+        ];
+        mockPrismaService.programGallery.findMany.mockResolvedValue([...ownImages, ...siblingImages]);
+
+        const result: any = await strategy.getData(category as any);
+        const section = gallerySection(result);
+
+        expect(section?.content.gallery).toHaveLength(8);
+        expect(section?.content.images).toHaveLength(8);
+        expect(section?.content.full_gallery).toHaveLength(10);
+        expect(section?.content.full_gallery.map((i: any) => i.url).sort()).toEqual(
+            ownImages.map((i) => i.imageUrl).sort(),
+        );
+        expect(section?.content.gallery.every((i: any) => i.url.startsWith('own-'))).toBe(true);
+    });
+
     describe('registration_overview.programs (MEYS 6th/7th concurrent-active-programs bug)', () => {
         const category = {
             id: 'brand-meys', name: 'Middle East Youth Summit', bannerUrl: '', websiteUrl: '',

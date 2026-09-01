@@ -420,16 +420,17 @@ export class HomeStrategy implements ILandingPageStrategy {
     }));
 
     // Full pool (up to the 200-row take above) for the dedicated /programs/gallery
-    // page. `programGallery` below stays capped at 6 for the homepage teaser,
-    // which links out to that page via `cta.url`. Additive `full_gallery`
-    // field, `gallery`/`images` unchanged for backwards compatibility.
+    // page. `programGallery` below stays capped at 8 for the homepage teaser
+    // (2 full rows on the 4-col desktop grid), which links out to that page
+    // via `cta.url`. Additive `full_gallery` field, `gallery`/`images`
+    // unchanged for backwards compatibility.
     const fullProgramGallery = imageGallery.map((img) => ({
       id: img.id,
       url: img.imageUrl,
       caption: img.title,
     }));
 
-    const programGallery = fullProgramGallery.slice(0, 6);
+    const programGallery = fullProgramGallery.slice(0, 8);
 
     // Program-owned landing sections (Task 1's Program.landingContent), not
     // Brand.metadata, as of Phase 3's ownership split — see
