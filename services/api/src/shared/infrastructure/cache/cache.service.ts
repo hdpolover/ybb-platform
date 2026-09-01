@@ -113,6 +113,7 @@ export class CacheService {
     await this.invalidateByPatterns([
       `landing:program:${brandId}:*`,
       `landing:faqs:${brandId}:*`,
+      `landing:announcements:${brandId}:*`,
       `landing:snapshot:${brandId}:*`,
     ]);
   }

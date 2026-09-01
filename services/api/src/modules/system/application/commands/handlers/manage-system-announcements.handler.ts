@@ -21,6 +21,7 @@ async function invalidateAnnouncementCache(
   if (brandId) {
     await Promise.all([
       cache.invalidateKey(`landing:announcements:${brandId}`),
+      cache.invalidateByPattern(`landing:announcements:${brandId}:*`),
       cache.invalidateByPattern(`landing:snapshot:${brandId}:announcements:*`),
       prisma.brandLandingSnapshot.deleteMany({
         where: {
