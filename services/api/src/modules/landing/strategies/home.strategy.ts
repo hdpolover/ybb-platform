@@ -3,6 +3,7 @@ import { ILandingPageStrategy } from './landing-page.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
+import { TESTIMONIAL_CATEGORY } from '../../../shared/constants/testimonial-categories';
 import { Brand } from '@prisma/client';
 import {
   buildParticipantDistributionLevels,
@@ -86,6 +87,33 @@ function normalizeFurtherInformationContent(value: unknown): FurtherInformationM
         ? content.background_image_mobile_url
         : undefined,
     mockup_image_url: typeof content.mockup_image_url === 'string' ? content.mockup_image_url : undefined,
+  };
+}
+
+type QuoteTestimonialRow = {
+  id: string;
+  name: string;
+  role: string | null;
+  testimonial: string;
+  company: string | null;
+  avatarUrl: string | null;
+  alumniYear: number | null;
+};
+
+/**
+ * Shared shape for the quote-style testimonial cards (delegates and speakers).
+ * The alumni section uses its own video-first mapping and is intentionally
+ * excluded here.
+ */
+function mapDelegateTestimonial(t: QuoteTestimonialRow) {
+  return {
+    id: t.id,
+    name: t.name,
+    role: t.role,
+    quote: t.testimonial,
+    country: t.company || '',
+    photo: t.avatarUrl || '',
+    year: t.alumniYear ?? null,
   };
 }
 
@@ -177,7 +205,7 @@ export class HomeStrategy implements ILandingPageStrategy {
 
     const nowForRegistrationWindow = new Date();
 
-    const [brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, registeredApplications, platformImpactStatsRow, openRegistrationPrograms] = await Promise.all([
+    const [brandImageGallery, brandSponsors, socialFeeds, videoPrograms, alumniTestimonials, delegateTestimonials, speakerTestimonials, registeredApplications, platformImpactStatsRow, openRegistrationPrograms] = await Promise.all([
       this.prisma.programGallery.findMany({
         where: {
           type: 'image',
@@ -245,7 +273,7 @@ export class HomeStrategy implements ILandingPageStrategy {
       this.prisma.programTestimonial.findMany({
         where: {
           brandId: brand.id,
-          category: 'alumni',
+          category: TESTIMONIAL_CATEGORY.ALUMNI,
           isActive: true
         },
         // Videos first: this section is a video reel, and text-only alumni
@@ -261,7 +289,19 @@ export class HomeStrategy implements ILandingPageStrategy {
       this.prisma.programTestimonial.findMany({
         where: {
           brandId: brand.id,
-          category: 'delegate',
+          category: TESTIMONIAL_CATEGORY.DELEGATE,
+          isActive: true
+        },
+        orderBy: [
+          { isFeatured: 'desc' },
+          { order: 'asc' }
+        ],
+        take: 10
+      }),
+      this.prisma.programTestimonial.findMany({
+        where: {
+          brandId: brand.id,
+          category: TESTIMONIAL_CATEGORY.SPEAKER,
           isActive: true
         },
         orderBy: [
@@ -613,15 +653,11 @@ export class HomeStrategy implements ILandingPageStrategy {
         {
           type: 'delegate_testimonials',
           content: {
-            items: delegateTestimonials.map(t => ({
-              id: t.id,
-              name: t.name,
-              role: t.role,
-              quote: t.testimonial,
-              country: t.company || '',
-              photo: t.avatarUrl || '',
-              year: t.alumniYear ?? null,
-            })),
+            items: delegateTestimonials.map(mapDelegateTestimonial),
+            // Speakers ride in the same section so the frontend can tab between
+            // them; kept as a separate key rather than merged into `items` so
+            // the delegate list stays the section's default view.
+            speakers: speakerTestimonials.map(mapDelegateTestimonial),
           },
         },
         {
