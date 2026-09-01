@@ -109,6 +109,9 @@ function InlineMediaPicker({
   const [assetFilter, setAssetFilter] = useState<string>("all");
 
   useEffect(() => {
+    // Fetch-on-mount/deps-change: loading/fetchError aren't deps of this
+    // effect ([programId, brandId, assetFilter]), so it can't loop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setFetchError(null);
     listProgramMedia({

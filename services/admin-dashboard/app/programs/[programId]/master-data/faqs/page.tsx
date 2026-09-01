@@ -377,7 +377,7 @@ function ConfirmDelete({ name, loading, onCancel, onConfirm }: { name: string; l
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
       <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
         <h2 className="mb-2 text-sm font-semibold text-zinc-900">Delete FAQ?</h2>
-        <p className="text-[11px] text-zinc-600 line-clamp-2">Remove <span className="font-semibold">"{name}"</span>? This cannot be undone.</p>
+        <p className="text-[11px] text-zinc-600 line-clamp-2">Remove <span className="font-semibold">&quot;{name}&quot;</span>? This cannot be undone.</p>
         <div className="mt-4 flex justify-end gap-2">
           <button onClick={onCancel} className="rounded-md border border-zinc-200 px-3 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50">Cancel</button>
           <button onClick={onConfirm} disabled={loading} className="rounded-md bg-red-500 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-60">{loading ? "Deleting…" : "Delete"}</button>

@@ -43,7 +43,7 @@ export interface Notification {
     priority: NotificationPriority;
     subject: string;
     content: string;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
     sentAt?: Date;
     deliveredAt?: Date;
     failedAt?: Date;
@@ -56,7 +56,7 @@ export interface SendEmailDto {
     to: string;
     template: EmailTemplate;
     subject?: string;
-    data: Record<string, any>;
+    data: Record<string, unknown>;
     priority?: NotificationPriority;
 }
 
@@ -66,7 +66,7 @@ export interface SendNotificationDto {
     subject: string;
     content: string;
     priority?: NotificationPriority;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
 }
 
 // RabbitMQ event payloads

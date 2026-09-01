@@ -12,6 +12,8 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
   const { adminProfile, isLoading, isPlatformAdmin } = useAuth();
   const [mounted, setMounted] = useState(false);
 
+  // Mount flag: empty deps, runs exactly once, can't loop.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {

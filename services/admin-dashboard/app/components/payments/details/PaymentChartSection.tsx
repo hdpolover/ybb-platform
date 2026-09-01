@@ -4,7 +4,11 @@ import React from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
 interface PaymentChartSectionProps {
-  data: any;
+  data: {
+    programEarnings: number;
+    adminFee: number;
+    totalPayment: number;
+  };
 }
 
 const formatIDR = (amount: number) => {

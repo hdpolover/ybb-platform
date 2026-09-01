@@ -70,7 +70,7 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
       } else if (application) {
         // Check dynamic rules
         switch (step.completionType) {
-          case TimelineCompletionType.status_change:
+          case TimelineCompletionType.status_change: {
             const statusConfig = step.completionConfig as { status: string };
             if (statusConfig?.status) {
               if (application.status === statusConfig.status) {
@@ -95,8 +95,9 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
               // If user is further along? (e.g. interview_scheduled > submitted) - Need status hierarchy helper
             }
             break;
+          }
 
-          case TimelineCompletionType.payment_completed:
+          case TimelineCompletionType.payment_completed: {
             const payConfig = step.completionConfig as { feeType: string };
             if (payConfig?.feeType) {
               const hasPaid = application.registrationPaymentStatus === 'paid' || application.programPaymentStatus === 'paid';
@@ -120,7 +121,8 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
               }
             }
             break;
-            
+          }
+
           case TimelineCompletionType.manual:
             // Logic: Not implemented yet. 
             // Could check a "ParticipantTimelineStatus" table.

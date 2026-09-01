@@ -235,7 +235,7 @@ export interface AdminGetPaymentMethodResponse {
   method: AdminPaymentMethod;
 }
 
-export interface AdminListPaymentMethodsRequest {}
+export type AdminListPaymentMethodsRequest = Record<string, never>;
 
 export interface AdminListPaymentMethodsResponse {
   methods: AdminPaymentMethod[];
