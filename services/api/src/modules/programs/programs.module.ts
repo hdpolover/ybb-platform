@@ -129,6 +129,7 @@ import { UpdateExchangeRateHandler } from './application/commands/handlers/updat
 import { ProgramContentRepository } from './infrastructure/persistence/program-content.repository';
 import { ProgramRepository } from './infrastructure/persistence/program.repository';
 import { LoaReleaseBatchRepository } from './infrastructure/persistence/loa-release-batch.repository';
+import { LoaBatchRecipientSendRepository } from './infrastructure/persistence/loa-batch-recipient-send.repository';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { FormFieldKeyValidator } from './application/validators/form-field-key.validator';
@@ -139,6 +140,7 @@ import {
   UnreleaseLoaBatchHandler,
   DeleteLoaBatchHandler,
   GetLoaBatchesHandler,
+  GetLoaBatchRecipientSendsHandler,
   GetLoaDownloadsHandler,
 } from './application/handlers/loa-batch.handlers';
 import { PreviewLoaTemplateHandler } from './application/handlers/loa-preview.handler';
@@ -286,6 +288,7 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
     UnreleaseLoaBatchHandler,
     DeleteLoaBatchHandler,
     GetLoaBatchesHandler,
+    GetLoaBatchRecipientSendsHandler,
     GetLoaDownloadsHandler,
     PreviewLoaTemplateHandler,
     LoaPreviewParticipantService,
@@ -296,6 +299,7 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
     LandingCacheInvalidationService,
     FormFieldKeyValidator,
     LoaReleaseBatchRepository,
+    LoaBatchRecipientSendRepository,
     {
       provide: 'IProgramContentRepository',
       useClass: ProgramContentRepository,

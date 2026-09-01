@@ -6,6 +6,7 @@ import { IUserNotificationRepository } from '@core/interfaces/repositories/user-
 import { UserNotification } from '@core/entities/user-notification.entity';
 import { LoaBatchReleasedPayload, LoaBatchReleasedRecipient } from '../../../../common/types/events';
 import { LoaReleaseBatchRepository } from '../../infrastructure/persistence/loa-release-batch.repository';
+import { LoaBatchRecipientSendRepository } from '../../infrastructure/persistence/loa-batch-recipient-send.repository';
 import {
   CreateLoaBatchCommand,
   UpdateLoaBatchCommand,
@@ -13,7 +14,18 @@ import {
   UnreleaseLoaBatchCommand,
   DeleteLoaBatchCommand,
 } from '../commands/loa-batch.commands';
-import { GetLoaBatchesQuery, GetLoaDownloadsQuery } from '../queries/loa-batch.queries';
+import {
+  GetLoaBatchesQuery,
+  GetLoaDownloadsQuery,
+  GetLoaBatchRecipientSendsQuery,
+} from '../queries/loa-batch.queries';
+import { LoaRecipientSendResponseDto } from '../dto/loa-batch.dto';
+import { ACTIVE_PARTICIPANT_WHERE } from '@shared/utils/active-participant.filter';
+import { Prisma } from '@prisma/client';
+
+// The uncovered-applicant list rides along with every LOA batch read, so it is
+// capped for payload size; the count returned beside it is the true total.
+const UNCOVERED_PARTICIPANT_LIST_LIMIT = 100;
 import { endOfWibDay, startOfWibDay } from '@shared/utils/wib-time';
 
 // ─── LOA_DOCUMENT_TYPE ────────────────────────────────────────────────────────
@@ -94,6 +106,7 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
     private readonly batchRepo: LoaReleaseBatchRepository,
     private readonly prisma: PrismaService,
     private readonly rabbitmqProducer: RabbitMQProducerService,
+    private readonly recipientSendRepo: LoaBatchRecipientSendRepository,
     @Inject(IUserNotificationRepository)
     private readonly userNotificationRepository: IUserNotificationRepository,
   ) {}
@@ -155,6 +168,12 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
     // (IUserNotificationRepository.create), same as list/mark-read use.
     await this.createInAppNotifications(batch, recipients);
 
+    // Record the intended recipients BEFORE publishing, so "who was supposed
+    // to get this letter?" is answerable even if the publish below fails, the
+    // broker is down, or services/notification never reports back. The
+    // outcomes are filled in later by LoaSendResultsController.
+    await this.recordPendingSends(batch, recipients);
+
     const program = await this.prisma.program.findUnique({
       where: { id: batch.programId },
       select: {
@@ -183,6 +202,26 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
       // pattern if guaranteed delivery becomes a requirement later).
       this.logger.error(
         `[loa-batch] failed to publish loa.batch.released for batch=${batch.id}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
+  /**
+   * Best-effort: the audit log exists to explain the send, so it must never
+   * be what stops one. A failure here is logged and the release/notify
+   * pipeline continues — the batch still goes out, it just goes out
+   * unlogged, which is strictly no worse than the pre-existing behaviour.
+   */
+  private async recordPendingSends(
+    batch: { id: string; programId: string },
+    recipients: LoaBatchReleasedRecipient[],
+  ): Promise<void> {
+    try {
+      await this.recipientSendRepo.markPending(batch.id, batch.programId, recipients);
+    } catch (error) {
+      this.logger.error(
+        `[loa-batch] failed to record ${recipients.length} pending send rows for batch=${batch.id}`,
         error instanceof Error ? error.stack : String(error),
       );
     }
@@ -334,5 +373,183 @@ export class GetLoaDownloadsHandler implements IQueryHandler<GetLoaDownloadsQuer
       firstDownloadedAt: doc.firstDownloadedAt,
       downloadCount: doc.downloadCount,
     }));
+  }
+}
+
+@QueryHandler(GetLoaBatchRecipientSendsQuery)
+export class GetLoaBatchRecipientSendsHandler
+  implements IQueryHandler<GetLoaBatchRecipientSendsQuery>
+{
+  constructor(
+    private readonly batchRepo: LoaReleaseBatchRepository,
+    private readonly recipientSendRepo: LoaBatchRecipientSendRepository,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  async execute(query: GetLoaBatchRecipientSendsQuery) {
+    const batch = await this.batchRepo.findById(query.batchId);
+    if (!batch || batch.programId !== query.programId) {
+      throw new NotFoundException('Batch not found');
+    }
+
+    const [sends, uncovered] = await Promise.all([
+      this.recipientSendRepo.findByBatch(query.batchId),
+      this.summariseUncoveredParticipants(query.programId),
+    ]);
+
+    const recipients = await this.attachParticipantNames(sends);
+
+    const summary = sends.reduce(
+      (counts, send) => ({
+        ...counts,
+        total: counts.total + 1,
+        [send.status]: (counts[send.status as 'pending' | 'sent' | 'failed'] ?? 0) + 1,
+      }),
+      { total: 0, pending: 0, sent: 0, failed: 0 },
+    );
+
+    return {
+      batchId: batch.id,
+      // A released batch with no rows predates this log; an unreleased batch
+      // has simply not fanned out yet. Both render as "not recorded", but
+      // only the first is a gap in the audit trail.
+      hasSendLog: sends.length > 0,
+      summary,
+      recipients,
+      ...uncovered,
+    };
+  }
+
+  /**
+   * The send log deliberately stores no name (it snapshots the email address
+   * because that is what delivery used, but a name is only ever display
+   * chrome). Resolved here in one extra query rather than via a Prisma
+   * relation, so the new table needs no foreign key to participants.
+   */
+  private async attachParticipantNames(
+    sends: Array<{
+      participantId: string;
+      email: string;
+      status: string;
+      providerMessageId: string | null;
+      errorMessage: string | null;
+      attemptCount: number;
+      sentAt: Date | null;
+    }>,
+  ): Promise<LoaRecipientSendResponseDto[]> {
+    if (sends.length === 0) {
+      return [];
+    }
+
+    const participants = await this.prisma.participant.findMany({
+      where: { id: { in: sends.map((send) => send.participantId) } },
+      select: { id: true, fullName: true },
+    });
+    const nameById = new Map(participants.map((p) => [p.id, p.fullName]));
+
+    return sends.map((send) => ({
+      participantId: send.participantId,
+      // full_name is '' (not null) until onboarding completes — an empty cell
+      // reads as a bug, so fall back to the address we actually mailed.
+      participantName: nameById.get(send.participantId) || send.email,
+      email: send.email,
+      status: send.status as LoaRecipientSendResponseDto['status'],
+      providerMessageId: send.providerMessageId,
+      errorMessage: send.errorMessage,
+      attemptCount: send.attemptCount,
+      sentAt: send.sentAt,
+    }));
+  }
+
+  /**
+   * Closes the silent-exclusion blind spot. An applicant whose submittedAt
+   * falls outside every RELEASED batch window is never returned by
+   * findEligibleRecipients, so they get no email, no log line and no
+   * send-log row — a per-recipient log alone cannot catch them, because they
+   * were never a recipient. Observed in production: one applicant on China
+   * Youth Summit 2026 (submitted 2026-08-28) sits outside all released
+   * windows, and because createLoaBatch rejects overlapping ranges the gap
+   * cannot simply be papered over with a wider batch later.
+   *
+   * Coverage is computed against RELEASED batches only — an unreleased batch
+   * notifies nobody. But an admin staring at "1 uncovered" is very likely
+   * looking at a batch they believe they already released, so an unreleased
+   * batch that WOULD cover some of them is reported alongside.
+   */
+  private async summariseUncoveredParticipants(programId: string) {
+    const batches = await this.prisma.loaReleaseBatch.findMany({
+      where: { programId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        submissionFrom: true,
+        submissionTo: true,
+        releasedAt: true,
+      },
+    });
+
+    const toWindow = (batch: { submissionFrom: Date; submissionTo: Date }) => ({
+      submittedAt: { gte: batch.submissionFrom, lte: batch.submissionTo },
+    });
+    const releasedBatches = batches.filter((batch) => batch.releasedAt !== null);
+    const unreleasedBatches = batches.filter((batch) => batch.releasedAt === null);
+
+    const uncoveredWhere = {
+      programId,
+      status: { in: ['submitted', 'accepted'] },
+      deletedAt: null,
+      submittedAt: { not: null },
+      // Deactivated/deleted accounts are excluded from the automated email,
+      // so listing them here as "missed" would be a false alarm — same
+      // predicate findEligibleRecipients uses.
+      participant: ACTIVE_PARTICIPANT_WHERE,
+      // No released batch at all -> every submitted applicant is uncovered.
+      ...(releasedBatches.length > 0
+        ? { NOT: { OR: releasedBatches.map(toWindow) } }
+        : {}),
+    } satisfies Prisma.ParticipantApplicationWhereInput;
+
+    const [count, applications, coveredByUnreleasedCount] = await Promise.all([
+      this.prisma.participantApplication.count({ where: uncoveredWhere }),
+      this.prisma.participantApplication.findMany({
+        where: uncoveredWhere,
+        // Capped: this rides along with every batch read, and an admin acting
+        // on the gap needs the earliest few, not an unbounded dump. `count`
+        // above is the honest total.
+        take: UNCOVERED_PARTICIPANT_LIST_LIMIT,
+        orderBy: { submittedAt: 'asc' },
+        select: {
+          id: true,
+          submittedAt: true,
+          participant: {
+            select: {
+              id: true,
+              fullName: true,
+              user: { select: { email: true } },
+            },
+          },
+        },
+      }),
+      unreleasedBatches.length > 0
+        ? this.prisma.participantApplication.count({
+            where: { ...uncoveredWhere, OR: unreleasedBatches.map(toWindow) },
+          })
+        : Promise.resolve(0),
+    ]);
+
+    return {
+      uncoveredParticipantCount: count,
+      uncoveredParticipants: applications.map((application) => ({
+        applicationId: application.id,
+        participantId: application.participant.id,
+        // full_name is '' (not null) until onboarding completes.
+        participantName: application.participant.fullName || application.participant.user.email,
+        email: application.participant.user.email,
+        submittedAt: application.submittedAt,
+      })),
+      coveredByUnreleasedBatchCount: coveredByUnreleasedCount,
+      unreleasedBatchNames:
+        coveredByUnreleasedCount > 0 ? unreleasedBatches.map((batch) => batch.name) : [],
+    };
   }
 }

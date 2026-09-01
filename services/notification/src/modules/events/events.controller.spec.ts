@@ -2,6 +2,7 @@ import { EventsController } from './events.controller';
 import { EmailService } from '../email/email.service';
 import { ReceiptService } from '../email/receipt.service';
 import { NotificationIdempotencyService } from './notification-idempotency.service';
+import { RabbitMQProducerService } from '../../shared/rabbitmq/rabbitmq-producer.service';
 import { RmqContext } from '@nestjs/microservices';
 
 const makeContext = (): RmqContext =>
@@ -13,7 +14,6 @@ const makeContext = (): RmqContext =>
     getChannelRef: () => ({ ack: jest.fn(), nack: jest.fn() }),
   }) as unknown as RmqContext;
 
-
 describe('EventsController.handlePaymentFailed — reason field resolution', () => {
   let controller: EventsController;
   let sendPaymentFailedEmail: jest.Mock;
@@ -24,9 +24,16 @@ describe('EventsController.handlePaymentFailed — reason field resolution', () 
       { sendPaymentFailedEmail } as unknown as EmailService,
       {} as ReceiptService,
       {
-        shouldProcess: jest.fn().mockResolvedValue({ shouldProcess: true, dedupeKey: 'key', reason: 'new' }),
+        shouldProcess: jest.fn().mockResolvedValue({
+          shouldProcess: true,
+          dedupeKey: 'key',
+          reason: 'new',
+        }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
+      {
+        emit: jest.fn().mockResolvedValue(true),
+      } as unknown as RabbitMQProducerService,
     );
   });
 
@@ -95,9 +102,16 @@ describe('EventsController.handlePaymentSucceeded — description field resoluti
       { sendPaymentSuccessEmail } as unknown as EmailService,
       { generateReceipt } as unknown as ReceiptService,
       {
-        shouldProcess: jest.fn().mockResolvedValue({ shouldProcess: true, dedupeKey: 'key', reason: 'new' }),
+        shouldProcess: jest.fn().mockResolvedValue({
+          shouldProcess: true,
+          dedupeKey: 'key',
+          reason: 'new',
+        }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
+      {
+        emit: jest.fn().mockResolvedValue(true),
+      } as unknown as RabbitMQProducerService,
     );
   });
 
@@ -118,11 +132,15 @@ describe('EventsController.handlePaymentSucceeded — description field resoluti
     await controller.handlePaymentSucceeded(payload, makeContext());
 
     expect(generateReceipt).toHaveBeenCalledWith(
-      expect.objectContaining({ description: 'Payment for Early Bird Registration' }),
+      expect.objectContaining({
+        description: 'Payment for Early Bird Registration',
+      }),
     );
     expect(sendPaymentSuccessEmail).toHaveBeenCalledWith(
       'jane@example.com',
-      expect.objectContaining({ description: 'Payment for Early Bird Registration' }),
+      expect.objectContaining({
+        description: 'Payment for Early Bird Registration',
+      }),
       expect.anything(),
     );
   });
@@ -133,13 +151,18 @@ describe('EventsController.handlePaymentSucceeded — description field resoluti
       amount: 100000,
       currency: 'IDR',
       order_id: 'inv-1',
-      metadata: { application_id: 'app-1', description: 'Payment for Wave 2 Program Fee' },
+      metadata: {
+        application_id: 'app-1',
+        description: 'Payment for Wave 2 Program Fee',
+      },
     };
 
     await controller.handlePaymentSucceeded(payload, makeContext());
 
     expect(generateReceipt).toHaveBeenCalledWith(
-      expect.objectContaining({ description: 'Payment for Wave 2 Program Fee' }),
+      expect.objectContaining({
+        description: 'Payment for Wave 2 Program Fee',
+      }),
     );
   });
 
@@ -170,9 +193,16 @@ describe('EventsController.handleLoaBatchReleased', () => {
       { sendLoaReadyEmail } as unknown as EmailService,
       {} as ReceiptService,
       {
-        shouldProcess: jest.fn().mockResolvedValue({ shouldProcess: true, dedupeKey: 'key', reason: 'new' }),
+        shouldProcess: jest.fn().mockResolvedValue({
+          shouldProcess: true,
+          dedupeKey: 'key',
+          reason: 'new',
+        }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
+      {
+        emit: jest.fn().mockResolvedValue(true),
+      } as unknown as RabbitMQProducerService,
     );
   });
 
@@ -193,7 +223,11 @@ describe('EventsController.handleLoaBatchReleased', () => {
     expect(sendLoaReadyEmail).toHaveBeenCalledTimes(2);
     expect(sendLoaReadyEmail).toHaveBeenCalledWith(
       'jane@example.com',
-      expect.objectContaining({ name: 'Jane Doe', program: 'YBB Summit 2026', programId: 'prog-1' }),
+      expect.objectContaining({
+        name: 'Jane Doe',
+        program: 'YBB Summit 2026',
+        programId: 'prog-1',
+      }),
     );
     expect(sendLoaReadyEmail).toHaveBeenCalledWith(
       'john@example.com',
@@ -230,11 +264,16 @@ describe('EventsController.handleLoaBatchReleased', () => {
     await controller.handleLoaBatchReleased(payload, makeContext());
 
     expect(sendLoaReadyEmail).toHaveBeenCalledTimes(1);
-    expect(sendLoaReadyEmail).toHaveBeenCalledWith('john@example.com', expect.anything());
+    expect(sendLoaReadyEmail).toHaveBeenCalledWith(
+      'john@example.com',
+      expect.anything(),
+    );
   });
 
   it('continues sending to remaining recipients when one send fails', async () => {
-    sendLoaReadyEmail.mockRejectedValueOnce(new Error('smtp down')).mockResolvedValueOnce(undefined);
+    sendLoaReadyEmail
+      .mockRejectedValueOnce(new Error('smtp down'))
+      .mockResolvedValueOnce(undefined);
     const payload = {
       batchId: 'batch-1',
       programId: 'prog-1',
@@ -257,7 +296,9 @@ describe('EventsController.handleLoaBatchReleased', () => {
       programId: 'prog-1',
       programName: 'YBB Summit 2026',
       batchName: 'Wave 1',
-      recipients: [{ userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' }],
+      recipients: [
+        { userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' },
+      ],
       brand: { name: 'YBB', websiteUrl: 'youthacademicforum.com' },
     };
 
@@ -277,7 +318,9 @@ describe('EventsController.handleLoaBatchReleased', () => {
       programId: 'prog-1',
       programName: 'YBB Summit 2026',
       batchName: 'Wave 1',
-      recipients: [{ userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' }],
+      recipients: [
+        { userId: 'user-1', email: 'jane@example.com', fullName: 'Jane Doe' },
+      ],
     };
 
     await controller.handleLoaBatchReleased(payload, makeContext());
@@ -299,9 +342,16 @@ describe('EventsController.handleSubmissionReminder', () => {
       { sendSubmissionReminderEmail } as unknown as EmailService,
       {} as ReceiptService,
       {
-        shouldProcess: jest.fn().mockResolvedValue({ shouldProcess: true, dedupeKey: 'key', reason: 'new' }),
+        shouldProcess: jest.fn().mockResolvedValue({
+          shouldProcess: true,
+          dedupeKey: 'key',
+          reason: 'new',
+        }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
+      {
+        emit: jest.fn().mockResolvedValue(true),
+      } as unknown as RabbitMQProducerService,
     );
   });
 
@@ -349,8 +399,190 @@ describe('EventsController.handleSubmissionReminder', () => {
   });
 
   it('does nothing when the payload has no email', async () => {
-    await controller.handleSubmissionReminder({ daysRemaining: 7 }, makeContext());
+    await controller.handleSubmissionReminder(
+      { daysRemaining: 7 },
+      makeContext(),
+    );
 
     expect(sendSubmissionReminderEmail).not.toHaveBeenCalled();
+  });
+});
+
+// ─── loa.batch.released → loa.batch.send_result ───────────────────────────────
+// The per-recipient try/catch in handleLoaBatchReleased used to swallow
+// failures into container logs (~2 day retention) and nothing else, so
+// "did this participant get their letter?" was unanswerable weeks later.
+// These cover the outcome-reporting path that replaces that blind spot.
+
+describe('EventsController.handleLoaBatchReleased — send result reporting', () => {
+  const buildController = (sendLoaReadyEmail: jest.Mock, emit: jest.Mock) =>
+    new EventsController(
+      { sendLoaReadyEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess: jest.fn().mockResolvedValue({
+          shouldProcess: true,
+          dedupeKey: 'key',
+          reason: 'new',
+        }),
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+      { emit } as unknown as RabbitMQProducerService,
+    );
+
+  type ReportedResult = {
+    participantId: string;
+    providerMessageId: string | null;
+    error: string | null;
+  };
+
+  // emit.mock.calls is any[][]; narrow once here so each assertion below can
+  // read the reported outcomes without an unsafe member access.
+  const reportedResults = (emit: jest.Mock): ReportedResult[] => {
+    const [, event] = emit.mock.calls[0] as [string, { results: ReportedResult[] }];
+    return event.results;
+  };
+
+  const payload = {
+    batchId: 'batch-1',
+    programId: 'prog-1',
+    programName: 'YBB 2026',
+    batchName: 'Wave 1',
+    recipients: [
+      {
+        participantId: 'p-1',
+        userId: 'u-1',
+        email: 'ok@example.com',
+        fullName: 'Ada',
+      },
+      {
+        participantId: 'p-2',
+        userId: 'u-2',
+        email: 'bad@example.com',
+        fullName: 'Bob',
+      },
+    ],
+    brand: null,
+  };
+
+  it('reports one result per recipient, with the provider id on success and the error on failure', async () => {
+    const sendLoaReadyEmail = jest
+      .fn()
+      .mockResolvedValueOnce({ data: { id: 'resend-abc' } })
+      .mockRejectedValueOnce(new Error('mailbox full'));
+    const emit = jest.fn().mockResolvedValue(true);
+
+    await buildController(sendLoaReadyEmail, emit).handleLoaBatchReleased(
+      payload,
+      makeContext(),
+    );
+
+    expect(emit).toHaveBeenCalledWith('loa.batch.send_result', {
+      batchId: 'batch-1',
+      programId: 'prog-1',
+      results: [
+        { participantId: 'p-1', providerMessageId: 'resend-abc', error: null },
+        {
+          participantId: 'p-2',
+          providerMessageId: null,
+          error: 'mailbox full',
+        },
+      ],
+    });
+  });
+
+  it('reads a nodemailer messageId as the provider id', async () => {
+    const sendLoaReadyEmail = jest
+      .fn()
+      .mockResolvedValue({ messageId: '<smtp-1@ybb>' });
+    const emit = jest.fn().mockResolvedValue(true);
+
+    await buildController(sendLoaReadyEmail, emit).handleLoaBatchReleased(
+      { ...payload, recipients: [payload.recipients[0]] },
+      makeContext(),
+    );
+
+    expect(reportedResults(emit)[0].providerMessageId).toBe('<smtp-1@ybb>');
+  });
+
+  it('records a null provider id when no transporter is configured', async () => {
+    const sendLoaReadyEmail = jest.fn().mockResolvedValue(undefined);
+    const emit = jest.fn().mockResolvedValue(true);
+
+    await buildController(sendLoaReadyEmail, emit).handleLoaBatchReleased(
+      { ...payload, recipients: [payload.recipients[0]] },
+      makeContext(),
+    );
+
+    expect(reportedResults(emit)[0]).toEqual({
+      participantId: 'p-1',
+      providerMessageId: null,
+      error: null,
+    });
+  });
+
+  it('still sends to every recipient when one fails, and does not throw', async () => {
+    const sendLoaReadyEmail = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce({ data: { id: 'resend-xyz' } });
+    const emit = jest.fn().mockResolvedValue(true);
+
+    await expect(
+      buildController(sendLoaReadyEmail, emit).handleLoaBatchReleased(
+        payload,
+        makeContext(),
+      ),
+    ).resolves.not.toThrow();
+
+    expect(sendLoaReadyEmail).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not throw when publishing the result event fails — the emails already went out', async () => {
+    const sendLoaReadyEmail = jest
+      .fn()
+      .mockResolvedValue({ data: { id: 'resend-abc' } });
+    const emit = jest.fn().mockRejectedValue(new Error('broker down'));
+
+    await expect(
+      buildController(sendLoaReadyEmail, emit).handleLoaBatchReleased(
+        payload,
+        makeContext(),
+      ),
+    ).resolves.not.toThrow();
+  });
+
+  it('skips reporting when recipients carry no participantId (older API payload)', async () => {
+    const sendLoaReadyEmail = jest.fn().mockResolvedValue(undefined);
+    const emit = jest.fn().mockResolvedValue(true);
+
+    await buildController(sendLoaReadyEmail, emit).handleLoaBatchReleased(
+      {
+        ...payload,
+        recipients: [
+          { userId: 'u-1', email: 'ok@example.com', fullName: 'Ada' },
+        ],
+      },
+      makeContext(),
+    );
+
+    expect(sendLoaReadyEmail).toHaveBeenCalledTimes(1);
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('truncates an oversized provider error before it reaches the event', async () => {
+    const sendLoaReadyEmail = jest
+      .fn()
+      .mockRejectedValue(new Error('x'.repeat(900)));
+    const emit = jest.fn().mockResolvedValue(true);
+
+    await buildController(sendLoaReadyEmail, emit).handleLoaBatchReleased(
+      { ...payload, recipients: [payload.recipients[0]] },
+      makeContext(),
+    );
+
+    const reported = reportedResults(emit)[0].error as string;
+    expect(reported).toHaveLength(500);
+    expect(reported.endsWith('…')).toBe(true);
   });
 });

@@ -65,7 +65,11 @@ import {
   UnreleaseLoaBatchCommand,
   DeleteLoaBatchCommand,
 } from '../application/commands/loa-batch.commands';
-import { GetLoaBatchesQuery, GetLoaDownloadsQuery } from '../application/queries/loa-batch.queries';
+import {
+  GetLoaBatchesQuery,
+  GetLoaDownloadsQuery,
+  GetLoaBatchRecipientSendsQuery,
+} from '../application/queries/loa-batch.queries';
 import {
   CreateLoaBatchHandler,
   UpdateLoaBatchHandler,
@@ -74,6 +78,7 @@ import {
   DeleteLoaBatchHandler,
   GetLoaBatchesHandler,
   GetLoaDownloadsHandler,
+  GetLoaBatchRecipientSendsHandler,
 } from '../application/handlers/loa-batch.handlers';
 import { PreviewLoaTemplateQuery, PreviewLoaTemplateHandler } from '../application/handlers/loa-preview.handler';
 
@@ -108,6 +113,7 @@ export class ProgramContentController {
     private readonly deleteLoaBatchHandlerSvc: DeleteLoaBatchHandler,
     private readonly getLoaBatchesHandlerSvc: GetLoaBatchesHandler,
     private readonly getLoaDownloadsHandlerSvc: GetLoaDownloadsHandler,
+    private readonly getLoaBatchRecipientSendsHandlerSvc: GetLoaBatchRecipientSendsHandler,
     private readonly previewLoaTemplateHandler: PreviewLoaTemplateHandler,
   ) {}
 
@@ -403,6 +409,23 @@ export class ProgramContentController {
   @ApiOperation({ summary: 'List LOA release batches for a program' })
   async getLoaBatches(@Param('programId') programId: string) {
     return this.getLoaBatchesHandlerSvc.execute(new GetLoaBatchesQuery(programId));
+  }
+
+  @Get(':programId/loa-batches/:id/recipient-sends')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Per-recipient delivery status for one released LOA batch, plus the count of applicants covered by no released batch',
+  })
+  async getLoaBatchRecipientSends(
+    @Param('programId') programId: string,
+    @Param('id') batchId: string,
+  ) {
+    return this.getLoaBatchRecipientSendsHandlerSvc.execute(
+      new GetLoaBatchRecipientSendsQuery(programId, batchId),
+    );
   }
 
   @Post(':programId/loa-batches')

@@ -10,10 +10,28 @@ import {
   NotificationIdempotencyService,
   abbreviateDedupeKey,
 } from './notification-idempotency.service';
+import { RabbitMQProducerService } from '../../shared/rabbitmq/rabbitmq-producer.service';
 
 type EventPayload = Record<string, unknown>;
 type ReceiptItem = { name: string; quantity: number; price: number };
-type LoaRecipient = { userId: string; email: string; fullName: string };
+type LoaRecipient = {
+  participantId: string;
+  userId: string;
+  email: string;
+  fullName: string;
+};
+// Outcome reported back to the API per recipient, so the per-recipient send
+// log can answer "did this participant get their letter?". This service has
+// no database of its own, so reporting over the bus is the only write path.
+type LoaSendResult = {
+  participantId: string;
+  providerMessageId: string | null;
+  error: string | null;
+};
+
+// Keeps a provider stack trace from bloating both the event and the audit
+// row it lands in. The API truncates independently too.
+const MAX_SEND_ERROR_LENGTH = 500;
 type PricingTierAlertTier = {
   tierId: string;
   tierName: string;
@@ -82,6 +100,7 @@ export class EventsController {
     private readonly emailService: EmailService,
     private readonly receiptService: ReceiptService,
     private readonly idempotencyService: NotificationIdempotencyService,
+    private readonly producer: RabbitMQProducerService,
   ) {}
 
   @EventPattern('notification.payment_succeeded')
@@ -810,23 +829,83 @@ export class EventsController {
         // either resend to already-succeeded recipients or, once the
         // dedupe key set by canProcess() is already claimed, get silently
         // skipped on retry. Best-effort per recipient avoids both.
+        //
+        // Each outcome is now also collected and reported back to the API
+        // (which owns the database) so the failures below stop being
+        // log-only — container logs retain ~2 days while batches are
+        // released weeks apart.
+        const results: LoaSendResult[] = [];
+
         for (const recipient of recipients) {
           try {
-            await this.emailService.sendLoaReadyEmail(recipient.email, {
-              name: recipient.fullName || 'Participant',
-              program: programName,
-              programId,
-              brand,
+            // EmailService is untyped at this boundary; extractProviderMessageId
+            // narrows the transport's response shape rather than trusting it.
+            const response: unknown = await this.emailService.sendLoaReadyEmail(
+              recipient.email,
+              {
+                name: recipient.fullName || 'Participant',
+                program: programName,
+                programId,
+                brand,
+              },
+            );
+            results.push({
+              participantId: recipient.participantId,
+              providerMessageId: extractProviderMessageId(response),
+              error: null,
             });
           } catch (error) {
             this.logger.error(
               `[loa-batch] failed to send LOA-ready email batch=${batchId} to=${maskEmail(recipient.email)}`,
               error instanceof Error ? error.stack : String(error),
             );
+            results.push({
+              participantId: recipient.participantId,
+              providerMessageId: null,
+              error: truncateSendError(
+                error instanceof Error ? error.message : String(error),
+              ),
+            });
           }
         }
+
+        await this.reportLoaSendResults(batchId, programId, results);
       },
     );
+  }
+
+  /**
+   * Best-effort reporting: the audit trail exists to explain the send, so a
+   * failure to publish it must never fail the send or nack the message —
+   * every email above has already gone out by this point, and re-delivering
+   * this event would re-send them all. A publish failure leaves the API's
+   * rows in `pending`, which reads as "outcome unknown" rather than
+   * falsely as "sent".
+   */
+  private async reportLoaSendResults(
+    batchId: string | undefined,
+    programId: string | undefined,
+    results: LoaSendResult[],
+  ): Promise<void> {
+    // participantId is what the API matches rows on; a payload from an older
+    // API build won't carry it and there is nothing to correlate.
+    const reportable = results.filter((result) => result.participantId);
+    if (!batchId || !programId || reportable.length === 0) {
+      return;
+    }
+
+    try {
+      await this.producer.emit('loa.batch.send_result', {
+        batchId,
+        programId,
+        results: reportable,
+      });
+    } catch (error) {
+      this.logger.error(
+        `[loa-batch] failed to publish loa.batch.send_result for batch=${batchId} (${reportable.length} results)`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   @EventPattern('support.ticket.status-updated')
@@ -1067,6 +1146,7 @@ function getLoaRecipients(
     if (!email) continue;
 
     normalized.push({
+      participantId: getString(recipient, 'participantId') || '',
       userId: getString(recipient, 'userId') || '',
       email,
       fullName: getString(recipient, 'fullName') || '',
@@ -1074,6 +1154,30 @@ function getLoaRecipients(
   }
 
   return normalized;
+}
+
+function truncateSendError(message: string): string {
+  return message.length > MAX_SEND_ERROR_LENGTH
+    ? `${message.slice(0, MAX_SEND_ERROR_LENGTH - 1)}\u2026`
+    : message;
+}
+
+/**
+ * EmailService.sendRawEmail returns the transport's own response verbatim:
+ * a Resend `{ data: { id } }`, a nodemailer `{ messageId }`, or `undefined`
+ * when no transporter is configured at all. Normalize those three shapes to
+ * one nullable id rather than leaking the union into the event contract.
+ */
+function extractProviderMessageId(response: unknown): string | null {
+  const record = asRecord(response);
+
+  const resendId = getString(asRecord(record.data), 'id');
+  if (resendId) return resendId;
+
+  const nodemailerId = getString(record, 'messageId');
+  if (nodemailerId) return nodemailerId;
+
+  return null;
 }
 
 function getStringArray(source: Record<string, unknown>, key: string): string[] {

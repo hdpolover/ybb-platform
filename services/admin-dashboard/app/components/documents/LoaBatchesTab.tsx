@@ -5,10 +5,12 @@ import { CalendarRange, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
   getLoaBatches,
+  getLoaBatchRecipientSends,
   releaseLoaBatch,
   unreleaseLoaBatch,
   deleteLoaBatch,
   type LoaBatch,
+  type LoaBatchRecipientSends,
 } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
 import { Badge } from "@/src/ui/badge";
@@ -25,6 +27,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/src/ui/tooltip";
 import { EmptyState } from "@/src/admin/empty-state";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 import { LoaBatchDialog } from "./LoaBatchDialog";
+import { LoaDeliveryDialog } from "./LoaDeliveryDialog";
+import { LoaCoverageWarning } from "./LoaCoverageWarning";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -51,18 +55,68 @@ function getErrorMessage(err: unknown): string {
 
 interface BatchRowProps {
   batch: LoaBatch;
+  /** Undefined while delivery data is still loading, or if it failed to load. */
+  delivery?: LoaBatchRecipientSends;
   onEdit: (batch: LoaBatch) => void;
   onDeleteRequest: (batch: LoaBatch) => void;
   onToggleRelease: (batch: LoaBatch) => void;
+  onViewDelivery: (batch: LoaBatch) => void;
   toggling: boolean;
   hasActiveTemplate?: boolean | null;
 }
 
+/**
+ * Email delivery for one batch: "N sent / M failed" once outcomes have been
+ * reported, or an explicit "not recorded" for batches released before
+ * per-recipient logging existed. Deliberately never renders a bare "0 sent"
+ * for a missing log — that would read as a failed release rather than as
+ * missing history.
+ */
+function DeliveryCell({
+  batch,
+  delivery,
+  onViewDelivery,
+}: Pick<BatchRowProps, "batch" | "delivery" | "onViewDelivery">) {
+  if (!batch.releasedAt) {
+    return <span className="text-sm text-zinc-400">—</span>;
+  }
+  if (!delivery) {
+    return <span className="text-sm text-zinc-400">…</span>;
+  }
+  if (!delivery.hasSendLog) {
+    return (
+      <button
+        type="button"
+        onClick={() => onViewDelivery(batch)}
+        className="cursor-pointer text-sm text-zinc-500 underline underline-offset-2 hover:text-zinc-700"
+      >
+        Not recorded
+      </button>
+    );
+  }
+
+  const { sent, failed } = delivery.summary;
+  return (
+    <button
+      type="button"
+      onClick={() => onViewDelivery(batch)}
+      className="cursor-pointer text-sm underline underline-offset-2"
+    >
+      <span className="tabular-nums text-emerald-700">{sent} sent</span>
+      {failed > 0 && (
+        <span className="tabular-nums text-red-700"> / {failed} failed</span>
+      )}
+    </button>
+  );
+}
+
 function BatchRow({
   batch,
+  delivery,
   onEdit,
   onDeleteRequest,
   onToggleRelease,
+  onViewDelivery,
   toggling,
   hasActiveTemplate,
 }: BatchRowProps) {
@@ -92,6 +146,13 @@ function BatchRow({
       </TableCell>
       <TableCell className="tabular-nums">{batch.eligibleCount}</TableCell>
       <TableCell className="tabular-nums">{batch.downloadedCount}</TableCell>
+      <TableCell>
+        <DeliveryCell
+          batch={batch}
+          delivery={delivery}
+          onViewDelivery={onViewDelivery}
+        />
+      </TableCell>
       <TableCell>
         <Badge variant={isReleased ? "success" : "secondary"}>
           {isReleased ? "Released" : "Draft"}
@@ -151,6 +212,37 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
   // Per-row toggle loading
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
+  // Per-batch email delivery, keyed by batch id. Fetched alongside the batch
+  // list so the table can show "N sent / M failed" without a second click.
+  const [deliveries, setDeliveries] = useState<Record<string, LoaBatchRecipientSends>>({});
+  const [deliveryTarget, setDeliveryTarget] = useState<LoaBatch | null>(null);
+
+  /**
+   * Delivery data is fetched per batch and folded in as it arrives, in
+   * parallel and deliberately after the table has already rendered: it is
+   * supplementary, so a slow or failing delivery query must never block or
+   * fail the batch list itself. A batch whose fetch rejects simply keeps no
+   * entry and renders as still-loading rather than as an error.
+   */
+  const fetchDeliveries = useCallback(
+    async (programId: string, forBatches: LoaBatch[]) => {
+      const settled = await Promise.allSettled(
+        forBatches.map((batch) => getLoaBatchRecipientSends(programId, batch.id)),
+      );
+
+      setDeliveries(
+        settled.reduce<Record<string, LoaBatchRecipientSends>>(
+          (byBatchId, result) =>
+            result.status === "fulfilled"
+              ? { ...byBatchId, [result.value.batchId]: result.value }
+              : byBatchId,
+          {},
+        ),
+      );
+    },
+    [],
+  );
+
   const fetchBatches = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -158,12 +250,13 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
       const data = await getLoaBatches(resolvedProgramId);
       setBatches(data);
       onBatchesChange?.(data);
+      void fetchDeliveries(resolvedProgramId, data);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [resolvedProgramId, onBatchesChange]);
+  }, [resolvedProgramId, onBatchesChange, fetchDeliveries]);
 
   useEffect(() => {
     void fetchBatches();
@@ -245,6 +338,10 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  // uncovered* is program-scoped, not batch-scoped — every delivery response
+  // carries the same figures, so the first one that loaded is as good as any.
+  const coverage = Object.values(deliveries)[0];
+
   return (
     <div className="space-y-4 pt-4">
       {/* Header row */}
@@ -257,6 +354,16 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
           New Batch
         </Button>
       </div>
+
+      {/* Silent-exclusion blind spot: applicants no released batch covers */}
+      {!loading && !error && coverage && (
+        <LoaCoverageWarning
+          count={coverage.uncoveredParticipantCount}
+          participants={coverage.uncoveredParticipants}
+          coveredByUnreleasedBatchCount={coverage.coveredByUnreleasedBatchCount}
+          unreleasedBatchNames={coverage.unreleasedBatchNames}
+        />
+      )}
 
       {/* Loading state */}
       {loading && (
@@ -299,6 +406,7 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
               <TableHead>Submission Range</TableHead>
               <TableHead>Eligible</TableHead>
               <TableHead>Downloaded</TableHead>
+              <TableHead>Email Delivery</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -308,9 +416,11 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
               <BatchRow
                 key={batch.id}
                 batch={batch}
+                delivery={deliveries[batch.id]}
                 onEdit={handleEdit}
                 onDeleteRequest={handleDeleteRequest}
                 onToggleRelease={handleToggleRelease}
+                onViewDelivery={setDeliveryTarget}
                 toggling={togglingId === batch.id}
                 hasActiveTemplate={hasActiveTemplate}
               />
@@ -326,6 +436,15 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
           batch={editingBatch}
           onClose={handleDialogClose}
           onSaved={handleSaved}
+        />
+      )}
+
+      {/* Per-recipient delivery dialog */}
+      {deliveryTarget && deliveries[deliveryTarget.id] && (
+        <LoaDeliveryDialog
+          batch={deliveryTarget}
+          delivery={deliveries[deliveryTarget.id]}
+          onClose={() => setDeliveryTarget(null)}
         />
       )}
 
