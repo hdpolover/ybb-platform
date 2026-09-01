@@ -580,7 +580,7 @@ function TestimonialSheet({
             >
               <option value="delegate">Delegate (shown in the Testimonials section)</option>
               <option value="alumni">Alumni (shown in the Alumni Stories section)</option>
-              <option value="speaker">Speaker (not shown on the public site yet)</option>
+              <option value="speaker">Speaker (shown in the Testimonials section)</option>
             </select>
           </div>
 
