@@ -9,6 +9,8 @@ import {
 } from "@/app/components/submissionsMasterData/api";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { AddSubThemeAction, EditSubThemeAction, DeleteSubThemeAction } from "./SubThemeActions";
+import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
+import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 
 export interface SubThemeRow {
   id: string;
@@ -33,6 +35,8 @@ export function SubThemesTable({ programId }: { programId: string }) {
   const [rows, setRows] = useState<SubThemeRow[]>([]);
   const [status, setStatus] = useState<"loading" | "idle">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
+  const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
 
   const loadSubthemes = useCallback(async () => {
     setStatus("loading");
@@ -81,7 +85,23 @@ export function SubThemesTable({ programId }: { programId: string }) {
             <p className="text-sm text-zinc-500">Manage the sub themes used in the submission form.</p>
           </div>
         </div>
-        <AddSubThemeAction programId={resolvedProgramId} onChanged={loadSubthemes} />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setCopyFromProgramOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+          >
+            <span>Copy from program</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCopyFromTemplateOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+          >
+            <span>Copy from template</span>
+          </button>
+          <AddSubThemeAction programId={resolvedProgramId} onChanged={loadSubthemes} />
+        </div>
       </div>
 
       {errorMessage && (
@@ -143,6 +163,32 @@ export function SubThemesTable({ programId }: { programId: string }) {
           </table>
         </div>
       </div>
+
+      <CopyFromProgramDialog
+        open={copyFromProgramOpen}
+        entityKey="sub-themes"
+        entityLabel="Sub Themes"
+        programId={resolvedProgramId}
+        supportsAppend
+        onClose={() => setCopyFromProgramOpen(false)}
+        onApplied={() => {
+          setCopyFromProgramOpen(false);
+          loadSubthemes();
+        }}
+      />
+
+      <CopyFromTemplateDialog
+        open={copyFromTemplateOpen}
+        entityKey="sub-themes"
+        entityLabel="Sub Themes"
+        programId={resolvedProgramId}
+        supportsAppend
+        onClose={() => setCopyFromTemplateOpen(false)}
+        onApplied={() => {
+          setCopyFromTemplateOpen(false);
+          loadSubthemes();
+        }}
+      />
     </section>
   );
 }

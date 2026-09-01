@@ -38,12 +38,14 @@ import { ParticipationCategoriesCopier } from './application/copy/copiers/partic
 import { TimelinesCopier } from './application/copy/copiers/timelines.copier';
 import { RundownsCopier } from './application/copy/copiers/rundowns.copier';
 import { FaqsCopier } from './application/copy/copiers/faqs.copier';
+import { SubThemesCopier } from './application/copy/copiers/sub-themes.copier';
 import { PaymentsCopier } from './application/copy/copiers/payments.copier';
 import { ProgramDetailsCopier } from './application/copy/copiers/program-details.copier';
 import { ContactCopier } from './application/copy/copiers/contact.copier';
 import { LandingCopier } from './application/copy/copiers/landing.copier';
 import { SpeakersCopier } from './application/copy/copiers/speakers.copier';
 import { TestimonialsCopier } from './application/copy/copiers/testimonials.copier';
+import { PhotosCopier } from './application/copy/copiers/photos.copier';
 import {
   GetContentTemplatesHandler,
   GetContentTemplateByIdHandler,
@@ -107,6 +109,7 @@ import {
   CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
   UpdateProgramPaymentInfoHandler,
   UpdateProgramContactHandler,
+  UpdateProgramPartnersCanvaUrlHandler,
   UpdateProgramLandingContentHandler,
 } from './application/commands/handlers/manage-program-content.handlers';
 import {
@@ -210,6 +213,7 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
     CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
     UpdateProgramPaymentInfoHandler,
     UpdateProgramContactHandler,
+    UpdateProgramPartnersCanvaUrlHandler,
     UpdateProgramLandingContentHandler,
     // Form Field Handlers
     CreateApplicationFormFieldHandler,
@@ -234,12 +238,14 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
     TimelinesCopier,
     RundownsCopier,
     FaqsCopier,
+    SubThemesCopier,
     PaymentsCopier,
     ProgramDetailsCopier,
     ContactCopier,
     LandingCopier,
     SpeakersCopier,
     TestimonialsCopier,
+    PhotosCopier,
     {
       provide: ProgramCopierRegistry,
       useFactory: (...copiers: ProgramCopier[]) => new ProgramCopierRegistry(...copiers),
@@ -249,12 +255,14 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
         TimelinesCopier,
         RundownsCopier,
         FaqsCopier,
+        SubThemesCopier,
         PaymentsCopier,
         ProgramDetailsCopier,
         ContactCopier,
         LandingCopier,
         SpeakersCopier,
         TestimonialsCopier,
+        PhotosCopier,
       ],
     },
 
