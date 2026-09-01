@@ -11,6 +11,7 @@ import {
   Film,
   Gift,
   Megaphone,
+  Presentation,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import { useState, type ReactNode } from "react";
 import { EmptyState } from "@/src/admin/empty-state";
 import type { ProgramLandingContent } from "@/app/platform/api";
 import { ProgramContactSheet } from "./ProgramContactSheet";
+import { ProgramPartnersCanvaSheet } from "./ProgramPartnersCanvaSheet";
 import { BenefitsSheet } from "../landing-content/BenefitsSheet";
 import { FeaturesSheet } from "../landing-content/FeaturesSheet";
 import { PromoCtaSheet } from "../landing-content/PromoCtaSheet";
@@ -64,6 +66,7 @@ export interface ProgramSpecificsData {
     contactAddress: string | null;
   };
   landingContent: ProgramLandingContent;
+  partnersCanvaUrl: string | null;
 }
 
 interface ProgramSpecificsTabProps {
@@ -403,6 +406,16 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
             action={<PaymentInfoSheet programId={programId} initial={lc.payment_info} onSaved={onDataChanged} />}
           >
             <p className="text-xs text-zinc-500">{paymentInfoItemCount} item(s) configured.</p>
+          </LandingContentCard>
+
+          <LandingContentCard
+            title="Partners Page — Canva Embed"
+            icon={Presentation}
+            isEmpty={!data.partnersCanvaUrl}
+            emptyDescription="Add a Canva embed for this program, shown on the Partners page labelled with the program name."
+            action={<ProgramPartnersCanvaSheet programId={programId} initial={data.partnersCanvaUrl} onSaved={onDataChanged} />}
+          >
+            <p className="truncate text-xs text-zinc-500">{data.partnersCanvaUrl}</p>
           </LandingContentCard>
         </div>
       </section>

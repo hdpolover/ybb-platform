@@ -16,6 +16,7 @@ import {
     CreateProgramSubthemeDto, UpdateProgramSubthemeDto,
     CreateDocumentTemplateDto, UpdateDocumentTemplateDto,
     UpdateProgramPaymentInfoDto,
+    UpdateProgramPartnersCanvaUrlDto,
 } from '../../presentation/dto/create-update-program-content.dto';
 import { UpdateProgramContactDto } from '../../presentation/dto/update-program-contact.dto';
 import { UpdateProgramLandingContentDto } from '../../presentation/dto/update-program-landing-content.dto';
@@ -281,6 +282,15 @@ export class UpdateProgramContactCommand {
     constructor(
         public readonly programId: string,
         public readonly dto: UpdateProgramContactDto,
+        public readonly userId: string,
+    ) { }
+}
+
+// Program-level Partners-page Canva embed URL
+export class UpdateProgramPartnersCanvaUrlCommand {
+    constructor(
+        public readonly programId: string,
+        public readonly dto: UpdateProgramPartnersCanvaUrlDto,
         public readonly userId: string,
     ) { }
 }

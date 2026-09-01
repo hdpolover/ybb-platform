@@ -34,8 +34,8 @@ import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
 import { ChangeType } from '@prisma/client';
-import { UpdateProgramPaymentInfoDto } from './dto/create-update-program-content.dto';
-import { UpdateProgramPaymentInfoCommand, UpdateProgramContactCommand, UpdateProgramLandingContentCommand } from '../application/commands/program-content.commands';
+import { UpdateProgramPaymentInfoDto, UpdateProgramPartnersCanvaUrlDto } from './dto/create-update-program-content.dto';
+import { UpdateProgramPaymentInfoCommand, UpdateProgramContactCommand, UpdateProgramPartnersCanvaUrlCommand, UpdateProgramLandingContentCommand } from '../application/commands/program-content.commands';
 import { UpdateProgramContactDto } from './dto/update-program-contact.dto';
 import { UpdateProgramLandingContentDto } from './dto/update-program-landing-content.dto';
 
@@ -229,6 +229,26 @@ export class ProgramsController {
   ) {
     await this.commandBus.execute(new UpdateProgramContactCommand(id, dto, req.user.id));
     return { message: 'Contact info updated successfully' };
+  }
+
+  @Put(':id/partners-canva-url')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update the Partners-page Canva embed URL for this program',
+    description:
+      'Send `partnersCanvaUrl: "https://www.canva.com/design/..."` to set, or omit / send `null` to clear.',
+  })
+  @ApiResponse({ status: 200, description: 'Partners Canva URL updated successfully' })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  async updatePartnersCanvaUrl(
+    @Param('id') id: string,
+    @Body() dto: UpdateProgramPartnersCanvaUrlDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    await this.commandBus.execute(new UpdateProgramPartnersCanvaUrlCommand(id, dto, req.user.id));
+    return { message: 'Partners Canva URL updated successfully' };
   }
 
   @Put(':id/landing-content')

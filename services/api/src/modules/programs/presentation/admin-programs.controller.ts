@@ -99,6 +99,7 @@ export class AdminProgramsController {
         contactPhone: program.contactPhone ?? null,
         contactWhatsapp: program.contactWhatsapp ?? null,
         contactAddress: program.contactAddress ?? null,
+        partnersCanvaUrl: program.partnersCanvaUrl ?? null,
         landingContent: (program.landingContent as Record<string, unknown>) ?? {},
         deletedAt: program.deletedAt ?? null,
         brand: program.brand,

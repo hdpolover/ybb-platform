@@ -1681,3 +1681,13 @@ export class UpdateProgramPaymentInfoDto {
     @IsOptional()
     paymentInfoHtml?: string | null;
 }
+
+// Program-level Partners-page Canva embed URL. Replaces the single
+// Brand.metadata.partners_canva_url slot — see program.prisma's
+// partnersCanvaUrl field comment for why this moved to per-program.
+export class UpdateProgramPartnersCanvaUrlDto {
+    @ApiPropertyOptional({ description: 'Canva "Share -> Embed" URL shown on the Partners page for this program. Omit or send null to clear.' })
+    @IsUrl()
+    @IsOptional()
+    partnersCanvaUrl?: string | null;
+}

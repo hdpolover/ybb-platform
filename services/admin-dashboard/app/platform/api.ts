@@ -57,6 +57,7 @@ export type PlatformProgram = {
   registrationCloseDate?: string | null;
   registrationFee?: number | null;
   paymentInfoHtml?: string | null;
+  partnersCanvaUrl?: string | null;
   isPublished: boolean;
   isActive: boolean;
   status: string;
@@ -513,6 +514,14 @@ export type AffiliateCommissionMetadata = {
 export type BrandMetadata = {
   /** Global background image used by all landing sections (benefits, shorts, promo CTA, further info). */
   section_background?: BrandSectionBackground;
+  /**
+   * @deprecated Legacy single-embed slot. The Partners page now reads a
+   * Canva URL per program (Program.partnersCanvaUrl, edited via
+   * updateProgramPartnersCanvaUrl), which lets concurrently running program
+   * editions of the same brand each show their own embed. This key is kept
+   * read-only here as the API's fallback for brands not yet migrated —
+   * BrandDetailPage no longer exposes an editor for it.
+   */
   partners_canva_url?: string | null;
   affiliateCommission?: AffiliateCommissionMetadata | null;
   recognition?: Record<string, unknown>;
@@ -594,6 +603,21 @@ export function updateProgramContact(programId: string, contact: ProgramContact)
   return request<{ message: string }>(`/programs/${programId}/contact`, {
     method: "PUT",
     body: JSON.stringify(contact),
+  });
+}
+
+// PUT /programs/:id/partners-canva-url REPLACES the field — an omitted or
+// null value clears it server-side, matching UpdateProgramPartnersCanvaUrlHandler.
+// Supersedes the brand-level `partners_canva_url` metadata key (see
+// BrandMetadata's deprecation note): each program now owns its own embed so
+// two program editions of the same brand can each show one.
+export function updateProgramPartnersCanvaUrl(
+  programId: string,
+  partnersCanvaUrl: string | null,
+): Promise<{ message: string }> {
+  return request<{ message: string }>(`/programs/${programId}/partners-canva-url`, {
+    method: "PUT",
+    body: JSON.stringify({ partnersCanvaUrl }),
   });
 }
 

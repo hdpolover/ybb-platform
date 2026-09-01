@@ -35,6 +35,7 @@ import {
     CreateDocumentTemplateCommand, UpdateDocumentTemplateCommand, DeleteDocumentTemplateCommand,
     UpdateProgramPaymentInfoCommand,
     UpdateProgramContactCommand,
+    UpdateProgramPartnersCanvaUrlCommand,
     UpdateProgramLandingContentCommand,
 } from '../program-content.commands';
 import { PROGRAM_LANDING_CONTENT_KEYS, isProgramLandingContentKey } from '../../copy/program-landing-content.constants';
@@ -1747,6 +1748,33 @@ export class UpdateProgramContactHandler implements ICommandHandler<UpdateProgra
             contactAddress: command.dto.contactAddress ?? null,
         });
 
+        await invalidateLandingCacheByProgramId(command.programId, this.prisma, this.landingCacheInvalidation);
+    }
+}
+
+// --- Program Partners-Page Canva URL Handler ---
+@CommandHandler(UpdateProgramPartnersCanvaUrlCommand)
+export class UpdateProgramPartnersCanvaUrlHandler implements ICommandHandler<UpdateProgramPartnersCanvaUrlCommand> {
+    constructor(
+        @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+        private readonly prisma: PrismaService,
+        private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    ) {}
+
+    async execute(command: UpdateProgramPartnersCanvaUrlCommand): Promise<void> {
+        const program = await this.programRepository.findById(command.programId);
+        if (!program) {
+            throw new NotFoundException(`Program ${command.programId} not found`);
+        }
+
+        // Replaces the field, like updatePaymentInfo — omitted/null clears it.
+        await this.programRepository.update(command.programId, {
+            partnersCanvaUrl: command.dto.partnersCanvaUrl ?? null,
+        });
+
+        // Partners-page data is snapshotted (LandingSnapshotService), so a
+        // plain Redis bust is not enough — this also needs clearSnapshot,
+        // which invalidateLandingCacheByProgramId already sets.
         await invalidateLandingCacheByProgramId(command.programId, this.prisma, this.landingCacheInvalidation);
     }
 }

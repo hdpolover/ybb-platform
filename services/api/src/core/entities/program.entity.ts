@@ -53,5 +53,6 @@ export class Program {
         public readonly contactAddress?: string | null,
         public readonly metaKeywords?: string | null,
         public readonly landingContent?: Record<string, unknown>,
+        public readonly partnersCanvaUrl?: string | null,
     ) { }
 }

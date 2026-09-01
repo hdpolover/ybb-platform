@@ -59,8 +59,29 @@ export class PartnersSponsorsStrategy implements ILandingPageStrategy {
       orderBy: { order: 'asc' }
     }) : [];
 
+    // Per-program Canva embeds — see program.prisma's partnersCanvaUrl
+    // field comment. One brand can have several programs live at once, and
+    // each program owns its own embed URL now (rather than sharing the
+    // single legacy Brand.metadata.partners_canva_url slot below), so we
+    // pull it straight from the same active-programs query the partners
+    // grid already scopes to instead of a second query.
+    const activeProgramsWithCanva = category
+      ? await this.prisma.program.findMany({
+        where: {
+          brandId: category.id,
+          isActive: true,
+          partnersCanvaUrl: { not: null },
+        },
+        select: { id: true, name: true, partnersCanvaUrl: true },
+        orderBy: { startDate: 'asc' },
+      })
+      : [];
+
     const metadata = (category?.metadata ?? {}) as Record<string, unknown>;
-    const partnersCanvaUrl = typeof metadata.partners_canva_url === 'string' && metadata.partners_canva_url.trim()
+    // Legacy brand-level fallback: only rendered when no active program has
+    // set its own partnersCanvaUrl yet, so brands mid-migration to the
+    // per-program field keep showing something instead of going blank.
+    const legacyPartnersCanvaUrl = typeof metadata.partners_canva_url === 'string' && metadata.partners_canva_url.trim()
       ? metadata.partners_canva_url.trim()
       : null;
 
@@ -90,10 +111,21 @@ export class PartnersSponsorsStrategy implements ILandingPageStrategy {
       },
     ];
 
-    if (partnersCanvaUrl) {
+    if (activeProgramsWithCanva.length > 0) {
+      for (const program of activeProgramsWithCanva) {
+        sections.push({
+          type: 'canva_embed',
+          content: {
+            url: program.partnersCanvaUrl as string,
+            program_id: program.id,
+            program_name: program.name,
+          },
+        });
+      }
+    } else if (legacyPartnersCanvaUrl) {
       sections.push({
         type: 'canva_embed',
-        content: { url: partnersCanvaUrl },
+        content: { url: legacyPartnersCanvaUrl, program_id: null, program_name: null },
       });
     }
 
