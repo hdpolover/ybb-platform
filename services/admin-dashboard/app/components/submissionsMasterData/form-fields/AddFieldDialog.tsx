@@ -52,6 +52,9 @@ export function AddFieldDialog({
 
   useEffect(() => {
     if (!open) return;
+    // Reset-on-open: `open` is the only dep and isn't itself set here, so
+    // this can't cascade - it just seeds a clean dialog each time it opens.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMode("picker");
     setQuery("");
     setSelectedSystem(null);

@@ -3,7 +3,6 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { CacheModule as NestCacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import Keyv from 'keyv';
-// @ts-ignore: Wrapper types might be missing locally
 import KeyvRedis from '@keyv/redis';
 import { CacheService } from './cache.service';
 import { CacheMetricsService } from './cache-metrics.service';

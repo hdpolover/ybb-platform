@@ -257,6 +257,9 @@ function UploadSheet({
   // Reset state when sheet opens
   useEffect(() => {
     if (open) {
+      // `open` is the only dep and isn't itself set here, so this can't
+      // cascade - it just clears the upload form each time the sheet opens.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFiles([]);
       setPreviews([]);
       setAssetType("gallery");

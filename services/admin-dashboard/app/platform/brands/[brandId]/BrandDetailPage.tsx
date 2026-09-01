@@ -60,10 +60,6 @@ import {
   listAllAdmins,
   assignBrandAdmin,
   removeBrandAdmin,
-  listEmailTemplates,
-  createEmailTemplate,
-  updateEmailTemplate,
-  deleteEmailTemplate,
   listLegalDocuments,
   createLegalDocument,
   updateLegalDocument,
@@ -77,7 +73,6 @@ import {
   type BrandAdmin,
   type BrandSocialFeed,
   type BrandSponsor,
-  type EmailTemplate,
   type LegalDocument,
   type PlatformBrandDetail,
   type PlatformProgram,
@@ -2463,179 +2458,6 @@ function AdminsTab({ brandId }: { brandId: string }) {
         </div>
       )}
     </div>
-  );
-}
-
-// ─── Tab: Email Templates ─────────────────────────────────────────────────────
-
-function EmailTemplateSheet({
-  brandId,
-  template,
-  onSaved,
-  onClose,
-}: {
-  brandId: string;
-  template: EmailTemplate | null;
-  onSaved: () => void;
-  onClose: () => void;
-}) {
-  const isEdit = !!template;
-  const [form, setForm] = useState({
-    name: template?.name ?? "",
-    type: template?.type ?? "",
-    subject: template?.subject ?? "",
-    body: template?.body ?? "",
-    isActive: template?.isActive ?? true,
-  });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
-    setForm((f) => ({ ...f, [k]: v }));
-    setError(null); setSuccess(null);
-  }
-
-  async function handleSave() {
-    setSaving(true); setError(null); setSuccess(null);
-    try {
-      if (isEdit) {
-        await updateEmailTemplate(template!.id, { name: form.name, type: form.type, subject: form.subject, body: form.body, isActive: form.isActive });
-      } else {
-        await createEmailTemplate({ name: form.name, type: form.type, subject: form.subject, body: form.body, brandId, isActive: form.isActive });
-      }
-      setSuccess(isEdit ? "Template updated." : "Template created.");
-      onSaved();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Sheet open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent side="right" className="sm:max-w-lg overflow-y-auto">
-        <SheetHeader><SheetTitle>{isEdit ? "Edit Template" : "New Template"}</SheetTitle></SheetHeader>
-        <div className="mt-6 space-y-4">
-          <SheetMsg message={error} variant="error" />
-          <SheetMsg message={success} variant="success" />
-          <FieldInput label="Name" id="et-name" value={form.name} onChange={(v) => set("name", v)} placeholder="Application Received" />
-          <FieldInput label="Type" id="et-type" value={form.type} onChange={(v) => set("type", v)} placeholder="application_received" hint="Unique identifier used to trigger this template" />
-          <FieldInput label="Subject" id="et-subject" value={form.subject} onChange={(v) => set("subject", v)} placeholder="Your application for {{program_name}} has been received" />
-          <FieldTextarea label="Body (HTML)" id="et-body" value={form.body} onChange={(v) => set("body", v)} rows={10} placeholder="<p>Dear {{name}},</p>..." />
-          <FieldCheckbox label="Active" id="et-active" checked={form.isActive} onChange={(v) => set("isActive", v)} hint="Inactive templates will not be sent" />
-        </div>
-        <SheetFooter className="mt-6">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave} loading={saving} disabled={saving}>
-            <Save className="mr-1.5 h-4 w-4" /> {isEdit ? "Update" : "Create"}
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-function _EmailTemplatesTab({ brandId }: { brandId: string }) {
-  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [sheetTarget, setSheetTarget] = useState<EmailTemplate | null | "new">(undefined as unknown as null);
-  const [deleting, setDeleting] = useState<string | null>(null);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    listEmailTemplates({ brandId })
-      .then(setTemplates)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load templates."))
-      .finally(() => setLoading(false));
-  }, [brandId]);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this template?")) return;
-    setDeleting(id);
-    try { await deleteEmailTemplate(id); load(); } catch { /* ignore */ } finally { setDeleting(null); }
-  }
-
-  if (loading) return <div className="rounded-lg border border-zinc-200 bg-white p-10 text-center text-sm text-zinc-500">Loading templates…</div>;
-  if (error) return <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>;
-
-  return (
-    <>
-      {sheetTarget !== undefined && sheetTarget !== null && (
-        <EmailTemplateSheet
-          brandId={brandId}
-          template={sheetTarget === "new" ? null : sheetTarget}
-          onSaved={() => { setSheetTarget(undefined as unknown as null); load(); }}
-          onClose={() => setSheetTarget(undefined as unknown as null)}
-        />
-      )}
-      <div className="space-y-3">
-        <div className="flex justify-end">
-          <Button size="sm" onClick={() => setSheetTarget("new")}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> New Template
-          </Button>
-        </div>
-        {templates.length === 0 ? (
-          <EmptyState
-            title="No email templates"
-            description="Create templates to automate emails for this brand."
-            action={{ label: "New Template", onClick: () => setSheetTarget("new") }}
-          />
-        ) : (
-          <div className="rounded-lg border border-zinc-200 bg-white">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-100">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Name</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Subject</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500">Status</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {templates.map((t) => (
-                  <tr key={t.id} className="border-b border-zinc-50 last:border-0 hover:bg-zinc-50">
-                    <td className="px-4 py-3 font-medium text-zinc-900">{t.name}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant="secondary" className="font-mono text-xs">{t.type}</Badge>
-                    </td>
-                    <td className="px-4 py-3 max-w-xs truncate text-zinc-600">{t.subject}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={t.isActive ? "success" : "secondary"}>{t.isActive ? "Active" : "Inactive"}</Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => setSheetTarget(t)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                          loading={deleting === t.id}
-                          disabled={deleting === t.id}
-                          onClick={() => handleDelete(t.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="border-t border-zinc-200 px-4 py-2.5">
-              <p className="text-xs text-zinc-400">{templates.length} template{templates.length !== 1 ? "s" : ""}</p>
-            </div>
-          </div>
-        )}
-      </div>
-    </>
   );
 }
 

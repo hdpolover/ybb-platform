@@ -15,9 +15,11 @@ export class GetProgramDetailHandler {
   ) { }
 
   async execute(query: GetProgramDetailQuery) {
-    let {
+    const {
       identifier,
       include = 'all',
+    } = query;
+    let {
       testimonialsLimit = 10,
       announcementsLimit = 10,
       resourcesLimit = 10,

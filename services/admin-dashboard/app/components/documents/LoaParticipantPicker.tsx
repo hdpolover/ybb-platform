@@ -50,6 +50,10 @@ export function LoaParticipantPicker({ programId, open, onOpenChange, onSelect }
 
   useEffect(() => {
     if (!open) return;
+    // Reset-on-open: `open` is the only dep and is never itself set by this
+    // effect, so this cannot cascade - it just seeds a clean form each time
+    // the dialog opens.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearch("");
     setResults([]);
     setTotalMatching(0);
@@ -61,6 +65,9 @@ export function LoaParticipantPicker({ programId, open, onOpenChange, onSelect }
     // Guard against a stale request overwriting state if the admin keeps
     // typing while an earlier search is still in flight.
     let cancelled = false;
+    // Debounced search: loading/error aren't deps, so this can't feed back
+    // into the effect's own [open, programId, search] deps.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
     const timer = setTimeout(() => {

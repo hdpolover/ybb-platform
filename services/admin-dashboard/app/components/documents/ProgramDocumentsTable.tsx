@@ -728,7 +728,7 @@ function ConfirmDelete({ name, loading, onCancel, onConfirm }: {
       <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
         <h2 className="mb-2 text-sm font-semibold text-zinc-900">Delete document?</h2>
         <p className="text-[11px] text-zinc-600">
-          Remove <span className="font-semibold">"{name}"</span>? This cannot be undone.
+          Remove <span className="font-semibold">&quot;{name}&quot;</span>? This cannot be undone.
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onCancel}

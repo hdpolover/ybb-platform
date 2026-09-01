@@ -744,6 +744,10 @@ export default function BrandEditPage({ brandId }: { brandId: string }) {
       .finally(() => setLoading(false));
   }, [brandId]);
 
+  // Fetch-on-mount/brandId-change: `load` only changes identity when
+  // brandId changes (its own useCallback dep), and load's internal
+  // setLoading/setError aren't part of that dependency, so this can't loop.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   if (loading) {

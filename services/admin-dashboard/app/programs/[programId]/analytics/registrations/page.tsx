@@ -42,6 +42,10 @@ export default function RegistrationsAnalyticsPage({
     return () => { mounted = false; };
   }, [resolvedId]);
 
+  // Fetch-on-mount/resolvedId-change: `load`'s identity only changes when
+  // resolvedId changes; its internal setLoading/setError/setData aren't part
+  // of that dependency, so this can't loop.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => load(), [load]);
 
   return (
