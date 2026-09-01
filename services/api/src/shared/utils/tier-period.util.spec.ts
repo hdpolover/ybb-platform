@@ -74,6 +74,35 @@ describe('tier-period.util', () => {
                 expect(resolveTierPeriod(periods, now, now)).toBe(futurePeriod);
             });
         });
+
+        describe('earliest-period start widening (2026-09-01 MEYS incident)', () => {
+            it('treats a first period stored at 23:59 WIB as open earlier that WIB day', () => {
+                // MEYS "Period 1": admin picked 1 Sept as the opening day, but the row
+                // was stored as 2026-09-01T16:59:00Z (23:59 WIB on 1 Sept) instead of
+                // WIB midnight. Registration should still read as open at, say, 09:00
+                // WIB on 1 Sept (02:00 UTC), not "closed until 23:59".
+                const firstPeriod = period('2026-09-01T16:59:00Z', '2026-09-30T16:59:00Z');
+                const periods = [firstPeriod];
+                const now = new Date('2026-09-01T02:00:00Z'); // 09:00 WIB, 1 Sept
+                expect(resolveTierPeriod(periods, now, now)).toBe(firstPeriod);
+            });
+
+            it('does NOT widen a mid-chain period whose start intentionally hands over at 23:59 WIB', () => {
+                // Installment 1 ends 23:59 WIB on day X; installment 2 starts 23:59 WIB
+                // on the same day X. That handover instant must stay exact — widening
+                // installment 2's start to WIB midnight would make it overlap
+                // installment 1 for nearly a full day (two prices valid at once).
+                const installment1 = period('2026-09-01T00:00:00Z', '2026-09-10T16:59:00Z');
+                const installment2 = period('2026-09-10T16:59:00Z', '2026-09-30T16:59:00Z');
+                const periods = [installment1, installment2];
+
+                // 12:00 WIB on 10 Sept (05:00 UTC) is after installment1's WIB-widened
+                // start but before installment2's exact 23:59 WIB handover — must still
+                // resolve to installment1, not installment2.
+                const now = new Date('2026-09-10T05:00:00Z');
+                expect(resolveTierPeriod(periods, now, now)).toBe(installment1);
+            });
+        });
     });
 
     describe('hasTierPeriodEnded', () => {

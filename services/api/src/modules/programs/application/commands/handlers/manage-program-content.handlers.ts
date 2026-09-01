@@ -9,6 +9,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '../../../../../shared/constants/cache-keys';
 import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
+import { snapEarliestPeriodStart } from '@shared/utils/tier-period.util';
 import {
     assertValidPeriodRange,
     assertNoDuplicatePeriod,
@@ -1138,7 +1139,10 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
         // so only the range check applies here (duplicate/overlap need >=2 periods).
         let warnings: ValidityPeriodWarnings | null = null;
         if (validFrom && validUntil) {
-            const startDate = new Date(validFrom);
+            // Brand-new tier: this nested period is always the tier's only (and
+            // therefore earliest) period, so it always gets pinned to WIB
+            // start-of-day — see snapEarliestPeriodStart.
+            const startDate = snapEarliestPeriodStart(new Date(validFrom), []);
             const endDate = new Date(validUntil);
             assertValidPeriodRange(startDate, endDate);
             const period = await this.repository.createValidityPeriod({
@@ -1271,14 +1275,24 @@ export class CreateValidityPeriodHandler implements ICommandHandler<CreateValidi
     ) {}
     async execute(command: CreateValidityPeriodCommand) {
         const pricingTierId = command.dto.pricingTierId!;
-        const startDate = new Date(command.dto.startDate);
+        const rawStartDate = new Date(command.dto.startDate);
         const endDate = new Date(command.dto.endDate);
 
         // Hard errors — see pricing-tier-validity-period.validator.ts for the
-        // prod incidents each one closes off.
-        assertValidPeriodRange(startDate, endDate);
+        // prod incidents each one closes off. Checked against exactly what was
+        // typed, before any start-of-day snapping below, so a genuinely
+        // zero-length/inverted or byte-identical-retry submission still gets
+        // caught even when it would otherwise be "fixed" into a valid range by
+        // widening its start.
+        assertValidPeriodRange(rawStartDate, endDate);
         const existingTier = await this.repository.findPricingTierById(pricingTierId);
-        assertNoDuplicatePeriod({ startDate, endDate }, existingTier?.validityPeriods ?? []);
+        const siblings = existingTier?.validityPeriods ?? [];
+        assertNoDuplicatePeriod({ startDate: rawStartDate, endDate }, siblings);
+
+        // If nothing else on the tier starts earlier, this new period becomes
+        // the earliest — pin it to WIB start-of-day. Otherwise it is a chained
+        // continuation and its start is left exactly as entered.
+        const startDate = snapEarliestPeriodStart(rawStartDate, siblings.map((p) => p.startDate));
 
         const dto = {
             pricingTierId,
@@ -1311,16 +1325,26 @@ export class UpdateValidityPeriodHandler implements ICommandHandler<UpdateValidi
         const existing = await this.repository.findValidityPeriodById(command.id);
         if (!existing) throw new NotFoundException(`Validity period ${command.id} not found`);
 
-        const startDate = command.dto.startDate ? new Date(command.dto.startDate) : existing.startDate;
+        const rawStartDate = command.dto.startDate ? new Date(command.dto.startDate) : existing.startDate;
         const endDate = command.dto.endDate ? new Date(command.dto.endDate) : existing.endDate;
 
         // Hard errors — see pricing-tier-validity-period.validator.ts for the
-        // prod incidents each one closes off. Excludes this row from its own
-        // duplicate check so e.g. an unrelated description-only edit doesn't
-        // trip over comparing the row against itself.
-        assertValidPeriodRange(startDate, endDate);
+        // prod incidents each one closes off. Checked against exactly what was
+        // typed (before any start-of-day snapping below) and excludes this row
+        // from its own duplicate check so e.g. an unrelated description-only
+        // edit doesn't trip over comparing the row against itself.
+        assertValidPeriodRange(rawStartDate, endDate);
         const existingTier = await this.repository.findPricingTierById(existing.pricingTierId);
-        assertNoDuplicatePeriod({ startDate, endDate }, existingTier?.validityPeriods ?? [], command.id);
+        const siblings = (existingTier?.validityPeriods ?? []).filter((p) => p.id !== command.id);
+        assertNoDuplicatePeriod({ startDate: rawStartDate, endDate }, siblings);
+
+        // Only re-pin the start when it's actually being changed — and only if
+        // that still leaves this as the tier's earliest period (see
+        // snapEarliestPeriodStart). A description-only edit, or an edit to a
+        // chained continuation, leaves the stored start untouched.
+        const startDate = command.dto.startDate
+            ? snapEarliestPeriodStart(rawStartDate, siblings.map((p) => p.startDate))
+            : existing.startDate;
 
         const dto = {
             startDate: command.dto.startDate ? startDate : undefined,

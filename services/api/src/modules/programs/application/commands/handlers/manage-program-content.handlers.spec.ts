@@ -435,6 +435,61 @@ describe('ManageProgramContentHandlers', () => {
                 expect(vpRepository.createValidityPeriod).not.toHaveBeenCalled();
             });
 
+            it('pins a brand-new tier\'s first period to WIB start-of-day even when entered at 23:59 WIB (2026-09-01 MEYS incident)', async () => {
+                const handler = await buildModule(CreateValidityPeriodHandler);
+                // Admin picked 1 Sept as the opening day but the datetime input
+                // carried 23:59 WIB (16:59 UTC), same as they'd type for an "until".
+                const command = new CreateValidityPeriodCommand(
+                    { pricingTierId: 'tier-1', startDate: '2026-09-01T16:59:00.000Z', endDate: '2026-09-30T16:59:00.000Z' },
+                    'user-1',
+                );
+                vpRepository.findPricingTierById.mockResolvedValue({ id: 'tier-1', programId: 'prog-1', validityPeriods: [] });
+                vpRepository.createValidityPeriod.mockResolvedValue({
+                    id: 'p1',
+                    pricingTierId: 'tier-1',
+                    startDate: new Date('2026-08-31T17:00:00.000Z'),
+                    endDate: new Date('2026-09-30T16:59:00.000Z'),
+                    description: null,
+                });
+                vpPrisma.program.findUnique.mockResolvedValue({ registrationCloseDate: null });
+
+                await handler.execute(command);
+
+                expect(vpRepository.createValidityPeriod).toHaveBeenCalledWith(
+                    expect.objectContaining({ startDate: new Date('2026-08-31T17:00:00.000Z') }), // WIB midnight, 1 Sept
+                );
+            });
+
+            it('leaves a chained continuation period\'s exact 23:59 WIB start untouched', async () => {
+                const handler = await buildModule(CreateValidityPeriodHandler);
+                // Installment 2 legitimately starts the instant installment 1 ends.
+                const command = new CreateValidityPeriodCommand(
+                    { pricingTierId: 'tier-1', startDate: '2026-09-10T16:59:00.000Z', endDate: '2026-09-30T16:59:00.000Z' },
+                    'user-1',
+                );
+                vpRepository.findPricingTierById.mockResolvedValue({
+                    id: 'tier-1',
+                    programId: 'prog-1',
+                    validityPeriods: [
+                        { id: 'installment-1', startDate: new Date('2026-09-01T00:00:00.000Z'), endDate: new Date('2026-09-10T16:59:00.000Z'), description: 'Installment 1' },
+                    ],
+                });
+                vpRepository.createValidityPeriod.mockResolvedValue({
+                    id: 'installment-2',
+                    pricingTierId: 'tier-1',
+                    startDate: new Date('2026-09-10T16:59:00.000Z'),
+                    endDate: new Date('2026-09-30T16:59:00.000Z'),
+                    description: null,
+                });
+                vpPrisma.program.findUnique.mockResolvedValue({ registrationCloseDate: null });
+
+                await handler.execute(command);
+
+                expect(vpRepository.createValidityPeriod).toHaveBeenCalledWith(
+                    expect.objectContaining({ startDate: new Date('2026-09-10T16:59:00.000Z') }), // untouched handover instant
+                );
+            });
+
             it('creates the period and returns overlap/coverage-gap warnings without blocking the save', async () => {
                 // Real prod: MEYS fully-funded had two live overlapping periods.
                 // Overlap must surface as a warning, not reject the write.
