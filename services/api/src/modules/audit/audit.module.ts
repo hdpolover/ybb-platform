@@ -4,6 +4,7 @@ import { AuditService } from './audit.service';
 import { AuditController } from './audit.controller';
 import { AuditAdminController } from './audit-admin.controller';
 import { AuditCleanupService } from './audit-cleanup.service';
+import { RetentionService } from './retention.service';
 import { PrismaModule } from '../../shared/infrastructure/prisma/prisma.module';
 import { ExcelModule } from '../../shared/infrastructure/excel/excel.module';
 import { AuditTrailInterceptor } from '../../shared/interceptors/audit-trail.interceptor';
@@ -15,6 +16,7 @@ import { AuthModule } from '../auth/auth.module';
   providers: [
     AuditService,
     AuditCleanupService,
+    RetentionService,
     // Register AuditTrailInterceptor as a global interceptor via DI
     // (needed because it depends on Reflector, PrismaService, DataChangeLogService)
     {
