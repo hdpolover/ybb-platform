@@ -42,6 +42,7 @@ import { SystemModule } from '@modules/system/system.module';
 import { UsersModule } from '@modules/users/users.module';
 import { GalleryModule } from '@modules/gallery/gallery.module';
 import { PortalModule } from '@modules/portal/portal.module';
+import { RemindersModule } from '@modules/reminders/reminders.module';
 import { AuditModule } from '@modules/audit/audit.module';
 import { ReportingModule } from '@modules/reporting/reporting.module';
 import { AdminsModule } from '@modules/admins/admins.module';
@@ -146,6 +147,7 @@ import { PlatformSettingsModule } from '@modules/platform-settings/platform-sett
     UsersModule,
     GalleryModule,
     PortalModule,
+    RemindersModule,
     AuditModule,
     ReportingModule,
     AdminsModule,

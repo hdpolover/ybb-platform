@@ -40,6 +40,7 @@ import {
   Clock,
   TrendingUp,
   Star,
+  MailWarning,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -230,6 +231,7 @@ export const programNavSections: NavSection[] = [
         ],
       },
       { id: "announcements", label: "Announcements", href: "announcements", icon: Bell },
+      { id: "reminders", label: "Reminders", href: "reminders", icon: MailWarning },
       { id: "partnerships", label: "Partnerships", href: "partnerships", icon: Handshake },
     ],
   },

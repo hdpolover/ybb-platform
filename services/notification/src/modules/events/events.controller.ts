@@ -29,6 +29,20 @@ type LoaSendResult = {
   error: string | null;
 };
 
+// Admin-drafted reminder recipients. Same shape as LoaRecipient, kept separate
+// so the two event contracts can evolve independently.
+type ParticipantReminderRecipient = {
+  participantId: string;
+  userId: string;
+  email: string;
+  fullName: string;
+};
+type ParticipantReminderSendResult = {
+  participantId: string;
+  providerMessageId: string | null;
+  error: string | null;
+};
+
 // Keeps a provider stack trace from bloating both the event and the audit
 // row it lands in. The API truncates independently too.
 const MAX_SEND_ERROR_LENGTH = 500;
@@ -908,6 +922,146 @@ export class EventsController {
     }
   }
 
+  /**
+   * Admin-drafted, admin-scheduled reminder to a computed audience of
+   * participants (today: everyone in a program who still owes the registration
+   * fee). The API decided WHO and WHEN; this only renders and delivers.
+   *
+   * Subject and body arrive ONCE as token templates rather than pre-rendered
+   * per recipient — a two-paragraph body times a few thousand recipients would
+   * otherwise put megabytes on the wire. Substitution happens here, per
+   * recipient, via the mirror of the API's reminder-message-tokens util.
+   */
+  @EventPattern('reminder.participant.dispatch')
+  async handleParticipantReminderDispatch(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'reminder.participant.dispatch',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received reminder.participant.dispatch event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const reminderId = getString(payload, 'reminderId');
+        const programId = getString(payload, 'programId');
+        const programName = getString(payload, 'programName') ?? '';
+        const subject = getString(payload, 'subject');
+        const body = getString(payload, 'body');
+        const paymentsUrl = getString(payload, 'paymentsUrl');
+        const recipients = getParticipantReminderRecipients(
+          payload,
+          'recipients',
+        );
+
+        // An admin cannot save an empty subject or body, so a payload missing
+        // either is malformed rather than merely empty — dropping it is right,
+        // and the API's rows stay `pending` ("outcome unknown") rather than
+        // falsely reading as sent.
+        if (!subject || !body || recipients.length === 0) {
+          this.logger.warn(
+            `[participant-reminder] ignoring dispatch reminder=${reminderId ?? 'missing'} ` +
+              `recipients=${recipients.length} hasSubject=${Boolean(subject)} hasBody=${Boolean(body)}`,
+          );
+          return;
+        }
+
+        const rawBrand = asRecord(payload.brand);
+        const brand = payload.brand
+          ? {
+              name: getString(rawBrand, 'name'),
+              websiteUrl: getString(rawBrand, 'websiteUrl') ?? null,
+            }
+          : undefined;
+        const brandId = getString(payload, 'brandId');
+
+        // Per-recipient errors are caught and logged rather than thrown: this
+        // event carries the whole audience as one message, so throwing would
+        // nack it and either re-mail everyone who already succeeded or, once
+        // the dedupe key is claimed, silently skip the whole thing. Best-effort
+        // per recipient avoids both — one bad address must not cost the rest.
+        const results: ParticipantReminderSendResult[] = [];
+
+        for (const recipient of recipients) {
+          try {
+            const response: unknown =
+              await this.emailService.sendParticipantReminderEmail(
+                recipient.email,
+                {
+                  subject,
+                  body,
+                  participantName: recipient.fullName || 'Participant',
+                  programName,
+                  paymentsUrl,
+                  brand,
+                  brandId,
+                  programId,
+                },
+              );
+            results.push({
+              participantId: recipient.participantId,
+              providerMessageId: extractProviderMessageId(response),
+              error: null,
+            });
+          } catch (error) {
+            this.logger.error(
+              `[participant-reminder] failed to send reminder=${reminderId} to=${maskEmail(recipient.email)}`,
+              error instanceof Error ? error.stack : String(error),
+            );
+            results.push({
+              participantId: recipient.participantId,
+              providerMessageId: null,
+              error: truncateSendError(
+                error instanceof Error ? error.message : String(error),
+              ),
+            });
+          }
+        }
+
+        await this.reportParticipantReminderResults(
+          reminderId,
+          programId,
+          results,
+        );
+      },
+    );
+  }
+
+  /**
+   * Best-effort reporting, exactly like reportLoaSendResults: every email has
+   * already gone out by this point, so a failure to publish the audit trail
+   * must never fail the send or nack the message. A publish failure leaves the
+   * API's rows in `pending`, which reads as "outcome unknown" rather than
+   * falsely as "sent".
+   */
+  private async reportParticipantReminderResults(
+    reminderId: string | undefined,
+    programId: string | undefined,
+    results: ParticipantReminderSendResult[],
+  ): Promise<void> {
+    const reportable = results.filter((result) => result.participantId);
+    if (!reminderId || !programId || reportable.length === 0) {
+      return;
+    }
+
+    try {
+      await this.producer.emit('reminder.participant.send_result', {
+        reminderId,
+        programId,
+        results: reportable,
+      });
+    } catch (error) {
+      this.logger.error(
+        `[participant-reminder] failed to publish reminder.participant.send_result for reminder=${reminderId} (${reportable.length} results)`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+  }
+
   @EventPattern('support.ticket.status-updated')
   async handleSupportTicketStatusUpdated(
     @Payload() data: unknown,
@@ -1139,6 +1293,29 @@ function getLoaRecipients(
 ): LoaRecipient[] {
   const rawRecipients = getArray(source, key);
   const normalized: LoaRecipient[] = [];
+
+  for (const rawRecipient of rawRecipients) {
+    const recipient = asRecord(rawRecipient);
+    const email = getString(recipient, 'email');
+    if (!email) continue;
+
+    normalized.push({
+      participantId: getString(recipient, 'participantId') || '',
+      userId: getString(recipient, 'userId') || '',
+      email,
+      fullName: getString(recipient, 'fullName') || '',
+    });
+  }
+
+  return normalized;
+}
+
+function getParticipantReminderRecipients(
+  source: Record<string, unknown>,
+  key: string,
+): ParticipantReminderRecipient[] {
+  const rawRecipients = getArray(source, key);
+  const normalized: ParticipantReminderRecipient[] = [];
 
   for (const rawRecipient of rawRecipients) {
     const recipient = asRecord(rawRecipient);

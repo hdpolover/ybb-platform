@@ -82,3 +82,72 @@ export interface LoaBatchSendResultsPayload {
   programId: string;
   results: LoaBatchSendResult[];
 }
+
+// ─── reminder.participant.dispatch ────────────────────────────────────────────
+// Emitted by ParticipantReminderDispatchService when a scheduled participant
+// reminder reaches its send time, and consumed by services/notification's
+// handleParticipantReminderDispatch.
+//
+// The message carries the whole audience, like loa.batch.released. Subject and
+// body travel ONCE as templates rather than pre-rendered per recipient: a
+// two-paragraph body times a few thousand recipients would otherwise put
+// megabytes on the wire for no gain. services/notification substitutes
+// {{participant_name}} / {{program_name}} per recipient using its mirror of
+// reminder-message-tokens.util.ts.
+
+export interface ParticipantReminderRecipient {
+  // Correlation key for the per-recipient send log: services/notification
+  // echoes this back on reminder.participant.send_result so the API can match
+  // an outcome to the row it wrote at dispatch time without trusting the email
+  // address (which the user can change between dispatch and delivery).
+  participantId: string;
+  userId: string;
+  email: string;
+  fullName: string;
+}
+
+// Batch-level, not per-recipient: one reminder belongs to exactly one program,
+// which belongs to exactly one brand.
+export interface ParticipantReminderBrand {
+  name: string | null;
+  websiteUrl: string | null;
+}
+
+export interface ParticipantReminderDispatchPayload {
+  reminderId: string;
+  programId: string;
+  programName: string;
+  brandId: string | null;
+  /** Which audience query selected these recipients — for logging only. */
+  audience: string;
+  /** Token template, not yet substituted. */
+  subject: string;
+  /** Plain text token template, not yet substituted, not HTML. */
+  body: string;
+  /** Deep link to the participant's payments page; '' when unresolvable. */
+  paymentsUrl: string;
+  recipients: ParticipantReminderRecipient[];
+  brand: ParticipantReminderBrand | null;
+}
+
+// ─── reminder.participant.send_result ─────────────────────────────────────────
+// Emitted by services/notification after it has attempted the reminder email
+// for every recipient in one dispatch message, and consumed by the API's
+// ReminderSendResultsController. Same rationale as loa.batch.send_result:
+// services/notification has no database access at all, so it reports outcomes
+// rather than writing them, and the API stays the single writer to its schema.
+
+export interface ParticipantReminderSendResult {
+  participantId: string;
+  // Present on success when the provider returned one (Resend `data.id`,
+  // nodemailer `messageId`); null when the transport reported no id.
+  providerMessageId: string | null;
+  // Null on success. Truncated by the emitter — see MAX_SEND_ERROR_LENGTH.
+  error: string | null;
+}
+
+export interface ParticipantReminderSendResultsPayload {
+  reminderId: string;
+  programId: string;
+  results: ParticipantReminderSendResult[];
+}

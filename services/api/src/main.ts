@@ -13,6 +13,7 @@ import { AuditConsumerModule } from './bootstrap/audit-consumer.module';
 import { ReportingConsumerModule } from './bootstrap/reporting-consumer.module';
 import { PaymentEventsConsumerModule } from './bootstrap/payment-events-consumer.module';
 import { LoaEventsConsumerModule } from './bootstrap/loa-events-consumer.module';
+import { ReminderEventsConsumerModule } from './bootstrap/reminder-events-consumer.module';
 import { AppModule } from './app.module';
 import { setupSwagger } from './config/swagger.config';
 import { TransformInterceptor } from './shared/interceptors/transform.interceptor';
@@ -60,11 +61,13 @@ async function bootstrap() {
     reportingQueueOptions,
     paymentEventsQueueOptions,
     loaEventsQueueOptions,
+    reminderEventsQueueOptions,
   ] = await Promise.all([
     resolvePrimaryQueueOptions(rabbitMqUrl, 'audit_log_queue'),
     resolvePrimaryQueueOptions(rabbitMqUrl, 'reporting_queue'),
     resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-payment-events'),
     resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-loa-events'),
+    resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-reminder-events'),
   ]);
 
   await ensureRetryTopology(rabbitMqUrl, 'audit_log_queue', {
@@ -106,6 +109,20 @@ async function bootstrap() {
       exchange: 'ybb.events',
       exchangeType: 'topic',
       routingKey: 'loa.batch.send_result',
+    },
+  });
+  // Per-recipient outcomes for admin-scheduled participant reminders, reported
+  // back by services/notification. Its own queue rather than a second binding
+  // on api-service-loa-events: ensureRetryTopology takes one binding per queue,
+  // and a queue that only ever receives what it handles is easier to reason
+  // about when the DLQ is non-empty.
+  await ensureRetryTopology(rabbitMqUrl, 'api-service-reminder-events', {
+    retryDelayMs,
+    primaryQueueOptions: reminderEventsQueueOptions,
+    binding: {
+      exchange: 'ybb.events',
+      exchangeType: 'topic',
+      routingKey: 'reminder.participant.send_result',
     },
   });
 
@@ -177,6 +194,7 @@ async function bootstrap() {
     { queue: 'reporting_queue', module: ReportingConsumerModule, queueOptions: reportingQueueOptions },
     { queue: 'api-service-payment-events', module: PaymentEventsConsumerModule, queueOptions: paymentEventsQueueOptions },
     { queue: 'api-service-loa-events', module: LoaEventsConsumerModule, queueOptions: loaEventsQueueOptions },
+    { queue: 'api-service-reminder-events', module: ReminderEventsConsumerModule, queueOptions: reminderEventsQueueOptions },
   ];
   const consumerApps = await Promise.all(
     consumerSpecs.map((spec) =>
