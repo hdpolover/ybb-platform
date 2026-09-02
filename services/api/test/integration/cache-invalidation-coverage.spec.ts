@@ -34,11 +34,10 @@ const ALLOWLIST_HANDLERS_PREFIXES: string[] = [
   'modules/stats/',
   // Admin user management — admin accounts are not surfaced on cached landing/portal reads.
   'modules/admins/',
-  // Payments/intent — intent creation and payment processing delegate to the
-  // payment microservice via gRPC. Cache invalidation is handled by the
-  // payment-events controller (webhook) and payment-admin controller, both of
-  // which carry @CacheInvalidate / direct cacheService calls.
-  'modules/payments/application/commands/handlers/create-intent',
+  // Payments — payment processing delegates to the payment microservice via
+  // gRPC. Cache invalidation is handled by the payment-events controller
+  // (webhook) and payment-admin controller, both of which carry
+  // @CacheInvalidate / direct cacheService calls.
   'modules/payments/application/commands/handlers/process-payment',
   // Application form fields and form templates are admin-facing config data
   // that doesn't have a separately-cached public read endpoint. The portal
