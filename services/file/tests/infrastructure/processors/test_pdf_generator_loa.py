@@ -4,7 +4,6 @@
 These cover the pure HTML builders, not the WeasyPrint render, so they run
 without the PDF toolchain installed.
 """
-import base64
 import io
 from datetime import datetime
 
@@ -494,15 +493,14 @@ class TestGenerateLoaSyncSmoke:
     def test_pdf_actually_embeds_the_signature_image(self, tmp_path):
         # http(s) URLs to a fake CDN never resolve, so the test above only
         # proves WeasyPrint doesn't error out — it can't prove the image
-        # actually got embedded. Point signature_url at a real local file
-        # (via file:// — no network involved) and inspect the PDF's page
-        # resources to confirm it made it in.
-        png_bytes = base64.b64decode(
+        # actually got embedded. Point signature_url at an inline data: URI
+        # (allowed by _safe_pdf_url_fetcher, no network involved) and inspect
+        # the PDF's page resources to confirm it made it in.
+        png_b64 = (
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
             "+A8AAQUBAScY42YAAAAASUVORK5CYII="
         )
-        signature_path = tmp_path / "signature.png"
-        signature_path.write_bytes(png_bytes)
+        signature_url = f"data:image/png;base64,{png_b64}"
 
         pdf_bytes = generate_loa_sync(
             html_content="<p>Body.</p>",
@@ -512,7 +510,7 @@ class TestGenerateLoaSyncSmoke:
             margins=DEFAULT_MARGINS,
             placeholder_data={},
             document_number="DOC-003",
-            signature_url=signature_path.as_uri(),
+            signature_url=signature_url,
         )
 
         reader = PdfReader(io.BytesIO(pdf_bytes))
@@ -527,14 +525,12 @@ class TestGenerateLoaSyncSmoke:
         # Real end-to-end version of the prod bug: footerHtml has {{signature}}
         # but no {{stamp}} token, stampUrl is set — the seal must still make
         # it into the actual rendered PDF, not just doesn't-crash HTML.
-        png_bytes = base64.b64decode(
+        png_b64 = (
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
             "+A8AAQUBAScY42YAAAAASUVORK5CYII="
         )
-        signature_path = tmp_path / "signature.png"
-        stamp_path = tmp_path / "stamp.png"
-        signature_path.write_bytes(png_bytes)
-        stamp_path.write_bytes(png_bytes)
+        signature_url = f"data:image/png;base64,{png_b64}"
+        stamp_url = f"data:image/png;base64,{png_b64}"
 
         pdf_bytes = generate_loa_sync(
             html_content="<p>Body.</p>",
@@ -547,8 +543,8 @@ class TestGenerateLoaSyncSmoke:
             margins=DEFAULT_MARGINS,
             placeholder_data={"{{program_name}}": "Youth Academic Forum"},
             document_number="DOC-004",
-            signature_url=signature_path.as_uri(),
-            stamp_url=stamp_path.as_uri(),
+            signature_url=signature_url,
+            stamp_url=stamp_url,
         )
 
         reader = PdfReader(io.BytesIO(pdf_bytes))
