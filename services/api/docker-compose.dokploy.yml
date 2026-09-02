@@ -109,6 +109,11 @@ services:
         "-c", "pg_stat_statements.track=all",
         "-c", "log_min_duration_statement=500"
       ]
+    # work_mem=16MB raises parallel-query shared memory usage (Postgres uses
+    # /dev/shm for parallel workers); Docker's 64MB default shm can be
+    # exhausted by a couple of concurrent parallel hash joins, causing
+    # "could not resize shared memory segment: No space left on device".
+    shm_size: 1gb
     volumes:
       - postgres_api_data_prod:/var/lib/postgresql/data
       - ./database-dump:/docker-entrypoint-initdb.d:rw
