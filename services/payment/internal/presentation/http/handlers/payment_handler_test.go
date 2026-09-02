@@ -737,3 +737,137 @@ func (s *stubPaymentGateway) CancelPayment(ctx context.Context, gatewayOrderID s
 func (s *stubPaymentGateway) RefundPayment(ctx context.Context, gatewayOrderID string, amount float64) error {
 	return errors.New("not implemented")
 }
+
+// A settlement callback reporting an amount that is not what this transaction
+// was charged is not proof this transaction was paid. It must be acknowledged
+// without settling anything.
+func TestHandleWebhookDoesNotSettleOnAmountMismatch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	intent := &entities.PaymentIntent{
+		ID:            "intent-1",
+		UserID:        "user-1",
+		ReferenceType: "application",
+		ReferenceID:   "app-1",
+		Amount:        100000,
+		Currency:      "IDR",
+		Status:        entities.PaymentIntentStatusProcessing,
+	}
+	tx := &entities.PaymentTransaction{
+		ID:                 "tx-1",
+		IntentID:           intent.ID,
+		GatewayReferenceID: "order-123",
+		PaymentMethodID:    "bca_va",
+		Currency:           "IDR",
+		AmountTotal:        100000,
+		AmountSubtotal:     100000,
+		NetAmount:          100000,
+		Status:             entities.TransactionStatusPending,
+	}
+	intentRepo := &stubIntentRepository{byID: map[string]*entities.PaymentIntent{intent.ID: intent}}
+	txRepo := &stubTransactionRepository{
+		byID:      map[string]*entities.PaymentTransaction{tx.ID: tx},
+		byGateway: map[string]*entities.PaymentTransaction{"order-123": tx},
+	}
+	factory := infraGateways.NewGatewayFactory()
+	factory.Register(&stubPaymentGateway{webhookPayment: &entities.Payment{
+		ID:             "order-123",
+		GatewayOrderID: "order-123",
+		Status:         entities.PaymentStatusSuccess,
+		GatewayResponse: map[string]interface{}{
+			"transaction_status": "settlement",
+			"gross_amount":       "1000.00",
+			"currency":           "IDR",
+		},
+	}})
+	handler := NewPaymentHandler(intentRepo, txRepo, messaging.NewNoOpPublisher(), factory)
+
+	router := gin.New()
+	router.POST("/payments/webhook/:gateway", handler.HandleWebhook)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/payments/webhook/stub", bytes.NewBufferString(`{"order_id":"order-123"}`))
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Nil(t, txRepo.updated)
+	require.Nil(t, intentRepo.updated)
+	require.Equal(t, entities.TransactionStatusPending, txRepo.byID[tx.ID].Status)
+	require.Equal(t, entities.PaymentIntentStatusProcessing, intentRepo.byID[intent.ID].Status)
+}
+
+// The matching-amount case must still settle, so the guard above cannot be
+// satisfied by simply never settling.
+func TestHandleWebhookSettlesWhenAmountAndCurrencyMatch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	intent := &entities.PaymentIntent{
+		ID:            "intent-1",
+		UserID:        "user-1",
+		ReferenceType: "application",
+		ReferenceID:   "app-1",
+		Amount:        100000,
+		Currency:      "IDR",
+		Status:        entities.PaymentIntentStatusProcessing,
+	}
+	tx := &entities.PaymentTransaction{
+		ID:                 "tx-1",
+		IntentID:           intent.ID,
+		GatewayReferenceID: "order-123",
+		PaymentMethodID:    "bca_va",
+		Currency:           "IDR",
+		AmountTotal:        100000,
+		AmountSubtotal:     100000,
+		NetAmount:          100000,
+		Status:             entities.TransactionStatusPending,
+	}
+	intentRepo := &stubIntentRepository{byID: map[string]*entities.PaymentIntent{intent.ID: intent}}
+	txRepo := &stubTransactionRepository{
+		byID:      map[string]*entities.PaymentTransaction{tx.ID: tx},
+		byGateway: map[string]*entities.PaymentTransaction{"order-123": tx},
+	}
+	factory := infraGateways.NewGatewayFactory()
+	factory.Register(&stubPaymentGateway{webhookPayment: &entities.Payment{
+		ID:             "order-123",
+		GatewayOrderID: "order-123",
+		Status:         entities.PaymentStatusSuccess,
+		GatewayResponse: map[string]interface{}{
+			"transaction_status": "settlement",
+			"gross_amount":       "100000.00",
+			"currency":           "idr",
+		},
+	}})
+	handler := NewPaymentHandler(intentRepo, txRepo, messaging.NewNoOpPublisher(), factory)
+
+	router := gin.New()
+	router.POST("/payments/webhook/:gateway", handler.HandleWebhook)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/payments/webhook/stub", bytes.NewBufferString(`{"order_id":"order-123"}`))
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, entities.TransactionStatusSuccess, txRepo.updated.Status)
+	require.Equal(t, entities.PaymentIntentStatusSucceeded, intentRepo.updated.Status)
+}
+
+// The gateways are charged a rounded version of the stored amount (Midtrans
+// truncates to int64, Xendit narrows to float32), so a fractional surcharge
+// total must still settle against the amount the callback echoes back.
+func TestVerifySettlementAmountAbsorbsGatewayRounding(t *testing.T) {
+	// 4,321,000 IDR with a 3.219% surcharge.
+	tx := &entities.PaymentTransaction{Currency: "IDR", AmountTotal: 4460092.99}
+
+	require.NoError(t, verifySettlementAmount(tx, map[string]interface{}{
+		"gross_amount": "4460092.00", // Midtrans int64 truncation
+		"currency":     "IDR",
+	}))
+	require.NoError(t, verifySettlementAmount(tx, map[string]interface{}{
+		"amount":   float64(float32(4460092.99)), // Xendit float32 narrowing
+		"currency": "IDR",
+	}))
+	require.Error(t, verifySettlementAmount(tx, map[string]interface{}{
+		"gross_amount": "4459092.99", // materially short by 1000
+		"currency":     "IDR",
+	}))
+}

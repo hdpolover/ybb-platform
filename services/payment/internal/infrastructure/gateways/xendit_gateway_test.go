@@ -151,3 +151,14 @@ func TestXenditChargePaymentReturnsXenditInvoiceIDAsGatewayReference(t *testing.
 		t.Fatalf("metadata token = %v, want the Xendit invoice id", resp.Metadata["token"])
 	}
 }
+
+// Without a configured callback token there is nothing to authenticate the
+// caller against, so the webhook must be rejected instead of trusted.
+func TestXenditHandleWebhookRejectsWhenCallbackTokenNotConfigured(t *testing.T) {
+	ctx := context.WithValue(context.Background(), XenditCallbackTokenKey, "whatever")
+
+	payment, err := NewXenditGateway("test-key", "").HandleWebhook(ctx, []byte(`{"id":"inv-1","status":"PAID"}`))
+	if err == nil {
+		t.Fatalf("expected an error for an unconfigured callback token, got payment %+v", payment)
+	}
+}
