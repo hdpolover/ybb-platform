@@ -1,4 +1,11 @@
-import { Injectable, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { createHash, timingSafeEqual } from 'crypto';
 import { RegisterAdminCommand } from '../register-admin.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
@@ -6,6 +13,37 @@ import { UnitOfWork } from '../../../../../shared/infrastructure/database/unit-o
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
+
+/**
+ * The only roles this route may hand out.
+ *
+ * It used to accept any string and CREATE the AdminRole row if it did not
+ * exist, so a caller who reached the secret also chose the name of a brand new
+ * role. The allowlist is the same set the access-level mapping below already
+ * knew about, so nothing that ever worked stops working.
+ */
+const ALLOWED_ADMIN_ROLES = [
+  'super_admin',
+  'super-admin',
+  'owner',
+  'program_coordinator',
+  'manager',
+  'news_writer',
+  'editor',
+] as const;
+
+/**
+ * Constant-time secret comparison.
+ *
+ * timingSafeEqual throws on unequal lengths, which would both leak the secret's
+ * length and turn a wrong guess into a 500. Comparing SHA-256 digests makes
+ * both inputs 32 bytes whatever the caller sends, so the length check never
+ * fires and the compare stays constant time.
+ */
+function secretMatches(candidate: string, expected: string): boolean {
+  const digest = (value: string) => createHash('sha256').update(value, 'utf8').digest();
+  return timingSafeEqual(digest(candidate), digest(expected));
+}
 
 @Injectable()
 export class RegisterAdminHandler {
@@ -17,10 +55,29 @@ export class RegisterAdminHandler {
   ) {}
 
   async execute(command: RegisterAdminCommand): Promise<AuthResponseDto> {
-    // 1. Verify Secret Key
+    // 0. Off unless someone deliberately turned it on.
+    //
+    // Nothing calls this route. First-admin bootstrap is done by
+    // prisma/seeds/seed-admins.ts at container start (docker-entrypoint.sh),
+    // and day-to-day admin creation is POST /v1/admins, which is behind
+    // JwtAuthGuard + RolesGuard and is what the dashboard uses. This is kept
+    // only as a break-glass path for a fresh local/staging database, so it
+    // stays dark until ADMIN_REGISTRATION_ENABLED is explicitly 'true'.
+    // NotFound rather than Forbidden: a disabled route should be
+    // indistinguishable from a typo'd one.
+    if (this.configService.get<string>('ADMIN_REGISTRATION_ENABLED') !== 'true') {
+      throw new NotFoundException('Cannot POST /auth/register-admin');
+    }
+
+    // 1. Verify Secret Key (constant time)
     const validSecret = this.configService.get<string>('ADMIN_REGISTRATION_SECRET');
-    if (!validSecret || command.secretKey !== validSecret) {
+    if (!validSecret || !secretMatches(command.secretKey ?? '', validSecret)) {
       throw new ForbiddenException('Invalid admin registration secret');
+    }
+
+    // 1b. Reject any role outside the allowlist BEFORE touching the database.
+    if (!(ALLOWED_ADMIN_ROLES as readonly string[]).includes(command.role)) {
+      throw new BadRequestException('Invalid admin role');
     }
 
     // 2. Check if program category exists
@@ -46,13 +103,14 @@ export class RegisterAdminHandler {
       throw new ConflictException('User already exists for this brand');
     }
 
-    // 4. Resolve or Create Admin Role
+    // 4. Resolve Admin Role. The name is allowlisted above, so the create
+    // branch can only ever materialise one of those seven known roles on a
+    // database that has not been seeded yet.
     let role = await this.prisma.adminRole.findUnique({
       where: { name: command.role },
     });
 
     if (!role) {
-      // Create role if it doesn't exist (Auto-provisioning for simplicity)
       role = await this.prisma.adminRole.create({
         data: {
           name: command.role,
@@ -92,10 +150,17 @@ export class RegisterAdminHandler {
           phoneNumber: undefined,
         });
 
-        // Update access level and permissions separately if needed
+        // Update access level and permissions, and LINK THE ROLE.
+        //
+        // roleId was never written here, so admins.role_id stayed NULL. That is
+        // not cosmetic: admin-login.handler rebuilds `roles` from the DB on the
+        // next login, and with a NULL role it emits only ['admin'] plus
+        // brand-scoped strings, so every @Roles(SUPER_ADMIN) route 403s from
+        // then on even though the token this handler returned worked fine.
         await repos.tx.admin.update({
           where: { id: newAdmin.id },
           data: {
+            roleId: role.id,
             accessLevel: accessLevel,
             canManageAdmins: accessLevel >= 10,
             canAssignRoles: accessLevel >= 10,

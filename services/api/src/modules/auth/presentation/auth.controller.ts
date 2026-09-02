@@ -54,6 +54,7 @@ import { Public } from '../../../shared/decorators/public.decorator';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { BrandDomain } from '../../../shared/decorators/brand-domain.decorator';
 import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
+import { clientIpTracker } from '../../../shared/infrastructure/throttler/user-aware-throttler.guard';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -226,7 +227,11 @@ export class AuthController {
 
   @Public()
   @Post('register-admin')
-  @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour
+  // Keyed on IP, NOT on body.email like every other anonymous route here.
+  // This route guards a shared secret, and the caller picks the email, so
+  // email keying handed every guess a fresh 3-per-hour bucket — an unbounded
+  // number of guesses per hour from one address.
+  @Throttle({ default: { limit: 3, ttl: 3600000, getTracker: clientIpTracker } })
   @ApiOperation({ summary: 'Register Admin (Requires Secret Key)' })
   @ApiResponse({ status: 201, description: 'Admin successfully registered', type: AuthResponseDto })
   async registerAdmin(@Body() dto: RegisterAdminDto): Promise<AuthResponseDto> {

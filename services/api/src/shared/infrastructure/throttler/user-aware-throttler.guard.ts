@@ -11,6 +11,40 @@ type MaybeAuthedRequest = {
 };
 
 /**
+ * Key a throttle bucket on the client IP, ignoring identity and body.
+ *
+ * Read the LAST x-forwarded-for entry, not the first. Every request reaches
+ * this service through exactly one trusted hop that APPENDS the peer it saw:
+ * Traefik for public traffic, and for server-side proxied calls
+ * ybb-program-next forwards the list Traefik already built. A client can put
+ * anything in the header, but those values land to the LEFT of the address our
+ * own edge observed, so the rightmost entry is the one it is safe to bill.
+ * Taking the first entry let any caller choose its own throttle bucket by
+ * sending a header.
+ *
+ * Exported so a route can opt OUT of the email keying above via
+ * `@Throttle({ default: { limit, ttl, getTracker: clientIpTracker } })`.
+ * Email keying is right for routes where the address is the thing being
+ * protected (one mailbox, one budget). It is exactly wrong for a route that
+ * guards a shared secret: the caller picks the email, so every guess can buy a
+ * fresh bucket and the cap stops bounding anything.
+ */
+export const clientIpTracker = (req: Record<string, unknown>): string => {
+  const request = req as MaybeAuthedRequest;
+  const forwarded = request.headers?.['x-forwarded-for'];
+  const chain = Array.isArray(forwarded) ? forwarded.join(',') : forwarded;
+  const lastForwarded =
+    typeof chain === 'string'
+      ? chain
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0)
+          .pop()
+      : undefined;
+  return `ip:${lastForwarded || request.ips?.[0] || request.ip || 'unknown'}`;
+};
+
+/**
  * Rate limit an authenticated request by WHO it is, not where it comes from.
  *
  * The default tracker is the client IP, which means every participant behind
@@ -51,25 +85,6 @@ export class UserAwareThrottlerGuard extends ThrottlerGuard {
     }
 
     // Fall back to the client IP.
-    //
-    // Read the LAST x-forwarded-for entry, not the first. Every request
-    // reaches this service through exactly one trusted hop that APPENDS the
-    // peer it saw: Traefik for public traffic, and for server-side proxied
-    // calls ybb-program-next forwards the list Traefik already built. A client
-    // can put anything in the header, but those values land to the LEFT of the
-    // address our own edge observed, so the rightmost entry is the one it is
-    // safe to bill. Taking the first entry let any caller choose its own
-    // throttle bucket by sending a header.
-    const forwarded = request.headers?.['x-forwarded-for'];
-    const chain = Array.isArray(forwarded) ? forwarded.join(',') : forwarded;
-    const lastForwarded =
-      typeof chain === 'string'
-        ? chain
-            .split(',')
-            .map((entry) => entry.trim())
-            .filter((entry) => entry.length > 0)
-            .pop()
-        : undefined;
-    return `ip:${lastForwarded || request.ips?.[0] || request.ip || 'unknown'}`;
+    return clientIpTracker(req);
   }
 }
