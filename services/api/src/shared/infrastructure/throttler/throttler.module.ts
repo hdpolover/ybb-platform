@@ -26,6 +26,16 @@ import { UserAwareThrottlerGuard } from './user-aware-throttler.guard';
             ttl: seconds(60),
             limit: configService.get<number>('THROTTLE_LONG_LIMIT', 300),
           },
+          // Routes decorated with @Throttle({ default: {...} }) or bare
+          // @SkipThrottle() only ever address a throttler literally named
+          // 'default' (the name the library assigns to an unnamed config).
+          // Without this entry those decorators match nothing and are
+          // silently ignored, so per-route overrides never take effect.
+          {
+            name: 'default',
+            ttl: seconds(60),
+            limit: configService.get<number>('THROTTLE_LONG_LIMIT', 300),
+          },
         ],
         storage: new RedisThrottlerStorage(
           configService.get<string>('REDIS_HOST', 'localhost'),

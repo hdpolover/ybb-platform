@@ -108,6 +108,13 @@ export class CacheService {
       `landing:announcements:${brandId}`,
       `landing:settings:${brandId}`,
       CACHE_KEYS.LANDING_ACTIVITY(brandId),
+      CACHE_KEYS.LANDING_OPEN_REGISTRATION_PROGRAMS(brandId),
+      // Only clears a UUID-keyed resolveBrand() entry (some callers pass
+      // brandId itself as the lookup key). The far more common host-keyed
+      // entry can't be derived from a brandId alone, so a brand write also
+      // busts every resolveBrand entry by pattern in
+      // LandingCacheInvalidationService.bustBrandResolveCache().
+      CACHE_KEYS.LANDING_BRAND_RESOLVE(brandId),
     ]);
 
     await this.invalidateByPatterns([

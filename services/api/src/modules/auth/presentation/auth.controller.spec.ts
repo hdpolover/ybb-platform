@@ -13,6 +13,7 @@ import { ResetPasswordHandler } from '../application/commands/handlers/reset-pas
 import { VerifyEmailHandler } from '../application/commands/handlers/verify-email.handler';
 import { ResendVerificationEmailHandler } from '../application/commands/handlers/resend-verification-email.handler';
 import { FirebaseLoginHandler } from '../application/commands/handlers/firebase-login.handler';
+import { LinkLocalIdentityHandler } from '../application/commands/handlers/link-local-identity.handler';
 import { GetUserProfileHandler } from '../application/queries/handlers/get-user-profile.handler';
 import { GetAuthProvidersHandler } from '../application/queries/handlers/get-auth-providers.handler';
 import { GetAuthContextHandler } from '../application/queries/handlers/get-auth-context.handler';
@@ -40,6 +41,7 @@ describe('AuthController', () => {
     const mockVerifyEmailHandler = { execute: jest.fn() };
     const mockResendVerificationHandler = { execute: jest.fn() };
     const mockFirebaseLoginHandler = { execute: jest.fn() };
+    const mockLinkLocalIdentityHandler = { execute: jest.fn() };
     const mockGetUserProfileHandler = { execute: jest.fn() };
     const mockGetAuthProvidersHandler = { execute: jest.fn() };
     const mockGetAuthContextHandler = { execute: jest.fn() };
@@ -60,6 +62,7 @@ describe('AuthController', () => {
                 { provide: VerifyEmailHandler, useValue: mockVerifyEmailHandler },
                 { provide: ResendVerificationEmailHandler, useValue: mockResendVerificationHandler },
                 { provide: FirebaseLoginHandler, useValue: mockFirebaseLoginHandler },
+                { provide: LinkLocalIdentityHandler, useValue: mockLinkLocalIdentityHandler },
                 { provide: GetUserProfileHandler, useValue: mockGetUserProfileHandler },
                 { provide: GetAuthProvidersHandler, useValue: mockGetAuthProvidersHandler },
                 { provide: GetAuthContextHandler, useValue: mockGetAuthContextHandler },
