@@ -214,9 +214,7 @@ model ParticipantApplication {
   //   idx_apps_program_updated_active            (program_id, updated_at DESC)
   //   idx_apps_program_status_updated_active     (program_id, status, updated_at DESC)
   //   idx_apps_program_created_active            (program_id, created_at DESC)
-  //     ...all WHERE deleted_at IS NULL, plus
-  //   idx_apps_program_unpaid_active             (program_id)
-  //     WHERE registration_payment_status <> 'paid' AND deleted_at IS NULL
+  //     ...all WHERE deleted_at IS NULL.
   //
   // participantId has no @@index of its own: the unique below already indexes
   // it as the leading column.
