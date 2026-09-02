@@ -7,6 +7,7 @@
 import { GetAuthContextHandler } from './get-auth-context.handler';
 import { openRegistrationProgramQuery } from '../../../../../shared/utils/active-program-resolver';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 
 const MEYS_2026 = { id: 'p-2026', slug: 'middle-east-youth-summit-6th', requireEmailVerification: false };
 const MEYS_2027 = { id: 'p-2027', slug: 'middle-east-youth-summit-7th', requireEmailVerification: false };
@@ -19,13 +20,23 @@ function mkPrisma(programFindFirst: jest.Mock): PrismaService {
     } as unknown as PrismaService;
 }
 
+// Always a cache miss — mirrors the real CacheService's behaviour the first
+// time a key is requested, and keeps these tests exercising the same
+// prisma.authProvider.findMany path they asserted on before caching was added.
+function mkCache(): CacheService {
+    return {
+        get: jest.fn().mockResolvedValue(undefined),
+        set: jest.fn().mockResolvedValue(undefined),
+    } as unknown as CacheService;
+}
+
 describe('GetAuthContextHandler — concurrent active programs', () => {
     it('registers new participants into the program that is open now, not the newer future one', async () => {
         // Rule 0 matches MEYS 2026 (open until December). MEYS 2027 is also
         // published+active but does not open until September, so the old
         // `year desc` query would have returned it.
         const findFirst = jest.fn().mockResolvedValueOnce(MEYS_2026);
-        const handler = new GetAuthContextHandler(mkPrisma(findFirst));
+        const handler = new GetAuthContextHandler(mkPrisma(findFirst), mkCache());
 
         const result = await handler.execute({ brandDomain: 'meys.com' } as any);
 
@@ -39,7 +50,7 @@ describe('GetAuthContextHandler — concurrent active programs', () => {
 
     it('falls back to the newest published+active program when no window is open', async () => {
         const findFirst = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(MEYS_2027);
-        const handler = new GetAuthContextHandler(mkPrisma(findFirst));
+        const handler = new GetAuthContextHandler(mkPrisma(findFirst), mkCache());
 
         const result = await handler.execute({ brandDomain: 'meys.com' } as any);
 
@@ -62,7 +73,7 @@ describe('GetAuthContextHandler — concurrent active programs', () => {
         // inactive program here; that must NOT happen at the registration
         // entry point.
         const findFirst = jest.fn().mockResolvedValue(null);
-        const handler = new GetAuthContextHandler(mkPrisma(findFirst));
+        const handler = new GetAuthContextHandler(mkPrisma(findFirst), mkCache());
 
         const result = await handler.execute({ brandDomain: 'meys.com' } as any);
 
@@ -70,5 +81,18 @@ describe('GetAuthContextHandler — concurrent active programs', () => {
         expect(result.programSlug).toBeNull();
         expect(result.requireEmailVerification).toBe(true); // brand-level fallback
         expect(findFirst).toHaveBeenCalledTimes(2);
+    });
+
+    it('serves the auth-provider list from cache on a hit, without querying authProvider', async () => {
+        const findFirst = jest.fn().mockResolvedValueOnce(MEYS_2026);
+        const prisma = mkPrisma(findFirst);
+        const cache = mkCache();
+        (cache.get as jest.Mock).mockResolvedValue([{ id: 'cached-local', name: 'local', displayName: 'Email', description: null, isOAuth: false, icon: null, buttonColor: null }]);
+        const handler = new GetAuthContextHandler(prisma, cache);
+
+        const result = await handler.execute({ brandDomain: 'meys.com' } as any);
+
+        expect(result.localProviderId).toBe('cached-local');
+        expect(prisma.authProvider.findMany).not.toHaveBeenCalled();
     });
 });
