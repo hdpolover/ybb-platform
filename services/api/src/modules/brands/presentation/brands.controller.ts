@@ -46,6 +46,7 @@ import { ListProgramsQuery } from '../../programs/application/queries/list-progr
 import { ProgramListResponseDto } from '../../programs/presentation/dto/program-response.dto';
 import { ListProgramsDto } from '../../programs/presentation/dto/list-programs.dto';
 import { AdminAccessControlService } from '@modules/admins/application/services/admin-access-control.service';
+import { multerLimits } from '@common/constants';
 
 @ApiTags('Brands')
 @Controller('brands')
@@ -105,7 +106,7 @@ export class BrandsController {
     @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Create a brand sponsor' })
     @ApiConsumes('multipart/form-data')
-    @UseInterceptors(FileInterceptor('logo'))
+    @UseInterceptors(FileInterceptor('logo', multerLimits()))
     @ApiResponse({ status: 201, description: 'Sponsor created', type: SponsorResponseDto })
     async createSponsor(
         @Param('id', ParseUUIDPipe) id: string,
@@ -124,7 +125,7 @@ export class BrandsController {
     @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Update a brand sponsor' })
     @ApiConsumes('multipart/form-data')
-    @UseInterceptors(FileInterceptor('logo'))
+    @UseInterceptors(FileInterceptor('logo', multerLimits()))
     @ApiResponse({ status: 200, description: 'Sponsor updated', type: SponsorResponseDto })
     @ApiResponse({ status: 404, description: 'Sponsor not found' })
     async updateSponsor(
@@ -226,7 +227,7 @@ export class BrandsController {
     @UseInterceptors(FileFieldsInterceptor([
         { name: 'logo', maxCount: 1 },
         { name: 'banner', maxCount: 1 },
-    ]))
+    ], multerLimits(2)))
     @ApiResponse({ status: 201, description: 'Brand created successfully', type: BrandResponseDto })
     async createBrand(
         @Body() dto: CreateBrandDto,
@@ -252,7 +253,7 @@ export class BrandsController {
     @UseInterceptors(FileFieldsInterceptor([
         { name: 'logo', maxCount: 1 },
         { name: 'banner', maxCount: 1 },
-    ]))
+    ], multerLimits(2)))
     @ApiResponse({ status: 200, description: 'Brand updated successfully', type: BrandResponseDto })
     @ApiResponse({ status: 404, description: 'Brand not found' })
     async updateBrand(
@@ -290,7 +291,7 @@ export class BrandsController {
     @UseInterceptors(FileFieldsInterceptor([
         { name: 'logo', maxCount: 1 },
         { name: 'banner', maxCount: 1 },
-    ]))
+    ], multerLimits(2)))
     @ApiResponse({ status: 200, description: 'Brand details updated successfully', type: BrandResponseDto })
     @ApiResponse({ status: 404, description: 'Brand not found' })
     async updateBrandDetails(

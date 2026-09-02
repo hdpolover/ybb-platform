@@ -1,26 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { GetAuthProvidersQuery } from '../get-auth-providers.query';
 import { AuthProviderDto } from '../../../presentation/dto/auth-provider.dto';
+import { fetchActiveAuthProviders } from './active-auth-providers.util';
 
 @Injectable()
 export class GetAuthProvidersHandler {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: CacheService,
+  ) {}
 
   async execute(query: GetAuthProvidersQuery): Promise<AuthProviderDto[]> {
-    const providers = await this.prisma.authProvider.findMany({
-      where: { isActive: true },
-      select: {
-        id: true,
-        name: true,
-        displayName: true,
-        description: true,
-        isOAuth: true,
-        icon: true,
-        buttonColor: true,
-      },
-      orderBy: { order: 'asc' },
-    });
+    const providers = await fetchActiveAuthProviders(this.prisma, this.cacheService);
 
     return providers.map(p => ({
         ...p,

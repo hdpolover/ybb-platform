@@ -11,12 +11,14 @@ import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
 import { ActivityStrategy } from './strategies/activity.strategy';
 import { LandingSnapshotService } from './services/landing-snapshot.service';
+import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { NotFoundException } from '@nestjs/common';
 
 describe('LandingService', () => {
   let service: LandingService;
   let prismaService: any;
   let homeStrategy: any;
+  let cacheService: { get: jest.Mock; set: jest.Mock };
 
   const mockPrismaService = {
     brand: {
@@ -36,6 +38,8 @@ describe('LandingService', () => {
   };
 
   beforeEach(async () => {
+    const mockCacheService = { get: jest.fn().mockResolvedValue(undefined), set: jest.fn().mockResolvedValue(undefined) };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         LandingService,
@@ -49,12 +53,14 @@ describe('LandingService', () => {
         { provide: FaqsStrategy, useValue: mockStrategy },
         { provide: ActivityStrategy, useValue: mockStrategy },
         { provide: LandingSnapshotService, useValue: mockLandingSnapshotService },
+        { provide: CacheService, useValue: mockCacheService },
       ],
     }).compile();
 
     service = module.get<LandingService>(LandingService);
     prismaService = module.get<PrismaService>(PrismaService);
     homeStrategy = module.get<HomeStrategy>(HomeStrategy);
+    cacheService = module.get<CacheService>(CacheService) as unknown as { get: jest.Mock; set: jest.Mock };
 
     jest.clearAllMocks();
   });
@@ -107,6 +113,30 @@ describe('LandingService', () => {
         mockPrismaService.brand.findFirst.mockResolvedValue(null);
 
         await expect(service.getHome('unknown.com')).rejects.toThrow(NotFoundException);
+    });
+
+    it('serves resolveBrand from cache on a hit, without querying the DB', async () => {
+        cacheService.get.mockResolvedValue({ id: 'cached-brand', websiteUrl: 'https://ybb.co', isActive: true });
+
+        await service.getHome('https://ybb.co');
+
+        expect(mockPrismaService.brand.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('caches a resolved brand after a cache miss, keyed by the normalised (lowercased, trimmed) URL', async () => {
+        const mockCategory = { id: 'cat-1', websiteUrl: 'https://ybb.co', isActive: true };
+        mockPrismaService.brand.findFirst.mockResolvedValue(mockCategory);
+
+        await service.getHome('  HTTPS://YBB.CO  ');
+
+        expect(cacheService.set).toHaveBeenCalledWith('landing:brand-resolve:https://ybb.co', mockCategory, expect.any(Number));
+    });
+
+    it('does not cache a not-found lookup', async () => {
+        mockPrismaService.brand.findFirst.mockResolvedValue(null);
+
+        await expect(service.getHome('unknown.com')).rejects.toThrow(NotFoundException);
+        expect(cacheService.set).not.toHaveBeenCalled();
     });
   });
 

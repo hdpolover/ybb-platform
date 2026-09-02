@@ -1,9 +1,20 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Optional } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { Observable } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 import { from } from 'rxjs';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { buildFileUrlMaskMap } from '@shared/utils/masked-file-url';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { buildFileUrlMaskMap, isMaskableUrl } from '@shared/utils/masked-file-url';
+
+// url -> masked-url cache. Misses are cached as MASK_MISS so a response full of
+// non-file urls stops hitting the (unindexed) files lookup on every request.
+const MASK_CACHE_TTL_MS = 5 * 60 * 1000;
+const MASK_MISS = '';
+
+function maskCacheKey(url: string): string {
+  return `cdnmask:url:${createHash('sha1').update(url).digest('hex')}`;
+}
 
 const PRESIGNED_UPLOAD_FIELDS = new Set([
   'upload_url',
@@ -104,16 +115,52 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 @Injectable()
 export class CdnMaskInterceptor implements NestInterceptor {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly cache?: CacheService,
+  ) {}
 
   private async maskUrls(value: unknown): Promise<unknown> {
-    const candidates = new Set<string>();
-    collectMaskCandidates(value, candidates);
-    if (candidates.size === 0) {
+    const collected = new Set<string>();
+    collectMaskCandidates(value, collected);
+    // Skip the files lookup entirely for responses whose urls can't live on our
+    // storage/CDN hosts (see isMaskableUrl — allowlist comes from config).
+    const candidates = Array.from(collected).filter(isMaskableUrl);
+    if (candidates.length === 0) {
       return value;
     }
 
-    const maskMap = await buildFileUrlMaskMap(this.prisma, Array.from(candidates));
+    const maskMap = new Map<string, string>();
+    const unresolved: string[] = [];
+
+    const cached = await Promise.all(
+      candidates.map((url) => this.cache?.get<string>(maskCacheKey(url)) ?? Promise.resolve(undefined)),
+    );
+    candidates.forEach((url, index) => {
+      const hit = cached[index];
+      if (hit === undefined || hit === null) {
+        unresolved.push(url);
+        return;
+      }
+      if (hit !== MASK_MISS) {
+        maskMap.set(url, hit);
+      }
+    });
+
+    if (unresolved.length > 0) {
+      const fresh = await buildFileUrlMaskMap(this.prisma, unresolved);
+      for (const [key, masked] of fresh) {
+        maskMap.set(key, masked);
+      }
+      if (this.cache) {
+        await Promise.all(
+          unresolved.map((url) =>
+            this.cache!.set(maskCacheKey(url), fresh.get(url) ?? MASK_MISS, MASK_CACHE_TTL_MS),
+          ),
+        );
+      }
+    }
+
     if (maskMap.size === 0) {
       return value;
     }

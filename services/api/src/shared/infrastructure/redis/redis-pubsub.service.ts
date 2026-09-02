@@ -1,7 +1,26 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 import Redis from 'ioredis';
 import { CacheService } from '../cache/cache.service';
+
+/**
+ * Process-wide sender id. Every Nest container booted in this process (the HTTP
+ * app plus the scoped RMQ consumer apps) gets its own RedisPubSubService with
+ * its own subscriber, but they all share this module-level constant. Stamping
+ * it on published messages lets each subscriber drop the message its own
+ * process published. invalidateAndPublish() already ran those patterns locally,
+ * so re-running them once per container was ~6x wasted keyspace scans.
+ */
+const PROCESS_INSTANCE_ID = randomUUID();
+
+/**
+ * Ids of messages already applied in this process, so a message from another
+ * instance is applied once instead of once per container. Entries are dropped
+ * after HANDLED_MESSAGE_TTL_MS; the set only ever holds a few seconds of ids.
+ */
+const HANDLED_MESSAGE_IDS = new Set<string>();
+const HANDLED_MESSAGE_TTL_MS = 30_000;
 
 /**
  * Redis Pub/Sub Service
@@ -83,6 +102,8 @@ export class RedisPubSubService implements OnModuleInit, OnModuleDestroy {
             patterns,
             timestamp: Date.now(),
             instanceId: process.env.HOSTNAME || 'unknown',
+            senderId: PROCESS_INSTANCE_ID,
+            messageId: randomUUID(),
         });
 
         await this.publisher.publish(this.channel, message);
@@ -95,7 +116,22 @@ export class RedisPubSubService implements OnModuleInit, OnModuleDestroy {
     private async handleInvalidation(message: string): Promise<void> {
         try {
             const data = JSON.parse(message);
-            const { patterns } = data;
+            const { patterns, senderId, messageId } = data;
+
+            // Published by this process: invalidateAndPublish() already applied it
+            // locally, and every container's subscriber sees the same message.
+            if (senderId && senderId === PROCESS_INSTANCE_ID) {
+                return;
+            }
+
+            // From another instance: apply once per process, not once per container.
+            if (typeof messageId === 'string') {
+                if (HANDLED_MESSAGE_IDS.has(messageId)) {
+                    return;
+                }
+                HANDLED_MESSAGE_IDS.add(messageId);
+                setTimeout(() => HANDLED_MESSAGE_IDS.delete(messageId), HANDLED_MESSAGE_TTL_MS).unref();
+            }
 
             if (patterns && Array.isArray(patterns)) {
                 await Promise.all(

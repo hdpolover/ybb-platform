@@ -18,6 +18,13 @@ export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 export const ALLOWED_DOCUMENT_TYPES = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
 
+// Multer options for every FileInterceptor/FileFieldsInterceptor, so multipart
+// uploads can't buffer an unbounded body into memory. `files` is the total file
+// parts multer will accept in one request (sum across all fields for
+// FileFieldsInterceptor). NestJS's built-in multer error mapping already turns
+// a LIMIT_FILE_SIZE violation into a 413 PayloadTooLargeException.
+export const multerLimits = (files: number = 1) => ({ limits: { fileSize: MAX_FILE_SIZE, files } });
+
 // JWT
 export const JWT_EXPIRATION = '7d';
 export const JWT_REFRESH_EXPIRATION = '30d';

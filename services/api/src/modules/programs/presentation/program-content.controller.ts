@@ -8,7 +8,7 @@ import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
-import { PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
+import { PROGRAM_CONTENT_PATTERNS, PROGRAM_PUBLIC_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
 
 import {
   ProgramGalleryResponseDto,
@@ -81,6 +81,7 @@ import {
   GetLoaBatchRecipientSendsHandler,
 } from '../application/handlers/loa-batch.handlers';
 import { PreviewLoaTemplateQuery, PreviewLoaTemplateHandler } from '../application/handlers/loa-preview.handler';
+import { multerLimits } from '@common/constants';
 
 @ApiTags('Program Content')
 @Controller('programs')
@@ -132,8 +133,11 @@ export class ProgramContentController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add gallery item' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('image'))
-  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  @UseInterceptors(FileInterceptor('image', multerLimits()))
+  // Gallery, testimonials and FAQs are landing-page-only content: no portal read
+  // selects them, so the per-user portal:* keys are left alone. Resources and
+  // document templates below DO reach the portal and keep the broad patterns.
+  @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
   async addGallery(
     @Param('id') programId: string, 
     @Body() dto: CreateProgramGalleryDto, 
@@ -149,8 +153,8 @@ export class ProgramContentController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update gallery item' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('image'))
-  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  @UseInterceptors(FileInterceptor('image', multerLimits()))
+  @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
   async updateGallery(
     @Param('itemId') itemId: string, 
     @Body() dto: UpdateProgramGalleryDto, 
@@ -165,7 +169,7 @@ export class ProgramContentController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete gallery item' })
-  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
   async deleteGallery(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.deleteProgramGalleryHandler.execute(new DeleteProgramGalleryCommand(itemId, req.user.id));
   }
@@ -184,7 +188,7 @@ export class ProgramContentController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add testimonial' })
-  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
   async addTestimonial(@Param('id') programId: string, @Body() dto: CreateProgramTestimonialDto, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.createProgramTestimonialHandler.execute(new CreateProgramTestimonialCommand(dto, req.user.id));
   }
@@ -194,7 +198,7 @@ export class ProgramContentController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update testimonial' })
-  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
   async updateTestimonial(@Param('itemId') itemId: string, @Body() dto: UpdateProgramTestimonialDto, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.updateProgramTestimonialHandler.execute(new UpdateProgramTestimonialCommand(itemId, dto, req.user.id));
   }
@@ -204,7 +208,7 @@ export class ProgramContentController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete testimonial' })
-  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
   async deleteTestimonial(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.deleteProgramTestimonialHandler.execute(new DeleteProgramTestimonialCommand(itemId, req.user.id));
   }
@@ -223,7 +227,7 @@ export class ProgramContentController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add FAQ' })
-  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
   async addFaq(@Param('id') programId: string, @Body() dto: CreateProgramFaqDto, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.createProgramFaqHandler.execute(new CreateProgramFaqCommand(dto, req.user.id));
   }
@@ -233,7 +237,7 @@ export class ProgramContentController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update FAQ' })
-  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
   async updateFaq(@Param('itemId') itemId: string, @Body() dto: UpdateProgramFaqDto, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.updateProgramFaqHandler.execute(new UpdateProgramFaqCommand(itemId, dto, req.user.id));
   }
@@ -243,7 +247,7 @@ export class ProgramContentController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete FAQ' })
-  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
   async deleteFaq(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
     return this.deleteProgramFaqHandler.execute(new DeleteProgramFaqCommand(itemId, req.user.id));
   }
@@ -263,7 +267,7 @@ export class ProgramContentController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add resource' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', multerLimits()))
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async addResource(
     @Param('id') programId: string, 
@@ -280,7 +284,7 @@ export class ProgramContentController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update resource' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', multerLimits()))
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async updateResource(
     @Param('itemId') itemId: string, 
@@ -318,7 +322,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', multerLimits()))
   @ApiConsumes('multipart/form-data', 'application/json')
   @ApiOperation({ summary: 'Create a document template' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -374,7 +378,7 @@ export class ProgramContentController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', multerLimits()))
   @ApiConsumes('multipart/form-data', 'application/json')
   @ApiOperation({ summary: 'Update a document template' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)

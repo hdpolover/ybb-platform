@@ -79,22 +79,24 @@ export interface ProcessPaymentResponse {
 // grpc-js client call. Typed loosely as `unknown` to avoid pulling @grpc/grpc-js
 // into this proto-shape file.
 type GrpcMeta = unknown;
+// Optional grpc-js CallOptions (e.g. { deadline }), forwarded the same way.
+type GrpcCallOptions = unknown;
 
 export interface PaymentService {
-  CreateIntent(req: CreateIntentRequest, metadata?: GrpcMeta): Observable<CreateIntentResponse>;
-  GetPaymentMethods(req: GetPaymentMethodsRequest, metadata?: GrpcMeta): Observable<GetPaymentMethodsResponse>;
-  ProcessPayment(req: ProcessPaymentRequest, metadata?: GrpcMeta): Observable<ProcessPaymentResponse>;
-  GetIntentsByReference(req: GetIntentsByReferenceRequest, metadata?: GrpcMeta): Observable<GetIntentsByReferenceResponse>;
-  SubmitManualPayment(req: SubmitManualPaymentRequest, metadata?: GrpcMeta): Observable<SubmitManualPaymentResponse>;
-  VerifyManualPayment(req: VerifyManualPaymentRequest, metadata?: GrpcMeta): Observable<VerifyManualPaymentResponse>;
+  CreateIntent(req: CreateIntentRequest, metadata?: GrpcMeta, options?: GrpcCallOptions): Observable<CreateIntentResponse>;
+  GetPaymentMethods(req: GetPaymentMethodsRequest, metadata?: GrpcMeta, options?: GrpcCallOptions): Observable<GetPaymentMethodsResponse>;
+  ProcessPayment(req: ProcessPaymentRequest, metadata?: GrpcMeta, options?: GrpcCallOptions): Observable<ProcessPaymentResponse>;
+  GetIntentsByReference(req: GetIntentsByReferenceRequest, metadata?: GrpcMeta, options?: GrpcCallOptions): Observable<GetIntentsByReferenceResponse>;
+  SubmitManualPayment(req: SubmitManualPaymentRequest, metadata?: GrpcMeta, options?: GrpcCallOptions): Observable<SubmitManualPaymentResponse>;
+  VerifyManualPayment(req: VerifyManualPaymentRequest, metadata?: GrpcMeta, options?: GrpcCallOptions): Observable<VerifyManualPaymentResponse>;
 
   // Admin Methods
-  AdminCreatePaymentMethod(req: AdminCreatePaymentMethodRequest, metadata?: GrpcMeta): Observable<AdminCreatePaymentMethodResponse>;
-  AdminUpdatePaymentMethod(req: AdminUpdatePaymentMethodRequest, metadata?: GrpcMeta): Observable<AdminUpdatePaymentMethodResponse>;
-  AdminDeletePaymentMethod(req: AdminDeletePaymentMethodRequest, metadata?: GrpcMeta): Observable<AdminDeletePaymentMethodResponse>;
-  AdminGetPaymentMethod(req: AdminGetPaymentMethodRequest, metadata?: GrpcMeta): Observable<AdminGetPaymentMethodResponse>;
-  AdminListPaymentMethods(req: AdminListPaymentMethodsRequest, metadata?: GrpcMeta): Observable<AdminListPaymentMethodsResponse>;
-  AdminListPayments(req: AdminListPaymentsRequest, metadata?: GrpcMeta): Observable<AdminListPaymentsResponse>;
+  AdminCreatePaymentMethod(req: AdminCreatePaymentMethodRequest, metadata?: GrpcMeta, options?: GrpcCallOptions): Observable<AdminCreatePaymentMethodResponse>;
+  AdminUpdatePaymentMethod(req: AdminUpdatePaymentMethodRequest, metadata?: GrpcMeta, options?: GrpcCallOptions): Observable<AdminUpdatePaymentMethodResponse>;
+  AdminDeletePaymentMethod(req: AdminDeletePaymentMethodRequest, metadata?: GrpcMeta, options?: GrpcCallOptions): Observable<AdminDeletePaymentMethodResponse>;
+  AdminGetPaymentMethod(req: AdminGetPaymentMethodRequest, metadata?: GrpcMeta, options?: GrpcCallOptions): Observable<AdminGetPaymentMethodResponse>;
+  AdminListPaymentMethods(req: AdminListPaymentMethodsRequest, metadata?: GrpcMeta, options?: GrpcCallOptions): Observable<AdminListPaymentMethodsResponse>;
+  AdminListPayments(req: AdminListPaymentsRequest, metadata?: GrpcMeta, options?: GrpcCallOptions): Observable<AdminListPaymentsResponse>;
 }
 
 export interface SubmitManualPaymentRequest {

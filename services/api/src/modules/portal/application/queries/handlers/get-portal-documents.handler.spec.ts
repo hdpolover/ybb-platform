@@ -71,8 +71,8 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
         mockPrisma = {
             participantApplication: { findFirst: jest.fn() },
             documentTemplate: { findMany: jest.fn() },
-            // resolveMaskedFileUrl calls prisma.file.findFirst to check masked URLs
-            file: { findFirst: jest.fn().mockResolvedValue(null) },
+            // url masking does one batched prisma.file.findMany for every document url
+            file: { findMany: jest.fn().mockResolvedValue([]) },
         };
 
         mockCacheService = {
@@ -297,7 +297,7 @@ describe('GetPortalDocumentsHandler — private file presigning', () => {
         mockPrisma = {
             participantApplication: { findFirst: jest.fn() },
             documentTemplate: { findMany: jest.fn() },
-            file: { findFirst: jest.fn().mockResolvedValue(null) },
+            file: { findMany: jest.fn().mockResolvedValue([]) },
         };
 
         mockCacheService = {
@@ -387,8 +387,8 @@ describe('GetPortalDocumentsHandler — private file presigning', () => {
         const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
 
         const agreementDoc = result.myDocuments.find((d) => d.documentType === 'agreement_letter');
-        // Not private -> falls through to resolveMaskedFileUrl, which returns the
-        // original url unchanged when no matching File row exists (mocked to null above).
+        // Not private -> falls through to the batched mask map, which leaves the
+        // original url unchanged when no matching File row exists (mocked empty above).
         expect(agreementDoc?.fileUrl).toBe(PUBLIC_MARKETING_URL);
     });
 
