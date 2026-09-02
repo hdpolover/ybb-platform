@@ -41,6 +41,19 @@ t("returns empty string for empty/whitespace input", () => {
   assert.equal(sanitizeHtml(undefined), "");
 });
 
+t("keeps safe text-align/color style declarations", () => {
+  assert.equal(
+    sanitizeHtml('<p style="text-align: center; color: #ff0000">x</p>'),
+    '<p style="text-align: center; color: #ff0000">x</p>',
+  );
+});
+
+t("strips unsafe style declarations while keeping safe ones", () => {
+  const out = sanitizeHtml('<p style="text-align:center; background:url(javascript:alert(1))">x</p>');
+  assert.ok(!out.includes("background"), `expected background stripped, got: ${out}`);
+  assert.ok(out.includes("text-align:center") || out.includes("text-align: center"), `expected text-align kept, got: ${out}`);
+});
+
 t("text-only allowlist drops headings/links/images", () => {
   const out = sanitizeHtml('<h1>Title</h1><a href="/x">link</a><p>body</p>', {
     allowedTags: TEXT_ONLY_TAGS,
