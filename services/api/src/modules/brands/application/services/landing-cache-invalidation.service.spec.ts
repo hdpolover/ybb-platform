@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { LandingCacheInvalidationService } from './landing-cache-invalidation.service';
 import { LandingRevalidationService } from './landing-revalidation.service';
 
@@ -16,6 +17,7 @@ const makePrismaService = () => ({
 const makeCacheService = () => ({
     invalidateBrandLandingCaches: jest.fn().mockResolvedValue(undefined),
     invalidateByPattern: jest.fn().mockResolvedValue(undefined),
+    invalidateKey: jest.fn().mockResolvedValue(undefined),
 });
 
 const makeLandingRevalidation = () => ({
@@ -173,6 +175,59 @@ describe('LandingCacheInvalidationService', () => {
             // Assert
             expect(landingRevalidation.revalidateForBrand).not.toHaveBeenCalled();
             expect(landingRevalidation.revalidateHomeAndSettingsForBrand).not.toHaveBeenCalled();
+        });
+
+        it('busts every resolveBrand cache entry by pattern when revalidate.kind is "brand"', async () => {
+            // resolveBrand()'s cache is keyed by the REQUEST host (cleanDomain()
+            // output — bare, no scheme), not by the stored websiteUrl (which has
+            // one) and not by brandId, so neither a key built from websiteUrl nor
+            // invalidateBrandLandingCaches(brandId) can reach it. A pattern wipe
+            // sidesteps reproducing cleanDomain's normalisation a second time.
+            const prisma = makePrismaService();
+            const cache = makeCacheService();
+            const landingRevalidation = makeLandingRevalidation();
+            const service = await buildService(prisma, cache, landingRevalidation);
+
+            await service.invalidate('brand-1', {
+                clearSnapshot: true,
+                bustProgramCache: false,
+                swallowErrors: true,
+                revalidate: { kind: 'brand', urls: { landingUrl: null, websiteUrl: 'https://example.com' } },
+            });
+
+            expect(cache.invalidateByPattern).toHaveBeenCalledWith(CACHE_KEYS.LANDING_BRAND_RESOLVE('*'));
+        });
+
+        it('busts resolveBrand cache entries even when websiteUrl is not known (domain may have changed)', async () => {
+            const prisma = makePrismaService();
+            const cache = makeCacheService();
+            const landingRevalidation = makeLandingRevalidation();
+            const service = await buildService(prisma, cache, landingRevalidation);
+
+            await service.invalidate('brand-1', {
+                clearSnapshot: true,
+                bustProgramCache: false,
+                swallowErrors: true,
+                revalidate: { kind: 'brand', urls: { landingUrl: null, websiteUrl: null } },
+            });
+
+            expect(cache.invalidateByPattern).toHaveBeenCalledWith(CACHE_KEYS.LANDING_BRAND_RESOLVE('*'));
+        });
+
+        it('skips the resolveBrand pattern bust when revalidate.kind is not "brand"', async () => {
+            const prisma = makePrismaService();
+            const cache = makeCacheService();
+            const landingRevalidation = makeLandingRevalidation();
+            const service = await buildService(prisma, cache, landingRevalidation);
+
+            await service.invalidate('brand-1', {
+                clearSnapshot: true,
+                bustProgramCache: false,
+                swallowErrors: true,
+                revalidate: { kind: 'homeAndSettings' },
+            });
+
+            expect(cache.invalidateByPattern).not.toHaveBeenCalledWith(CACHE_KEYS.LANDING_BRAND_RESOLVE('*'));
         });
     });
 

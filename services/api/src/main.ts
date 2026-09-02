@@ -18,6 +18,7 @@ import { AppModule } from './app.module';
 import { setupSwagger } from './config/swagger.config';
 import { TransformInterceptor } from './shared/interceptors/transform.interceptor';
 import { CdnMaskInterceptor } from './shared/interceptors/cdn-mask.interceptor';
+import { CacheService } from './shared/infrastructure/cache/cache.service';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { PrismaService } from './shared/infrastructure/prisma/prisma.service';
@@ -147,7 +148,7 @@ async function bootstrap() {
   // Global Interceptor for standard response format
   app.useGlobalInterceptors(new TransformInterceptor());
   // Rewrite file URLs to proxy paths so raw storage URLs are never exposed.
-  app.useGlobalInterceptors(new CdnMaskInterceptor(app.get(PrismaService)));
+  app.useGlobalInterceptors(new CdnMaskInterceptor(app.get(PrismaService), app.get(CacheService)));
 
   // API Versioning
   app.enableVersioning({

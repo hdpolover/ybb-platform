@@ -79,7 +79,7 @@ export class ReceiptService {
 
     const response = await fetch(`${fileServiceUrl}/api/v1/documents/generate/receipt`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getInternalHeaders(),
       body: JSON.stringify(payload),
     });
 
@@ -99,6 +99,22 @@ export class ReceiptService {
     // services pointed at the same file-service base URL/topology.
     const url = this.configService.get<string>('FILE_SERVICE_URL', 'http://file-service:8001');
     return url.replace(/\/$/, '');
+  }
+
+  // Same shared-secret pattern as services/api's FileServiceClient
+  // (getInternalHeaders) — the file service's /documents router now enforces
+  // this header, so it must be sent from every caller, not just the API.
+  private getInternalHeaders(): Record<string, string> {
+    const key =
+      this.configService.get<string>('FILE_SERVICE_INTERNAL_KEY') ||
+      this.configService.get<string>('INTERNAL_SERVICE_KEY', '');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (key) {
+      headers['x-internal-service-key'] = key;
+    }
+    return headers;
   }
 
   private buildPayload(data: GenerateReceiptInput): GenerateReceiptPayload {

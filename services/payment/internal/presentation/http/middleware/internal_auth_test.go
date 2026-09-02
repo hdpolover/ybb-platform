@@ -46,3 +46,25 @@ func TestRequireInternalServiceKey_AllowsMatchingHeader(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.Code)
 	}
 }
+
+// A blank configured key cannot authenticate anyone, so the guarded routes must
+// stay closed rather than let every caller through.
+func TestRequireInternalServiceKey_RejectsWhenKeyNotConfigured(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(RequireInternalServiceKey("   "))
+	router.GET("/protected", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("X-Internal-Service-Key", "anything")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.Code)
+	}
+}

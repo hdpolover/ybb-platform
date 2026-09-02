@@ -62,6 +62,7 @@ model User {
   lastFailedLogin     DateTime? @map("last_failed_login") @db.Timestamptz(6)
   lastLoginAt         DateTime? @map("last_login_at") @db.Timestamptz(6)
   lastPasswordChange  DateTime? @map("last_password_change") @db.Timestamptz(6)
+  lockedUntil         DateTime? @map("locked_until") @db.Timestamptz(6)
 
   // Audit
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -103,12 +104,15 @@ model User {
   assessments         ApplicationAssessment[]
   exchangeRateChanges ProgramExchangeRateHistory[] @relation("ExchangeRateChangedBy")
 
+  // email has no @@index of its own: the unique above already indexes it as the
+  // leading column, and ILIKE lookups use idx_users_email_trgm (SQL-only).
   @@unique([email, brandId])
-  @@index([email])
   @@index([brandId])
   @@index([emailVerified])
   @@index([isActive, deletedAt])
   @@index([passwordResetToken])
+  // ReportingService export keyset cursor: ORDER BY created_at DESC, id DESC.
+  @@index([createdAt, id])
   @@map("users")
 }
 

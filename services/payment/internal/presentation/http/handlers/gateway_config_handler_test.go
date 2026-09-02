@@ -131,3 +131,31 @@ func TestValidateGatewayConfigRequest(t *testing.T) {
 		})
 	}
 }
+
+// Read responses must never carry decrypted gateway credentials.
+func TestRedactGatewayConfigMasksSecrets(t *testing.T) {
+	t.Parallel()
+
+	redacted := redactGatewayConfig(entities.GatewayConfig{
+		Provider:      "xendit",
+		ServerKey:     "xnd_production_abc123",
+		ClientKey:     "unused",
+		WebhookSecret: "cb",
+	})
+
+	require.Equal(t, "****c123", redacted.ServerKey)
+	require.Equal(t, "****used", redacted.ClientKey)
+	require.Equal(t, "****", redacted.WebhookSecret, "values too short to reveal a tail are blanked to the bare mask")
+	require.Equal(t, "xendit", redacted.Provider, "non-secret fields stay intact so the form still loads")
+}
+
+// Because GET serves a mask, an edit form submitted without touching the key
+// fields sends that mask back. Writing it through would destroy a live key.
+func TestKeepSecretIfMaskedPreservesStoredValue(t *testing.T) {
+	t.Parallel()
+
+	stored := "xnd_production_abc123"
+	require.Equal(t, stored, keepSecretIfMasked(maskSecret(stored), stored))
+	require.Equal(t, "xnd_production_new999", keepSecretIfMasked("xnd_production_new999", stored))
+	require.Equal(t, "", keepSecretIfMasked("", stored), "an explicitly cleared field still clears")
+}

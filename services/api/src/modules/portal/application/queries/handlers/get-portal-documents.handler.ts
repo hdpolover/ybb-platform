@@ -11,7 +11,12 @@ import {
     PortalDocumentResponseDto,
     DocumentItemDto
 } from '../../../presentation/dto/portal-document.dto';
-import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
+import {
+    buildFileUrlMaskMap,
+    extractFileIdFromDownloadUrl,
+    extractFileUuidFromUrl,
+    getMaskedDownloadUrl,
+} from '@shared/utils/masked-file-url';
 import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '@modules/files/application/private-file-url-resolver.service';
 
 @Injectable()
@@ -31,15 +36,27 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
      *  - private category (documents/signed-copies) -> fresh presigned url
      *  - private but presign failed -> undefined (fail closed, never the stored url)
      *  - not a private category -> unchanged existing masked-download behavior
+     *
+     * `maskMap` comes from one batched files lookup for every document url on the
+     * response (see buildFileUrlMaskMap) instead of two queries per url.
      */
-    private async resolveDocumentUrl(url: string | null | undefined): Promise<string | undefined> {
+    private async resolveDocumentUrl(
+        url: string | null | undefined,
+        maskMap: Map<string, string>,
+    ): Promise<string | undefined> {
         if (typeof url !== 'string' || url.trim().length === 0) return url ?? undefined;
 
         const resolution = await this.privateFileUrlResolver.resolve(url);
         if (resolution === PRIVATE_FILE_UNAVAILABLE) return undefined;
         if (resolution) return resolution;
 
-        return resolveMaskedFileUrl(this.prisma, url);
+        // Same precedence as resolveMaskedFileUrl: already-masked url, then the file
+        // id embedded in the url, then an exact stored-url match.
+        const maskedId = extractFileIdFromDownloadUrl(url);
+        if (maskedId) return getMaskedDownloadUrl(maskedId);
+
+        const uuid = extractFileUuidFromUrl(url);
+        return (uuid ? maskMap.get(uuid) : undefined) ?? maskMap.get(url) ?? url;
     }
 
     async execute(query: GetPortalDocumentsQuery): Promise<PortalDocumentResponseDto> {
@@ -195,19 +212,26 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
             }
         }
 
+        const maskMap = await buildFileUrlMaskMap(
+            this.prisma,
+            [...programResources, ...myDocuments]
+                .flatMap((item) => [item.fileUrl, item.signedCopyUrl])
+                .filter((url): url is string => typeof url === 'string' && url.trim().length > 0),
+        );
+
         const maskedProgramResources = await Promise.all(
             programResources.map(async (item) => ({
                 ...item,
-                fileUrl: await this.resolveDocumentUrl(item.fileUrl),
-                signedCopyUrl: await this.resolveDocumentUrl(item.signedCopyUrl),
+                fileUrl: await this.resolveDocumentUrl(item.fileUrl, maskMap),
+                signedCopyUrl: await this.resolveDocumentUrl(item.signedCopyUrl, maskMap),
             })),
         );
 
         const maskedMyDocuments = await Promise.all(
             myDocuments.map(async (item) => ({
                 ...item,
-                fileUrl: await this.resolveDocumentUrl(item.fileUrl),
-                signedCopyUrl: await this.resolveDocumentUrl(item.signedCopyUrl),
+                fileUrl: await this.resolveDocumentUrl(item.fileUrl, maskMap),
+                signedCopyUrl: await this.resolveDocumentUrl(item.signedCopyUrl, maskMap),
             })),
         );
 

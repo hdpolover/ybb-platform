@@ -5,6 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
 import { ParticipantsModule } from '../participants/participants.module';
 import { FilesModule } from '../files/files.module';
+import { AdminsModule } from '../admins/admins.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { PaymentsController } from './presentation/payments.controller';
 import { PaymentAdminController } from './presentation/payment-admin.controller';
@@ -17,7 +18,6 @@ import { PaymentServiceHttpClient } from './infrastructure/services/payment-serv
 import { PaymentGatewayClient } from './infrastructure/services/payment-gateway.client';
 import { ListUserPaymentsHandler } from './application/queries/handlers/list-user-payments.handler';
 import { GetPaymentDetailHandler } from './application/queries/handlers/get-payment-detail.handler';
-import { CreateIntentHandler } from './application/commands/handlers/create-intent.handler';
 import { ProcessPaymentHandler } from './application/commands/handlers/process-payment.handler';
 import { PaymentOutboxService } from './infrastructure/services/payment-outbox.service';
 import { PaymentReconciliationService } from './infrastructure/services/payment-reconciliation.service';
@@ -31,8 +31,12 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         AuthModule,
         ParticipantsModule,
         FilesModule,
+        AdminsModule,
         MonitoringModule,
-        HttpModule,
+        HttpModule.register({
+            timeout: 15000, // bound calls to the Go payment service — no timeout meant a hung request never returned
+            maxRedirects: 0,
+        }),
         ConfigModule,
         CacheModule,
     ],
@@ -47,7 +51,6 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         PaymentGatewayClient,
         ListUserPaymentsHandler,
         GetPaymentDetailHandler,
-        CreateIntentHandler,
         ProcessPaymentHandler,
         PaymentOutboxService,
         PaymentReconciliationService,

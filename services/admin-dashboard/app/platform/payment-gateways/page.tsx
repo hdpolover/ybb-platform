@@ -289,9 +289,12 @@ function GatewayConfigSheet({
   const isEdit = !!config;
   const [provider, setProvider] = useState<GatewayProvider>(config?.provider ?? "midtrans");
   const [mode, setMode] = useState<GatewayMode>(config?.mode ?? "sandbox");
-  const [serverKey, setServerKey] = useState(config?.server_key ?? "");
-  const [clientKey, setClientKey] = useState(config?.client_key ?? "");
-  const [webhookSecret, setWebhookSecret] = useState(config?.webhook_secret ?? "");
+  // GET returns these masked (see GatewayConfig's doc comment) — never prefill
+  // an editable input with them. Inputs start blank; the mask is shown as a
+  // read-only hint instead, and left blank on submit means "keep unchanged".
+  const [serverKey, setServerKey] = useState("");
+  const [clientKey, setClientKey] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
   const [brandId, setBrandId] = useState(config?.brand_id ?? "");
   const [scope, setScope] = useState<"platform" | "brand">(config?.brand_id ? "brand" : "platform");
   const [isActive, setIsActive] = useState(config?.is_active ?? true);
@@ -307,12 +310,22 @@ function GatewayConfigSheet({
       setLoading(false);
       return;
     }
+    // Blank means "admin didn't touch this field". On create there's nothing to
+    // fall back to (the required attribute keeps server_key/client_key non-empty
+    // before we get here). On edit, echo the exact mask GET gave us — the
+    // server's keepSecretIfMasked recognizes that and keeps the stored secret;
+    // sending an empty string instead would wipe it.
+    const resolveSecret = (typed: string, maskedAtRest: string | undefined) => {
+      const trimmed = typed.trim();
+      if (trimmed) return trimmed;
+      return isEdit ? maskedAtRest : undefined;
+    };
     const payload: CreateGatewayConfigInput = {
       provider,
       mode,
-      server_key: serverKey,
-      client_key: clientKey,
-      webhook_secret: webhookSecret || undefined,
+      server_key: resolveSecret(serverKey, config?.server_key) ?? "",
+      client_key: resolveSecret(clientKey, config?.client_key) ?? "",
+      webhook_secret: resolveSecret(webhookSecret, config?.webhook_secret),
       is_active: isActive,
       brand_id: scope === "brand" ? brandId : undefined,
     };
@@ -414,14 +427,14 @@ function GatewayConfigSheet({
               </div>
             </div>
 
-            <Field label="Server Key" required>
-              <input required type="text" value={serverKey} onChange={(e) => setServerKey(e.target.value)} placeholder={isEdit ? "(decrypted — paste new value to change)" : "Provider secret key"} className={`${inputCls} font-mono`} autoComplete="off" />
+            <Field label="Server Key" required={!isEdit}>
+              <input required={!isEdit} type="text" value={serverKey} onChange={(e) => setServerKey(e.target.value)} placeholder={isEdit ? maskHint(config?.server_key) : "Provider secret key"} className={`${inputCls} font-mono`} autoComplete="off" />
             </Field>
-            <Field label="Client Key" required>
-              <input required type="text" value={clientKey} onChange={(e) => setClientKey(e.target.value)} placeholder="Provider public/client key" className={`${inputCls} font-mono`} autoComplete="off" />
+            <Field label="Client Key" required={!isEdit}>
+              <input required={!isEdit} type="text" value={clientKey} onChange={(e) => setClientKey(e.target.value)} placeholder={isEdit ? maskHint(config?.client_key) : "Provider public/client key"} className={`${inputCls} font-mono`} autoComplete="off" />
             </Field>
             <Field label="Webhook Secret">
-              <input type="text" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder="Used to verify webhook callbacks" className={`${inputCls} font-mono`} autoComplete="off" />
+              <input type="text" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder={isEdit ? maskHint(config?.webhook_secret) : "Used to verify webhook callbacks"} className={`${inputCls} font-mono`} autoComplete="off" />
             </Field>
 
             <label className="flex items-center gap-2">
@@ -464,6 +477,13 @@ function Field({ label, required, children }: { label: string; required?: boolea
       {children}
     </div>
   );
+}
+
+// `value` is what GET already gave us masked (e.g. "****1234", "****", or "").
+// Turn it into the placeholder hint shown over a blank input.
+function maskHint(value: string | undefined): string {
+  if (!value) return "Not set — leave blank or enter a value";
+  return `Configured, ending in ${value} — leave blank to keep`;
 }
 
 const inputCls = "block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";

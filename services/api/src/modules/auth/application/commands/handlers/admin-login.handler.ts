@@ -16,6 +16,7 @@ import {
     mapAdminProgramAssignment,
     normalizePermissions,
 } from '../../../../../shared/admin-access-response';
+import { MAX_FAILED_LOGIN_ATTEMPTS, LOCKOUT_DURATION_MINUTES } from '../../services/account-lockout.constants';
 
 @Injectable()
 export class AdminLoginHandler {
@@ -123,17 +124,29 @@ export class AdminLoginHandler {
             throw new UnauthorizedException('Admin account has no password set. Please use other login method or reset password.');
         }
 
+        // Locked out from prior failed attempts
+        if (user.lockedUntil && user.lockedUntil > new Date()) {
+            throw new UnauthorizedException('Too many failed attempts. Try again later.');
+        }
+
         const isPasswordValid = await bcrypt.compare(
             command.password,
             user.passwordHash,
         );
 
         if (!isPasswordValid) {
+            const failedLoginAttempts = user.failedLoginAttempts + 1;
+            const lockedUntil =
+                failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS
+                    ? new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60_000)
+                    : null;
+
             await this.prisma.user.update({
                 where: { id: user.id },
                 data: {
-                    failedLoginAttempts: user.failedLoginAttempts + 1,
+                    failedLoginAttempts,
                     lastFailedLogin: new Date(),
+                    lockedUntil,
                 },
             });
 
@@ -149,6 +162,7 @@ export class AdminLoginHandler {
             data: {
                 failedLoginAttempts: 0,
                 lastLoginAt: new Date(),
+                lockedUntil: null,
             },
         });
 

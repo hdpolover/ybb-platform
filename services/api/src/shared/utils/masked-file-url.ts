@@ -10,6 +10,63 @@ export function extractFileIdFromDownloadUrl(url: string): string | null {
   return match?.[1]?.toLowerCase() ?? null;
 }
 
+/** First UUID appearing anywhere in the url (stored CDN urls use the file id as filename). */
+export function extractFileUuidFromUrl(url: string): string | null {
+  return url.match(UUID_PATTERN)?.[0]?.toLowerCase() ?? null;
+}
+
+/**
+ * Hosts whose urls the mask lookup can ever resolve. Derived from config, never
+ * hardcoded: the STORAGE_PUBLIC_URL host (the host the app itself writes into
+ * stored file urls), any extra hosts in FILE_CDN_HOSTS (comma-separated hosts
+ * or urls, for legacy/second storage buckets), plus the PUBLIC_API_BASE_URL
+ * host so already-masked links stay candidates.
+ *
+ * When none of those resolve to a host the allowlist is empty and every url
+ * stays a candidate, i.e. the pre-existing behaviour.
+ */
+let maskableHostsEnv: string | undefined;
+let maskableHosts = new Set<string>();
+
+function normalizeHost(value: string): string | null {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return null;
+  const withoutScheme = trimmed.replace(/^[a-z][a-z0-9+.-]*:\/\//, '');
+  const host = withoutScheme.split('/')[0].split('@').pop() ?? '';
+  return host.replace(/:\d+$/, '') || null;
+}
+
+function getMaskableHosts(): Set<string> {
+  const storage = process.env.STORAGE_PUBLIC_URL ?? '';
+  const extra = process.env.FILE_CDN_HOSTS ?? '';
+  const apiBase = process.env.PUBLIC_API_BASE_URL ?? '';
+  const envKey = `${storage}|${extra}|${apiBase}`;
+  if (envKey !== maskableHostsEnv) {
+    maskableHostsEnv = envKey;
+    const hosts = new Set<string>();
+    for (const entry of [storage, ...extra.split(',')]) {
+      const host = normalizeHost(entry);
+      if (host) hosts.add(host);
+    }
+    if (hosts.size > 0) {
+      const apiHost = normalizeHost(apiBase);
+      if (apiHost) hosts.add(apiHost);
+    }
+    maskableHosts = hosts;
+  }
+  return maskableHosts;
+}
+
+/** True when the url could plausibly resolve to a files row (see getMaskableHosts). */
+export function isMaskableUrl(url: string): boolean {
+  const hosts = getMaskableHosts();
+  if (hosts.size === 0) return true;
+  const absolute = /^https?:\/\//i.test(url);
+  if (!absolute) return true; // relative /v1/files/<id>/download path
+  const host = normalizeHost(url);
+  return host !== null && hosts.has(host);
+}
+
 export function getMaskedDownloadUrl(fileId: string, baseUrl?: string): string {
   const base = (baseUrl ?? process.env.PUBLIC_API_BASE_URL ?? '').trim().replace(/\/+$/, '');
   const path = `/v1/files/${fileId}/download`;
@@ -22,7 +79,7 @@ export async function resolveFileIdFromRawUrl(prisma: PrismaService, url: string
     return existingMaskedId;
   }
 
-  const uuidMatch = url.match(UUID_PATTERN)?.[0]?.toLowerCase() ?? null;
+  const uuidMatch = extractFileUuidFromUrl(url);
   if (uuidMatch) {
     const byId = await prisma.file.findUnique({
       where: { id: uuidMatch },
@@ -62,7 +119,7 @@ export async function buildFileUrlMaskMap(prisma: PrismaService, urls: string[])
     .filter((id): id is string => Boolean(id));
 
   const idsFromRawUrl = sanitizedUrls
-    .map((url) => url.match(UUID_PATTERN)?.[0]?.toLowerCase() ?? null)
+    .map((url) => extractFileUuidFromUrl(url))
     .filter((id): id is string => Boolean(id));
 
   const candidateIds = Array.from(new Set([...idsFromMaskedUrl, ...idsFromRawUrl]));

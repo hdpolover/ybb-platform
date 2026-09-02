@@ -302,13 +302,35 @@ export class PaymentEventsController {
             const transactionId = (data.transaction_id as string) || gatewayOrderId || '';
 
             // Portal-driven manual payments only carry invoice_id in metadata. Resolve
-            // application_id from the invoice so we can run the same downstream logic.
-            if (!applicationId && invoiceId) {
+            // application_id from the invoice so we can run the same downstream logic -
+            // and, before anything is flipped to paid, verify the event really settles
+            // THAT invoice: it must belong to the application named in the event, and
+            // the settled amount/currency must be what the invoice actually owes.
+            // On any mismatch nothing is touched; the invoice is left for admin review.
+            if (invoiceId) {
                 const inv = await this.prisma.applicationInvoice.findUnique({
                     where: { id: invoiceId },
-                    select: { applicationId: true },
+                    select: { applicationId: true, amount: true, currency: true },
                 });
-                if (inv) applicationId = inv.applicationId;
+                if (!inv) {
+                    this.logger.warn(
+                        `payment.succeeded: invoice ${invoiceId} not found - skipping paid transition (application=${applicationId ?? 'none'} txn=${transactionId})`,
+                    );
+                    return;
+                }
+                if (applicationId && inv.applicationId !== applicationId) {
+                    this.logger.warn(
+                        `payment.succeeded: invoice ${invoiceId} belongs to application ${inv.applicationId}, not ${applicationId} - skipping paid transition (txn=${transactionId})`,
+                    );
+                    return;
+                }
+                if (!settlesInvoice(data.amount, currency, inv.amount, inv.currency)) {
+                    this.logger.warn(
+                        `payment.succeeded: settled ${String(data.amount)} ${currency} does not match invoice ${invoiceId} (${String(inv.amount)} ${inv.currency}) - skipping paid transition (application=${inv.applicationId} txn=${transactionId})`,
+                    );
+                    return;
+                }
+                applicationId = inv.applicationId;
             }
 
             if (applicationId) {
@@ -1029,4 +1051,27 @@ function abbreviateKey(value: string | null): string {
 function buildApplicationDedupeKey(applicationId: string, externalRef: string): string {
     const refHash = createHash('sha256').update(externalRef).digest('hex').slice(0, 16);
     return `payment-application:${applicationId}:${refHash}`;
+}
+
+/**
+ * True when a payment.succeeded event actually settles the invoice it names.
+ *
+ * A missing/non-positive event amount counts as a mismatch (fail closed) — an
+ * event that cannot prove what was paid must never flip an invoice to paid.
+ * Both sides are Decimal(10,2) money, so they are compared in whole cents to
+ * keep float representation noise out of the check.
+ */
+function settlesInvoice(
+    eventAmount: unknown,
+    eventCurrency: string,
+    invoiceAmount: unknown,
+    invoiceCurrency: string,
+): boolean {
+    const paid = Number(eventAmount);
+    const owed = Number(invoiceAmount);
+    if (!Number.isFinite(paid) || paid <= 0 || !Number.isFinite(owed)) return false;
+    if ((eventCurrency || '').trim().toUpperCase() !== (invoiceCurrency || '').trim().toUpperCase()) {
+        return false;
+    }
+    return Math.round(paid * 100) === Math.round(owed * 100);
 }

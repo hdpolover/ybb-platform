@@ -49,6 +49,7 @@ import {
   type Signature,
 } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import { LoaParticipantPicker } from "./LoaParticipantPicker";
 
 const PLACEHOLDER_TOKENS: DocumentTemplatePlaceholder[] = [
@@ -1055,7 +1056,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
                           className="mt-2 max-h-32 overflow-y-auto rounded border border-amber-200 bg-white px-3 py-2 text-xs text-zinc-700"
                           // Read-only render of admin-authored HTML already stored on this template —
                           // same trust boundary Tiptap's setContent() rendered it under before.
-                          dangerouslySetInnerHTML={{ __html: layout.headerHtml || "" }}
+                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(layout.headerHtml) }}
                         />
                         <button
                           type="button"

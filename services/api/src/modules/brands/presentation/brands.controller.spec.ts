@@ -14,6 +14,10 @@ import { UpdateSocialFeedCommand } from '../application/commands/update-social-f
 import { DeleteSocialFeedCommand } from '../application/commands/delete-social-feed.command';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
+import { AdminAccessControlService } from '@modules/admins/application/services/admin-access-control.service';
+import { AssignBrandAdminCommand } from '../application/commands/assign-brand-admin.command';
+import { ForbiddenException } from '@nestjs/common';
+import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 
 describe('BrandsController', () => {
     let controller: BrandsController;
@@ -32,6 +36,10 @@ describe('BrandsController', () => {
         get: jest.fn(),
     };
 
+    const mockAdminAccessControl = {
+        assertCanManageAdmins: jest.fn().mockResolvedValue(undefined),
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             controllers: [BrandsController],
@@ -39,6 +47,7 @@ describe('BrandsController', () => {
                 { provide: CommandBus, useValue: mockCommandBus },
                 { provide: QueryBus, useValue: mockQueryBus },
                 { provide: ConfigService, useValue: mockConfigService },
+                { provide: AdminAccessControlService, useValue: mockAdminAccessControl },
             ],
         })
         .overrideGuard(JwtAuthGuard)
@@ -52,6 +61,7 @@ describe('BrandsController', () => {
         queryBus = module.get<QueryBus>(QueryBus);
         
         jest.clearAllMocks();
+        mockAdminAccessControl.assertCanManageAdmins.mockResolvedValue(undefined);
     });
 
     it('should be defined', () => {
@@ -238,6 +248,38 @@ describe('BrandsController', () => {
 
             expect(mockCommandBus.execute).toHaveBeenCalledWith(expect.any(DeleteSocialFeedCommand));
             expect(mockCommandBus.execute.mock.calls[0][0]).toMatchObject({ brandId, socialFeedId });
+        });
+    });
+
+    describe('brand admin assignment', () => {
+        const user = { userId: 'user-1' } as CurrentUserData;
+
+        it('rejects assignBrandAdmin when the caller cannot manage admins', async () => {
+            mockAdminAccessControl.assertCanManageAdmins.mockRejectedValueOnce(new ForbiddenException());
+
+            await expect(
+                controller.assignBrandAdmin('brand-1', { adminId: 'admin-1' }, user),
+            ).rejects.toThrow(ForbiddenException);
+            expect(mockCommandBus.execute).not.toHaveBeenCalled();
+        });
+
+        it('rejects removeBrandAdmin when the caller cannot manage admins', async () => {
+            mockAdminAccessControl.assertCanManageAdmins.mockRejectedValueOnce(new ForbiddenException());
+
+            await expect(
+                controller.removeBrandAdmin('brand-1', 'admin-1', user),
+            ).rejects.toThrow(ForbiddenException);
+            expect(mockCommandBus.execute).not.toHaveBeenCalled();
+        });
+
+        it('does not forward any client-supplied permissions to the command', async () => {
+            mockCommandBus.execute.mockResolvedValue({ id: 'assignment-1' });
+
+            await controller.assignBrandAdmin('brand-1', { adminId: 'admin-1', roleInBrand: 'admin' }, user);
+
+            expect(mockCommandBus.execute).toHaveBeenCalledWith(
+                new AssignBrandAdminCommand('brand-1', 'admin-1', 'admin', 'user-1'),
+            );
         });
     });
 });

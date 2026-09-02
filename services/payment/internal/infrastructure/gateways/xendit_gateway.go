@@ -162,12 +162,14 @@ func (g *XenditGateway) VerifyPayment(ctx context.Context, gatewayOrderID string
 // The caller (HTTP handler) must inject the x-callback-token header value into
 // the context using XenditCallbackTokenKey before invoking this method.
 func (g *XenditGateway) HandleWebhook(ctx context.Context, payload []byte) (*entities.Payment, error) {
-	// 1. Verify callback token
-	if g.callbackToken != "" {
-		ctxToken, _ := ctx.Value(XenditCallbackTokenKey).(string)
-		if ctxToken != g.callbackToken {
-			return nil, fmt.Errorf("invalid xendit callback token")
-		}
+	// 1. Verify callback token. Without a configured token there is nothing to
+	// authenticate the caller against, so verification fails instead of passing.
+	if g.callbackToken == "" {
+		return nil, fmt.Errorf("xendit callback token is not configured")
+	}
+	ctxToken, _ := ctx.Value(XenditCallbackTokenKey).(string)
+	if ctxToken != g.callbackToken {
+		return nil, fmt.Errorf("invalid xendit callback token")
 	}
 
 	// 2. Parse payload
