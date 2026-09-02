@@ -1537,6 +1537,12 @@ export async function updateProgramGalleryItem(
     imageUrl?: string;
     userId?: string;
     brandId?: string;
+    // Forwarded so the uploaded file is stamped with the PROGRAM's brand.
+    // Without it the API falls back to the uploader's JWT home brand, so a
+    // multi-brand admin replacing an image filed it under their own brand and
+    // it stopped appearing in this program's media. createProgramGalleryItem
+    // already passes this; update did not.
+    programId?: string;
   },
 ): Promise<ProgramGalleryItem> {
   let imageUrl: string | undefined = input.imageUrl;
@@ -1548,6 +1554,7 @@ export async function updateProgramGalleryItem(
       userId: input.userId,
       brandId: input.brandId,
       bucket: "gallery",
+      programId: input.programId,
       assetType: "gallery",
     });
     if (!upload.publicUrl) {
@@ -1555,10 +1562,11 @@ export async function updateProgramGalleryItem(
     }
     imageUrl = upload.publicUrl;
   }
-  const { image: _image, userId: _userId, brandId: _brandId, ...rest } = input;
+  const { image: _image, userId: _userId, brandId: _brandId, programId: _programId, ...rest } = input;
   void _image;
   void _userId;
   void _brandId;
+  void _programId;
   return request<ProgramGalleryItem>(`/programs/gallery/${id}`, {
     method: "PUT",
     body: JSON.stringify({
