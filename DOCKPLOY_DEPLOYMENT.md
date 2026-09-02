@@ -130,6 +130,44 @@ For every service:
 
 ---
 
+## Backups
+
+Each of the three Postgres-backed compose files (API, Payment, File) runs a
+`postgres-backup-local` sidecar next to its `postgres-*` service. It dumps
+daily (`SCHEDULE=@daily`), keeping 7 daily / 4 weekly / 3 monthly copies, into
+a named volume (`postgres_api_backups`, `postgres_payment_backups`,
+`postgres_file_backups`) local to the VPS. This is on-host only — there is no
+off-site copy yet.
+
+### Restore recipe
+
+Find the dump you want inside the backup volume, then restore it into the
+target Postgres container. Example for the API database:
+
+```bash
+# 1. List available dumps (daily/weekly/monthly subfolders)
+docker run --rm -v postgres_api_backups:/backups alpine ls -la /backups/daily
+
+# 2. Copy the dump you want out of the volume (or `docker cp` from a throwaway container)
+docker run --rm -v postgres_api_backups:/backups -v $(pwd):/out alpine \
+  cp /backups/daily/<dump-file>.sql.gz /out/
+
+# 3. Restore into the running postgres-api container (drops/recreates is on you —
+#    this pipes into psql against the existing DB, so restore into a fresh DB/container
+#    for a real disaster-recovery drill, not the live one)
+gunzip -c <dump-file>.sql.gz | docker exec -i ybb-prod-postgres-api \
+  psql -U "$DATABASE_USER" -d "$DATABASE_NAME"
+```
+
+Swap `postgres_api_backups` / `ybb-prod-postgres-api` for the payment or file
+equivalents (`postgres_payment_backups` / `ybb-prod-postgres-payment`,
+`postgres_file_backups` / `ybb-prod-postgres-file`) as needed.
+
+**Follow-up (not done here):** no off-site sync exists — a VPS-level failure
+loses both the live data and the backup volume. Add one later by pointing an
+`rclone`/`AWS_*` sidecar at the same backup volumes, or by switching to a
+`postgres-backup-local` fork/image with native S3 upload support.
+
 ## Notes
 - **Container names**: All prod containers are prefixed `ybb-prod-` (e.g., `ybb-prod-api`, `ybb-prod-postgres-api`) to avoid conflicts with staging containers on the same host.
 - **Internal URLs**: Services on `dokploy-network` communicate by container name (e.g., `http://ybb-prod-payment:8002`).
