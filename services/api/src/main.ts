@@ -54,6 +54,23 @@ async function createConsumerApp(
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // DELIBERATELY NOT SET: app.set('trust proxy', ...).
+  //
+  // The audit backlog suggests it as the fix for `req.ip` being the load
+  // balancer. It is the wrong fix here, and enabling it would turn a logging
+  // defect into log forgery. Express's trust-proxy walks the x-forwarded-for
+  // chain from the RIGHT and returns the leftmost entry it considers
+  // untrusted — which, on the direct-to-origin path (this origin is reachable
+  // without going through Cloudflare, confirmed), is a value the caller typed.
+  // Every session row, GeoIP lookup and security log would then record an
+  // attacker-chosen address, and `req.ips` would become attacker-controlled
+  // wherever it is read.
+  //
+  // Use `@ClientIp()` / `resolveClientIp()` (src/shared/utils/client-ip.ts)
+  // instead. Those read the RIGHTMOST forwarded entry — the one our own edge
+  // appended — and only prefer cf-connecting-ip when the hop that reached us
+  // is inside a published Cloudflare range.
   const rabbitMqUrl =
     process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/';
   const retryDelayMs = parsePositiveInt(process.env.RABBITMQ_RETRY_DELAY_MS, 15000);
