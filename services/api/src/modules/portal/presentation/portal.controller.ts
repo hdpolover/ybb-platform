@@ -39,6 +39,7 @@ import { EnsurePortalPaymentInvoiceHandler } from '../application/commands/handl
 import { PaymentServiceHttpClient } from '../../payments/infrastructure/services/payment-service-http.client';
 import type { AdminPaymentMethod } from '../../payments/common/proto/payment.interface';
 import { LoaDownloadService } from '../application/services/loa-download.service';
+import { multerLimits } from '@common/constants';
 
 // Subset of the Go payment service's ProgramMethodView (merged, fallback-aware
 // per-program payment methods response) needed to project onto PortalPaymentMethodDto.
@@ -452,7 +453,7 @@ export class PortalController {
     }
 
     @Post('documents/:templateId/signed-copy')
-    @UseInterceptors(FileInterceptor('file'))
+    @UseInterceptors(FileInterceptor('file', multerLimits()))
     @ApiConsumes('multipart/form-data')
     @ApiOperation({ summary: 'Upload signed copy of an agreement letter' })
     @ApiBody({
