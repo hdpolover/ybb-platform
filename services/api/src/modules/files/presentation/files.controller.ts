@@ -33,6 +33,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { isPrivateCategoryKey } from '@shared/utils/private-file-key';
 import { resolveRevenueAccessScope, assertProgramAccess } from '@modules/stats/revenue/utils/revenue-access.util';
+import { multerLimits } from '@common/constants';
 
 /**
  * Files Controller
@@ -344,7 +345,7 @@ export class FilesController {
     },
   })
   @ApiResponse({ status: 201, description: 'File uploaded successfully' })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', multerLimits()))
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: CurrentUserData,

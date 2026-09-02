@@ -33,6 +33,7 @@ import { GalleryService } from '../application/gallery.service';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
 import { Request } from 'express';
+import { multerLimits } from '@common/constants';
 
 @ApiTags('Gallery')
 @Controller('gallery')
@@ -66,7 +67,7 @@ export class GalleryController {
       required: ['program_id'],
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', multerLimits()))
   @AuditTrail({ entityType: 'ProgramGallery', action: ChangeType.create })
   async uploadGalleryItem(
     @UploadedFile() file: Express.Multer.File | undefined,
