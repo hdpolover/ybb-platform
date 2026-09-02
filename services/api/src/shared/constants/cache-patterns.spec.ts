@@ -1,5 +1,9 @@
 // file: services/api/src/shared/constants/cache-patterns.spec.ts
-import { LANDING_BRAND_PATTERNS, PROGRAM_CONTENT_PATTERNS } from './cache-patterns';
+import {
+  LANDING_BRAND_PATTERNS,
+  PROGRAM_CONTENT_PATTERNS,
+  PROGRAM_PUBLIC_CONTENT_PATTERNS,
+} from './cache-patterns';
 
 describe('cache-patterns', () => {
   // A 2026-08-23 audit found every @CacheInvalidate route clearing the page
@@ -14,5 +18,19 @@ describe('cache-patterns', () => {
 
   it('carries the snapshot pattern through to program-content routes', () => {
     expect(PROGRAM_CONTENT_PATTERNS).toContain('landing:snapshot:*');
+  });
+
+  // Gallery/testimonial/FAQ/speaker/schedule writes used to drag the whole
+  // portal:* namespace with them, so one FAQ edit cold-started every
+  // participant's dashboard. Nothing the portal reads selects those relations.
+  it('leaves per-user portal keys alone for landing-only program content', () => {
+    expect(PROGRAM_PUBLIC_CONTENT_PATTERNS.some((p) => p.startsWith('portal:'))).toBe(false);
+    expect(PROGRAM_CONTENT_PATTERNS.some((p) => p.startsWith('portal:'))).toBe(true);
+  });
+
+  it('still busts the landing and program caches for landing-only content', () => {
+    expect(PROGRAM_PUBLIC_CONTENT_PATTERNS).toEqual(
+      expect.arrayContaining([...LANDING_BRAND_PATTERNS, 'program:*']),
+    );
   });
 });

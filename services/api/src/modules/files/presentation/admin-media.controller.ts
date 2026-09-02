@@ -35,6 +35,7 @@ import { FileServiceClient } from '../infrastructure/clients/file-service.client
 import { StorageService } from '../application/storage.service';
 import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '../application/private-file-url-resolver.service';
 import { isPrivateCategoryKey } from '@shared/utils/private-file-key';
+import { multerLimits } from '@common/constants';
 
 /**
  * Admin Media Library Controller
@@ -135,7 +136,7 @@ export class AdminMediaController {
   @ApiParam({ name: 'programId', description: 'Program UUID' })
   @ApiConsumes('multipart/form-data')
   @ApiResponse({ status: 201, description: 'File uploaded successfully' })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', multerLimits()))
   @HttpCode(HttpStatus.CREATED)
   async uploadMedia(
     @Param('programId') programId: string,

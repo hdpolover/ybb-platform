@@ -46,6 +46,8 @@ import { AssignBrandAdminDto, BrandAdminResponseDto } from './dto/brand-admin.dt
 import { ListProgramsQuery } from '../../programs/application/queries/list-programs.query';
 import { ProgramListResponseDto } from '../../programs/presentation/dto/program-response.dto';
 import { ListProgramsDto } from '../../programs/presentation/dto/list-programs.dto';
+import { AdminAccessControlService } from '@modules/admins/application/services/admin-access-control.service';
+import { multerLimits } from '@common/constants';
 
 @ApiTags('Brands')
 @Controller('brands')
@@ -53,6 +55,7 @@ export class BrandsController {
     constructor(
         private readonly queryBus: QueryBus,
         private readonly commandBus: CommandBus,
+        private readonly adminAccessControl: AdminAccessControlService,
     ) { }
 
     @Get()
@@ -105,7 +108,7 @@ export class BrandsController {
     @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Create a brand sponsor' })
     @ApiConsumes('multipart/form-data')
-    @UseInterceptors(FileInterceptor('logo'))
+    @UseInterceptors(FileInterceptor('logo', multerLimits()))
     @ApiResponse({ status: 201, description: 'Sponsor created', type: SponsorResponseDto })
     async createSponsor(
         @Param('id', ParseUUIDPipe) id: string,
@@ -125,7 +128,7 @@ export class BrandsController {
     @CacheInvalidate(LANDING_BRAND_PATTERNS)
     @ApiOperation({ summary: 'Update a brand sponsor' })
     @ApiConsumes('multipart/form-data')
-    @UseInterceptors(FileInterceptor('logo'))
+    @UseInterceptors(FileInterceptor('logo', multerLimits()))
     @ApiResponse({ status: 200, description: 'Sponsor updated', type: SponsorResponseDto })
     @ApiResponse({ status: 404, description: 'Sponsor not found' })
     async updateSponsor(
@@ -235,7 +238,7 @@ export class BrandsController {
     @UseInterceptors(FileFieldsInterceptor([
         { name: 'logo', maxCount: 1 },
         { name: 'banner', maxCount: 1 },
-    ]))
+    ], multerLimits(2)))
     @ApiResponse({ status: 201, description: 'Brand created successfully', type: BrandResponseDto })
     async createBrand(
         @Body() dto: CreateBrandDto,
@@ -262,7 +265,7 @@ export class BrandsController {
     @UseInterceptors(FileFieldsInterceptor([
         { name: 'logo', maxCount: 1 },
         { name: 'banner', maxCount: 1 },
-    ]))
+    ], multerLimits(2)))
     @ApiResponse({ status: 200, description: 'Brand updated successfully', type: BrandResponseDto })
     @ApiResponse({ status: 404, description: 'Brand not found' })
     async updateBrand(
@@ -301,7 +304,7 @@ export class BrandsController {
     @UseInterceptors(FileFieldsInterceptor([
         { name: 'logo', maxCount: 1 },
         { name: 'banner', maxCount: 1 },
-    ]))
+    ], multerLimits(2)))
     @ApiResponse({ status: 200, description: 'Brand details updated successfully', type: BrandResponseDto })
     @ApiResponse({ status: 404, description: 'Brand not found' })
     async updateBrandDetails(
@@ -413,8 +416,9 @@ export class BrandsController {
         @Body() dto: AssignBrandAdminDto,
         @CurrentUser() user: CurrentUserData,
     ): Promise<BrandAdminResponseDto> {
+        await this.adminAccessControl.assertCanManageAdmins(user);
         return this.commandBus.execute(
-            new AssignBrandAdminCommand(id, dto.adminId, dto.roleInBrand, dto.permissions, user.userId),
+            new AssignBrandAdminCommand(id, dto.adminId, dto.roleInBrand, user.userId),
         );
     }
 
@@ -432,7 +436,9 @@ export class BrandsController {
     async removeBrandAdmin(
         @Param('id', ParseUUIDPipe) id: string,
         @Param('adminId', ParseUUIDPipe) adminId: string,
+        @CurrentUser() user: CurrentUserData,
     ): Promise<{ message: string }> {
+        await this.adminAccessControl.assertCanManageAdmins(user);
         return this.commandBus.execute(new RemoveBrandAdminCommand(id, adminId));
     }
 }

@@ -410,4 +410,52 @@ describe('LoginHandler', () => {
     const result = await handler.execute(command);
     expect(result.user.id).toBe('user-brand-1');
   });
+
+  it('rejects login while the account is locked out, without checking the password', async () => {
+    mockPrismaService.user.findFirst.mockResolvedValueOnce({
+      ...brandOneUser,
+      lockedUntil: new Date(Date.now() + 60_000),
+    });
+
+    const command = new LoginCommand(
+      'same@example.com',
+      'password123',
+      '127.0.0.1',
+      'Mozilla/5.0',
+      'brand-1',
+    );
+
+    await expect(handler.execute(command)).rejects.toThrow(
+      'Too many failed attempts. Try again later.',
+    );
+    expect(bcrypt.compare).not.toHaveBeenCalled();
+  });
+
+  it('locks the account once failed attempts reach the threshold', async () => {
+    (bcrypt.compare as jest.Mock).mockResolvedValueOnce(false);
+    mockPrismaService.user.findFirst.mockResolvedValueOnce({
+      ...brandOneUser,
+      failedLoginAttempts: 4,
+    });
+
+    const command = new LoginCommand(
+      'same@example.com',
+      'wrong-password',
+      '127.0.0.1',
+      'Mozilla/5.0',
+      'brand-1',
+    );
+
+    await expect(handler.execute(command)).rejects.toThrow(UnauthorizedException);
+
+    expect(mockPrismaService.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'user-brand-1' },
+        data: expect.objectContaining({
+          failedLoginAttempts: 5,
+          lockedUntil: expect.any(Date),
+        }),
+      }),
+    );
+  });
 });

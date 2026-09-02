@@ -14,6 +14,7 @@ import {
   ensureProgramApplication,
   toProgramRegistrationInfo,
 } from '../../services/auth-program-linking.util';
+import { MAX_FAILED_LOGIN_ATTEMPTS, LOCKOUT_DURATION_MINUTES } from '../../services/account-lockout.constants';
 
 @Injectable()
 export class LoginHandler {
@@ -226,6 +227,11 @@ export class LoginHandler {
       throw new UnauthorizedException('Local authentication not configured. Please use OAuth provider.');
     }
 
+    // Locked out from prior failed attempts
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      throw new UnauthorizedException('Too many failed attempts. Try again later.');
+    }
+
     // Verify password
     const isPasswordValid = await bcrypt.compare(
       command.password,
@@ -233,12 +239,19 @@ export class LoginHandler {
     );
 
     if (!isPasswordValid) {
+      const failedLoginAttempts = user.failedLoginAttempts + 1;
+      const lockedUntil =
+        failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS
+          ? new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60_000)
+          : null;
+
       // Update failed login attempts
       await this.prisma.user.update({
         where: { id: user.id },
         data: {
-          failedLoginAttempts: user.failedLoginAttempts + 1,
+          failedLoginAttempts,
           lastFailedLogin: new Date(),
+          lockedUntil,
         },
       });
 
@@ -255,6 +268,7 @@ export class LoginHandler {
       data: {
         failedLoginAttempts: 0,
         lastLoginAt: new Date(),
+        lockedUntil: null,
       },
     });
 

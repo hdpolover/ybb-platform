@@ -1,11 +1,16 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '../../../../../shared/constants/cache-keys';
 import { CreateAuthProviderCommand } from '../create-auth-provider.command';
 import { ConflictException } from '@nestjs/common';
 
 @CommandHandler(CreateAuthProviderCommand)
 export class CreateAuthProviderHandler implements ICommandHandler<CreateAuthProviderCommand> {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheService: CacheService,
+  ) {}
 
   async execute(command: CreateAuthProviderCommand) {
     const existing = await this.prisma.authProvider.findUnique({
@@ -16,7 +21,7 @@ export class CreateAuthProviderHandler implements ICommandHandler<CreateAuthProv
       throw new ConflictException(`AuthProvider with name ${command.name} already exists`);
     }
 
-    return this.prisma.authProvider.create({
+    const created = await this.prisma.authProvider.create({
       data: {
         name: command.name,
         displayName: command.displayName,
@@ -33,5 +38,8 @@ export class CreateAuthProviderHandler implements ICommandHandler<CreateAuthProv
         order: command.order ?? 0,
       },
     });
+
+    await this.cacheService.invalidateKey(CACHE_KEYS.AUTH_PROVIDERS_LIST);
+    return created;
   }
 }

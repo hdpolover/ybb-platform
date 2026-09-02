@@ -8,7 +8,7 @@ import { PaymentsModule } from '@modules/payments/payments.module';
 // routing key 'payment.#'). Only PaymentEventsController runs here, so
 // processApplicationPayment() executes exactly once per delivery.
 // PaymentModule provides the @Global PaymentGrpcClient (gRPC transport to Go payment
-// service) needed by CreateIntentHandler inside PaymentsModule.
+// service) needed by ProcessPaymentHandler inside PaymentsModule.
 // PaymentsModule contains @Cron services (PaymentReconciliationService hourly,
 // PaymentOutboxService every 10s); because ConsumerInfraModule omits ScheduleModule
 // and neither service injects SchedulerRegistry, those crons do NOT register here.

@@ -29,6 +29,7 @@ import { MomentsShortsSheet } from "../landing-content/MomentsShortsSheet";
 import { PaymentInfoSheet } from "../landing-content/PaymentInfoSheet";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 
 export interface ProgramSpecificsData {
   schedule: {
@@ -293,19 +294,19 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Requirements Description</dt>
             <dd className="rounded-md border border-zinc-200 bg-white p-5 text-sm leading-relaxed text-zinc-800 shadow-sm"
-              dangerouslySetInnerHTML={{ __html: data.participantContent.requirementsDescription }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.participantContent.requirementsDescription) }}
             />
           </div>
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Benefits Description</dt>
             <dd className="rounded-md border border-zinc-200 bg-white p-5 text-sm leading-relaxed text-zinc-800 shadow-sm"
-              dangerouslySetInnerHTML={{ __html: data.participantContent.benefitsDescription }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.participantContent.benefitsDescription) }}
             />
           </div>
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Terms &amp; Conditions</dt>
             <dd className="rounded-md border border-zinc-200 bg-white p-5 text-sm leading-relaxed text-zinc-800 shadow-sm"
-              dangerouslySetInnerHTML={{ __html: data.participantContent.termsAndConditions }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.participantContent.termsAndConditions) }}
             />
           </div>
         </dl>

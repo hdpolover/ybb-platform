@@ -50,3 +50,26 @@ export const PROGRAM_CONTENT_PATTERNS = [
   'portal:payments:*',
   'portal:documents:*',
 ];
+
+/**
+ * Patterns to bust when program content that only ever renders on public
+ * landing pages changes: FAQs, gallery, testimonials, speakers, team, partners,
+ * schedule and timeline.
+ *
+ * Deliberately omits the `portal:*` patterns from PROGRAM_CONTENT_PATTERNS. No
+ * portal read (dashboard, submissions, submission-detail, payments, documents)
+ * selects any of those relations, so evicting them only cold-started every
+ * participant's portal cache platform-wide on a single admin edit.
+ *
+ * Content that DOES reach the portal (announcements, pricing tiers, validity
+ * periods, resources, essays, requirements, program settings) must keep using
+ * PROGRAM_CONTENT_PATTERNS.
+ */
+export const PROGRAM_PUBLIC_CONTENT_PATTERNS = [
+  ...LANDING_BRAND_PATTERNS,
+  // Left as a wildcard on purpose: `program:detail:*` is keyed by slug OR id
+  // (GET /programs/:identifier), so a program-scoped pattern would leave the
+  // slug-keyed entry stale. A narrower glob costs the same SCAN anyway: SCAN
+  // walks the whole keyspace regardless of MATCH.
+  'program:*',
+];

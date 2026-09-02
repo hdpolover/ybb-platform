@@ -279,6 +279,7 @@ export class FileServiceClient {
           data,
           {
             responseType: 'arraybuffer',
+            headers: this.getInternalHeaders(),
           },
         ),
       );
@@ -305,6 +306,7 @@ export class FileServiceClient {
           data,
           {
             responseType: 'arraybuffer',
+            headers: this.getInternalHeaders(),
           },
         ),
       );
@@ -331,6 +333,7 @@ export class FileServiceClient {
           data,
           {
             responseType: 'arraybuffer',
+            headers: this.getInternalHeaders(),
           },
         ),
       );
@@ -356,6 +359,7 @@ export class FileServiceClient {
           payload,
           {
             responseType: 'arraybuffer',
+            headers: this.getInternalHeaders(),
           },
         ),
       );
@@ -383,6 +387,7 @@ export class FileServiceClient {
           },
           {
             responseType: 'arraybuffer',
+            headers: this.getInternalHeaders(),
           },
         ),
       );
@@ -412,6 +417,7 @@ export class FileServiceClient {
           },
           {
             responseType: 'arraybuffer',
+            headers: this.getInternalHeaders(),
           },
         ),
       );
@@ -431,7 +437,7 @@ export class FileServiceClient {
         this.httpService.post(
           `${this.fileServiceUrl}/api/v1/documents/generate/loa`,
           params,
-          { responseType: 'arraybuffer' },
+          { responseType: 'arraybuffer', headers: this.getInternalHeaders() },
         ),
       );
       return Buffer.from(response.data);
@@ -449,6 +455,7 @@ export class FileServiceClient {
       const response: AxiosResponse<FileResponse> = await firstValueFrom(
         this.httpService.get(
           `${this.fileServiceUrl}/api/v1/documents/verify/${verificationHash}`,
+          { headers: this.getInternalHeaders() },
         ),
       );
       return response.data;
