@@ -6,7 +6,6 @@ import { CqrsModule } from '@nestjs/cqrs';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { join } from 'path';
 import { PaymentsController } from '../src/modules/payments/presentation/payments.controller';
-import { CreateIntentHandler } from '../src/modules/payments/application/commands/handlers/create-intent.handler';
 import { ProcessPaymentHandler } from '../src/modules/payments/application/commands/handlers/process-payment.handler';
 import { PaymentGrpcClient } from '../src/modules/payments/infrastructure/services/payment-grpc.client';
 import { JwtAuthGuard } from '../src/modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -46,7 +45,6 @@ describe('Payment Integration (e2e)', () => {
       ],
       controllers: [PaymentsController],
       providers: [
-        CreateIntentHandler,
         ProcessPaymentHandler,
         PaymentGrpcClient,
         {
@@ -79,31 +77,6 @@ describe('Payment Integration (e2e)', () => {
 
   afterAll(async () => {
     await app.close();
-  });
-
-  describe('POST /payments/intents', () => {
-    it('should create a payment intent via gRPC', () => {
-      const createDto = {
-        amount: 150000,
-        currency: 'IDR',
-        reference_type: 'application',
-        reference_id: 'app_12345',
-        metadata: {
-            test_run: 'true'
-        }
-      };
-
-      return request(app.getHttpServer())
-        .post('/payments/intents')
-        .send(createDto)
-        .expect(201)
-        .expect((res) => {
-            // We expect the gRPC service to return something like { intent_id: '...', client_secret: '...' }
-            // If the Payment Service is NOT running, this will fail with 500
-            console.log('Create Intent Response:', res.body);
-            expect(res.body).toHaveProperty('intent_id');
-        });
-    });
   });
 
   describe('POST /payments/intents/:id/confirm', () => {

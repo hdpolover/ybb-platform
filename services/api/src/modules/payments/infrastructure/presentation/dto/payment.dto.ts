@@ -1,37 +1,5 @@
-import { IsString, IsNumber, IsOptional, IsNotEmpty, IsObject, Min } from 'class-validator';
+import { IsString, IsOptional, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-
-export class CreateIntentDto {
-  @ApiProperty({ example: 50000, description: 'Amount to charge' })
-  @IsNumber()
-  @Min(1)
-  amount: number;
-
-  @ApiProperty({ example: 'IDR', description: 'Currency code' })
-  @IsString()
-  @IsNotEmpty()
-  currency: string;
-
-  @ApiProperty({ example: 'application', description: 'Context of payment' })
-  @IsString()
-  @IsNotEmpty()
-  reference_type: string;
-
-  @ApiProperty({ example: 'app_123', description: 'External ID reference' })
-  @IsString()
-  @IsNotEmpty()
-  reference_id: string;
-
-  @ApiProperty({ example: 'uuid-beneficiary', required: false, description: 'Beneficiary ID' })
-  @IsString()
-  @IsOptional()
-  participant_id?: string;
-
-  @ApiProperty({ example: { program: 'YBB 2024' }, required: false, description: 'Arbitrary metadata' })
-  @IsObject()
-  @IsOptional()
-  metadata?: Record<string, string>;
-}
 
 export class SubmitManualPaymentDto {
     @ApiProperty({ description: 'Payment Intent ID' })
