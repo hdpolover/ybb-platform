@@ -104,12 +104,15 @@ model User {
   assessments         ApplicationAssessment[]
   exchangeRateChanges ProgramExchangeRateHistory[] @relation("ExchangeRateChangedBy")
 
+  // email has no @@index of its own: the unique above already indexes it as the
+  // leading column, and ILIKE lookups use idx_users_email_trgm (SQL-only).
   @@unique([email, brandId])
-  @@index([email])
   @@index([brandId])
   @@index([emailVerified])
   @@index([isActive, deletedAt])
   @@index([passwordResetToken])
+  // ReportingService export keyset cursor: ORDER BY created_at DESC, id DESC.
+  @@index([createdAt, id])
   @@map("users")
 }
 

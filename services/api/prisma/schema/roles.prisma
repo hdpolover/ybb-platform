@@ -221,6 +221,8 @@ model Participant {
   @@index([institution])
   @@index([referralCode])
   @@index([deletedAt])
+  // ReportingService export keyset cursor: ORDER BY created_at DESC, id DESC.
+  @@index([createdAt, id])
   @@map("participants")
 }
 
