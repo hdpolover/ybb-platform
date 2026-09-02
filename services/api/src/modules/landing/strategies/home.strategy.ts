@@ -22,6 +22,19 @@ import {
 const FULLY_FUNDED_PROCESS_COPY =
   'Complete the registration fee, submit the required documents and essay, and participate in the interview process.';
 
+// Homepage teaser size for `program_gallery`. 12 = exactly 3 full rows on the
+// 4-column desktop grid; the untruncated pool stays available in `full_gallery`
+// for /programs/gallery. Also caps each per-edition tab below.
+const HOME_GALLERY_TEASER_LIMIT = 12;
+
+// Decorate-sort-undecorate shuffle. Returns a new array and never mutates the
+// input, so the same source pool can be shuffled independently per section.
+const shuffleImages = <T>(images: readonly T[]): T[] =>
+  images
+    .map((img) => ({ img, sort: Math.random() }))
+    .sort((a, b) => a.sort - b.sort)
+    .map(({ img }) => img);
+
 type FurtherInformationMetadata = {
   eyebrow?: string;
   title?: string;
@@ -227,6 +240,10 @@ export class HomeStrategy implements ILandingPageStrategy {
           imageUrl: true,
           type: true,
           programId: true,
+          // Edition label for the per-edition gallery tabs built below, so the
+          // homepage can switch between KYS 2025 / KYS 2026 / ... without a
+          // second query per program.
+          program: { select: { name: true, year: true } },
         },
       }),
       this.prisma.sponsor.findMany({
@@ -401,11 +418,8 @@ export class HomeStrategy implements ILandingPageStrategy {
     const galleryPool = ownImages.length > 0 ? ownImages : brandImageGallery;
 
     // Shuffle image gallery once. All sections below draw from this randomised pool.
-    // Fisher-Yates shuffle ensures an unbiased random order per cache-miss (i.e. per deploy / TTL expiry).
-    const imageGallery = galleryPool
-      .map(img => ({ img, sort: Math.random() }))
-      .sort((a, b) => a.sort - b.sort)
-      .map(({ img }) => img);
+    // The shuffle ensures an unbiased random order per cache-miss (i.e. per deploy / TTL expiry).
+    const imageGallery = shuffleImages(galleryPool);
 
     // 4 images for the objectives collage
     const objectiveImages = imageGallery.slice(0, 4).map(img => ({
@@ -420,17 +434,48 @@ export class HomeStrategy implements ILandingPageStrategy {
     }));
 
     // Full pool (up to the 200-row take above) for the dedicated /programs/gallery
-    // page. `programGallery` below stays capped at 8 for the homepage teaser
-    // (2 full rows on the 4-col desktop grid), which links out to that page
-    // via `cta.url`. Additive `full_gallery` field, `gallery`/`images`
-    // unchanged for backwards compatibility.
-    const fullProgramGallery = imageGallery.map((img) => ({
+    // page. `programGallery` below stays capped at HOME_GALLERY_TEASER_LIMIT for
+    // the homepage teaser (3 full rows on the 4-col desktop grid), which links
+    // out to that page via `cta.url`. Additive `full_gallery` field,
+    // `gallery`/`images` unchanged for backwards compatibility.
+    const toGalleryImage = (img: (typeof imageGallery)[number]) => ({
       id: img.id,
       url: img.imageUrl,
       caption: img.title,
-    }));
+    });
 
-    const programGallery = fullProgramGallery.slice(0, 8);
+    const fullProgramGallery = imageGallery.map(toGalleryImage);
+
+    const programGallery = fullProgramGallery.slice(0, HOME_GALLERY_TEASER_LIMIT);
+
+    // Per-edition tabs so a visitor can browse the gallery by edition (KYS 2025,
+    // KYS 2026, ...) without leaving the homepage — the behaviour the old site
+    // had. Shape mirrors `program_highlight_videos`' `tabs` below (year +
+    // program_name + the edition's own items) so the two switchable sections
+    // stay consistent. Grouped from the brand-wide pool that was already
+    // fetched, so no extra query. Only editions that actually have images get a
+    // tab: an empty tab is worse than no tab. Additive — `gallery`, `images`
+    // and `full_gallery` are untouched, so a payload cached before this change
+    // still renders.
+    const galleryImagesByProgramId = new Map<string, typeof brandImageGallery>();
+    brandImageGallery.forEach((img) => {
+      const existing = galleryImagesByProgramId.get(img.programId) ?? [];
+      existing.push(img);
+      galleryImagesByProgramId.set(img.programId, existing);
+    });
+    const galleryEditionTabs = Array.from(galleryImagesByProgramId.entries())
+      .map(([programId, images]) => ({
+        program_id: programId,
+        program_name: images[0].program?.name ?? '',
+        year: images[0].program?.year ?? null,
+        // The active edition is the default tab, preserving the pre-tabs
+        // behaviour where the teaser showed only the active program's images.
+        // When it has none it simply gets no tab and the frontend falls back to
+        // the newest edition, matching the brand-wide fallback above.
+        is_active: programId === program?.id,
+        gallery: shuffleImages(images).slice(0, HOME_GALLERY_TEASER_LIMIT).map(toGalleryImage),
+      }))
+      .sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
 
     // Program-owned landing sections (Task 1's Program.landingContent), not
     // Brand.metadata, as of Phase 3's ownership split — see
@@ -578,6 +623,8 @@ export class HomeStrategy implements ILandingPageStrategy {
             images: programGallery,
             // Untruncated pool for the full /programs/gallery page.
             full_gallery: fullProgramGallery,
+            // Per-edition tabs; same shape as program_highlight_videos' `tabs`.
+            tabs: galleryEditionTabs,
             cta: {
               label: 'See More',
               url: '/programs/gallery',
@@ -753,7 +800,12 @@ export class HomeStrategy implements ILandingPageStrategy {
             background_image_url: sectionBgDesktop,
             background_image_mobile_url: sectionBgMobile,
             text_color_scheme: sectionTextColorScheme,
-            mockup_image_url: furtherInformationMeta?.mockup_image_url || '/img/mockupjapan.png',
+            // No default. This used to fall back to '/img/mockupjapan.png',
+            // so every brand without an uploaded mockup showed a Japan Youth
+            // Summit guideline poster — Korea Youth Summit's landing page was
+            // advertising JYS. Better an empty frame than another brand's
+            // artwork; the frontend omits the mockup entirely when unset.
+            mockup_image_url: furtherInformationMeta?.mockup_image_url || undefined,
           },
         },
         {
