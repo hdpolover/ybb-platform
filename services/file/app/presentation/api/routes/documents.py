@@ -11,9 +11,14 @@ from app.presentation.dependencies.container import (
     get_pdf_generator_service,
     get_certificate_generator_service
 )
+from app.presentation.dependencies.internal_auth import require_internal_service_key
 
 
-router = APIRouter(prefix="/documents", tags=["Documents"])
+router = APIRouter(
+    prefix="/documents",
+    tags=["Documents"],
+    dependencies=[Depends(require_internal_service_key)],
+)
 
 
 # Request models
