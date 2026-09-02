@@ -130,6 +130,39 @@ For every service:
 
 ---
 
+## Postgres tuning
+
+All three Postgres containers (API, Payment, File) shipped on stock
+`postgres:15-alpine` defaults — sized for a 1GB toy install, not the shared
+32GB VPS these run on. `docker-compose.dokploy.yml` now passes tuned settings
+via the postgres service's `command:` block:
+
+- `postgres-api` (the large, hot DB — participants/applications/logs):
+  `shared_buffers=1GB` (was 128MB), `effective_cache_size=3GB` (was 4GB
+  default but assumed the whole host; 3GB reflects what's actually free on a
+  shared box), `work_mem=16MB` (was 4MB — fewer disk spills on sorts/joins),
+  `maintenance_work_mem=256MB` (was 64MB — faster index builds/vacuum),
+  `random_page_cost=1.1` (was 4 — the volume is SSD-backed, default assumes
+  spinning disk and pushes the planner away from index scans it should use),
+  plus `track_io_timing=on`, `pg_stat_statements` preloaded, and
+  `log_min_duration_statement=500` (log queries over 500ms).
+- `postgres-payment` and `postgres-file`: these DBs are tiny, so no memory
+  settings were touched — only `track_io_timing=on` and `pg_stat_statements`
+  were added, for the same visibility.
+
+**pg_stat_statements requires one more step.** `shared_preload_libraries`
+only loads the library into the server; the extension still needs
+`CREATE EXTENSION IF NOT EXISTS pg_stat_statements;` run once per database
+after the container restarts with the new setting active. Run
+`scripts/db/enable-pg-stat-statements.sh` (from the VPS, with `docker` access
+to all three containers) to do this for all three DBs.
+
+**Changing `command:` recreates the container.** Applying this (or any future
+tuning change) causes a few seconds of Postgres downtime while it restarts
+and the API/Payment/File services reconnect. Deploy during a quiet window.
+
+---
+
 ## Backups
 
 Each of the three Postgres-backed compose files (API, Payment, File) runs a

@@ -93,6 +93,22 @@ services:
       POSTGRES_DB: ${DATABASE_NAME}
       # Safety switch for automatic seeding (Default: false)
       ENABLE_DB_SEEDING: ${ENABLE_DB_SEEDING:-false}
+    # Tuned for the shared 32GB host (stock defaults were sized for a 1GB
+    # toy install). See "Postgres tuning" section in DOCKPLOY_DEPLOYMENT.md
+    # for rationale and the pg_stat_statements activation step this requires.
+    command:
+      [
+        "postgres",
+        "-c", "shared_buffers=1GB",
+        "-c", "effective_cache_size=3GB",
+        "-c", "work_mem=16MB",
+        "-c", "maintenance_work_mem=256MB",
+        "-c", "random_page_cost=1.1",
+        "-c", "track_io_timing=on",
+        "-c", "shared_preload_libraries=pg_stat_statements",
+        "-c", "pg_stat_statements.track=all",
+        "-c", "log_min_duration_statement=500"
+      ]
     volumes:
       - postgres_api_data_prod:/var/lib/postgresql/data
       - ./database-dump:/docker-entrypoint-initdb.d:rw
