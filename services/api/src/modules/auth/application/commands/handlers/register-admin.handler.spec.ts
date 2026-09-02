@@ -74,7 +74,8 @@ describe('RegisterAdminHandler - public admin-registration hardening', () => {
 
     mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', isActive: true });
     mockPrisma.user.findFirst.mockResolvedValue(null);
-    mockPrisma.adminRole.findUnique.mockResolvedValue({ id: 'role-1', name: 'super_admin' });
+    // What the seed actually creates: a DISPLAY name, not the request slug.
+    mockPrisma.adminRole.findUnique.mockResolvedValue({ id: 'role-1', name: 'Super Admin' });
     tx.user.create.mockResolvedValue({
       id: 'user-1',
       email: 'new-admin@example.com',
@@ -148,6 +149,59 @@ describe('RegisterAdminHandler - public admin-registration hardening', () => {
     await expect(handler.execute(attempt)).rejects.toThrow(BadRequestException);
     expect(mockPrisma.adminRole.create).not.toHaveBeenCalled();
     expect(mockPrisma.adminRole.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('resolves the request slug to the SEEDED role row, not to the slug itself', async () => {
+    // AdminRole.name is the unique key and seed-auth.ts writes 'Super Admin';
+    // the body sends the 'super_admin' slug that admin_brands.role_in_brand
+    // uses. Looking the slug up as a role name missed on every seeded
+    // database, so the old auto-create branch fired every time and M136 then
+    // linked that fabricated, permission-less row.
+    await handler.execute(command());
+
+    expect(mockPrisma.adminRole.findUnique).toHaveBeenCalledWith({
+      where: { name: 'Super Admin' },
+    });
+  });
+
+  it('400s instead of creating a role when the database has not been seeded', async () => {
+    mockPrisma.adminRole.findUnique.mockResolvedValue(null);
+
+    await expect(handler.execute(command())).rejects.toThrow(BadRequestException);
+    expect(mockPrisma.adminRole.create).not.toHaveBeenCalled();
+    expect(mockUnitOfWork.execute).not.toHaveBeenCalled();
+  });
+
+  it('never creates an AdminRole row, whatever the request asks for', async () => {
+    for (const role of ['super_admin', 'owner', 'editor', 'news_writer', 'god_mode', 'constructor']) {
+      jest.clearAllMocks();
+      mockPrisma.brand.findUnique.mockResolvedValue({ id: 'brand-1', isActive: true });
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+      mockPrisma.adminRole.findUnique.mockResolvedValue({ id: 'role-1', name: 'Super Admin' });
+      tx.user.create.mockResolvedValue({
+        id: 'user-1',
+        email: 'new-admin@example.com',
+        brandId: 'brand-1',
+        isActive: true,
+        isOnboardingCompleted: false,
+      });
+      repos.createAdmin.mockResolvedValue({ id: 'admin-1' });
+
+      await handler
+        .execute(
+          new RegisterAdminCommand(
+            'new-admin@example.com',
+            'hunter2hunter2',
+            'New Admin',
+            VALID_SECRET,
+            'brand-1',
+            role,
+          ),
+        )
+        .catch(() => undefined);
+
+      expect(mockPrisma.adminRole.create).not.toHaveBeenCalled();
+    }
   });
 
   it('links the resolved role id onto the created admin', async () => {

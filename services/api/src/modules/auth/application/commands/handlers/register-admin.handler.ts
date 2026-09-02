@@ -15,22 +15,29 @@ import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
 
 /**
- * The only roles this route may hand out.
+ * The only roles this route may hand out, mapped to the AdminRole rows the
+ * seed actually creates.
  *
- * It used to accept any string and CREATE the AdminRole row if it did not
- * exist, so a caller who reached the secret also chose the name of a brand new
- * role. The allowlist is the same set the access-level mapping below already
- * knew about, so nothing that ever worked stops working.
+ * Two different vocabularies meet here. AdminRole.name is the unique key and
+ * prisma/seeds/seed-auth.ts writes DISPLAY names ('Super Admin', 'Program
+ * Admin', ...); the slugs on the left are what admin_brands.role_in_brand
+ * stores and what the request body sends, matching prisma/seeds/seed-admins.ts.
+ * Looking a slug up as a role name missed on every seeded database, so the old
+ * auto-create branch fired every time and produced a duplicate,
+ * permission-less AdminRole that the new roleId link then pointed at.
+ *
+ * A Map rather than an object literal so a body of "constructor" or
+ * "__proto__" cannot resolve to something inherited.
  */
-const ALLOWED_ADMIN_ROLES = [
-  'super_admin',
-  'super-admin',
-  'owner',
-  'program_coordinator',
-  'manager',
-  'news_writer',
-  'editor',
-] as const;
+const ADMIN_ROLE_CATALOG = new Map<string, { roleName: string; accessLevel: number }>([
+  ['super_admin', { roleName: 'Super Admin', accessLevel: 10 }],
+  ['super-admin', { roleName: 'Super Admin', accessLevel: 10 }],
+  ['owner', { roleName: 'Super Admin', accessLevel: 10 }],
+  ['program_coordinator', { roleName: 'Program Admin', accessLevel: 5 }],
+  ['manager', { roleName: 'Program Admin', accessLevel: 5 }],
+  ['news_writer', { roleName: 'News Writer', accessLevel: 3 }],
+  ['editor', { roleName: 'Editor', accessLevel: 3 }],
+]);
 
 /**
  * Constant-time secret comparison.
@@ -75,8 +82,9 @@ export class RegisterAdminHandler {
       throw new ForbiddenException('Invalid admin registration secret');
     }
 
-    // 1b. Reject any role outside the allowlist BEFORE touching the database.
-    if (!(ALLOWED_ADMIN_ROLES as readonly string[]).includes(command.role)) {
+    // 1b. Reject any role outside the catalog BEFORE touching the database.
+    const catalogEntry = ADMIN_ROLE_CATALOG.get(command.role);
+    if (!catalogEntry) {
       throw new BadRequestException('Invalid admin role');
     }
 
@@ -103,28 +111,22 @@ export class RegisterAdminHandler {
       throw new ConflictException('User already exists for this brand');
     }
 
-    // 4. Resolve Admin Role. The name is allowlisted above, so the create
-    // branch can only ever materialise one of those seven known roles on a
-    // database that has not been seeded yet.
-    let role = await this.prisma.adminRole.findUnique({
-      where: { name: command.role },
+    // 4. Resolve the seeded AdminRole this slug maps to.
+    //
+    // No create branch: if the row is missing the database has not been
+    // seeded, and inventing a permission-less role here would silently hand
+    // the new admin an account that 403s on every role-guarded route.
+    const role = await this.prisma.adminRole.findUnique({
+      where: { name: catalogEntry.roleName },
     });
 
     if (!role) {
-      role = await this.prisma.adminRole.create({
-        data: {
-          name: command.role,
-          description: `Auto-generated role for ${command.role}`,
-          isActive: true,
-        },
-      });
+      throw new BadRequestException(
+        `Admin role "${catalogEntry.roleName}" does not exist. Run prisma/seeds/seed-auth.ts first.`,
+      );
     }
 
-    // Determine Access Level based on role
-    let accessLevel = 1;
-    if (['super_admin', 'super-admin', 'owner'].includes(command.role)) accessLevel = 10;
-    else if (['program_coordinator', 'manager'].includes(command.role)) accessLevel = 5;
-    else if (['news_writer', 'editor'].includes(command.role)) accessLevel = 3;
+    const accessLevel = catalogEntry.accessLevel;
 
     // 5. Create User and Admin in transaction
     const { user, admin } = await this.unitOfWork.execute(
