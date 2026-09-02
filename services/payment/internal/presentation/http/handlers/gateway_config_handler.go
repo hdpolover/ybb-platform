@@ -40,7 +40,11 @@ func (h *GatewayConfigHandler) GetAll(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": configs})
+	redacted := make([]entities.GatewayConfig, 0, len(configs))
+	for _, cfg := range configs {
+		redacted = append(redacted, redactGatewayConfig(cfg))
+	}
+	c.JSON(http.StatusOK, gin.H{"data": redacted})
 }
 
 // GetByID godoc
@@ -58,7 +62,7 @@ func (h *GatewayConfigHandler) GetByID(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Gateway config not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": cfg})
+	c.JSON(http.StatusOK, gin.H{"data": redactGatewayConfig(*cfg)})
 }
 
 // Create godoc
@@ -118,12 +122,14 @@ func (h *GatewayConfigHandler) Update(c *gin.Context) {
 		return
 	}
 
-	// Map only mutable fields to prevent ID or audit field overwrites
+	// Map only mutable fields to prevent ID or audit field overwrites.
+	// GET serves masked secrets, so a client that edits an unrelated field and
+	// submits the form back sends the mask; that means "unchanged", not a new key.
 	existing.Provider = req.Provider
 	existing.Mode = req.Mode
-	existing.ServerKey = req.ServerKey
-	existing.ClientKey = req.ClientKey
-	existing.WebhookSecret = req.WebhookSecret
+	existing.ServerKey = keepSecretIfMasked(req.ServerKey, existing.ServerKey)
+	existing.ClientKey = keepSecretIfMasked(req.ClientKey, existing.ClientKey)
+	existing.WebhookSecret = keepSecretIfMasked(req.WebhookSecret, existing.WebhookSecret)
 	existing.IsActive = req.IsActive
 	existing.BrandID = req.BrandID
 	if err := validateGatewayConfigRequest(existing); err != nil {
@@ -222,6 +228,41 @@ func (h *GatewayConfigHandler) Delete(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Deleted successfully"})
+}
+
+// secretMaskPrefix marks a value that has been redacted for a read response.
+const secretMaskPrefix = "****"
+
+// maskSecret reduces a credential to its last 4 characters so an admin can tell
+// two keys apart without the response carrying the key itself. Values too short
+// to reveal any tail safely are blanked entirely.
+func maskSecret(value string) string {
+	if len(value) <= 4 {
+		if value == "" {
+			return ""
+		}
+		return secretMaskPrefix
+	}
+	return secretMaskPrefix + value[len(value)-4:]
+}
+
+// redactGatewayConfig returns a copy of cfg with its credentials masked. Read
+// endpoints must never hand back decrypted gateway keys.
+func redactGatewayConfig(cfg entities.GatewayConfig) entities.GatewayConfig {
+	cfg.ServerKey = maskSecret(cfg.ServerKey)
+	cfg.ClientKey = maskSecret(cfg.ClientKey)
+	cfg.WebhookSecret = maskSecret(cfg.WebhookSecret)
+	return cfg
+}
+
+// keepSecretIfMasked returns the stored secret when the submitted value is the
+// mask this handler served for it, otherwise the submitted value. Without this,
+// saving an untouched form would overwrite a live key with "****abcd".
+func keepSecretIfMasked(submitted, stored string) string {
+	if strings.HasPrefix(submitted, secretMaskPrefix) && submitted == maskSecret(stored) {
+		return stored
+	}
+	return submitted
 }
 
 func validateGatewayConfigRequest(cfg *entities.GatewayConfig) error {
