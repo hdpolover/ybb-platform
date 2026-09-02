@@ -452,11 +452,29 @@ describe('ProgramsStrategy', () => {
             await strategy.getData({ id: 'brand-1', name: 'MEYS' } as any, 'meys-6th');
             await strategy.getData({ id: 'brand-1', name: 'MEYS' } as any, 'meys-7th');
 
-            const cacheKeysUsed = mockCacheService.set.mock.calls.map((call) => call[0]);
+            // Filtered to this strategy's own `landing:programs:*` payload
+            // cache — each call also writes the brand-scoped (not
+            // edition-scoped) fetchOpenRegistrationPrograms cache entry, a
+            // separate key asserted on below.
+            const cacheKeysUsed = mockCacheService.set.mock.calls
+                .map((call) => call[0])
+                .filter((key) => key.startsWith('landing:programs:'));
             expect(cacheKeysUsed).toHaveLength(2);
             expect(cacheKeysUsed[0]).not.toBe(cacheKeysUsed[1]);
             expect(cacheKeysUsed[0]).toContain('meys-6th');
             expect(cacheKeysUsed[1]).toContain('meys-7th');
+        });
+
+        it('caches the open-registration-editions query per brand, not per edition', async () => {
+            mockEditionsAndPrograms();
+
+            await strategy.getData({ id: 'brand-1', name: 'MEYS' } as any, 'meys-6th');
+            await strategy.getData({ id: 'brand-1', name: 'MEYS' } as any, 'meys-7th');
+
+            const openEditionsKeys = mockCacheService.set.mock.calls
+                .map((call) => call[0])
+                .filter((key) => key.startsWith('landing:open-registration-programs:'));
+            expect(openEditionsKeys).toEqual(['landing:open-registration-programs:brand-1', 'landing:open-registration-programs:brand-1']);
         });
     });
 });

@@ -16,6 +16,7 @@ const makePrismaService = () => ({
 const makeCacheService = () => ({
     invalidateBrandLandingCaches: jest.fn().mockResolvedValue(undefined),
     invalidateByPattern: jest.fn().mockResolvedValue(undefined),
+    invalidateKey: jest.fn().mockResolvedValue(undefined),
 });
 
 const makeLandingRevalidation = () => ({
@@ -173,6 +174,41 @@ describe('LandingCacheInvalidationService', () => {
             // Assert
             expect(landingRevalidation.revalidateForBrand).not.toHaveBeenCalled();
             expect(landingRevalidation.revalidateHomeAndSettingsForBrand).not.toHaveBeenCalled();
+        });
+
+        it('busts the host-keyed resolveBrand cache entry when revalidate.kind is "brand" and websiteUrl is known', async () => {
+            // resolveBrand()'s cache is keyed by normalised host, not brandId,
+            // so invalidateBrandLandingCaches(brandId) alone can't reach it —
+            // this is the one call site that has the fresh websiteUrl on hand.
+            const prisma = makePrismaService();
+            const cache = makeCacheService();
+            const landingRevalidation = makeLandingRevalidation();
+            const service = await buildService(prisma, cache, landingRevalidation);
+
+            await service.invalidate('brand-1', {
+                clearSnapshot: true,
+                bustProgramCache: false,
+                swallowErrors: true,
+                revalidate: { kind: 'brand', urls: { landingUrl: null, websiteUrl: '  HTTPS://Example.com  ' } },
+            });
+
+            expect(cache.invalidateKey).toHaveBeenCalledWith('landing:brand-resolve:https://example.com');
+        });
+
+        it('skips the resolveBrand-by-host bust when websiteUrl is not known', async () => {
+            const prisma = makePrismaService();
+            const cache = makeCacheService();
+            const landingRevalidation = makeLandingRevalidation();
+            const service = await buildService(prisma, cache, landingRevalidation);
+
+            await service.invalidate('brand-1', {
+                clearSnapshot: true,
+                bustProgramCache: false,
+                swallowErrors: true,
+                revalidate: { kind: 'homeAndSettings' },
+            });
+
+            expect(cache.invalidateKey).not.toHaveBeenCalled();
         });
     });
 
