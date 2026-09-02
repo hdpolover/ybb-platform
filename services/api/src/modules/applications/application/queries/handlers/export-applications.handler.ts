@@ -286,11 +286,16 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
         const BATCH_SIZE = 1000;
 
         const where: Prisma.ParticipantApplicationWhereInput = {
-            program: { brand: { id: query.brandId } },
             // Deactivated/deleted accounts stay visible in admin views but
             // never leave the building in an export.
             participant: ACTIVE_PARTICIPANT_WHERE,
         };
+        // brandId/programIds arrive already narrowed to the caller's admin scope
+        // (see ApplicationsController.resolveScopedFilters). At least one of the
+        // three filters below is always set, so an export is never platform-wide
+        // for a brand- or program-scoped admin.
+        if (query.brandId) where.program = { brand: { id: query.brandId } };
+        if (query.programIds) where.programId = { in: query.programIds };
         if (query.programId) where.programId = query.programId;
         if (query.status) where.status = query.status;
         if (query.category) where.applicationCategory = query.category;
@@ -484,7 +489,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
 
         return new StreamableFile(buffer, {
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            disposition: `attachment; filename="applications_${query.brandId}_${new Date().toISOString()}.xlsx"`,
+            disposition: `attachment; filename="applications_${query.brandId ?? query.programId ?? 'scoped'}_${new Date().toISOString()}.xlsx"`,
         });
     }
 }

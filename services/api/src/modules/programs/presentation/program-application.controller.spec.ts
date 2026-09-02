@@ -1,8 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ForbiddenException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { ProgramApplicationConfigController } from './program-application.controller';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
+import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import {
   CreateProgramPricingTierDto,
   UpdateProgramPricingTierDto,
@@ -43,6 +46,14 @@ describe('ProgramApplicationConfigController', () => {
     // Mocks
     const mockExecute = { execute: jest.fn() };
 
+    // Backs the child-entity scope checks (pricing tier / validity period -> program).
+    const mockReadPrisma = {
+        admin: { findUnique: jest.fn() },
+        program: { findUnique: jest.fn() },
+        programPricingTier: { findUnique: jest.fn() },
+        pricingTierValidityPeriod: { findUnique: jest.fn() },
+    };
+
     // Function to create providers list
     const createMockProviders = () => {
         const handlers = [
@@ -72,14 +83,27 @@ describe('ProgramApplicationConfigController', () => {
             providers: [
                 ...createMockProviders(),
                 { provide: 'IProgramRepository', useValue: { findById: jest.fn(), findBySlug: jest.fn() } },
+                { provide: PrismaReadService, useValue: mockReadPrisma },
             ],
         })
         .overrideGuard(JwtAuthGuard)
+        .useValue({ canActivate: () => true })
+        .overrideGuard(AdminScopeGuard)
         .useValue({ canActivate: () => true })
         .compile();
 
         controller = module.get<ProgramApplicationConfigController>(ProgramApplicationConfigController);
         jest.clearAllMocks();
+        // Default caller is a platform-scope (super) admin, so existing expectations hold.
+        mockReadPrisma.admin.findUnique.mockResolvedValue({
+            accessLevel: 10,
+            canManageAdmins: true,
+            canAssignRoles: true,
+            customPermissions: [],
+            role: { name: 'super admin', permissions: ['*'] },
+            adminBrands: [],
+            adminPrograms: [],
+        });
     });
 
     it('should be defined', () => {
@@ -93,6 +117,51 @@ describe('ProgramApplicationConfigController', () => {
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(ListProgramPricingTiersQuery));
             const query = mockExecute.execute.mock.calls[0][0];
             expect(query.programId).toBe(programId);
+        });
+    });
+
+    describe('updatePricingTier scope', () => {
+        // Fresh per test: the resolved scope is memoized onto the request object.
+        const newReq = () => ({ user: { id: 'admin-1', adminId: 'admin-1' } }) as any;
+
+        it('resolves the owning program from the tier row, not from the request body', async () => {
+            mockReadPrisma.programPricingTier.findUnique.mockResolvedValue({ programId: 'prog-owner' });
+            mockReadPrisma.program.findUnique.mockResolvedValue({
+                id: 'prog-owner',
+                brandId: 'brand-1',
+                name: 'Owner',
+                deletedAt: null,
+            });
+
+            await controller.updatePricingTier('tier-1', { programId: 'prog-i-can-reach' } as any, newReq());
+
+            expect(mockReadPrisma.programPricingTier.findUnique).toHaveBeenCalledWith({
+                where: { id: 'tier-1' },
+                select: { programId: true },
+            });
+            expect(mockExecute.execute).toHaveBeenCalled();
+        });
+
+        it('refuses a tier whose program is outside the caller’s assignments', async () => {
+            mockReadPrisma.admin.findUnique.mockResolvedValue({
+                accessLevel: 1,
+                canManageAdmins: false,
+                canAssignRoles: false,
+                customPermissions: [],
+                role: { name: 'admin', permissions: [] },
+                adminBrands: [],
+                adminPrograms: [{ programId: 'prog-mine', permissions: [] }],
+            });
+            mockReadPrisma.programPricingTier.findUnique.mockResolvedValue({ programId: 'prog-theirs' });
+            mockReadPrisma.program.findUnique.mockResolvedValue({
+                id: 'prog-theirs',
+                brandId: 'brand-1',
+                name: 'Theirs',
+                deletedAt: null,
+            });
+
+            await expect(controller.updatePricingTier('tier-1', {} as any, newReq())).rejects.toThrow(ForbiddenException);
+            expect(mockExecute.execute).not.toHaveBeenCalled();
         });
     });
 

@@ -13,6 +13,7 @@ import { ListBrandSocialFeedsQuery } from '../application/queries/list-brand-soc
 import { UpdateSocialFeedCommand } from '../application/commands/update-social-feed.command';
 import { DeleteSocialFeedCommand } from '../application/commands/delete-social-feed.command';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
 
 describe('BrandsController', () => {
     let controller: BrandsController;
@@ -41,6 +42,8 @@ describe('BrandsController', () => {
             ],
         })
         .overrideGuard(JwtAuthGuard)
+        .useValue({ canActivate: () => true })
+        .overrideGuard(AdminScopeGuard)
         .useValue({ canActivate: () => true })
         .compile();
 
