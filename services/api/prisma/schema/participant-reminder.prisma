@@ -1,0 +1,118 @@
+// ============================================================================
+// PARTICIPANT REMINDERS
+// ============================================================================
+
+// An admin-drafted, admin-scheduled reminder email to a computed audience of
+// participants in one program. Today there is exactly one audience —
+// `registration_fee_unpaid` — and this is deliberately the shape the other
+// reminder types will be cloned from.
+//
+// There is no automatic date-offset sending here on purpose. A reminder only
+// ever goes out because an admin wrote it, previewed exactly who would get it,
+// and picked a send time; a wrong deadline or a timezone bug therefore cannot
+// mail participants unattended. Contrast SubmissionDeadlineReminderService,
+// which fires off Program.applicationDeadline with no human in the loop.
+model ParticipantReminder {
+  id        String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programId String @map("program_id") @db.Uuid
+
+  // Which audience query this reminder targets. Plain varchar rather than a
+  // Prisma enum so adding the next reminder type stays a purely additive
+  // migration (no CREATE TYPE / ALTER TYPE ... ADD VALUE, which cannot run
+  // inside a transaction) — same choice as LoaBatchRecipientSend.status.
+  // Constrained by a CHECK in the migration. See REMINDER_AUDIENCES.
+  audience String @default("registration_fee_unpaid") @db.VarChar(50)
+
+  subject String @db.VarChar(255)
+
+  // Plain text, not HTML. The notification service escapes it and wraps it in
+  // the shared email layout, so an admin cannot paste markup that breaks the
+  // template. Supports {{participant_name}} / {{program_name}} tokens — see
+  // reminder-message-tokens.util.ts.
+  body String @db.Text
+
+  // Absolute instant, never a wall clock. The admin UI collects a WIB
+  // (Asia/Jakarta, UTC+7) date and time and sends it with an explicit +07:00
+  // offset; the API rejects any value without an explicit offset so a naive
+  // string can never be reinterpreted against the container's TZ. Null while
+  // the reminder is still a draft.
+  scheduledAt DateTime? @map("scheduled_at") @db.Timestamptz(6)
+
+  // 'draft' | 'scheduled' | 'sending' | 'sent' | 'cancelled'.
+  // The only legal transitions are draft→scheduled, scheduled→draft,
+  // draft/scheduled→cancelled, scheduled→sending→sent. Every one of them is
+  // performed as a conditional updateMany guarded on the current status, so
+  // the database — not timing — is what makes dispatch at-most-once.
+  status String @default("draft") @db.VarChar(20)
+
+  // Set when the dispatcher wins the scheduled→sending claim. A row still
+  // sitting in `sending` means the process died mid-fan-out; the dispatcher
+  // deliberately never re-claims it (see ParticipantReminderDispatchService).
+  dispatchedAt DateTime? @map("dispatched_at") @db.Timestamptz(6)
+  sentAt       DateTime? @map("sent_at") @db.Timestamptz(6)
+  cancelledAt  DateTime? @map("cancelled_at") @db.Timestamptz(6)
+
+  // Audience size at dispatch time, snapshotted because the audience is a
+  // live query: someone who pays an hour after the send drops out of it, and
+  // "we mailed 0 people" must stay distinguishable from "nobody owes now".
+  // 0 is a real, recorded outcome — an empty audience sends nothing and is
+  // still marked `sent`.
+  audienceCount Int? @map("audience_count")
+
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  recipientSends ParticipantReminderSend[]
+
+  @@index([programId, status])
+  @@index([status, scheduledAt])
+  @@map("participant_reminders")
+}
+
+// Per-recipient audit trail, written in two phases exactly like
+// LoaBatchRecipientSend:
+//   1. The API inserts one `pending` row per recipient at dispatch time,
+//      BEFORE publishing reminder.participant.dispatch — so "who was supposed
+//      to get this?" survives a broker or notification-service outage.
+//   2. services/notification reports each outcome back over
+//      reminder.participant.send_result; ReminderSendResultsController flips
+//      the row to `sent` (with the provider message id) or `failed`.
+//
+// services/notification has no database access of its own (no Prisma or pg
+// dependency), so the API stays the single writer to its own schema.
+//
+// This log is mandatory rather than nice-to-have: email deliverability to
+// non-Gmail domains (Outlook/iCloud/Zoho/Yandex/QQ/university) is a known
+// open problem, and container logs retain ~2 days.
+model ParticipantReminderSend {
+  id            String @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  reminderId    String @map("reminder_id") @db.Uuid
+  programId     String @map("program_id") @db.Uuid
+  participantId String @map("participant_id") @db.Uuid
+  userId        String @map("user_id") @db.Uuid
+
+  // Snapshot of the address actually used, not a join to users.email: the
+  // audit question is "where did it go", not "where would it go today".
+  email String @db.VarChar(255)
+
+  // 'pending' | 'sent' | 'failed'. Constrained by a CHECK in the migration.
+  status String @default("pending") @db.VarChar(20)
+
+  providerMessageId String? @map("provider_message_id") @db.VarChar(255)
+  errorMessage      String? @map("error_message") @db.Text
+  attemptCount      Int     @default(0) @map("attempt_count")
+
+  sentAt    DateTime? @map("sent_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  reminder ParticipantReminder @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+
+  // One row per (reminder, participant): a reminder can never appear to have
+  // been sent to the same person twice, whatever the dispatcher does.
+  @@unique([reminderId, participantId], map: "participant_reminder_sends_reminder_participant_key")
+  @@index([reminderId, status])
+  @@index([programId])
+  @@map("participant_reminder_sends")
+}

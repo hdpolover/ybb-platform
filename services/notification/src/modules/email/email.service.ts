@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Resend } from 'resend';
 import { maskEmail } from '../../common/logging/safe-log';
+import { renderReminderTokens } from '../../common/utils/reminder-message-tokens';
 
 interface ManagedEmailTemplate {
   id: string;
@@ -1107,6 +1108,82 @@ export class EmailService {
       data,
     });
     return this.sendRawEmail(to, subject, html);
+  }
+
+  /**
+   * Admin-drafted participant reminder.
+   *
+   * Unlike every other sender here there is NO managed-template lookup and no
+   * .hbs file: the admin's subject and body ARE the template. They arrive as
+   * plain text with {{participant_name}} / {{program_name}} tokens, which are
+   * substituted literally (never through Handlebars — see
+   * reminder-message-tokens.ts for why), HTML-escaped, and wrapped in the same
+   * brand layout every other email uses. Escaping is what keeps a stray "<" in
+   * someone's prose from silently eating the rest of the message.
+   */
+  async sendParticipantReminderEmail(
+    to: string,
+    data: {
+      subject: string;
+      body: string;
+      participantName: string;
+      programName: string;
+      paymentsUrl?: string;
+      // `unknown` rather than the `any` the older senders use: this method is
+      // new, and the brand blob is only ever forwarded, never read here.
+      brand?: unknown;
+      brandId?: string;
+      programId?: string;
+    },
+  ) {
+    const values = {
+      participantName: data.participantName || 'Participant',
+      programName: data.programName || '',
+    };
+
+    const subject = renderReminderTokens(data.subject, values);
+    const paymentsUrl =
+      data.paymentsUrl?.trim() || this.resolvePaymentsUrl(data.brand);
+
+    const templateData = this.enrichTemplateData({
+      name: values.participantName,
+      program: values.programName,
+      paymentsUrl,
+      brand: data.brand,
+      brandId: data.brandId,
+      programId: data.programId,
+    }) as Record<string, unknown>;
+
+    const body =
+      this.renderPlainTextAsHtml(renderReminderTokens(data.body, values)) +
+      `<div style="text-align: center;"><a href="${escapeHtml(paymentsUrl)}" class="cta-button">Go to Payments</a></div>`;
+
+    const html = this.renderBodyWithLayout(body, templateData);
+    return (await this.sendRawEmail(to, subject, html)) as unknown;
+  }
+
+  /**
+   * Plain text to email-safe HTML: escape everything, blank lines become
+   * paragraphs, single newlines become line breaks. Nothing an admin types can
+   * introduce markup.
+   */
+  private renderPlainTextAsHtml(text: string): string {
+    return text
+      .replace(/\r\n/g, '\n')
+      .split(/\n{2,}/)
+      .map((paragraph) => paragraph.trim())
+      .filter((paragraph) => paragraph.length > 0)
+      .map(
+        (paragraph) =>
+          `<p style="font-size: 15px; color: #4b5563; line-height: 1.6; text-align: left; margin: 0 0 16px;">${escapeHtml(
+            paragraph,
+          ).replace(/\n/g, '<br>')}</p>`,
+      )
+      .join('');
+  }
+
+  private resolvePaymentsUrl(brand?: any): string {
+    return `${this.resolvePortalBaseUrl(brand, 'resolvePaymentsUrl')}/dashboard/payments`;
   }
 
   private resolveSupportUrl(brand?: any): string {

@@ -67,6 +67,15 @@ async function bootstrap() {
       { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'payment.cancelled' },
       { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'payment.issue_alternative' },
       { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'loa.batch.released' },
+      // Admin-scheduled participant reminders. There is no 'reminder.#'
+      // wildcard on purpose: reminder.participant.send_result is consumed by
+      // the API, not by this service, and a wildcard would pull it in here to
+      // be ack-dropped.
+      {
+        exchange: 'ybb.events',
+        exchangeType: 'topic',
+        routingKey: 'reminder.participant.dispatch',
+      },
     ],
   });
 

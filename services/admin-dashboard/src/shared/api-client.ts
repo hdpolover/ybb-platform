@@ -4321,3 +4321,168 @@ export function getLoaBatchRecipientSends(
     `/programs/${programId}/loa-batches/${batchId}/recipient-sends`,
   );
 }
+
+// ─── Participant Reminders ────────────────────────────────────────────────────
+
+/**
+ * An admin-drafted, admin-scheduled reminder email to a computed audience.
+ * Mirrors ParticipantReminderResponseDto (services/api). Dates come as ISO
+ * strings over the wire.
+ */
+export type ParticipantReminderStatus =
+  | "draft"
+  | "scheduled"
+  | "sending"
+  | "sent"
+  | "cancelled";
+
+export type ParticipantReminderSendSummary = {
+  total: number;
+  pending: number;
+  sent: number;
+  failed: number;
+};
+
+export type ParticipantReminder = {
+  id: string;
+  programId: string;
+  /** Which audience query this targets. Only "registration_fee_unpaid" today. */
+  audience: string;
+  subject: string;
+  /** Plain text with {{participant_name}} / {{program_name}} tokens. */
+  body: string;
+  /** ISO datetime string with an explicit offset; null while still a draft. */
+  scheduledAt: string | null;
+  status: ParticipantReminderStatus;
+  dispatchedAt: string | null;
+  sentAt: string | null;
+  cancelledAt: string | null;
+  /**
+   * Audience size snapshotted at dispatch. Null until then; 0 is a real
+   * outcome meaning nobody owed the fee when the send time arrived.
+   */
+  audienceCount: number | null;
+  createdAt: string;
+  summary: ParticipantReminderSendSummary;
+};
+
+export type ParticipantReminderRecipientSend = {
+  participantId: string;
+  participantName: string;
+  /** The address the email was actually addressed to, as of dispatch time. */
+  email: string;
+  status: "pending" | "sent" | "failed";
+  providerMessageId: string | null;
+  errorMessage: string | null;
+  attemptCount: number;
+  sentAt: string | null;
+};
+
+export type ParticipantReminderDetail = ParticipantReminder & {
+  /** False before dispatch, and for a reminder that fanned out to nobody. */
+  hasSendLog: boolean;
+  recipients: ParticipantReminderRecipientSend[];
+};
+
+/**
+ * One person who would receive the reminder if it were sent right now.
+ * `applicationStatus: "draft"` is the norm — the registration fee is what
+ * gates submission, so most unpaid participants have not submitted yet.
+ */
+export type ReminderAudienceMember = {
+  applicationId: string;
+  participantId: string;
+  participantName: string;
+  email: string;
+  applicationStatus: string;
+  registrationPaymentStatus: string;
+  submittedAt: string | null;
+  registeredAt: string;
+};
+
+export type ReminderAudiencePreview = {
+  audience: string;
+  /**
+   * False when the program has no active registration_fee pricing tier — the
+   * audience is empty because nothing is owed, not because everyone has paid.
+   */
+  registrationFeeConfigured: boolean;
+  /** True total; `members` is capped at `listLimit`. */
+  count: number;
+  listLimit: number;
+  members: ReminderAudienceMember[];
+  /** The draft rendered against the first real recipient, when requested. */
+  preview: { subject: string; body: string } | null;
+};
+
+export type CreateParticipantReminderInput = {
+  subject: string;
+  body: string;
+  /** ISO datetime WITH an explicit offset. Omit to save as a draft. */
+  scheduledAt?: string;
+};
+
+export type UpdateParticipantReminderInput = {
+  subject?: string;
+  body?: string;
+  /** A datetime (re)schedules; `null` returns it to a draft. */
+  scheduledAt?: string | null;
+};
+
+export function getReminderAudience(programId: string): Promise<ReminderAudiencePreview> {
+  return request<ReminderAudiencePreview>(`/programs/${programId}/reminders/audience`);
+}
+
+/** Renders a draft against a real recipient. Writes nothing, sends nothing. */
+export function previewParticipantReminder(
+  programId: string,
+  data: { subject: string; body: string },
+): Promise<ReminderAudiencePreview> {
+  return request<ReminderAudiencePreview>(`/programs/${programId}/reminders/preview`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function listParticipantReminders(
+  programId: string,
+): Promise<ParticipantReminder[]> {
+  return request<ParticipantReminder[]>(`/programs/${programId}/reminders`);
+}
+
+export function getParticipantReminder(
+  programId: string,
+  id: string,
+): Promise<ParticipantReminderDetail> {
+  return request<ParticipantReminderDetail>(`/programs/${programId}/reminders/${id}`);
+}
+
+export function createParticipantReminder(
+  programId: string,
+  data: CreateParticipantReminderInput,
+): Promise<ParticipantReminder> {
+  return request<ParticipantReminder>(`/programs/${programId}/reminders`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateParticipantReminder(
+  programId: string,
+  id: string,
+  data: UpdateParticipantReminderInput,
+): Promise<ParticipantReminder> {
+  return request<ParticipantReminder>(`/programs/${programId}/reminders/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function cancelParticipantReminder(
+  programId: string,
+  id: string,
+): Promise<ParticipantReminder> {
+  return request<ParticipantReminder>(`/programs/${programId}/reminders/${id}/cancel`, {
+    method: "POST",
+  });
+}

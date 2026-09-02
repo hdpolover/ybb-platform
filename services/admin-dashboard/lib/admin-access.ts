@@ -99,6 +99,9 @@ const menuPermissionRules: Record<string, string[]> = {
   "documents-certificates": ["documents:read", "documents:write", "content:read", "content:write", "program:write"],
   "documents-program-guidelines": ["documents:read", "documents:write", "content:read", "content:write", "program:write"],
   announcements: ["announcements:read", "announcements:write", "content:read", "content:write", "program:write"],
+  // Reminders mail real participants about money owed, so it sits behind the
+  // same write-level permissions as announcements plus payments.
+  reminders: ["announcements:write", "payments:write", "participants:write", "program:write"],
   partnerships: ["partnerships:read", "partnerships:write", "content:read", "content:write", "program:write"],
   "master-data": ["program:write", "payments:write", "content:write"],
   "program-details": ["program:write"],

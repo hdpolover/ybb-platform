@@ -586,3 +586,151 @@ describe('EventsController.handleLoaBatchReleased — send result reporting', ()
     expect(reported.endsWith('…')).toBe(true);
   });
 });
+
+describe('EventsController.handleParticipantReminderDispatch', () => {
+  let controller: EventsController;
+  let sendParticipantReminderEmail: jest.Mock;
+  let emit: jest.Mock;
+
+  const RECIPIENTS = [
+    {
+      participantId: 'p-1',
+      userId: 'u-1',
+      email: 'ada@example.com',
+      fullName: 'Ada',
+    },
+    {
+      participantId: 'p-2',
+      userId: 'u-2',
+      email: 'bob@example.com',
+      fullName: 'Bob',
+    },
+  ];
+
+  const payload = {
+    reminderId: 'rem-1',
+    programId: 'prog-1',
+    programName: 'CYS 2026',
+    brandId: 'brand-1',
+    audience: 'registration_fee_unpaid',
+    subject: 'Fee for {{program_name}}',
+    body: 'Hi {{participant_name}}, please pay.',
+    paymentsUrl: 'https://cys.example.com/dashboard/payments',
+    recipients: RECIPIENTS,
+    brand: { name: 'CYS', websiteUrl: 'https://cys.example.com' },
+  };
+
+  beforeEach(() => {
+    sendParticipantReminderEmail = jest
+      .fn()
+      .mockResolvedValue({ data: { id: 'resend-1' } });
+    emit = jest.fn().mockResolvedValue(true);
+    controller = new EventsController(
+      { sendParticipantReminderEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess: jest.fn().mockResolvedValue({
+          shouldProcess: true,
+          dedupeKey: 'key',
+          reason: 'new',
+        }),
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+      { emit } as unknown as RabbitMQProducerService,
+    );
+  });
+
+  it('sends one email per recipient, passing the template through untouched', async () => {
+    await controller.handleParticipantReminderDispatch(payload, makeContext());
+
+    expect(sendParticipantReminderEmail).toHaveBeenCalledTimes(2);
+    expect(sendParticipantReminderEmail).toHaveBeenCalledWith(
+      'ada@example.com',
+      expect.objectContaining({
+        subject: 'Fee for {{program_name}}',
+        body: 'Hi {{participant_name}}, please pay.',
+        participantName: 'Ada',
+        programName: 'CYS 2026',
+        paymentsUrl: 'https://cys.example.com/dashboard/payments',
+      }),
+    );
+  });
+
+  it("one recipient's failure does not abort the rest", async () => {
+    sendParticipantReminderEmail
+      .mockRejectedValueOnce(new Error('mailbox full'))
+      .mockResolvedValueOnce({ data: { id: 'resend-2' } });
+
+    await controller.handleParticipantReminderDispatch(payload, makeContext());
+
+    expect(sendParticipantReminderEmail).toHaveBeenCalledTimes(2);
+    expect(emit).toHaveBeenCalledWith('reminder.participant.send_result', {
+      reminderId: 'rem-1',
+      programId: 'prog-1',
+      results: [
+        {
+          participantId: 'p-1',
+          providerMessageId: null,
+          error: 'mailbox full',
+        },
+        { participantId: 'p-2', providerMessageId: 'resend-2', error: null },
+      ],
+    });
+  });
+
+  it('reports every outcome back to the API for the per-recipient send log', async () => {
+    await controller.handleParticipantReminderDispatch(payload, makeContext());
+
+    expect(emit).toHaveBeenCalledWith('reminder.participant.send_result', {
+      reminderId: 'rem-1',
+      programId: 'prog-1',
+      results: [
+        { participantId: 'p-1', providerMessageId: 'resend-1', error: null },
+        { participantId: 'p-2', providerMessageId: 'resend-1', error: null },
+      ],
+    });
+  });
+
+  it('drops a malformed dispatch with no subject rather than mailing a blank', async () => {
+    await controller.handleParticipantReminderDispatch(
+      { ...payload, subject: '' },
+      makeContext(),
+    );
+
+    expect(sendParticipantReminderEmail).not.toHaveBeenCalled();
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing when the audience is empty', async () => {
+    await controller.handleParticipantReminderDispatch(
+      { ...payload, recipients: [] },
+      makeContext(),
+    );
+
+    expect(sendParticipantReminderEmail).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a generic salutation when full_name is blank', async () => {
+    await controller.handleParticipantReminderDispatch(
+      {
+        ...payload,
+        recipients: [{ ...RECIPIENTS[0], fullName: '' }],
+      },
+      makeContext(),
+    );
+
+    expect(sendParticipantReminderEmail).toHaveBeenCalledWith(
+      'ada@example.com',
+      expect.objectContaining({ participantName: 'Participant' }),
+    );
+  });
+
+  it('does not fail the send when reporting results back fails', async () => {
+    emit.mockRejectedValue(new Error('broker down'));
+
+    await expect(
+      controller.handleParticipantReminderDispatch(payload, makeContext()),
+    ).resolves.toBeUndefined();
+    expect(sendParticipantReminderEmail).toHaveBeenCalledTimes(2);
+  });
+});
