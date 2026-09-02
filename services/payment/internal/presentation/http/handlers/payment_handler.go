@@ -222,6 +222,19 @@ func (h *PaymentHandler) handleTransactionWebhook(c *gin.Context, tx *entities.P
 		newStatus = entities.TransactionStatusPending
 	}
 
+	// A settlement callback must agree with what this transaction was actually
+	// charged. A payload reporting a different amount or currency is not proof
+	// that THIS transaction was paid, so nothing is settled. The callback is
+	// acknowledged with 2xx (same convention as the other handled-but-ignored
+	// cases here) so the gateway does not retry a payload we will keep refusing.
+	if newStatus == entities.TransactionStatusSuccess {
+		if err := verifySettlementAmount(tx, updatedData.GatewayResponse); err != nil {
+			log.Printf("payment_webhook settlement_mismatch transaction_id=%s %v", tx.ID, err)
+			c.JSON(http.StatusOK, gin.H{"status": "ok", "warning": "settlement amount mismatch"})
+			return
+		}
+	}
+
 	// Check change
 	if tx.Status == newStatus {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "no change"})
@@ -262,6 +275,48 @@ func (h *PaymentHandler) handleTransactionWebhook(c *gin.Context, tx *entities.P
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// settlementAmountTolerance absorbs float representation drift between the
+// stored decimal amount and the value the gateway reports back.
+const settlementAmountTolerance = 0.01
+
+// verifySettlementAmount checks a settlement callback against the stored
+// transaction. Fields the payload does not carry are not checked; a payload
+// carrying no amount and no currency at all passes unchanged.
+func verifySettlementAmount(tx *entities.PaymentTransaction, payload map[string]interface{}) error {
+	if amount, ok := gatewayReportedAmount(payload); ok {
+		if diff := amount - tx.AmountTotal; diff > settlementAmountTolerance || diff < -settlementAmountTolerance {
+			return fmt.Errorf("gateway_amount=%v stored_amount=%v", amount, tx.AmountTotal)
+		}
+	}
+	if currency, _ := payload["currency"].(string); currency != "" && tx.Currency != "" {
+		if !strings.EqualFold(strings.TrimSpace(currency), tx.Currency) {
+			return fmt.Errorf("gateway_currency=%s stored_currency=%s", currency, tx.Currency)
+		}
+	}
+	return nil
+}
+
+// gatewayReportedAmount pulls the charged amount out of a webhook payload.
+// Midtrans sends gross_amount as a string, Xendit sends amount as a number.
+// ok is false when the payload carries no recognised amount field.
+func gatewayReportedAmount(payload map[string]interface{}) (float64, bool) {
+	for _, key := range []string{"gross_amount", "amount"} {
+		switch value := payload[key].(type) {
+		case float64:
+			return value, true
+		case json.Number:
+			if parsed, err := value.Float64(); err == nil {
+				return parsed, true
+			}
+		case string:
+			if parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil {
+				return parsed, true
+			}
+		}
+	}
+	return 0, false
 }
 
 func (h *PaymentHandler) publishIntentEvent(intent *entities.PaymentIntent, tx *entities.PaymentTransaction, eventType events.EventType) {
