@@ -207,9 +207,21 @@ model ParticipantApplication {
   invoices    ApplicationInvoice[]
   assessments ApplicationAssessment[]
 
+  // Partial indexes live in the migration SQL only (Prisma 7 DSL cannot express
+  // a WHERE clause on an index):
+  //   idx_apps_program_status_submitted_active   (program_id, status, submission_date DESC)
+  //   idx_apps_program_category_submitted_active (program_id, application_category, submission_date DESC)
+  //   idx_apps_program_updated_active            (program_id, updated_at DESC)
+  //   idx_apps_program_status_updated_active     (program_id, status, updated_at DESC)
+  //   idx_apps_program_created_active            (program_id, created_at DESC)
+  //     ...all WHERE deleted_at IS NULL, plus
+  //   idx_apps_program_unpaid_active             (program_id)
+  //     WHERE registration_payment_status <> 'paid' AND deleted_at IS NULL
+  //
+  // participantId has no @@index of its own: the unique below already indexes
+  // it as the leading column.
   @@unique([participantId, programId])
   @@index([programId])
-  @@index([participantId])
   @@index([status])
   @@index([registrationPaymentStatus])
   @@map("participant_applications")
@@ -261,11 +273,16 @@ model ApplicationInvoice {
   application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   pricingTier ProgramPricingTier     @relation(fields: [pricingTierId], references: [id])
 
+  // Partial index in the migration SQL only (Prisma 7 DSL cannot express it):
+  //   idx_invoices_status_reconciled_external (status, last_reconciled_at)
+  //     WHERE external_intent_id IS NOT NULL OR external_transaction_id IS NOT NULL
   @@index([applicationId])
   @@index([status])
   @@index([externalIntentId])
   @@index([externalTransactionId])
   @@index([lastReconciledAt])
+  // ReportingService export keyset cursor: ORDER BY created_at DESC, id DESC.
+  @@index([createdAt, id])
   @@map("application_invoices")
 }
 
