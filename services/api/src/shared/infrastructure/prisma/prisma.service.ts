@@ -11,6 +11,51 @@ type PrismaServiceOptions = {
   clientRole?: 'primary' | 'replica' | 'primary_fallback';
 };
 
+// main.ts boots one HTTP Nest app + several RMQ consumer Nest apps in a single
+// process (see createConsumerApp calls in main.ts), each with its own copy of
+// the @Global PrismaModule. Without this registry every one of those DI
+// containers would open its own pg.Pool against the same database. Keyed by
+// connection string and refcounted so the underlying pool is only closed once
+// the last PrismaService instance using it has shut down.
+type PoolRegistryEntry = { pool: Pool; refCount: number };
+const poolRegistry = new Map<string, PoolRegistryEntry>();
+
+function acquirePool(
+  connectionString: string,
+  poolConfig: { max: number; min: number; idleTimeoutMillis: number; connectionTimeoutMillis: number },
+): { pool: Pool; reused: boolean } {
+  const existing = poolRegistry.get(connectionString);
+  if (existing) {
+    existing.refCount += 1;
+    return { pool: existing.pool, reused: true };
+  }
+
+  const pool = new Pool({
+    connectionString,
+    max: poolConfig.max,
+    min: poolConfig.min,
+    idleTimeoutMillis: poolConfig.idleTimeoutMillis,
+    connectionTimeoutMillis: poolConfig.connectionTimeoutMillis,
+  });
+  poolRegistry.set(connectionString, { pool, refCount: 1 });
+  return { pool, reused: false };
+}
+
+function releasePool(connectionString: string): void {
+  const entry = poolRegistry.get(connectionString);
+  if (!entry) return;
+
+  entry.refCount -= 1;
+  if (entry.refCount <= 0) {
+    poolRegistry.delete(connectionString);
+    // The pg.Pool was handed to Prisma as an "external pool", which Prisma's
+    // adapter never closes on $disconnect() (it assumes the caller owns the
+    // pool's lifecycle) — so ending it here is the only thing that actually
+    // releases these TCP connections.
+    void entry.pool.end().catch(() => {});
+  }
+}
+
 /**
  * Prisma Service
  * 
@@ -33,6 +78,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   private readonly slowQueryThresholdMs: number;
   private readonly enablePoolMetrics: boolean;
   private readonly clientRole: 'primary' | 'replica' | 'primary_fallback';
+  private readonly connectionStringKey: string;
+  private readonly poolReused: boolean;
   private poolMetricsInterval?: NodeJS.Timeout;
 
   constructor(
@@ -59,13 +106,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       connectionTimeoutMillis: poolConnectionTimeoutMs,
     };
 
-    const pool = new Pool({
-      connectionString,
-      max: poolConfig.max,
-      min: poolConfig.min,
-      idleTimeoutMillis: poolConfig.idleTimeoutMillis,
-      connectionTimeoutMillis: poolConfig.connectionTimeoutMillis,
-    });
+    const connectionStringKey = connectionString ?? '';
+    const { pool, reused } = acquirePool(connectionStringKey, poolConfig);
     const adapter = new PrismaPg(pool);
 
     super({
@@ -80,6 +122,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     this.slowQueryThresholdMs = parseNumberEnv('PRISMA_SLOW_QUERY_MS', 250);
     this.enablePoolMetrics = options.enablePoolMetrics ?? true;
     this.clientRole = options.clientRole ?? 'primary';
+    this.connectionStringKey = connectionStringKey;
+    this.poolReused = reused;
   }
 
 
@@ -90,7 +134,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     await this.$connect();
 
     this.logger.log(
-      `Prisma pool configured (role=${this.clientRole}, max=${this.poolConfig.max}, min=${this.poolConfig.min}, idleTimeoutMs=${this.poolConfig.idleTimeoutMillis}, connectionTimeoutMs=${this.poolConfig.connectionTimeoutMillis}, slowQueryMs=${this.slowQueryThresholdMs})`,
+      `Prisma pool ${this.poolReused ? 'reused' : 'configured'} (role=${this.clientRole}, max=${this.poolConfig.max}, min=${this.poolConfig.min}, idleTimeoutMs=${this.poolConfig.idleTimeoutMillis}, connectionTimeoutMs=${this.poolConfig.connectionTimeoutMillis}, slowQueryMs=${this.slowQueryThresholdMs})`,
     );
 
     if (this.enablePoolMetrics) {
@@ -238,6 +282,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       clearInterval(this.poolMetricsInterval);
     }
     await this.$disconnect();
+    releasePool(this.connectionStringKey);
   }
 
   /**
