@@ -8,6 +8,8 @@
 // query, guidebook resolution and status/date mapping a second time.
 import { Prisma, ProgramResource } from '@prisma/client';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 import { ACTIVE_PROGRAM_ORDER_BY } from '@shared/utils/active-program-resolver';
 
@@ -68,13 +70,51 @@ export type OpenRegistrationProgram = Prisma.ProgramGetPayload<{
   include: typeof OPEN_REGISTRATION_PROGRAMS_INCLUDE;
 }>;
 
+/** Redis round-trips a cached array through JSON, turning Date fields into
+ * ISO strings. Every consumer of fetchOpenRegistrationPrograms either
+ * compares these dates (editionStatus) or calls .toISOString() on them
+ * (buildRegistrationEditions), so they must come back as real Date objects
+ * regardless of whether the array just arrived from cache or from Prisma. */
+function reviveProgramDates(programs: OpenRegistrationProgram[]): OpenRegistrationProgram[] {
+  // Falsy values (null, or undefined on a fixture that omits the field)
+  // pass through unchanged — only a truthy value (a real Date, or a string
+  // if this came back from a Redis round-trip) gets rebuilt into a Date.
+  const toDate = (value: unknown) => (value ? new Date(value as string | number | Date) : value);
+  return programs.map((program) => ({
+    ...program,
+    registrationOpenDate: toDate(program.registrationOpenDate) as Date | null,
+    registrationCloseDate: toDate(program.registrationCloseDate) as Date | null,
+    startDate: toDate(program.startDate) as Date,
+    endDate: toDate(program.endDate) as Date,
+  }));
+}
+
 /** Every currently-relevant edition for a brand: filtered on close date only
  * (not open date) so an edition whose registration hasn't opened yet still
  * shows up as (closed) instead of vanishing. Ordered soonest-close-first,
  * nulls (no bound) last, tie-broken with the same ordering
- * active-program-resolver.ts uses everywhere else. */
-export function fetchOpenRegistrationPrograms(prisma: PrismaService, brandId: string, now: Date) {
-  return prisma.program.findMany({
+ * active-program-resolver.ts uses everywhere else.
+ *
+ * Cached per-brand for CACHE_TTL.SHORT (60s): this is the query that used to
+ * run uncached on every /landing/programs request (resolveEditionSlug needs
+ * it to compute the snapshot cache key, before the snapshot cache itself is
+ * checked) plus again in home/programs strategy builders. Registration
+ * windows don't need per-request freshness, so a stale-by-up-to-60s edition
+ * list is an accepted tradeoff — `now` is intentionally NOT part of the
+ * cache key. */
+export async function fetchOpenRegistrationPrograms(
+  prisma: PrismaService,
+  cache: CacheService,
+  brandId: string,
+  now: Date,
+): Promise<OpenRegistrationProgram[]> {
+  const cacheKey = CACHE_KEYS.LANDING_OPEN_REGISTRATION_PROGRAMS(brandId);
+  const cached = await cache.get<OpenRegistrationProgram[]>(cacheKey);
+  if (cached) {
+    return reviveProgramDates(cached);
+  }
+
+  const programs = await prisma.program.findMany({
     where: {
       brandId,
       deletedAt: null,
@@ -86,6 +126,9 @@ export function fetchOpenRegistrationPrograms(prisma: PrismaService, brandId: st
     orderBy: [{ registrationCloseDate: { sort: 'asc', nulls: 'last' } }, ...ACTIVE_PROGRAM_ORDER_BY],
     include: OPEN_REGISTRATION_PROGRAMS_INCLUDE,
   });
+
+  await cache.set(cacheKey, programs, CACHE_TTL.SHORT);
+  return reviveProgramDates(programs);
 }
 
 export async function resolveEditionGuidebooks(prisma: PrismaService, resources: ProgramResource[]) {
@@ -170,11 +213,12 @@ export async function buildRegistrationEditions(
  * default. */
 export async function resolveEditionSlug(
   prisma: PrismaService,
+  cache: CacheService,
   brandId: string,
   requestedSlug: string | undefined,
   now: Date,
 ): Promise<string | null> {
-  const editions = await fetchOpenRegistrationPrograms(prisma, brandId, now);
+  const editions = await fetchOpenRegistrationPrograms(prisma, cache, brandId, now);
   if (editions.length === 0) return null;
 
   if (requestedSlug) {

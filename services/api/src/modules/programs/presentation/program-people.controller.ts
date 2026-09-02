@@ -51,6 +51,7 @@ import {
   CreateProgramTeamHandler, UpdateProgramTeamHandler, DeleteProgramTeamHandler,
   CreateProgramPartnerHandler, UpdateProgramPartnerHandler, DeleteProgramPartnerHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
+import { multerLimits } from '@common/constants';
 
 @ApiTags('Program People')
 @Controller('programs')
@@ -85,7 +86,7 @@ export class ProgramPeopleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add speaker' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('photo'))
+  @UseInterceptors(FileInterceptor('photo', multerLimits()))
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addSpeaker(
     @Param('id') programId: string, 
@@ -102,7 +103,7 @@ export class ProgramPeopleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update speaker' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('photo'))
+  @UseInterceptors(FileInterceptor('photo', multerLimits()))
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateSpeaker(
     @Param('itemId') itemId: string, 
@@ -138,7 +139,7 @@ export class ProgramPeopleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add team member' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('photo'))
+  @UseInterceptors(FileInterceptor('photo', multerLimits()))
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addTeam(
     @Param('id') programId: string, 
@@ -155,7 +156,7 @@ export class ProgramPeopleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update team member' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('photo'))
+  @UseInterceptors(FileInterceptor('photo', multerLimits()))
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateTeam(
     @Param('itemId') itemId: string, 
@@ -191,7 +192,7 @@ export class ProgramPeopleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add partner' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('logo'))
+  @UseInterceptors(FileInterceptor('logo', multerLimits()))
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addPartner(
     @Param('id') programId: string, 
@@ -208,7 +209,7 @@ export class ProgramPeopleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update partner' })
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('logo'))
+  @UseInterceptors(FileInterceptor('logo', multerLimits()))
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updatePartner(
     @Param('itemId') itemId: string, 

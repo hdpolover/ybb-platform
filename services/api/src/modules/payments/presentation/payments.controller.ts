@@ -15,13 +15,10 @@ import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.de
 import { ListUserPaymentsQuery } from '../application/queries/list-user-payments.query';
 import { GetPaymentDetailQuery } from '../application/queries/get-payment-detail.query';
 import { PaymentResponseDto } from './dto/payment.dto';
-import { CreateIntentDto } from './dto/create-intent.dto';
 import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
-import { CreateIntentCommand } from '../application/commands/create-intent.command';
 import { ProcessPaymentCommand } from '../application/commands/process-payment.command';
 import { PaymentGrpcClient } from '../infrastructure/services/payment-grpc.client';
 import {
-    CreateIntentResponse,
     ProcessPaymentResponse,
     GetPaymentMethodsResponse,
 } from '../common/proto/payment.interface';
@@ -36,17 +33,6 @@ export class PaymentsController {
         private readonly queryBus: QueryBus,
         private readonly paymentClient: PaymentGrpcClient,
     ) { }
-
-    @Post('intents')
-    @ApiOperation({ summary: 'Create payment intent' })
-    @ApiResponse({ status: 201, description: 'Intent created' })
-    async createIntent(
-        @Body() dto: CreateIntentDto,
-        @CurrentUser() user: CurrentUserData,
-    ): Promise<CreateIntentResponse> {
-        if (!user?.userId) throw new UnauthorizedException();
-        return this.commandBus.execute(new CreateIntentCommand(user.userId, dto));
-    }
 
     @Post('intents/:id/confirm')
     @ApiOperation({ summary: 'Confirm payment (charge)' })

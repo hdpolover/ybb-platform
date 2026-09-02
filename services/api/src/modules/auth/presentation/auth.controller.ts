@@ -15,6 +15,8 @@ import { AdminAuthResponseDto } from './dto/admin-auth-response.dto'; // [NEW]
 import { UserProfileDto } from './dto/user-profile.dto';
 import { AdminLoginDto } from './dto/admin-login.dto'; // [NEW]
 import { AdminRefreshDto } from './dto/admin-refresh.dto';
+import { LinkLocalIdentityDto } from './dto/link-local-identity.dto';
+import { LinkLocalIdentityResponseDto } from './dto/link-local-identity-response.dto';
 import { LoginHandler } from '../application/commands/handlers/login.handler';
 import { AdminLoginHandler } from '../application/commands/handlers/admin-login.handler'; // [NEW]
 import { AdminRefreshHandler } from '../application/commands/handlers/admin-refresh.handler';
@@ -26,6 +28,7 @@ import { ResetPasswordHandler } from '../application/commands/handlers/reset-pas
 import { VerifyEmailHandler } from '../application/commands/handlers/verify-email.handler';
 import { ResendVerificationEmailHandler } from '../application/commands/handlers/resend-verification-email.handler';
 import { FirebaseLoginHandler } from '../application/commands/handlers/firebase-login.handler';
+import { LinkLocalIdentityHandler } from '../application/commands/handlers/link-local-identity.handler';
 import { GetUserProfileHandler } from '../application/queries/handlers/get-user-profile.handler';
 import { GetAuthProvidersHandler } from '../application/queries/handlers/get-auth-providers.handler';
 import { GetAuthContextHandler } from '../application/queries/handlers/get-auth-context.handler';
@@ -39,6 +42,7 @@ import { ResetPasswordCommand } from '../application/commands/reset-password.com
 import { VerifyEmailCommand } from '../application/commands/verify-email.command';
 import { ResendVerificationEmailCommand } from '../application/commands/resend-verification-email.command';
 import { FirebaseLoginCommand } from '../application/commands/firebase-login.command';
+import { LinkLocalIdentityCommand } from '../application/commands/link-local-identity.command';
 import { AmbassadorLoginCommand } from '../application/commands/ambassador-login.command';
 import { AmbassadorLoginDto } from './dto/ambassador-login.dto';
 import { AmbassadorLoginHandler } from '../application/commands/handlers/ambassador-login.handler';
@@ -72,6 +76,7 @@ export class AuthController {
     private readonly verifyEmailHandler: VerifyEmailHandler,
     private readonly resendVerificationEmailHandler: ResendVerificationEmailHandler,
     private readonly firebaseLoginHandler: FirebaseLoginHandler,
+    private readonly linkLocalIdentityHandler: LinkLocalIdentityHandler,
     private readonly getUserProfileHandler: GetUserProfileHandler,
     private readonly getAuthProvidersHandler: GetAuthProvidersHandler,
     private readonly getAuthContextHandler: GetAuthContextHandler,
@@ -315,6 +320,22 @@ export class AuthController {
 
     const command = new LogoutCommand(user.userId, user.jti, user.exp, user.sid);
     return this.logoutHandler.execute(command);
+  }
+
+  @Post('identities/local')
+  @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { limit: 5, ttl: 3600000 } }) // 5 per hour per user
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Add Email & Password Sign-in to the Current Account' })
+  @ApiResponse({ status: 201, description: 'Local sign-in added', type: LinkLocalIdentityResponseDto })
+  @ApiResponse({ status: 409, description: 'Local sign-in is already configured' })
+  async linkLocalIdentity(
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: LinkLocalIdentityDto,
+  ): Promise<LinkLocalIdentityResponseDto> {
+    const command = new LinkLocalIdentityCommand(user.userId, dto.password);
+    return this.linkLocalIdentityHandler.execute(command);
   }
 
   @Get('me')

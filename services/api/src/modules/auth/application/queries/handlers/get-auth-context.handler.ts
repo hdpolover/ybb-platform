@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { activeProgramQuery, openRegistrationProgramQuery } from '../../../../../shared/utils/active-program-resolver';
 import { GetAuthContextQuery } from '../get-auth-context.query';
 import { AuthContextResponseDto } from '../../../presentation/dto/auth-context.dto';
+import { fetchActiveAuthProviders } from './active-auth-providers.util';
 
 /**
  * Resolves the auth context (brand + active program + local provider) needed by
@@ -12,24 +14,15 @@ import { AuthContextResponseDto } from '../../../presentation/dto/auth-context.d
  */
 @Injectable()
 export class GetAuthContextHandler {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) {}
 
     async execute(query: GetAuthContextQuery): Promise<AuthContextResponseDto> {
         const brandDomain = (query.brandDomain ?? '').trim().toLowerCase();
 
-        const providers = await this.prisma.authProvider.findMany({
-            where: { isActive: true },
-            select: {
-                id: true,
-                name: true,
-                displayName: true,
-                description: true,
-                isOAuth: true,
-                icon: true,
-                buttonColor: true,
-            },
-            orderBy: { order: 'asc' },
-        });
+        const providers = await fetchActiveAuthProviders(this.prisma, this.cacheService);
 
         const localProviderId = providers.find(p => p.name === 'local')?.id ?? null;
 

@@ -108,7 +108,7 @@ export class ProgramsStrategy implements ILandingPageStrategy {
         // pickDefaultEditionIndex); no open editions at all falls back to
         // today's newest-by-year behaviour so nothing regresses.
         const now = new Date();
-        const openRegistrationPrograms = await fetchOpenRegistrationPrograms(this.prisma, brand.id, now);
+        const openRegistrationPrograms = await fetchOpenRegistrationPrograms(this.prisma, this.cacheService, brand.id, now);
         const registrationEditions = await buildRegistrationEditions(this.prisma, openRegistrationPrograms, now);
         const targetEdition = resolveTargetEdition(registrationEditions, editionSlug);
 

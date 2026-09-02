@@ -38,6 +38,7 @@ import { UpdateProgramPaymentInfoDto, UpdateProgramPartnersCanvaUrlDto } from '.
 import { UpdateProgramPaymentInfoCommand, UpdateProgramContactCommand, UpdateProgramPartnersCanvaUrlCommand, UpdateProgramLandingContentCommand } from '../application/commands/program-content.commands';
 import { UpdateProgramContactDto } from './dto/update-program-contact.dto';
 import { UpdateProgramLandingContentDto } from './dto/update-program-landing-content.dto';
+import { multerLimits } from '@common/constants';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string; email: string; brandId: string };
@@ -309,7 +310,7 @@ export class ProgramsController {
     { name: 'logo', maxCount: 1 },
     { name: 'banner', maxCount: 1 },
     { name: 'thumbnail', maxCount: 1 },
-  ]))
+  ], multerLimits(3)))
   async updateBranding(
     @Param('id') id: string,
     @Body() dto: UploadProgramBrandingDto,

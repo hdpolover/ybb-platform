@@ -23,6 +23,11 @@ function makeRmqContext(): RmqContext {
 
 describe('PaymentEventsController — idempotency on redelivered event', () => {
     let controller: PaymentEventsController;
+    let mockPrisma: {
+        participantApplication: { findUnique: jest.Mock; update: jest.Mock };
+        applicationInvoice: { findUnique: jest.Mock; findFirst: jest.Mock; update: jest.Mock };
+        $transaction: jest.Mock;
+    };
     let fakeTx: {
         participantApplication: { update: jest.Mock };
         applicationInvoice: {
@@ -52,7 +57,7 @@ describe('PaymentEventsController — idempotency on redelivered event', () => {
             ),
         };
 
-        const mockPrisma = {
+        mockPrisma = {
             participantApplication: {
                 findUnique: jest.fn().mockResolvedValue({
                     id: 'app-1',
@@ -64,7 +69,14 @@ describe('PaymentEventsController — idempotency on redelivered event', () => {
                 update: jest.fn().mockResolvedValue({}),
             },
             applicationInvoice: {
-                findUnique: jest.fn().mockResolvedValue(null),
+                // Invoice named by metadata.invoice_id: belongs to app-1 and owes
+                // exactly what the test payloads settle, so the ownership/amount
+                // guard in handlePaymentSucceeded lets them through.
+                findUnique: jest.fn().mockResolvedValue({
+                    applicationId: 'app-1',
+                    amount: 500000,
+                    currency: 'IDR',
+                }),
                 findFirst: jest.fn().mockResolvedValue(null),
                 update: jest.fn().mockResolvedValue({ id: 'inv-existing' }),
             },
@@ -250,6 +262,73 @@ describe('PaymentEventsController — idempotency on redelivered event', () => {
                     data: expect.objectContaining({ paymentMethod: null }),
                 }),
             );
+        });
+    });
+    describe('handlePaymentSucceeded — invoice must match the event before anything is marked paid', () => {
+        const payloadFor = (overrides: Record<string, unknown>) => ({
+            email: 'john@example.com',
+            amount: 500000,
+            currency: 'IDR',
+            transaction_id: 'txn-guard',
+            payment_id: 'txn-guard',
+            metadata: {
+                application_id: 'app-1',
+                invoice_id: 'inv-existing',
+                customer_name: 'John Doe',
+            },
+            ...overrides,
+        });
+
+        it('skips the paid transition when the invoice belongs to a different application', async () => {
+            mockPrisma.applicationInvoice.findUnique.mockResolvedValue({
+                applicationId: 'someone-elses-app',
+                amount: 500000,
+                currency: 'IDR',
+            });
+
+            await controller.handlePaymentSucceeded(payloadFor({}) as any, makeRmqContext());
+
+            expect(fakeTx.participantApplication.update).not.toHaveBeenCalled();
+            expect(fakeTx.applicationInvoice.update).not.toHaveBeenCalled();
+            expect(fakeTx.applicationInvoice.create).not.toHaveBeenCalled();
+        });
+
+        it('skips the paid transition when the settled amount does not cover the invoice', async () => {
+            mockPrisma.applicationInvoice.findUnique.mockResolvedValue({
+                applicationId: 'app-1',
+                amount: 500000,
+                currency: 'IDR',
+            });
+
+            await controller.handlePaymentSucceeded(payloadFor({ amount: 1 }) as any, makeRmqContext());
+
+            expect(fakeTx.participantApplication.update).not.toHaveBeenCalled();
+            expect(fakeTx.applicationInvoice.update).not.toHaveBeenCalled();
+            expect(fakeTx.applicationInvoice.create).not.toHaveBeenCalled();
+        });
+
+        it('skips the paid transition when the event carries no amount at all', async () => {
+            mockPrisma.applicationInvoice.findUnique.mockResolvedValue({
+                applicationId: 'app-1',
+                amount: 500000,
+                currency: 'IDR',
+            });
+
+            await controller.handlePaymentSucceeded(payloadFor({ amount: undefined }) as any, makeRmqContext());
+
+            expect(fakeTx.participantApplication.update).not.toHaveBeenCalled();
+        });
+
+        it('skips the paid transition when the settled currency differs from the invoice currency', async () => {
+            mockPrisma.applicationInvoice.findUnique.mockResolvedValue({
+                applicationId: 'app-1',
+                amount: 500000,
+                currency: 'USD',
+            });
+
+            await controller.handlePaymentSucceeded(payloadFor({}) as any, makeRmqContext());
+
+            expect(fakeTx.participantApplication.update).not.toHaveBeenCalled();
         });
     });
 });

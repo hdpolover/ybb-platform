@@ -16,8 +16,11 @@ import { LandingActivityResponseDto } from './dto/landing-activity.dto';
 import { LandingSnapshotService } from './services/landing-snapshot.service';
 import { resolveEditionSlug } from './strategies/registration-editions.util';
 import { ListAnnouncementsQueryDto } from './dto/landing-announcements-query.dto';
+import { CacheService } from '../../shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '../../shared/constants/cache-keys';
 
 const DEFAULT_FAQ_LIMIT = 200;
+const DEFAULT_BRAND_CACHE_KEY = '__default__';
 
 @Injectable()
 export class LandingService {
@@ -34,12 +37,32 @@ export class LandingService {
     private readonly faqsStrategy: FaqsStrategy,
     private readonly activityStrategy: ActivityStrategy,
     private readonly landingSnapshotService: LandingSnapshotService,
+    private readonly cacheService: CacheService,
   ) { }
 
   // Public: reused by the Meta CAPI module (MetaCapiService) to resolve a brand
   // by its request Origin/Referer host without duplicating brand-by-domain
   // lookup logic.
+  //
+  // Cached for CACHE_TTL.MEDIUM (5 min) — this ran 1-2 uncached brand
+  // queries on EVERY /landing/* request, ahead of the snapshot cache check.
+  // Only a resolved brand is cached; the not-found path always hits the DB
+  // so a newly-added brand domain doesn't have to wait out a stale miss.
   async resolveBrand(url?: string): Promise<Brand | null> {
+    const cacheKey = CACHE_KEYS.LANDING_BRAND_RESOLVE(url ? url.trim().toLowerCase() : DEFAULT_BRAND_CACHE_KEY);
+    const cached = await this.cacheService.get<Brand>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const brand = await this.resolveBrandUncached(url);
+    if (brand) {
+      await this.cacheService.set(cacheKey, brand, CACHE_TTL.MEDIUM);
+    }
+    return brand;
+  }
+
+  private async resolveBrandUncached(url?: string): Promise<Brand | null> {
     if (!url) {
       // Return default active brand if no URL specified, likely the main YBB one
       return this.prisma.brand.findFirst({
@@ -124,7 +147,7 @@ export class LandingService {
       // mix up two editions' pages (see MEYS 6th/7th concurrent-active-
       // programs bug). `programsStrategy.getData` re-resolves the same slug
       // from the same DB state internally to build the actual payload.
-      const resolvedEditionSlug = await resolveEditionSlug(this.prisma, brand.id, edition, new Date());
+      const resolvedEditionSlug = await resolveEditionSlug(this.prisma, this.cacheService, brand.id, edition, new Date());
       return this.landingSnapshotService.getOrBuildProgramsSnapshot(
         brand,
         resolvedEditionSlug,
