@@ -14,13 +14,22 @@ export class ResetPasswordHandler {
   async execute(command: ResetPasswordCommand): Promise<{ message: string }> {
     const { token, newPassword } = command;
 
-    // Find user with valid token
+    // Find user with valid token.
+    //
+    // isActive/deletedAt are part of the lookup, not a later branch: a revoked
+    // account must not be able to consume a reset token at all. isActive:false
+    // is only ever set deliberately — admin deactivate, admin delete, or an
+    // APPROVED account-deletion request pending its 30-day purge. The error
+    // below is deliberately the same one an unknown token gets, so this leaks
+    // nothing about which accounts are deactivated.
     const user = await this.prisma.user.findFirst({
       where: {
         passwordResetToken: token,
         passwordResetExpires: {
           gt: new Date(), // Token must not be expired
         },
+        isActive: true,
+        deletedAt: null,
       },
     });
 
@@ -32,7 +41,14 @@ export class ResetPasswordHandler {
     const salt = await bcrypt.genSalt();
     const passwordHash = await bcrypt.hash(newPassword, salt);
 
-    // Update user: set new password, clear reset token/expiry
+    // Update user: set new password, clear reset token/expiry.
+    //
+    // This used to also set isActive: true, which let anyone with inbox access
+    // to a deactivated account undo the deactivation through an unauthenticated
+    // self-service flow — including an account an admin had already approved
+    // for deletion, which came back live while the request row still read
+    // "approved". Reactivation is a deliberate admin action with its own
+    // endpoint (PATCH /users/:id/activate); it does not belong here.
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
@@ -40,9 +56,16 @@ export class ResetPasswordHandler {
         passwordResetToken: null,
         passwordResetExpires: null,
         lastPasswordChange: new Date(),
-        // Also ensure user is active if they reset password
-        isActive: true, 
       },
+    });
+
+    // A password reset means the old credential is presumed compromised, so
+    // every session it authorised has to go. This kills the 7-day refresh
+    // tokens, which is what actually matters: access tokens cannot be revoked
+    // retroactively (their jti is never persisted) and die at their own TTL.
+    await this.prisma.userSession.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { isActive: false, revokedAt: new Date() },
     });
 
     await this.authLoggingService.logPasswordReset(

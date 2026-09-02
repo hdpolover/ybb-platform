@@ -145,6 +145,29 @@ describe('ForgotPasswordHandler - account enumeration hardening', () => {
     );
   });
 
+  it('scopes the lookup to active, non-deleted accounts so no reset mail reaches a deactivated one', async () => {
+    // isActive: false is only ever set deliberately — admin deactivate, admin
+    // delete, or an APPROVED account-deletion request. ResetPasswordHandler
+    // refuses those tokens, so mailing one would only send a dead link to an
+    // account someone deliberately revoked. Filtering here means the miss path
+    // runs instead, and the miss path is byte-identical to the hit path, so
+    // this stays enumeration-safe.
+    mockPrismaService.user.findFirst.mockResolvedValue(null);
+    const command = new ForgotPasswordCommand('deactivated@example.com', 'brand-id-123');
+
+    const result = await handler.execute(command);
+
+    expect(mockPrismaService.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ isActive: true, deletedAt: null }),
+      }),
+    );
+    expect(mockRabbitmqProducer.emit).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      message: 'A password reset link has been sent to your email.',
+    });
+  });
+
   it('logs a warning server-side when the account does not exist', async () => {
     // Arrange
     mockPrismaService.user.findFirst.mockResolvedValue(null);

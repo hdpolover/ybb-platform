@@ -82,6 +82,12 @@ export class ForgotPasswordHandler {
                 email: { equals: command.email, mode: 'insensitive' },
                 brandId: brandId,
                 deletedAt: null,
+                // Deactivated accounts get no reset mail. ResetPasswordHandler
+                // refuses their tokens anyway, so sending one would only mail a
+                // dead link to someone whose account an admin deactivated or
+                // approved for deletion. The response below is unchanged either
+                // way, so this stays enumeration-safe.
+                isActive: true,
             },
             orderBy: { createdAt: 'asc' },
         });
