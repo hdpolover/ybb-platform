@@ -1,8 +1,10 @@
 """PDF document generation service."""
 # type: ignore
 import html
+import os
 import re
 from typing import Dict, Any, Optional
+from urllib.parse import urlsplit
 from reportlab.lib.pagesizes import letter, A4  # type: ignore
 from reportlab.lib.units import inch  # type: ignore
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ignore
@@ -573,6 +575,47 @@ def _build_loa_html_document(
     return full_html
 
 
+def _pdf_url_allowlist() -> set:
+    """Hostnames the WeasyPrint renderer may fetch over http(s).
+
+    Built from the same env vars the service already uses to talk to its
+    neighbors, not a new config surface: the file service's own public URL,
+    the API, and the CDN/object storage host.
+    """
+    hosts = set()
+    for env_var in ("FILE_SERVICE_URL", "FILE_SERVICE_PUBLIC_URL", "API_URL", "MINIO_PUBLIC_ENDPOINT", "MINIO_ENDPOINT"):
+        value = os.getenv(env_var, "").strip()
+        if not value:
+            continue
+        # MINIO_* vars are a bare host[:port], not a full URL.
+        netloc = urlsplit(value).netloc or value
+        host = netloc.rsplit("@", 1)[-1].split(":", 1)[0].lower()
+        if host:
+            hosts.add(host)
+    return hosts
+
+
+def _safe_pdf_url_fetcher(url: str):
+    """WeasyPrint url_fetcher that blocks file:// reads and SSRF to non-allowlisted hosts.
+
+    Caller-supplied HTML (LOA body, receipt data) can embed <img src="...">
+    or CSS url()s. WeasyPrint's default fetcher will happily open file://
+    paths or reach internal-network hosts, so every scheme but data: and
+    http(s) to a known host is rejected before falling back to the default.
+    """
+    import weasyprint  # type: ignore
+
+    scheme = urlsplit(url).scheme.lower()
+    if scheme == "data":
+        return weasyprint.default_url_fetcher(url)
+    if scheme not in ("http", "https"):
+        raise ValueError(f"Blocked unsupported URL scheme in PDF source: {scheme!r}")
+    host = (urlsplit(url).hostname or "").lower()
+    if host not in _pdf_url_allowlist():
+        raise ValueError(f"Blocked URL host not in allowlist: {host!r}")
+    return weasyprint.default_url_fetcher(url)
+
+
 def generate_loa_sync(
     html_content: str,
     header_html: str,
@@ -611,7 +654,7 @@ def generate_loa_sync(
         show_generated_date=show_generated_date,
         program_name=program_name,
     )
-    return HTML(string=full_html).write_pdf()
+    return HTML(string=full_html, url_fetcher=_safe_pdf_url_fetcher).write_pdf()
 
 
 # ---------------------------------------------------------------------------
@@ -925,7 +968,7 @@ def generate_receipt_weasy_sync(payload: Dict[str, Any]) -> bytes:
 </body>
 </html>"""
 
-    return HTML(string=full_html).write_pdf()
+    return HTML(string=full_html, url_fetcher=_safe_pdf_url_fetcher).write_pdf()
 
 
 class PDFGeneratorService:
