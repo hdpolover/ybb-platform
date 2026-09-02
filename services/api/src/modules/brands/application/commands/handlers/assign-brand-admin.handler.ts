@@ -24,7 +24,8 @@ export class AssignBrandAdminHandler implements ICommandHandler<AssignBrandAdmin
                 adminId: command.adminId,
                 brandId: command.brandId,
                 roleInBrand: command.roleInBrand ?? 'admin',
-                permissions: command.permissions ?? [],
+                // permissions are managed through the admin roles flow, never client-supplied here
+                permissions: [],
                 assignedBy: command.assignedBy,
             },
             include: {
