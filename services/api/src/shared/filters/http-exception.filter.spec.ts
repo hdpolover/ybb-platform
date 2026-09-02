@@ -1,4 +1,5 @@
 import { ArgumentsHost, BadRequestException, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { HttpExceptionFilter } from './http-exception.filter';
 
 describe('HttpExceptionFilter', () => {
@@ -252,5 +253,213 @@ describe('HttpExceptionFilter', () => {
     const [line] = errorSpy.mock.calls[0];
     expect(line).toContain('500');
     expect(line).toContain('Unexpected failure');
+  });
+
+  // --- Prisma error mapping (M87) -------------------------------------------
+  // Constructed with the same shapes verified against a real Postgres in
+  // upsert-scoring-rubric.handler.spec.ts: adapter-pg populates
+  // meta.driverAdapterError.cause, leaves meta.target undefined, and always
+  // carries the raw text in the message.
+  const makeKnown = (
+    code: string,
+    message: string,
+    meta?: Record<string, unknown>,
+  ): Prisma.PrismaClientKnownRequestError =>
+    new Prisma.PrismaClientKnownRequestError(message, {
+      code,
+      clientVersion: 'test',
+      ...(meta ? { meta } : {}),
+    });
+
+  const PRISMA_RAW = 'Invalid `prisma.user.create()` invocation:\n\nUnique constraint failed';
+
+  it('maps a P2002 with the adapter-pg constraint.fields shape to 409 naming the column', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/auth/register' });
+
+    filter.catch(
+      makeKnown('P2002', PRISMA_RAW, {
+        driverAdapterError: { cause: { constraint: { fields: ['email'] } } },
+      }),
+      host,
+    );
+
+    expect(statusMock).toHaveBeenCalledWith(409);
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).toEqual(
+      expect.objectContaining({
+        statusCode: 409,
+        message: 'A record with this email already exists.',
+        errorCode: 'DUPLICATE_RECORD',
+      }),
+    );
+    expect(JSON.stringify(body)).not.toContain('prisma.user.create');
+  });
+
+  it('maps a P2002 with the meta.target array shape to 409', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/programs/1/rubric' });
+
+    filter.catch(
+      makeKnown('P2002', 'Unique constraint failed', {
+        target: ['program_id', 'stage'],
+      }),
+      host,
+    );
+
+    expect(statusMock).toHaveBeenCalledWith(409);
+    expect(jsonMock.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        message: 'A record with these values already exists (program_id, stage).',
+        errorCode: 'DUPLICATE_RECORD',
+      }),
+    );
+  });
+
+  it('falls back to a field-less 409 message when a P2002 carries no extractable fields', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/programs' });
+
+    filter.catch(makeKnown('P2002', 'Unique constraint failed', {}), host);
+
+    expect(statusMock).toHaveBeenCalledWith(409);
+    expect(jsonMock.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        message: 'A record with these values already exists.',
+        errorCode: 'DUPLICATE_RECORD',
+      }),
+    );
+  });
+
+  it('maps P2025 to 404 RECORD_NOT_FOUND without echoing Prisma meta', () => {
+    const host = makeHost({ method: 'PATCH', url: '/v1/programs/1' });
+
+    filter.catch(
+      makeKnown('P2025', 'An operation failed because it depends on one or more records that were required but not found.', {
+        modelName: 'Program',
+        operation: 'an update',
+      }),
+      host,
+    );
+
+    expect(statusMock).toHaveBeenCalledWith(404);
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).toEqual(
+      expect.objectContaining({
+        statusCode: 404,
+        message: 'The requested record no longer exists.',
+        errorCode: 'RECORD_NOT_FOUND',
+      }),
+    );
+    expect(JSON.stringify(body)).not.toContain('an update');
+  });
+
+  it('maps P2000 to 400 VALUE_TOO_LONG, naming the column when the driver supplies it', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/participants' });
+
+    filter.catch(
+      makeKnown('P2000', 'The provided value for the column is too long', {
+        driverAdapterError: {
+          cause: {
+            originalMessage: 'value too long for type character varying(50)',
+            column: 'institution',
+          },
+        },
+      }),
+      host,
+    );
+
+    expect(statusMock).toHaveBeenCalledWith(400);
+    expect(jsonMock.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        message: 'The value provided for institution is too long.',
+        errorCode: 'VALUE_TOO_LONG',
+      }),
+    );
+  });
+
+  it('maps P2000 to a column-less 400 when Postgres supplies no column (the real 22001 case)', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/participants' });
+
+    filter.catch(
+      makeKnown('P2000', 'The provided value for the column is too long', {
+        driverAdapterError: {
+          cause: { originalMessage: 'value too long for type character varying(50)' },
+        },
+      }),
+      host,
+    );
+
+    expect(statusMock).toHaveBeenCalledWith(400);
+    expect(jsonMock.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        message: 'One of the provided values is too long.',
+        errorCode: 'VALUE_TOO_LONG',
+      }),
+    );
+  });
+
+  it('maps P2024 to 503 and logs via error (with stack), not warn', () => {
+    const host = makeHost({ method: 'GET', url: '/v1/programs' });
+
+    filter.catch(makeKnown('P2024', 'Timed out fetching a new connection from the pool'), host);
+
+    expect(statusMock).toHaveBeenCalledWith(503);
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [line, stack] = errorSpy.mock.calls[0];
+    expect(line).toContain('503');
+    expect(line).toContain('P2024');
+    expect(stack).toBeDefined();
+    expect(jsonMock.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ statusCode: 503, errorCode: 'DATABASE_UNAVAILABLE' }),
+    );
+  });
+
+  it('leaves an unmapped Prisma code (P2016) as the existing 500 behavior', () => {
+    const host = makeHost({ method: 'GET', url: '/v1/programs' });
+
+    filter.catch(makeKnown('P2016', 'Query interpretation error'), host);
+
+    expect(statusMock).toHaveBeenCalledWith(500);
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).not.toHaveProperty('errorCode');
+  });
+
+  it('leaves PrismaClientValidationError (a developer bug) as a 500', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/programs' });
+
+    filter.catch(
+      new Prisma.PrismaClientValidationError('Argument `where` is missing', {
+        clientVersion: 'test',
+      }),
+      host,
+    );
+
+    expect(statusMock).toHaveBeenCalledWith(500);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('puts the Prisma code in the 4xx warn line but never in the JSON body', () => {
+    const host = makeHost({
+      method: 'POST',
+      url: '/v1/auth/register',
+      user: { userId: 'user-9' },
+    });
+
+    filter.catch(
+      makeKnown('P2002', PRISMA_RAW, {
+        driverAdapterError: { cause: { constraint: { fields: ['email'] } } },
+      }),
+      host,
+    );
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    const [line] = warnSpy.mock.calls[0];
+    expect(line).toContain('P2002');
+    expect(line).toContain('prisma.user.create');
+    expect(line).toContain('user-9');
+
+    const [body] = jsonMock.mock.calls[0];
+    expect(JSON.stringify(body)).not.toContain('P2002');
   });
 });
