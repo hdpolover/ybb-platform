@@ -81,6 +81,34 @@ services:
       retries: 10
       start_period: 30s
 
+  # Daily local dump of postgres-file into the postgres_file_backups volume
+  # on this VPS (7 daily / 4 weekly / 3 monthly, pruned by the image itself).
+  # This is on-host only, not off-site. To add off-site sync later, point an
+  # AWS_* / rclone sidecar at this same named volume, or swap this image for
+  # one with S3 upload support (e.g. set AWS_S3_BUCKET/AWS_ACCESS_KEY_ID/etc
+  # if a fork with S3 support is adopted).
+  postgres-file-backup:
+    image: prodrigestivill/postgres-backup-local:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: ybb-prod-postgres-file
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_EXTRA_OPTS: "-Z6 --schema=public --blobs"
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 3
+      HEALTHCHECK_PORT: 8080
+    volumes:
+      - postgres_file_backups:/backups
+    depends_on:
+      postgres-file:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+
 networks:
   dokploy-network:
     external: true
@@ -88,3 +116,4 @@ networks:
 volumes:
   postgres_file_data_prod:
   filestash_data:
+  postgres_file_backups:
