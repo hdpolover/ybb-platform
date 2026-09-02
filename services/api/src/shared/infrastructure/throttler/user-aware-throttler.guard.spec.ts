@@ -1,4 +1,4 @@
-import { UserAwareThrottlerGuard } from './user-aware-throttler.guard';
+import { clientIpTracker, emailTracker, UserAwareThrottlerGuard } from './user-aware-throttler.guard';
 
 // getTracker is protected; the tests exercise it the way the guard does.
 type TrackerAccess = { getTracker(req: Record<string, unknown>): Promise<string> };
@@ -108,34 +108,57 @@ describe('UserAwareThrottlerGuard', () => {
     expect(t).toBe('ip:203.0.113.9');
   });
 
-  it('tracks an anonymous, email-addressed request by that address, not the shared proxy IP', async () => {
-    // Both requests arrive from the same Next container, because the proxy
-    // routes do not forward x-forwarded-for. Before this they shared one
-    // bucket and throttled each other.
+  it('ignores the request body entirely, so a caller cannot mint a bucket per request', async () => {
+    // The guard runs BEFORE the validation pipe, so `body.email` is the raw,
+    // unvalidated body. While the default keyed on it, any caller on any
+    // anonymous POST route bought a fresh bucket by varying a JSON field —
+    // the cap bounded nothing. Routes that genuinely need per-mailbox
+    // budgeting opt in with emailTracker AND keep an IP ceiling.
     const a = await guard.getTracker({ body: { email: 'ada@example.com' }, ip: '10.0.0.1' });
     const b = await guard.getTracker({ body: { email: 'grace@example.com' }, ip: '10.0.0.1' });
-    expect(a).toBe('email:ada@example.com');
-    expect(b).toBe('email:grace@example.com');
-    expect(a).not.toBe(b);
+    expect(a).toBe('ip:10.0.0.1');
+    expect(a).toBe(b);
   });
 
-  it('normalises the address so casing and padding cannot buy extra attempts', async () => {
-    const a = await guard.getTracker({ body: { email: '  Ada@Example.COM ' } });
-    expect(a).toBe('email:ada@example.com');
-  });
-
-  it('prefers the authenticated user over the body address', async () => {
+  it('prefers the authenticated user over everything else', async () => {
     const t = await guard.getTracker({ user: { userId: 'u1' }, body: { email: 'ada@example.com' } });
     expect(t).toBe('user:u1');
   });
 
-  it('falls back to IP when the address is missing or not a string, so a malformed body cannot dodge the limit', async () => {
-    expect(await guard.getTracker({ body: { email: '   ' }, ip: '10.0.0.1' })).toBe('ip:10.0.0.1');
-    expect(await guard.getTracker({ body: { email: 42 }, ip: '10.0.0.1' })).toBe('ip:10.0.0.1');
-    expect(await guard.getTracker({ body: {}, ip: '10.0.0.1' })).toBe('ip:10.0.0.1');
-  });
-
   it('never returns an empty tracker', async () => {
     expect(await guard.getTracker({})).toBe('ip:unknown');
+  });
+
+  it('ignores req.ips, which only exists when trust proxy is on and would then be caller-chosen', async () => {
+    expect(await guard.getTracker({ ips: ['1.2.3.4'], ip: '10.0.0.1' })).toBe('ip:10.0.0.1');
+  });
+});
+
+describe('emailTracker', () => {
+  it('keys on the mailbox, normalised, so casing and padding buy no extra attempts', () => {
+    expect(emailTracker({ body: { email: '  Ada@Example.COM ' } })).toBe('email:ada@example.com');
+    expect(emailTracker({ body: { email: 'ada@example.com' } })).toBe('email:ada@example.com');
+  });
+
+  it('separates two mailboxes, which is the whole point on a mail-sending route', () => {
+    expect(emailTracker({ body: { email: 'ada@example.com' } })).not.toBe(
+      emailTracker({ body: { email: 'grace@example.com' } }),
+    );
+  });
+
+  it('falls back to the client IP for anything that is not email-shaped', () => {
+    // The STRICT direction: junk lands you in the shared IP bucket rather than
+    // an unlimited private one. Guards run before pipes, so this really is the
+    // raw body — `{ email: {} }` and friends are reachable.
+    for (const email of ['   ', 42, {}, [], null, 'no-at-sign', 'a@b', undefined]) {
+      expect(emailTracker({ body: { email }, ip: '10.0.0.1' })).toBe('ip:10.0.0.1');
+    }
+    expect(emailTracker({ ip: '10.0.0.1' })).toBe('ip:10.0.0.1');
+  });
+
+  it('resolves that IP fallback through the proxy chain, same as clientIpTracker', () => {
+    const req = { body: { email: 42 }, headers: { 'x-forwarded-for': '1.2.3.4, 203.0.113.9' } };
+    expect(emailTracker(req)).toBe(clientIpTracker(req));
+    expect(emailTracker(req)).toBe('ip:203.0.113.9');
   });
 });
