@@ -379,11 +379,13 @@ export class RegisterHandler {
       email: newUser.email,
       brandId: newUser.brandId,
       jti: accessTokenJti,
+      type: 'access' as const,
     };
 
     const refreshTokenPayload = {
         ...payload,
         jti: refreshTokenJti,
+        type: 'refresh' as const,
     };
 
     const accessToken = this.jwtService.sign(payload, {

@@ -318,6 +318,7 @@ export class LoginHandler {
       brandId: user.brandId,
       jti: randomUUID(), // Unique token ID for blacklisting
       roles: roles,
+      type: 'access' as const,
     };
 
     const refreshTokenPayload = {
@@ -325,6 +326,7 @@ export class LoginHandler {
       email: user.email,
       brandId: user.brandId,
       jti: randomUUID(), // Different JTI for refresh token
+      type: 'refresh' as const,
     };
 
     const accessToken = this.jwtService.sign(accessTokenPayload, {

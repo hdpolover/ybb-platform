@@ -106,11 +106,11 @@ export class AmbassadorLoginHandler {
 
     // Generate JWT tokens
     const accessToken = this.jwtService.sign(
-      { sub: user.id, email: user.email, brandId: user.brandId, jti: randomUUID(), roles: [] },
+      { sub: user.id, email: user.email, brandId: user.brandId, jti: randomUUID(), roles: [], type: 'access' },
       { expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h') },
     );
     const refreshToken = this.jwtService.sign(
-      { sub: user.id, email: user.email, brandId: user.brandId, jti: randomUUID() },
+      { sub: user.id, email: user.email, brandId: user.brandId, jti: randomUUID(), type: 'refresh' },
       { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') },
     );
 

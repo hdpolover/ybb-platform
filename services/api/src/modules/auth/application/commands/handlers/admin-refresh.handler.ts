@@ -19,6 +19,7 @@ type RefreshPayload = {
   adminId?: string;
   sid?: string;
   isAdmin?: boolean;
+  type?: 'access' | 'refresh';
 };
 
 @Injectable()
@@ -36,6 +37,17 @@ export class AdminRefreshHandler {
       payload = this.jwtService.verify<RefreshPayload>(refreshToken);
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    // Mirror of the grace window in JwtStrategy.validate: reject only an
+    // EXPLICIT access token here, and keep accepting a missing type, because
+    // admin refresh tokens issued before this deploy carry no type claim and
+    // demanding one would bounce every admin to the login screen. Drop the
+    // undefined branch once the longest REFRESH TTL has elapsed
+    // (JWT_REFRESH_EXPIRES_IN, 7d) — not the 8h access window, since an admin
+    // returning after a long weekend still holds an un-rotated legacy token.
+    if (payload.type === 'access') {
+      throw new UnauthorizedException('Access token cannot be used to refresh');
     }
 
     if (!payload.isAdmin || !payload.adminId || !payload.sid) {
@@ -145,6 +157,7 @@ export class AdminRefreshHandler {
         isAdmin: true,
         adminId: user.admin.id,
         sid: session.sessionToken,
+        type: 'access',
       },
       { expiresIn: this.configService.get<string>('JWT_ADMIN_EXPIRES_IN', '8h') },
     );
@@ -158,6 +171,7 @@ export class AdminRefreshHandler {
         adminId: user.admin.id,
         isAdmin: true,
         sid: session.sessionToken,
+        type: 'refresh',
       },
       { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') },
     );

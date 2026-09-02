@@ -5,7 +5,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { createHash, timingSafeEqual } from 'crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'crypto';
 import { RegisterAdminCommand } from '../register-admin.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
@@ -192,22 +192,27 @@ export class RegisterAdminHandler {
       { name: 'register-admin', timeout: 5000 }
     );
 
-    // 6. Generate Tokens
-    const payload = {
+    // 6. Generate Tokens.
+    //
+    // These used to be signed from ONE payload object with no jti at all, so
+    // the two tokens were byte-identical apart from exp, the logout blacklist
+    // could not track them, and the refresh token was accepted as a bearer.
+    const basePayload = {
       sub: user.id,
       email: user.email,
       brandId: user.brandId,
-      roles: ['admin', command.role],
       adminId: admin.id,
     };
 
-    const accessToken = this.jwtService.sign(payload, {
-      expiresIn: this.configService.get<string>('JWT_ADMIN_EXPIRES_IN', '8h'),
-    });
+    const accessToken = this.jwtService.sign(
+      { ...basePayload, jti: randomUUID(), roles: ['admin', command.role], type: 'access' },
+      { expiresIn: this.configService.get<string>('JWT_ADMIN_EXPIRES_IN', '8h') },
+    );
 
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d'),
-    });
+    const refreshToken = this.jwtService.sign(
+      { ...basePayload, jti: randomUUID(), type: 'refresh' },
+      { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') },
+    );
 
     return {
       accessToken,

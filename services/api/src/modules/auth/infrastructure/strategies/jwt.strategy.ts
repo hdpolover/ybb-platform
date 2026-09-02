@@ -13,6 +13,7 @@ export interface JwtPayload {
   roles?: string[]; // Roles from token
   adminId?: string; // Admin ID
   sid?: string; // Session ID for refresh/logout coordination
+  type?: 'access' | 'refresh'; // Which half of the pair this token is
 }
 
 @Injectable()
@@ -29,6 +30,27 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    // Refresh tokens are signed with the same secret as access tokens and were
+    // otherwise indistinguishable, so anyone holding one could send it as a
+    // Bearer and get full API access for its whole 7-day life — surviving
+    // logout, which only blacklists the access token's jti.
+    //
+    // MIGRATION GRACE WINDOW: reject only an EXPLICIT type === 'refresh'. A
+    // missing type is still accepted as an access token, because every token
+    // minted before this deploy has no type claim at all and a strict check
+    // would log out every signed-in user at once (participants have no refresh
+    // endpoint, so they would have no way back in but re-login).
+    //
+    // Tighten to a strict allowlist (`if (payload.type !== 'access') throw`)
+    // once the longest ACCESS-token TTL has elapsed since deploy: that is
+    // JWT_ADMIN_EXPIRES_IN, 8h in production (JWT_EXPIRES_IN is 1h there, but
+    // check it in the target env first — some non-prod .env files set it to
+    // 7d). After that window a no-type bearer can only be a legacy refresh
+    // token, which is exactly what we want to reject.
+    if (payload.type === 'refresh') {
+      throw new UnauthorizedException('Refresh token cannot be used as an access token');
+    }
+
     // Verify user still exists and is active
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },

@@ -248,6 +248,7 @@ export class SupportAccessService {
         brandId: user.brandId,
         jti: randomUUID(),
         roles: [],
+        type: 'access',
       },
       { expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h') },
     );
@@ -258,6 +259,7 @@ export class SupportAccessService {
         email: user.email,
         brandId: user.brandId,
         jti: randomUUID(),
+        type: 'refresh',
       },
       { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') },
     );

@@ -395,6 +395,7 @@ export class FirebaseLoginHandler {
       email: user.email,
       brandId: user.brandId,
       jti: randomUUID(),
+      type: 'access' as const,
     };
 
     const refreshTokenPayload = {
@@ -402,6 +403,7 @@ export class FirebaseLoginHandler {
       email: user.email,
       brandId: user.brandId,
       jti: randomUUID(),
+      type: 'refresh' as const,
     };
 
     const accessToken = this.jwtService.sign(accessTokenPayload, { expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h') });
