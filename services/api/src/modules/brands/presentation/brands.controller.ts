@@ -45,6 +45,7 @@ import { AssignBrandAdminDto, BrandAdminResponseDto } from './dto/brand-admin.dt
 import { ListProgramsQuery } from '../../programs/application/queries/list-programs.query';
 import { ProgramListResponseDto } from '../../programs/presentation/dto/program-response.dto';
 import { ListProgramsDto } from '../../programs/presentation/dto/list-programs.dto';
+import { AdminAccessControlService } from '@modules/admins/application/services/admin-access-control.service';
 import { multerLimits } from '@common/constants';
 
 @ApiTags('Brands')
@@ -53,6 +54,7 @@ export class BrandsController {
     constructor(
         private readonly queryBus: QueryBus,
         private readonly commandBus: CommandBus,
+        private readonly adminAccessControl: AdminAccessControlService,
     ) { }
 
     @Get()
@@ -395,8 +397,9 @@ export class BrandsController {
         @Body() dto: AssignBrandAdminDto,
         @CurrentUser() user: CurrentUserData,
     ): Promise<BrandAdminResponseDto> {
+        await this.adminAccessControl.assertCanManageAdmins(user);
         return this.commandBus.execute(
-            new AssignBrandAdminCommand(id, dto.adminId, dto.roleInBrand, dto.permissions, user.userId),
+            new AssignBrandAdminCommand(id, dto.adminId, dto.roleInBrand, user.userId),
         );
     }
 
@@ -413,7 +416,9 @@ export class BrandsController {
     async removeBrandAdmin(
         @Param('id', ParseUUIDPipe) id: string,
         @Param('adminId', ParseUUIDPipe) adminId: string,
+        @CurrentUser() user: CurrentUserData,
     ): Promise<{ message: string }> {
+        await this.adminAccessControl.assertCanManageAdmins(user);
         return this.commandBus.execute(new RemoveBrandAdminCommand(id, adminId));
     }
 }

@@ -19,6 +19,8 @@ import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { AdminAccessControlService } from '@modules/admins/application/services/admin-access-control.service';
 import { ChangeType } from '@prisma/client';
 import {
     CreateGatewayConfigDto,
@@ -43,6 +45,7 @@ export class GatewayAdminController {
     constructor(
         private readonly paymentServiceClient: PaymentServiceHttpClient,
         private readonly configService: ConfigService,
+        private readonly adminAccessControl: AdminAccessControlService,
     ) {
         this.paymentServiceInternalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
     }
@@ -50,7 +53,8 @@ export class GatewayAdminController {
     @Get()
     @ApiOperation({ summary: 'List payment gateway configurations' })
     @ApiResponse({ status: 200 })
-    async list() {
+    async list(@CurrentUser() currentUser: CurrentUserData) {
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
         try {
             const { data } = await this.paymentServiceClient.get<{ data: unknown[] }>('/api/v1/gateway-configs', {
                 headers: this.buildInternalHeaders(),
@@ -63,7 +67,8 @@ export class GatewayAdminController {
 
     @Get(':id')
     @ApiOperation({ summary: 'Get a gateway configuration' })
-    async getById(@Param('id') id: string) {
+    async getById(@Param('id') id: string, @CurrentUser() currentUser: CurrentUserData) {
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
         try {
             const { data } = await this.paymentServiceClient.get<{ data: unknown }>(`/api/v1/gateway-configs/${id}`, {
                 headers: this.buildInternalHeaders(),
@@ -79,7 +84,8 @@ export class GatewayAdminController {
     @ApiOperation({ summary: 'Create a gateway configuration' })
     @ApiBody({ type: CreateGatewayConfigDto })
     @ApiResponse({ status: 201 })
-    async create(@Body() body: CreateGatewayConfigDto) {
+    async create(@Body() body: CreateGatewayConfigDto, @CurrentUser() currentUser: CurrentUserData) {
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
         try {
             const { data } = await this.paymentServiceClient.post<{ data: unknown }>('/api/v1/gateway-configs', body, {
                 headers: this.buildInternalHeaders(),
@@ -95,7 +101,8 @@ export class GatewayAdminController {
     @AuditTrail({ entityType: 'GatewayConfig', action: ChangeType.update })
     @ApiOperation({ summary: 'Update a gateway configuration' })
     @ApiBody({ type: UpdateGatewayConfigDto })
-    async update(@Param('id') id: string, @Body() body: UpdateGatewayConfigDto) {
+    async update(@Param('id') id: string, @Body() body: UpdateGatewayConfigDto, @CurrentUser() currentUser: CurrentUserData) {
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
         try {
             const { data } = await this.paymentServiceClient.put<{ data: unknown }>(`/api/v1/gateway-configs/${id}`, body, {
                 headers: this.buildInternalHeaders(),
@@ -111,7 +118,8 @@ export class GatewayAdminController {
     @AuditTrail({ entityType: 'GatewayConfig', action: ChangeType.update })
     @ApiOperation({ summary: 'Toggle is_active on a gateway configuration' })
     @ApiBody({ type: SetGatewayActiveDto })
-    async setActive(@Param('id') id: string, @Body() body: SetGatewayActiveDto) {
+    async setActive(@Param('id') id: string, @Body() body: SetGatewayActiveDto, @CurrentUser() currentUser: CurrentUserData) {
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
         try {
             const { data } = await this.paymentServiceClient.patch<{ data: unknown }>(`/api/v1/gateway-configs/${id}/active`, body, {
                 headers: this.buildInternalHeaders(),
@@ -126,7 +134,8 @@ export class GatewayAdminController {
     @Delete(':id')
     @AuditTrail({ entityType: 'GatewayConfig', action: ChangeType.delete })
     @ApiOperation({ summary: 'Delete a gateway configuration (blocked if referenced)' })
-    async delete(@Param('id') id: string) {
+    async delete(@Param('id') id: string, @CurrentUser() currentUser: CurrentUserData) {
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
         try {
             const { data } = await this.paymentServiceClient.delete<Record<string, unknown>>(`/api/v1/gateway-configs/${id}`, {
                 headers: this.buildInternalHeaders(),
