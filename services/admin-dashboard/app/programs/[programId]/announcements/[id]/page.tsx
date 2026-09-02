@@ -13,6 +13,7 @@ import {
   type ProgramAnnouncement,
 } from "@/src/shared/api-client";
 import { formatDateTime } from "@/lib/utils";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   formatAnnouncementLabel,
@@ -131,7 +132,7 @@ export default function ProgramAnnouncementDetailPage() {
 
           <div
             className="prose prose-sm max-w-none text-zinc-800"
-            dangerouslySetInnerHTML={{ __html: announcement.content }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(announcement.content) }}
           />
         </main>
 

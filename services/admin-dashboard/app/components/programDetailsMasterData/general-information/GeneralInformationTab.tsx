@@ -4,6 +4,7 @@ import {
   GlobeAltIcon,
   ArrowTopRightOnSquareIcon,
 } from "@heroicons/react/24/solid";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 
 function extractYouTubeId(url: string): string | null {
   const patterns = [
@@ -184,7 +185,7 @@ export function GeneralInformationTab({ data }: { data: GeneralInformationData }
         <div className="rounded-md border border-zinc-200 bg-white p-5 text-sm leading-relaxed text-zinc-800 shadow-sm">
           <div
             className="[&_a]:text-blue-600 [&_a]:underline [&_blockquote]:my-4 [&_blockquote]:border-l-4 [&_blockquote]:border-zinc-200 [&_blockquote]:pl-4 [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:mb-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_pre]:my-4 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-zinc-950 [&_pre]:p-3 [&_pre]:text-xs [&_pre]:text-zinc-100 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5"
-            dangerouslySetInnerHTML={{ __html: data.description }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.description) }}
           />
         </div>
       </section>

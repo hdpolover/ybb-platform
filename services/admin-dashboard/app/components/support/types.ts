@@ -3,6 +3,7 @@ import type {
   ProgramSupportTicketStatus,
   ProgramSupportTicketPriority,
 } from "@/src/shared/api-client";
+import { sanitizeHtml, TEXT_ONLY_TAGS } from "@/lib/sanitize-html";
 
 export const STATUS_OPTIONS: ProgramSupportTicketStatus[] = [
   "open",
@@ -53,14 +54,7 @@ export function toTitleCase(value: string): string {
 }
 
 export function sanitizeRichHtml(value: string): string {
-  if (!value.trim()) return "";
-  return value
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
-    .replace(/<iframe[\s\S]*?>[\s\S]*?<\/iframe>/gi, "")
-    .replace(/\son\w+="[^"]*"/gi, "")
-    .replace(/\son\w+='[^']*'/gi, "")
-    .replace(/<(?!\/?(p|br|strong|b|em|i|u|ul|ol|li|blockquote|code|pre)\b)[^>]*>/gi, "");
+  return sanitizeHtml(value, { allowedTags: TEXT_ONLY_TAGS });
 }
 
 export function stripUploadedScreenshotsSection(value: string): string {

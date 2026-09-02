@@ -16,6 +16,7 @@ import {
   type SystemAnnouncement,
 } from "@/src/shared/api-client";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import { formatAnnouncementLabel } from "../_components/system-announcement-utils";
 
 const TYPE_BADGE: Record<string, string> = {
@@ -183,7 +184,7 @@ export default function AnnouncementDetailPage() {
 
           <div
             className="prose prose-sm max-w-none text-zinc-800"
-            dangerouslySetInnerHTML={{ __html: ann.content }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(ann.content) }}
           />
 
           {ann.actionUrl && ann.actionLabel && (
