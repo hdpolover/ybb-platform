@@ -2,6 +2,7 @@ import { INestApplication, Injectable, Logger, OnModuleInit, Optional } from '@n
 import { PrismaClient, Prisma } from '@prisma/client';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { EventEmitter } from 'node:events';
 import { MetricsService } from '../monitoring/metrics.service';
 
 type PrismaServiceOptions = {
@@ -19,10 +20,12 @@ type PrismaServiceOptions = {
 // the last PrismaService instance using it has shut down.
 type PoolRegistryEntry = { pool: Pool; refCount: number };
 const poolRegistry = new Map<string, PoolRegistryEntry>();
+const poolLogger = new Logger('PrismaPool');
 
 function acquirePool(
   connectionString: string,
   poolConfig: { max: number; min: number; idleTimeoutMillis: number; connectionTimeoutMillis: number },
+  roleHint: string,
 ): { pool: Pool; reused: boolean } {
   const existing = poolRegistry.get(connectionString);
   if (existing) {
@@ -37,8 +40,62 @@ function acquirePool(
     idleTimeoutMillis: poolConfig.idleTimeoutMillis,
     connectionTimeoutMillis: poolConfig.connectionTimeoutMillis,
   });
+
+  // Exactly one 'error' listener per shared pool, attached once here at
+  // creation time — never per PrismaService instance. @prisma/adapter-pg's
+  // PrismaPgAdapterFactory#connect() also attaches its own 'error' listener
+  // directly to whatever pool object it is handed, once per PrismaClient that
+  // connects through it; with up to 6 Nest DI containers x 2 PrismaService
+  // subclasses sharing one pool, that duplicated per-instance attachment is
+  // what produced "11 error listeners added to [BoundPool]"
+  // (MaxListenersExceededWarning) in prod. Each PrismaService instance below
+  // is handed an isolated facade (see createErrorIsolatedPoolFacade) instead
+  // of this pool directly, so the vendor's per-instance listener lands on the
+  // facade, never on this shared pool.
+  pool.on('error', (err) => {
+    poolLogger.error(`Postgres pool error (role=${roleHint}): ${err.message}`, err.stack);
+  });
+
   poolRegistry.set(connectionString, { pool, refCount: 1 });
   return { pool, reused: false };
+}
+
+// Hands @prisma/adapter-pg a private 'error' listener target instead of the
+// real shared pool, so its per-instance pool.on('error', ...) /
+// removeListener('error', ...) calls (one pair per PrismaService instance,
+// fired on $connect()/$disconnect()) never touch the real pool's listener
+// count. Everything else (query/connect/end/totalCount/...) forwards straight
+// through to the real pool, unchanged — including the `instanceof Pool` check
+// in @prisma/adapter-pg's constructor, which a Proxy satisfies by default.
+// ponytail: only 'on'/'removeListener' are intercepted, matching what
+// @prisma/adapter-pg 7.3.0 actually calls on the pool; extend if a future
+// adapter version also uses 'once'/'addListener'/'off' for pool errors.
+function createErrorIsolatedPoolFacade(pool: Pool): Pool {
+  const localErrors = new EventEmitter();
+  return new Proxy(pool, {
+    get(target, prop, receiver) {
+      if (prop === 'on') {
+        return (event: string, listener: (...args: unknown[]) => void) => {
+          if (event === 'error') {
+            localErrors.on('error', listener);
+            return receiver;
+          }
+          return (target as unknown as EventEmitter).on(event, listener);
+        };
+      }
+      if (prop === 'removeListener') {
+        return (event: string, listener: (...args: unknown[]) => void) => {
+          if (event === 'error') {
+            localErrors.removeListener('error', listener);
+            return receiver;
+          }
+          return (target as unknown as EventEmitter).removeListener(event, listener);
+        };
+      }
+      const value = Reflect.get(target, prop, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as unknown as Pool;
 }
 
 function releasePool(connectionString: string): void {
@@ -107,8 +164,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     };
 
     const connectionStringKey = connectionString ?? '';
-    const { pool, reused } = acquirePool(connectionStringKey, poolConfig);
-    const adapter = new PrismaPg(pool);
+    const clientRole = options.clientRole ?? 'primary';
+    const { pool, reused } = acquirePool(connectionStringKey, poolConfig, clientRole);
+    const adapter = new PrismaPg(createErrorIsolatedPoolFacade(pool));
 
     super({
       adapter,
@@ -121,7 +179,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     this.poolConfig = poolConfig;
     this.slowQueryThresholdMs = parseNumberEnv('PRISMA_SLOW_QUERY_MS', 250);
     this.enablePoolMetrics = options.enablePoolMetrics ?? true;
-    this.clientRole = options.clientRole ?? 'primary';
+    this.clientRole = clientRole;
     this.connectionStringKey = connectionStringKey;
     this.poolReused = reused;
   }
