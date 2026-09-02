@@ -198,70 +198,6 @@ export class RegisterHandler {
       },
     });
 
-    // Function to handle program registration & referrals
-    const handleProgramRegistration = async (userId: string, email: string) => {
-      // Create participant profile if not exists
-      let participant = await this.prisma.participant.findUnique({
-        where: { userId },
-      });
-
-      if (!participant) {
-        participant = await this.prisma.participant.create({
-          data: {
-            userId,
-            // Left blank until onboarding collects a real name. Seeding the
-            // email local part here produced values the onboarding API itself
-            // rejects (@IsEnglishName forbids digits, so "owais56" is a hard
-            // 400), and the form prefills from this column.
-            fullName: '',
-            referralCode: command.referralCode, // Store what they entered even if invalid? Or only valid? 
-                                                // Storing valid one if ambassador exists, else maybe null or raw string.
-                                                // Schema has referralCode on Participant (String).
-          },
-        });
-        
-        // If this is a new participant and we have a valid ambassador, link them
-        if (ambassador) {
-             try {
-                 await this.prisma.ambassadorReferral.create({
-                     data: {
-                         ambassadorId: ambassador.id,
-                         participantId: participant.id,
-                         status: 'referred', // Default
-                     }
-                 });
-
-                 // Increment stats
-                 await this.prisma.ambassador.update({
-                     where: { id: ambassador.id },
-                     data: {
-                         totalReferrals: { increment: 1 },
-                         lastReferralAt: new Date(),
-                     }
-                 });
-             } catch (e) {
-                 // Ignore unique constraint violation if retry
-                 this.logger.error(`Failed to link ambassador: ${e.message}`);
-             }
-        }
-      }
-
-      const applicationResult = await ensureProgramApplication(this.prisma, {
-        participantId: participant.id,
-        brandId,
-        programId: targetProgramId,
-        applicationCategory: command.applicationCategory,
-      });
-
-      if (applicationResult.status === 'closed') {
-        this.logger.warn(
-          `Registration closed for program ${applicationResult.program.id} at auth time (userId: ${userId})`,
-        );
-      }
-
-      return applicationResult;
-    };
-
     // For OAuth providers, check if identity already exists
     if (authProvider.name !== 'local' && command.providerUserId) {
       const existingIdentity = await this.prisma.userIdentity.findFirst({
@@ -276,39 +212,11 @@ export class RegisterHandler {
       });
 
       if (existingIdentity) {
-        const applicationResult = await handleProgramRegistration(existingIdentity.user.id, existingIdentity.user.email);
-
-        // User with this provider already exists, return login tokens
-        const payload = {
-          sub: existingIdentity.user.id,
-          email: existingIdentity.user.email,
-          brandId: existingIdentity.user.brandId,
-        };
-
-        const accessToken = this.jwtService.sign(payload, { expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h') });
-        const refreshToken = this.jwtService.sign(payload, { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') });
-
-        // Update last used
-        await this.prisma.userIdentity.update({
-          where: { id: existingIdentity.id },
-          data: { lastUsedAt: new Date() },
-        });
-
-        const registeredPrograms = await this.getRegisteredPrograms(existingIdentity.user.id, existingIdentity.user.brandId);
-
-        return {
-          accessToken,
-          refreshToken,
-          user: {
-            id: existingIdentity.user.id,
-            email: existingIdentity.user.email,
-            brandId: existingIdentity.user.brandId,
-            isActive: existingIdentity.user.isActive,
-            isOnboardingCompleted: existingIdentity.user.isOnboardingCompleted ?? false,
-            registeredPrograms,
-          },
-          programRegistration: toProgramRegistrationInfo(applicationResult),
-        };
+        // The provider identity is already attached to an account. No ID token is
+        // verified here, so returning tokens would hand that account to any caller
+        // who can guess a providerUserId. OAuth sign-in goes through firebase-login,
+        // which does verify the ID token.
+        throw new ConflictException('An account with this email already exists. Please sign in.');
       }
     }
 
@@ -316,63 +224,11 @@ export class RegisterHandler {
     const providerUserIdToUse = command.providerUserId || command.email;
 
     if (user) {
-      // User exists, handle program registration first just in case
-      const applicationResult = await handleProgramRegistration(user.id, user.email);
-
-      // User exists, check if they can add this provider
-      const existingIdentity = user.identities.find(i => i.providerId === authProvider.id);
-      
-      if (existingIdentity) {
-        throw new ConflictException(`User already has ${authProvider.displayName} authentication configured`);
-      }
-
-      // Add new identity to existing user
-      await this.prisma.userIdentity.create({
-        data: {
-          userId: user.id,
-          brandId: user.brandId,
-          providerId: authProvider.id,
-          providerUserId: providerUserIdToUse,
-          providerEmail: command.email,
-          isPrimary: user.identities.length === 0, // First identity is primary
-          lastUsedAt: new Date(),
-        },
-      });
-
-      // If adding local auth, update password hash
-      if (authProvider.name === 'local' && command.password) {
-        const passwordHash = await bcrypt.hash(command.password, 10);
-        await this.prisma.user.update({
-          where: { id: user.id },
-          data: { passwordHash },
-        });
-      }
-
-      // Return login tokens
-      const payload = {
-        sub: user.id,
-        email: user.email,
-        brandId: user.brandId,
-      };
-
-      const accessToken = this.jwtService.sign(payload, { expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h') });
-      const refreshToken = this.jwtService.sign(payload, { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') });
-
-      const registeredPrograms = await this.getRegisteredPrograms(user.id, user.brandId);
-
-      return {
-        accessToken,
-        refreshToken,
-        user: {
-          id: user.id,
-          email: user.email,
-          brandId: user.brandId,
-          isActive: user.isActive,
-          isOnboardingCompleted: user.isOnboardingCompleted ?? false,
-          registeredPrograms,
-        },
-        programRegistration: toProgramRegistrationInfo(applicationResult),
-      };
+      // An account already exists for this email in this brand. This endpoint is
+      // unauthenticated and proves nothing about who is calling, so it must not
+      // attach an identity to that account, overwrite its password, register it
+      // into a program, or mint tokens for it. Sign-in is the only way in.
+      throw new ConflictException('An account with this email already exists. Please sign in.');
     }
 
     // New user registration

@@ -11,7 +11,7 @@ import { AuthLoggingService } from '../../services/auth-logging.service';
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
 import { GeoIpService } from '../../../../../shared/infrastructure/geoip/geoip.service';
 import { RegisterCommand } from '../register.command';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 jest.mock('bcrypt', () => ({
@@ -298,6 +298,101 @@ describe('RegisterHandler', () => {
 
         expect(result).toHaveProperty('accessToken', 'mock_token');
         expect(result).toHaveProperty('user');
+    });
+
+    it('should reject registration for an existing email without touching the account', async () => {
+        mockPrismaService.authProvider.findUnique.mockResolvedValue({
+            id: 'provider-id-123',
+            name: 'local',
+            isActive: true,
+            isOAuth: false,
+        });
+
+        mockPrismaService.brand.findUnique.mockResolvedValue({
+            id: 'category-id-123',
+            isActive: true,
+            name: 'Test Category',
+            requireEmailVerification: false,
+        });
+
+        mockPrismaService.program.findUnique.mockResolvedValue({
+            id: 'program-id-123',
+            brandId: 'category-id-123',
+            status: 'published',
+            isActive: true,
+            isPublished: true,
+            allowRegistration: true,
+            registrationOpenDate: null,
+            registrationCloseDate: null,
+        });
+
+        mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
+
+        // Existing account, no local identity yet — the shape that previously let an
+        // unauthenticated caller attach an identity and overwrite the password.
+        mockPrismaService.user.findFirst.mockResolvedValue({
+            id: 'victim-user-id',
+            email: 'test@example.com',
+            brandId: 'category-id-123',
+            isActive: true,
+            isOnboardingCompleted: true,
+            identities: [],
+        });
+
+        await expect(handler.execute(command)).rejects.toThrow(ConflictException);
+
+        expect(mockPrismaService.userIdentity.create).not.toHaveBeenCalled();
+        expect(mockPrismaService.user.update).not.toHaveBeenCalled();
+        expect(mockPrismaService.participant.create).not.toHaveBeenCalled();
+        expect(mockPrismaService.participantApplication.create).not.toHaveBeenCalled();
+        expect(mockJwtService.sign).not.toHaveBeenCalled();
+    });
+
+    it('should reject registration for an existing provider identity without issuing tokens', async () => {
+        mockPrismaService.authProvider.findUnique.mockResolvedValue({
+            id: 'provider-id-123',
+            name: 'google',
+            isActive: true,
+            isOAuth: true,
+        });
+
+        mockPrismaService.brand.findUnique.mockResolvedValue({
+            id: 'category-id-123',
+            isActive: true,
+            name: 'Test Category',
+            requireEmailVerification: false,
+        });
+
+        mockPrismaService.program.findUnique.mockResolvedValue({
+            id: 'program-id-123',
+            brandId: 'category-id-123',
+            status: 'published',
+            isActive: true,
+            isPublished: true,
+            allowRegistration: true,
+            registrationOpenDate: null,
+            registrationCloseDate: null,
+        });
+
+        mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
+        mockPrismaService.user.findFirst.mockResolvedValue(null);
+
+        mockPrismaService.userIdentity.findFirst.mockResolvedValue({
+            id: 'identity-id-123',
+            user: {
+                id: 'victim-user-id',
+                email: 'test@example.com',
+                brandId: 'category-id-123',
+                isActive: true,
+                isOnboardingCompleted: true,
+            },
+        });
+
+        await expect(handler.execute(command)).rejects.toThrow(ConflictException);
+
+        expect(mockJwtService.sign).not.toHaveBeenCalled();
+        expect(mockPrismaService.userIdentity.update).not.toHaveBeenCalled();
+        expect(mockPrismaService.participantApplication.create).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException if program slug is invalid', async () => {
