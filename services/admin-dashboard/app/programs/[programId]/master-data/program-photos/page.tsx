@@ -13,6 +13,11 @@ import {
   type ProgramGalleryItem,
 } from "@/src/shared/api-client";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/src/ui/sheet";
+import {
+  IMAGE_ACCEPT_ATTR,
+  IMAGE_HINT,
+  validateUploadType,
+} from "@/lib/upload-validation";
 import { MediaLibraryPicker } from "@/app/components/submissionsMasterData/form-fields/MediaLibraryPicker";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
@@ -226,6 +231,16 @@ function PhotoModal({
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    // Refuse an unsupported type here, naming the file, instead of letting the
+    // upload fail against the file service after the admin has filled the form.
+    // Size is checked at upload time, once client-side compression has run.
+    const rejection = validateUploadType(file, { imagesOnly: true });
+    if (rejection) {
+      setError(rejection);
+      e.target.value = "";
+      return;
+    }
+    setError(null);
     setImageFile(file);
     setSelectedMediaUrl(null);
     const reader = new FileReader();
@@ -308,7 +323,7 @@ function PhotoModal({
                 <div className="flex flex-col items-center gap-2 text-zinc-400">
                   <PhotoIcon className="h-8 w-8" />
                   <span className="text-[11px] font-medium">Click to select image</span>
-                  <span className="text-[10px] text-zinc-400">JPG, PNG, WebP · Max 5 MB</span>
+                  <span className="text-[10px] text-zinc-400">{IMAGE_HINT}</span>
                 </div>
               )}
             </button>
@@ -318,7 +333,7 @@ function PhotoModal({
             {selectedMediaUrl && !imageFile && (
               <p className="mt-1 truncate text-[10px] text-zinc-500">Selected from media library</p>
             )}
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+            <input ref={fileInputRef} type="file" accept={IMAGE_ACCEPT_ATTR} className="hidden" onChange={handleFileChange} />
             <button
               type="button"
               onClick={() => {

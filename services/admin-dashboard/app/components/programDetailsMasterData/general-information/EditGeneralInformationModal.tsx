@@ -16,7 +16,13 @@ import {
 } from "@heroicons/react/24/solid";
 import { toast } from "sonner";
 import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/submissionsMasterData/api";
-import { listProgramMedia, type MediaFile } from "@/src/shared/api-client";
+import { compressImageFile, listProgramMedia, type MediaFile } from "@/src/shared/api-client";
+import {
+  IMAGE_ACCEPT_ATTR,
+  IMAGE_HINT,
+  validateUploadFile,
+  validateUploadType,
+} from "@/lib/upload-validation";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { FormSection } from "@/src/ui/drawer/form-section";
@@ -338,7 +344,7 @@ function ImageUploadField({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept={IMAGE_ACCEPT_ATTR}
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0] ?? null;
@@ -474,6 +480,31 @@ export function EditGeneralInformationModal({
     setBrandingError(null);
   }
 
+  /**
+   * Wrap a staged-file setter with a type pre-flight, so an unsupported file
+   * (SVG, HEIC, PDF) is refused the moment it is picked instead of at save.
+   * Size is deliberately not checked here — compression runs at save time and
+   * routinely brings a large export back under the limit, so rejecting on the
+   * raw size would turn away files that would have uploaded fine.
+   */
+  function selectBrandingFile(setFile: (file: File | null) => void) {
+    return (file: File | null) => {
+      resetBrandingState();
+      if (!file) {
+        setFile(null);
+        return;
+      }
+      const rejection = validateUploadType(file, { imagesOnly: true });
+      if (rejection) {
+        setBrandingError(rejection);
+        toast.error(rejection);
+        setFile(null);
+        return;
+      }
+      setFile(file);
+    };
+  }
+
   function updateField<K extends keyof GeneralInformationFormValues>(
     key: K,
     value: GeneralInformationFormValues[K],
@@ -515,13 +546,36 @@ export function EditGeneralInformationModal({
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      // Step 1: upload new files via multipart
-      const hasFiles = logoFile || bannerFile || thumbnailFile;
-      if (hasFiles) {
+      // Step 1: upload new files via multipart.
+      const picked = (
+        [
+          ["logo", logoFile],
+          ["banner", bannerFile],
+          ["thumbnail", thumbnailFile],
+        ] as ReadonlyArray<readonly [string, File | null]>
+      ).flatMap(([field, file]) => (file ? [[field, file] as const] : []));
+
+      if (picked.length > 0) {
+        // Compress first. This endpoint is the one image path with no
+        // client-side shrink of its own, so a full-resolution logo straight
+        // from a designer would sail past the file service's 10 MB image cap
+        // and hard-fail — while the very same file uploads fine from the
+        // media library, which goes through the presigned (compressing) flow.
+        const processed = await Promise.all(
+          picked.map(
+            async ([field, file]) => [field, await compressImageFile(file)] as const,
+          ),
+        );
+
+        // Pre-flight the compressed bytes so an over-limit file is explained
+        // here, naming the file and its size, rather than as a bare 413.
+        const rejection = processed
+          .map(([, file]) => validateUploadFile(file, { imagesOnly: true }))
+          .find((message): message is string => message !== null);
+        if (rejection) throw new Error(rejection);
+
         const formData = new FormData();
-        if (logoFile) formData.append("logo", logoFile);
-        if (bannerFile) formData.append("banner", bannerFile);
-        if (thumbnailFile) formData.append("thumbnail", thumbnailFile);
+        processed.forEach(([field, file]) => formData.append(field, file));
 
         const res = await fetch(
           buildApiUrl(`/programs/${encodeURIComponent(programId)}/branding`),
@@ -737,12 +791,12 @@ export function EditGeneralInformationModal({
               currentUrl={currentLogoUrl}
               file={logoFile}
               pickedUrl={logoPickedUrl}
-              onFileChange={(f) => { setLogoFile(f); resetBrandingState(); }}
+              onFileChange={selectBrandingFile(setLogoFile)}
               onPick={(url) => { setLogoPickedUrl(url); setLogoFile(null); resetBrandingState(); }}
               onClear={() => { setLogoFile(null); setLogoPickedUrl(null); resetBrandingState(); }}
               onRemove={() => handleRemoveAsset("logo")}
               uploadStatus={brandingStatus}
-              hint="Square or 4:3 ratio recommended. PNG/JPG up to 2 MB."
+              hint={`Square or 4:3 ratio recommended. ${IMAGE_HINT}.`}
               programId={programId}
               brandId={brandId}
             />
@@ -751,12 +805,12 @@ export function EditGeneralInformationModal({
               currentUrl={currentBannerUrl}
               file={bannerFile}
               pickedUrl={bannerPickedUrl}
-              onFileChange={(f) => { setBannerFile(f); resetBrandingState(); }}
+              onFileChange={selectBrandingFile(setBannerFile)}
               onPick={(url) => { setBannerPickedUrl(url); setBannerFile(null); resetBrandingState(); }}
               onClear={() => { setBannerFile(null); setBannerPickedUrl(null); resetBrandingState(); }}
               onRemove={() => handleRemoveAsset("banner")}
               uploadStatus={brandingStatus}
-              hint="16:9 ratio recommended (e.g. 1200×675). PNG/JPG up to 2 MB."
+              hint={`16:9 ratio recommended (e.g. 1200x675). ${IMAGE_HINT}.`}
               programId={programId}
               brandId={brandId}
             />
@@ -765,12 +819,12 @@ export function EditGeneralInformationModal({
               currentUrl={currentThumbnailUrl}
               file={thumbnailFile}
               pickedUrl={thumbnailPickedUrl}
-              onFileChange={(f) => { setThumbnailFile(f); resetBrandingState(); }}
+              onFileChange={selectBrandingFile(setThumbnailFile)}
               onPick={(url) => { setThumbnailPickedUrl(url); setThumbnailFile(null); resetBrandingState(); }}
               onClear={() => { setThumbnailFile(null); setThumbnailPickedUrl(null); resetBrandingState(); }}
               onRemove={() => handleRemoveAsset("thumbnail")}
               uploadStatus={brandingStatus}
-              hint="Used on program cards and listings. PNG/JPG up to 2 MB."
+              hint={`Used on program cards and listings. ${IMAGE_HINT}.`}
               programId={programId}
               brandId={brandId}
             />

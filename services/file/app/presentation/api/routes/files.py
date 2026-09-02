@@ -64,7 +64,7 @@ async def upload_file(
        `/{env}/{brand}/users/{user_id}/{category}/{filename}`
     
     Supported file types:
-    - Images: JPEG, PNG, GIF, WebP (max 5MB)
+    - Images: JPEG, PNG, GIF, WebP (max 10MB)
     - Documents: PDF, Word, Excel (max 10MB)
     """
     try:
@@ -131,8 +131,9 @@ async def request_upload_url(
     status=PROCESSING, and returns a presigned PUT URL. Client then PUTs the file bytes
     directly to `upload_url` (the API never sees them) and calls PATCH /files/{id}/ready.
 
-    Allowed MIME types: PDF, Word, Excel, JPEG/PNG/WebP/GIF.
-    Max size: 10 MB for documents, 5 MB for images.
+    Allowed MIME types: PDF, Word, Excel, JPEG/PNG/WebP/GIF. SVG is not accepted:
+    it is an executable document and these files are served straight from the CDN.
+    Max size: 10 MB for images, 50 MB for documents (CreateUploadUrlHandler).
     """
     try:
         command = CreateUploadUrlCommand(

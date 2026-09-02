@@ -34,6 +34,11 @@ import {
   SheetFooter,
 } from "@/src/ui/sheet";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import {
+  IMAGE_HINT,
+  UPLOAD_ACCEPT_ATTR,
+  validateUploadType,
+} from "@/lib/upload-validation";
 
 const ASSET_TYPE_LABELS: Record<string, string> = {
   all: "All",
@@ -252,6 +257,10 @@ function UploadSheet({
   const [title, setTitle] = useState("");
   const [altText, setAltText] = useState("");
   const [uploading, setUploading] = useState(false);
+  /** Per-file rejections from the last selection, shown inline in the sheet. */
+  const [selectionErrors, setSelectionErrors] = useState<string[]>([]);
+  /** Failures from the last upload attempt — the sheet stays open to show them. */
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Reset state when sheet opens
@@ -265,17 +274,36 @@ function UploadSheet({
       setAssetType("gallery");
       setTitle("");
       setAltText("");
+      setSelectionErrors([]);
+      setUploadErrors([]);
     }
   }, [open]);
 
   // Generate object-URL previews for image files
   function applyFiles(newFiles: File[]) {
+    // Refuse unsupported types at selection time — naming each offending file
+    // — rather than letting them fail one by one against the file service.
+    // Size is judged later, after client-side compression has had its go.
+    const rejected = newFiles.flatMap((file) => {
+      const message = validateUploadType(file);
+      return message ? [message] : [];
+    });
+    const accepted = newFiles.filter((file) => validateUploadType(file) === null);
+
+    if (rejected.length > 0) {
+      setSelectionErrors(rejected);
+      rejected.slice(0, 3).forEach((message) => toast.error(message));
+    } else {
+      setSelectionErrors([]);
+    }
+    if (accepted.length === 0 && newFiles.length > 0) return;
+
     // Revoke previous previews to avoid memory leaks
     previews.forEach((p) => URL.revokeObjectURL(p));
-    const urls = newFiles.map((f) =>
+    const urls = accepted.map((f) =>
       f.type.startsWith("image/") ? URL.createObjectURL(f) : "",
     );
-    setFiles(newFiles);
+    setFiles(accepted);
     setPreviews(urls);
   }
 
@@ -290,6 +318,7 @@ function UploadSheet({
   async function handleUpload() {
     if (!files.length) return;
     setUploading(true);
+    setUploadErrors([]);
     const hasImages = files.some((f) => f.type.startsWith("image/"));
     const toastId = toast.loading(
       hasImages
@@ -300,7 +329,9 @@ function UploadSheet({
           ? `Uploading "${files[0].name}"…`
           : `Uploading ${files.length} files…`,
     );
-    onClose();
+    // The sheet stays open (in a busy state) until every upload settles.
+    // Closing first made a failure look like nothing had happened at all —
+    // the error toast landed after the form it belonged to was gone.
     const settled = await Promise.allSettled(
       files.map((file) =>
         uploadFileViaPresignedUrl(file, {
@@ -315,32 +346,43 @@ function UploadSheet({
       ),
     );
     const succeeded = settled.filter((r) => r.status === "fulfilled").length;
-    const failed = settled.filter((r) => r.status === "rejected");
-    if (failed.length === 0) {
+    // Pair each rejection back to its file so the admin knows which one failed.
+    const failures = settled.flatMap((result, index) =>
+      result.status === "rejected"
+        ? [
+            `"${files[index].name}": ${
+              result.reason instanceof Error ? result.reason.message : "unknown error"
+            }`,
+          ]
+        : [],
+    );
+
+    setUploading(false);
+
+    if (failures.length === 0) {
       toast.success(
         succeeded === 1 ? `"${files[0].name}" uploaded.` : `${succeeded} files uploaded.`,
         { id: toastId },
       );
       onUploaded();
-    } else if (succeeded > 0) {
-      toast.warning(
-        `${succeeded} uploaded, ${failed.length} failed: ${(failed[0].reason as Error)?.message ?? "unknown error"}.`,
-        { id: toastId },
-      );
+      onClose();
+      return;
+    }
+
+    // Something failed — keep the sheet open with the real reasons on screen.
+    setUploadErrors(failures);
+    if (succeeded > 0) {
+      toast.warning(`${succeeded} uploaded, ${failures.length} failed.`, { id: toastId });
       onUploaded();
     } else {
-      toast.error(
-        `Upload failed: ${(failed[0].reason as Error)?.message ?? "unknown error"}.`,
-        { id: toastId },
-      );
+      toast.error(`Upload failed: ${failures[0]}`, { id: toastId });
     }
-    setUploading(false);
   }
 
   const multiFile = files.length > 1;
 
   return (
-    <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+    <Sheet open={open} onOpenChange={(v) => { if (!v && !uploading) onClose(); }}>
       <SheetContent side="right" className="flex w-full max-w-md flex-col p-0 sm:max-w-md">
         <SheetHeader className="border-b border-zinc-200 px-6 py-5">
           <SheetTitle>Upload Media</SheetTitle>
@@ -350,6 +392,15 @@ function UploadSheet({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto space-y-5 px-6 py-5">
+          {/* Files refused before sending, and failures from the last attempt */}
+          {(selectionErrors.length > 0 || uploadErrors.length > 0) && (
+            <ul className="space-y-1 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+              {[...selectionErrors, ...uploadErrors].map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          )}
+
           {/* Drop Zone */}
           <div
             className={`relative flex min-h-[130px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-lg border-2 border-dashed text-center transition ${
@@ -413,7 +464,7 @@ function UploadSheet({
               <div className="flex flex-col items-center gap-1 p-6">
                 <CloudArrowUpIcon className="h-8 w-8 text-zinc-400" />
                 <p className="text-xs font-semibold text-zinc-700">Drag & drop or click to select</p>
-                <p className="text-[11px] text-zinc-400">Images up to 5 MB, documents up to 10 MB</p>
+                <p className="text-[11px] text-zinc-400">{IMAGE_HINT} · PDF, Word or Excel up to 50 MB</p>
               </div>
             )}
             <input
@@ -421,7 +472,7 @@ function UploadSheet({
               type="file"
               multiple
               className="hidden"
-              accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+              accept={UPLOAD_ACCEPT_ATTR}
               onChange={(e) => applyFiles(Array.from(e.target.files ?? []))}
             />
           </div>
@@ -477,7 +528,8 @@ function UploadSheet({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+            disabled={uploading}
+            className="rounded-md border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -485,9 +537,14 @@ function UploadSheet({
             type="button"
             onClick={handleUpload}
             disabled={uploading || files.length === 0}
-            className="rounded-md bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-md bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
           >
-            {files.length > 0 ? `Upload (${files.length})` : "Upload"}
+            {uploading && <ArrowPathIcon className="h-4 w-4 animate-spin" />}
+            {uploading
+              ? "Uploading…"
+              : files.length > 0
+                ? `Upload (${files.length})`
+                : "Upload"}
           </button>
         </SheetFooter>
       </SheetContent>
