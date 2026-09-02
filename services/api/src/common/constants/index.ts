@@ -25,10 +25,6 @@ export const ALLOWED_DOCUMENT_TYPES = ['application/pdf', 'application/msword', 
 // a LIMIT_FILE_SIZE violation into a 413 PayloadTooLargeException.
 export const multerLimits = (files: number = 1) => ({ limits: { fileSize: MAX_FILE_SIZE, files } });
 
-// JWT
-export const JWT_EXPIRATION = '7d';
-export const JWT_REFRESH_EXPIRATION = '30d';
-
 // Rate Limiting
 export const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
 export const RATE_LIMIT_MAX_REQUESTS = 100;

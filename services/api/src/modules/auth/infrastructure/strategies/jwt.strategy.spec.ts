@@ -1,8 +1,8 @@
 // src/modules/auth/infrastructure/strategies/jwt.strategy.spec.ts
 
-import { UnauthorizedException } from '@nestjs/common';
+import { Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtPayload, JwtStrategy } from './jwt.strategy';
+import { JwtPayload, JwtStrategy, parseTtlSeconds } from './jwt.strategy';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
 
 describe('JwtStrategy - refresh tokens must not work as bearer tokens', () => {
@@ -90,15 +90,81 @@ describe('JwtStrategy - refresh tokens must not work as bearer tokens', () => {
     expect(result).toEqual(expect.objectContaining({ userId: 'user-1' }));
   });
 
-  it('derives the threshold from config, so a 7d JWT_EXPIRES_IN dev env is not locked out', async () => {
-    // Several non-prod .env files set JWT_EXPIRES_IN=7d. Hardcoding 8h here
-    // would have logged out every developer on this deploy.
+  it('warns loudly when the access ttl reaches the refresh ttl, instead of silently not protecting', async () => {
+    // .env and .env.staging used to set JWT_EXPIRES_IN=7d, the same as the
+    // refresh ttl, which leaves the check no gap to discriminate on: it runs
+    // on every request and can never reject anything. The previous version of
+    // this spec asserted that shape was CORRECT, which documented the hole
+    // instead of reporting it.
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     config.JWT_EXPIRES_IN = '7d';
     strategy = build();
 
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('JWT_REFRESH_EXPIRES_IN'),
+    );
+
+    // ...and it does indeed wave the legacy refresh token through, which is
+    // why the warning has to exist.
     const result = await strategy.validate(legacyTokenLasting(7 * 24 * HOUR));
+    expect(result).toEqual(expect.objectContaining({ userId: 'user-1' }));
+  });
+
+  it('does not warn on prod-shaped config, where the check can actually discriminate', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    strategy = build(); // 1h / 8h access, 7d refresh
+
+    expect(warn).not.toHaveBeenCalled();
+    await expect(strategy.validate(legacyTokenLasting(7 * 24 * HOUR))).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('accepts the whole duration grammar the signer accepts', async () => {
+    // jsonwebtoken feeds `expiresIn` to `ms`, so anything ms takes is a legal
+    // TTL. The hand-rolled parser this replaces returned undefined for all of
+    // these and fell back to a threshold far below the real one, which 401'd
+    // every admin token for its entire life.
+    config.JWT_ADMIN_EXPIRES_IN = '12 hours';
+    strategy = build();
+
+    const result = await strategy.validate(legacyTokenLasting(12 * HOUR));
 
     expect(result).toEqual(expect.objectContaining({ userId: 'user-1' }));
+  });
+
+  it('reads a bare number as milliseconds, the same as the signer does', () => {
+    // The old parser read '3600' as 3600 SECONDS; jsonwebtoken reads it as
+    // 3.6 seconds. Agreeing with the signer matters more than the value being
+    // sensible.
+    expect(parseTtlSeconds('3600')).toBe(3.6);
+    expect(parseTtlSeconds('1w')).toBe(7 * 24 * HOUR);
+    expect(parseTtlSeconds('10.5h')).toBe(10.5 * HOUR);
+    expect(parseTtlSeconds('2 days')).toBe(2 * 24 * HOUR);
+  });
+
+  it('disables the lifetime check rather than locking everyone out when the ttl is unparseable', async () => {
+    // Fail OPEN. A typo in an env var must not turn into "every token is
+    // rejected for its whole life" with an error message that blames the
+    // token.
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    config.JWT_ADMIN_EXPIRES_IN = 'eight hours';
+    strategy = build();
+
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('JWT_ADMIN_EXPIRES_IN'));
+
+    const result = await strategy.validate(legacyTokenLasting(7 * 24 * HOUR));
+    expect(result).toEqual(expect.objectContaining({ userId: 'user-1' }));
+  });
+
+  it('still rejects an explicitly typed refresh token when the check is disabled', async () => {
+    jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    config.JWT_ADMIN_EXPIRES_IN = 'eight hours';
+    strategy = build();
+
+    await expect(strategy.validate(payload({ type: 'refresh' }))).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 
   it('still accepts an untyped token that carries neither iat nor exp', async () => {
