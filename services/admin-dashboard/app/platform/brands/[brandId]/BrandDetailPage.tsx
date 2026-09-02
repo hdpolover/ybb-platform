@@ -314,8 +314,8 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
                     <Upload className="h-3.5 w-3.5" />
                     {logoFile ? logoFile.name : brand.logoUrl ? "Replace logo…" : "Upload logo…"}
                   </label>
-                  <input id="logoUpload" type="file" accept="image/*" className="sr-only" onChange={onLogoChange} />
-                  <p className="mt-1 text-xs text-zinc-400">PNG, JPG, SVG, WEBP. Square works best.</p>
+                  <input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" onChange={onLogoChange} />
+                  <p className="mt-1 text-xs text-zinc-400">PNG, JPG, WEBP or GIF, up to 10MB. Square works best. SVG is not supported.</p>
                 </div>
               </div>
             </div>

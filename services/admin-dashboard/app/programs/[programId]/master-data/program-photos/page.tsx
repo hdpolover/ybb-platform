@@ -252,7 +252,7 @@ function PhotoModal({
           year: year ? Number(year) : undefined,
           order: order !== "" ? Number(order) : undefined,
           ...(selectedMediaUrl ? { imageUrl: selectedMediaUrl } : {}),
-          ...(imageFile ? { image: imageFile, userId, brandId } : {}),
+          ...(imageFile ? { image: imageFile, userId, brandId, programId } : {}),
         });
       } else {
         await createProgramGalleryItem(programId, {
