@@ -111,8 +111,9 @@ export class CacheService {
       CACHE_KEYS.LANDING_OPEN_REGISTRATION_PROGRAMS(brandId),
       // Only clears a UUID-keyed resolveBrand() entry (some callers pass
       // brandId itself as the lookup key). The far more common host-keyed
-      // entry is busted separately in LandingCacheInvalidationService,
-      // which knows the brand's websiteUrl — this method only has brandId.
+      // entry can't be derived from a brandId alone, so a brand write also
+      // busts every resolveBrand entry by pattern in
+      // LandingCacheInvalidationService.bustBrandResolveCache().
       CACHE_KEYS.LANDING_BRAND_RESOLVE(brandId),
     ]);
 
