@@ -477,6 +477,7 @@ function SocialMediaSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSa
     socialFacebook: brand.socialMediaLinks?.facebook ?? "",
     socialYoutube: brand.socialMediaLinks?.youtube ?? "",
     socialTiktok: brand.socialMediaLinks?.tiktok ?? "",
+    socialTelegram: brand.socialMediaLinks?.telegram ?? "",
   });
 
   function set<K extends keyof typeof form>(k: K, v: string) {
@@ -492,6 +493,7 @@ function SocialMediaSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSa
       socialFacebook: brand.socialMediaLinks?.facebook ?? "",
       socialYoutube: brand.socialMediaLinks?.youtube ?? "",
     socialTiktok: brand.socialMediaLinks?.tiktok ?? "",
+    socialTelegram: brand.socialMediaLinks?.telegram ?? "",
     });
     setError(null);
   }
@@ -506,6 +508,7 @@ function SocialMediaSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSa
     if (form.socialFacebook) socialMediaLinks.facebook = form.socialFacebook;
     if (form.socialYoutube) socialMediaLinks.youtube = form.socialYoutube;
     if (form.socialTiktok) socialMediaLinks.tiktok = form.socialTiktok;
+    if (form.socialTelegram) socialMediaLinks.telegram = form.socialTelegram;
     try {
       await updatePlatformBrandDetails(brand.id, {
         socialMediaLinks: Object.keys(socialMediaLinks).length > 0 ? socialMediaLinks : undefined,
@@ -535,6 +538,7 @@ function SocialMediaSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSa
             <FieldInput label="Facebook" id="socialFacebook" value={form.socialFacebook} onChange={(v) => set("socialFacebook", v)} placeholder="https://facebook.com/..." />
             <FieldInput label="YouTube" id="socialYoutube" value={form.socialYoutube} onChange={(v) => set("socialYoutube", v)} placeholder="https://youtube.com/..." />
             <FieldInput label="TikTok" id="socialTiktok" value={form.socialTiktok} onChange={(v) => set("socialTiktok", v)} placeholder="https://tiktok.com/@..." />
+            <FieldInput label="Telegram" id="socialTelegram" value={form.socialTelegram} onChange={(v) => set("socialTelegram", v)} placeholder="https://t.me/..." />
           </div>
           <SheetFooter className="mt-6">
             <Button onClick={handleSave} loading={saving} disabled={saving}>
@@ -793,9 +797,28 @@ function ProgramsTab({ brandId }: { brandId: string }) {
 
 // ─── Tab: Contact ─────────────────────────────────────────────────────────────
 
+// Every platform the edit sheet can set. Listed even when unset, so the tab
+// shows what is *available* rather than only what happens to be filled in —
+// TikTok was reported as a missing option purely because no brand but Vietnam
+// had a value, so it never appeared here.
+const SUPPORTED_SOCIAL_PLATFORMS = [
+  "instagram",
+  "tiktok",
+  "linkedin",
+  "twitter",
+  "facebook",
+  "youtube",
+  "telegram",
+] as const;
+
 function ContactTab({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: () => void }) {
   const social = brand.socialMediaLinks ?? {};
-  const hasSocial = Object.keys(social).length > 0;
+  // Anything stored that predates the supported list still renders, so a value
+  // can never be hidden just because the sheet has no input for it yet.
+  const extraPlatforms = Object.keys(social).filter(
+    (platform) => !SUPPORTED_SOCIAL_PLATFORMS.includes(platform as (typeof SUPPORTED_SOCIAL_PLATFORMS)[number]),
+  );
+  const platforms = [...SUPPORTED_SOCIAL_PLATFORMS, ...extraPlatforms];
 
   return (
     <div className="space-y-4">
@@ -807,27 +830,30 @@ function ContactTab({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: (
           </div>
         </CardHeader>
         <CardContent>
-          {hasSocial ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {Object.entries(social).map(([platform, url]) => (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {platforms.map((platform) => {
+              const url = social[platform];
+              return (
                 <div key={platform}>
                   <p className="text-xs font-medium capitalize text-zinc-500">{platform}</p>
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-0.5 flex items-center gap-1 text-sm text-blue-600 hover:underline"
-                  >
-                    <Globe className="h-3.5 w-3.5" />
-                    <span className="truncate">{url}</span>
-                    <ExternalLink className="h-3 w-3 shrink-0" />
-                  </a>
+                  {url ? (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-0.5 flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                      <span className="truncate">{url}</span>
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                    </a>
+                  ) : (
+                    <p className="mt-0.5 text-sm text-zinc-400">Not set</p>
+                  )}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-zinc-400">No social media links configured.</p>
-          )}
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
     </div>
