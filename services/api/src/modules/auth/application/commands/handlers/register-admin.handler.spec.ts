@@ -216,4 +216,39 @@ describe('RegisterAdminHandler - public admin-registration hardening', () => {
       }),
     );
   });
+
+  it('signs the token with the roles the LINKED row grants, not the request slug', async () => {
+    // The body says 'super_admin'; the seeded AdminRole is named 'Super Admin'.
+    // Signing the slug produced a token that matched neither @Roles(SUPER_ADMIN)
+    // nor the display name, so a brand-new admin 403'd on every role-guarded
+    // route until they logged out and back in — at which point admin-login
+    // rebuilt the roles correctly and the problem vanished, which is exactly
+    // how it survived this long.
+    await handler.execute(
+      new RegisterAdminCommand(
+        'new-admin@example.com',
+        'hunter2hunter2',
+        'New Admin',
+        VALID_SECRET,
+        'brand-1',
+        'owner', // a slug that is not even a substring of the role name
+        ['brand-2'],
+      ),
+    );
+
+    expect(mockJwtService.sign).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        type: 'access',
+        roles: [
+          'admin',
+          'Super Admin',
+          'super_admin',
+          'brand:brand-1:owner',
+          'brand:brand-2:owner',
+        ],
+      }),
+      expect.anything(),
+    );
+  });
 });

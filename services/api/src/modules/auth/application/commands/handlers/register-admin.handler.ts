@@ -209,8 +209,24 @@ export class RegisterAdminHandler {
       adminId: admin.id,
     };
 
+    // Roles are derived exactly the way admin-login.handler rebuilds them on
+    // the next sign-in, so the token this route hands back grants the same
+    // thing that logging in does. It used to emit the request's SLUG
+    // ('owner', 'manager'), which matches no @Roles() value and none of the
+    // linked row's names, so a freshly registered admin 403'd on every
+    // role-guarded route until they logged out and back in.
+    const roleSlug = role.name.toLowerCase().replace(/\s+/g, '_');
+    const roles = [
+      'admin',
+      role.name,
+      ...(roleSlug === role.name ? [] : [roleSlug]),
+      ...[command.brandId, ...(command.additionalCategoryIds ?? [])].map(
+        (brandId) => `brand:${brandId}:${command.role}`,
+      ),
+    ];
+
     const accessToken = this.jwtService.sign(
-      { ...basePayload, jti: randomUUID(), roles: ['admin', command.role], type: 'access' },
+      { ...basePayload, jti: randomUUID(), roles, type: 'access' },
       { expiresIn: this.configService.get<string>('JWT_ADMIN_EXPIRES_IN', '8h') },
     );
 
