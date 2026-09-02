@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsUUID, IsOptional, IsArray } from 'class-validator';
+import { IsString, IsUUID, IsOptional } from 'class-validator';
 
 export class AssignBrandAdminDto {
     @ApiProperty({ example: 'uuid-of-admin', description: 'Admin ID to assign to this brand' })
@@ -10,12 +10,6 @@ export class AssignBrandAdminDto {
     @IsOptional()
     @IsString()
     roleInBrand?: string;
-
-    @ApiProperty({ type: [String], required: false, description: 'Permission flags' })
-    @IsOptional()
-    @IsArray()
-    @IsString({ each: true })
-    permissions?: string[];
 }
 
 export class BrandAdminResponseDto {
