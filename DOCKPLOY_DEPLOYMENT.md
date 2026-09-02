@@ -145,7 +145,13 @@ via the postgres service's `command:` block:
   `random_page_cost=1.1` (was 4 — the volume is SSD-backed, default assumes
   spinning disk and pushes the planner away from index scans it should use),
   plus `track_io_timing=on`, `pg_stat_statements` preloaded, and
-  `log_min_duration_statement=500` (log queries over 500ms).
+  `log_min_duration_statement=500` (log queries over 500ms). Also sets
+  `shm_size: 1gb` on the service (Docker default is 64MB) — Postgres uses
+  `/dev/shm` for parallel-query workers, and a parallel hash join at the new
+  work_mem can approach that default budget on its own; a couple of
+  concurrent parallel queries would exhaust it and fail with "could not
+  resize shared memory segment: No space left on device" instead of
+  degrading gracefully.
 - `postgres-payment` and `postgres-file`: these DBs are tiny, so no memory
   settings were touched — only `track_io_timing=on` and `pg_stat_statements`
   were added, for the same visibility.
