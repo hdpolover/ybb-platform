@@ -1,6 +1,7 @@
 "use client";
 
 import { formatAnnouncementLabel } from "./system-announcement-utils";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 
 type SystemAnnouncementPreviewProps = {
   title: string;
@@ -85,7 +86,7 @@ export function SystemAnnouncementPreview({
           {content.trim() ? (
             <div
               className="prose prose-slate max-w-none prose-headings:text-blue-950 prose-a:text-primary"
-              dangerouslySetInnerHTML={{ __html: content }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }}
             />
           ) : (
             <p className="text-sm leading-7 text-slate-500">
