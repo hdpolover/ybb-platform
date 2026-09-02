@@ -13,6 +13,7 @@ import { ResetPasswordHandler } from './application/commands/handlers/reset-pass
 import { VerifyEmailHandler } from './application/commands/handlers/verify-email.handler';
 import { ResendVerificationEmailHandler } from './application/commands/handlers/resend-verification-email.handler';
 import { FirebaseLoginHandler } from './application/commands/handlers/firebase-login.handler';
+import { LinkLocalIdentityHandler } from './application/commands/handlers/link-local-identity.handler';
 import { AdminLoginHandler } from './application/commands/handlers/admin-login.handler';
 import { AdminRefreshHandler } from './application/commands/handlers/admin-refresh.handler';
 import { AmbassadorLoginHandler } from './application/commands/handlers/ambassador-login.handler';
@@ -59,6 +60,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
     VerifyEmailHandler,
     ResendVerificationEmailHandler,
     FirebaseLoginHandler,
+    LinkLocalIdentityHandler,
     AdminLoginHandler,
     AdminRefreshHandler,
     AmbassadorLoginHandler,
