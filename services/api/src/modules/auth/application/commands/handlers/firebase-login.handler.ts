@@ -389,12 +389,17 @@ export class FirebaseLoginHandler {
     await this.authLoggingService.logSuccessfulLogin(user.id, command.ipAddress, command.userAgent);
     this.metricsService.loginTotal.inc({ method: providerName, result: 'success' });
 
+    // Session id is minted BEFORE the token so the access token can carry it
+    // as `sid`. Without it logout has no session to name (see LogoutHandler).
+    const sessionToken = randomUUID();
+
     // Generate JWT
     const accessTokenPayload = {
       sub: user.id,
       email: user.email,
       brandId: user.brandId,
       jti: randomUUID(),
+      sid: sessionToken,
       type: 'access' as const,
     };
 
@@ -411,7 +416,6 @@ export class FirebaseLoginHandler {
 
     // Create Session
     const agentInfo = this.parseUserAgent(command.userAgent);
-    const sessionToken = randomUUID();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
     const geoCtx = this.geoIpService.lookup(command.ipAddress);

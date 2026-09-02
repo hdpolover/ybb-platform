@@ -374,11 +374,18 @@ export class RegisterHandler {
     const accessTokenJti = crypto.randomUUID();
     const refreshTokenJti = crypto.randomUUID();
 
+    // Session id is minted BEFORE the token so the access token can carry it as
+    // `sid`. The session row below is only written when we have an IP and a
+    // user agent; when it is not, this sid simply names no row and logout
+    // revokes nothing, which is the correct outcome.
+    const sessionToken = crypto.randomUUID();
+
     const payload = {
       sub: newUser.id,
       email: newUser.email,
       brandId: newUser.brandId,
       jti: accessTokenJti,
+      sid: sessionToken,
       type: 'access' as const,
     };
 
@@ -399,7 +406,6 @@ export class RegisterHandler {
     // Create initial user session
     if (command.ipAddress && command.userAgent) {
         const agentInfo = this.authLoggingService.parseUserAgent(command.userAgent);
-        const sessionToken = crypto.randomUUID();
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
         

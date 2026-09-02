@@ -241,6 +241,10 @@ export class SupportAccessService {
       throw new NotFoundException('Participant account is not available.');
     }
 
+    // Session id is minted BEFORE the token so the access token can carry it
+    // as `sid`. Without it logout has no session to name (see LogoutHandler).
+    const sessionToken = randomUUID();
+
     const accessToken = this.jwtService.sign(
       {
         sub: user.id,
@@ -248,6 +252,7 @@ export class SupportAccessService {
         brandId: user.brandId,
         jti: randomUUID(),
         roles: [],
+        sid: sessionToken,
         type: 'access',
       },
       { expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h') },
@@ -278,7 +283,7 @@ export class SupportAccessService {
       this.prisma.userSession.create({
         data: {
           userId: user.id,
-          sessionToken: randomUUID(),
+          sessionToken,
           refreshToken,
           deviceName: 'admin-impersonation',
           browser: userAgent.slice(0, 100),
