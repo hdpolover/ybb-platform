@@ -40,6 +40,7 @@ import {
 import { useAuth } from "@/app/contexts/AuthContext";
 import { LogoOverrideWarning } from "@/src/admin/components/logo-override-warning";
 import { formatDate, parseApiDate, toLocalDatetimeInputValue } from "@/lib/utils";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import {
   listProgramMedia,
   uploadFileViaPresignedUrl,
@@ -657,7 +658,7 @@ function OverviewTab({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: 
             <p className="text-xs font-medium text-zinc-500">About</p>
             <div
               className="mt-0.5 text-sm text-zinc-900 [&_a]:text-blue-600 [&_a]:underline [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:mb-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5"
-              dangerouslySetInnerHTML={{ __html: brand.about }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(brand.about) }}
             />
           </div>
         ) : (
@@ -668,7 +669,7 @@ function OverviewTab({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: 
             <p className="text-xs font-medium text-zinc-500">Vision</p>
             <div
               className="mt-0.5 text-sm text-zinc-900 [&_a]:text-blue-600 [&_a]:underline [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:mb-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5"
-              dangerouslySetInnerHTML={{ __html: brand.vision }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(brand.vision) }}
             />
           </div>
         )}
@@ -677,7 +678,7 @@ function OverviewTab({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: 
             <p className="text-xs font-medium text-zinc-500">Mission</p>
             <div
               className="mt-0.5 text-sm text-zinc-900 [&_a]:text-blue-600 [&_a]:underline [&_h1]:mb-3 [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:mb-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-5"
-              dangerouslySetInnerHTML={{ __html: brand.mission }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(brand.mission) }}
             />
           </div>
         )}

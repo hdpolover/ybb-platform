@@ -1783,8 +1783,12 @@ export const SUPPORTED_GATEWAY_PROVIDERS = ["midtrans", "xendit", "stripe", "pay
 export type GatewayProvider = typeof SUPPORTED_GATEWAY_PROVIDERS[number];
 export type GatewayMode = "sandbox" | "production";
 
-// Mirrors the Go GatewayConfig entity. Credential fields come back decrypted
-// from the payment service — never log or persist them client-side.
+// Mirrors the Go GatewayConfig entity. GET responses come back with the
+// credential fields MASKED (e.g. "****1234", "****" if too short to reveal a
+// tail, or "" if never set) — see redactGatewayConfig/maskSecret in the
+// payment service's gateway_config_handler.go. Never treat these as the real
+// secret. On PUT, echoing the exact mask back for a field the admin didn't
+// change tells the server to keep the stored value (keepSecretIfMasked).
 export type GatewayConfig = {
   id: string;
   brand_id: string | null;

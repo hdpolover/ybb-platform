@@ -31,7 +31,7 @@ function OriginalDescriptionCard({
       {description ? (
         <div
           className="prose prose-xs max-w-none text-amber-900"
-          dangerouslySetInnerHTML={{ __html: description }}
+          dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(description) }}
         />
       ) : (
         <p className="text-xs italic text-amber-700">No description provided.</p>

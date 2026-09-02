@@ -15,6 +15,7 @@ import { getExchangeRate } from "@/src/shared/api-client";
 import { parseApiDate } from "@/lib/utils";
 import { formatInBusinessTz } from "@/lib/datetime";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
+import { sanitizeHtml } from "@/lib/sanitize-html";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 
 /**
@@ -101,7 +102,7 @@ function PaymentInfoEditor({ programId, initialHtml, onSaved }: PaymentInfoEdito
         {initialHtml ? (
           <div
             className="prose prose-sm max-w-none text-zinc-700"
-            dangerouslySetInnerHTML={{ __html: initialHtml }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(initialHtml) }}
           />
         ) : (
           <p className="text-sm italic text-zinc-400">
