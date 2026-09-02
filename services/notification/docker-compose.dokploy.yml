@@ -38,6 +38,10 @@ services:
       # Without this the ReceiptService falls back to http://file-service:8001, which does
       # not resolve here, and every receipt silently fails to attach.
       FILE_SERVICE_URL: ${FILE_SERVICE_URL:-http://ybb-prod-file:8001}
+      # Shared secret the file service's internal routes (/documents, /files,
+      # /images, /media) require via x-internal-service-key. Must match the
+      # file service's own FILE_SERVICE_INTERNAL_KEY/INTERNAL_SERVICE_KEY.
+      FILE_SERVICE_INTERNAL_KEY: ${FILE_SERVICE_INTERNAL_KEY}
       # Fallback portal origin used by email.service.ts (resolveDocumentsUrl,
       # resolveSupportUrl, etc.) when a brand has no websiteUrl set. Was
       # entirely absent here before, so those links silently fell back to
