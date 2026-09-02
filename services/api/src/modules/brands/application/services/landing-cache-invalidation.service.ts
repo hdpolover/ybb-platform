@@ -80,7 +80,7 @@ export class LandingCacheInvalidationService {
         } = options;
 
         await this.clearCacheLayers(brandId, { bustProgramCache, clearSnapshot, swallowErrors });
-        await this.bustBrandResolveCacheByUrl(options.revalidate);
+        await this.bustBrandResolveCache(options.revalidate);
 
         // LandingRevalidationService's methods already catch + log their own
         // HTTP failures (see landing-revalidation.service.ts), so they never
@@ -174,23 +174,22 @@ export class LandingCacheInvalidationService {
     }
 
     /**
-     * resolveBrand()'s cache is keyed by normalised host, not brandId, so
-     * `cacheService.invalidateBrandLandingCaches(brandId)` above can't reach
-     * a host-keyed entry — only clearCacheLayers's brandId-as-key variant.
-     * A 'brand' revalidate request already carries the fresh websiteUrl
-     * (see update-brand.handler.ts), so bust that specific host entry here.
-     * A domain CHANGE leaves the old host's entry to expire on its own
-     * CACHE_TTL.MEDIUM (5 min) — accepted, matches every other bounded-
-     * staleness tradeoff in this file.
+     * resolveBrand()'s cache is keyed by the REQUEST host (BrandDomain's
+     * cleanDomain() output — bare, lowercased, www/staging/dev/test-stripped),
+     * not by the stored `websiteUrl` (which carries a scheme, e.g.
+     * "https://example.com") and not by brandId, so neither a targeted
+     * key built from websiteUrl nor `invalidateBrandLandingCaches(brandId)`
+     * above can reach it. With only ~8 brands, don't bother reproducing
+     * cleanDomain's normalisation here (a second copy that could drift out
+     * of sync) — just wipe every resolveBrand entry on any brand write.
+     * Cheap, and it also covers the websiteUrl-changed case for free.
      */
-    private async bustBrandResolveCacheByUrl(request: LandingRevalidationRequest): Promise<void> {
-        if (request.kind !== 'brand' || !request.urls?.websiteUrl) return;
+    private async bustBrandResolveCache(request: LandingRevalidationRequest): Promise<void> {
+        if (request.kind !== 'brand') return;
         try {
-            await this.cacheService.invalidateKey(
-                CACHE_KEYS.LANDING_BRAND_RESOLVE(request.urls.websiteUrl.trim().toLowerCase()),
-            );
+            await this.cacheService.invalidateByPattern(CACHE_KEYS.LANDING_BRAND_RESOLVE('*'));
         } catch (error) {
-            console.error('Failed to invalidate resolveBrand cache by URL:', error);
+            console.error('Failed to invalidate resolveBrand cache:', error);
         }
     }
 
