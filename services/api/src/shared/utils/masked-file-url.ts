@@ -17,12 +17,13 @@ export function extractFileUuidFromUrl(url: string): string | null {
 
 /**
  * Hosts whose urls the mask lookup can ever resolve. Derived from config, never
- * hardcoded: FILE_CDN_HOSTS (comma-separated hosts or urls) plus the
- * PUBLIC_API_BASE_URL host so already-masked links stay candidates.
+ * hardcoded: the STORAGE_PUBLIC_URL host (the host the app itself writes into
+ * stored file urls), any extra hosts in FILE_CDN_HOSTS (comma-separated hosts
+ * or urls, for legacy/second storage buckets), plus the PUBLIC_API_BASE_URL
+ * host so already-masked links stay candidates.
  *
- * When FILE_CDN_HOSTS is unset the allowlist is empty and every url stays a
- * candidate, i.e. the pre-existing behaviour. Set it to skip the files lookup
- * for the many responses that only carry third-party or marketing urls.
+ * When none of those resolve to a host the allowlist is empty and every url
+ * stays a candidate, i.e. the pre-existing behaviour.
  */
 let maskableHostsEnv: string | undefined;
 let maskableHosts = new Set<string>();
@@ -36,17 +37,19 @@ function normalizeHost(value: string): string | null {
 }
 
 function getMaskableHosts(): Set<string> {
-  const configured = process.env.FILE_CDN_HOSTS ?? '';
-  const envKey = `${configured}|${process.env.PUBLIC_API_BASE_URL ?? ''}`;
+  const storage = process.env.STORAGE_PUBLIC_URL ?? '';
+  const extra = process.env.FILE_CDN_HOSTS ?? '';
+  const apiBase = process.env.PUBLIC_API_BASE_URL ?? '';
+  const envKey = `${storage}|${extra}|${apiBase}`;
   if (envKey !== maskableHostsEnv) {
     maskableHostsEnv = envKey;
     const hosts = new Set<string>();
-    for (const entry of configured.split(',')) {
+    for (const entry of [storage, ...extra.split(',')]) {
       const host = normalizeHost(entry);
       if (host) hosts.add(host);
     }
     if (hosts.size > 0) {
-      const apiHost = normalizeHost(process.env.PUBLIC_API_BASE_URL ?? '');
+      const apiHost = normalizeHost(apiBase);
       if (apiHost) hosts.add(apiHost);
     }
     maskableHosts = hosts;

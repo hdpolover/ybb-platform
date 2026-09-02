@@ -165,8 +165,8 @@ describe('CdnMaskInterceptor', () => {
   });
 
   it('skips URLs that are not on a configured storage/CDN host', async () => {
-    const previous = process.env.FILE_CDN_HOSTS;
-    process.env.FILE_CDN_HOSTS = 'cdn.ybbhub.com';
+    const previous = process.env.STORAGE_PUBLIC_URL;
+    process.env.STORAGE_PUBLIC_URL = 'https://cdn.ybbhub.com';
     try {
       const handler: CallHandler = {
         handle: () => of({ external: 'https://www.youtube.com/watch?v=abc' }),
@@ -177,8 +177,8 @@ describe('CdnMaskInterceptor', () => {
       expect(result).toEqual({ external: 'https://www.youtube.com/watch?v=abc' });
       expect(prismaMock.file.findMany).not.toHaveBeenCalled();
     } finally {
-      process.env.FILE_CDN_HOSTS = previous;
-      if (previous === undefined) delete process.env.FILE_CDN_HOSTS;
+      process.env.STORAGE_PUBLIC_URL = previous;
+      if (previous === undefined) delete process.env.STORAGE_PUBLIC_URL;
     }
   });
 });
