@@ -182,7 +182,7 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @Throttle({ default: { limit: 3, ttl: 3600000 } }) // 3 attempts per hour
+  @Throttle({ default: { limit: 10, ttl: 3600000 } }) // 10 per hour per address; was 3, shared by the whole site
   @ApiOperation({
     summary: 'Register User',
     description: `
@@ -239,7 +239,7 @@ export class AuthController {
 
   @Public()
   @Post('forgot-password')
-  @Throttle({ default: { limit: 3, ttl: 3600000 } })
+  @Throttle({ default: { limit: 10, ttl: 3600000 } }) // 10 per hour per address
   @ApiOperation({ summary: 'Request Password Reset' })
   @ApiResponse({ status: 201, description: 'Password reset email sent' })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
@@ -286,7 +286,7 @@ export class AuthController {
 
   @Public()
   @Post('resend-verification')
-  @Throttle({ default: { limit: 3, ttl: 3600000 } }) // Limit to prevent spam
+  @Throttle({ default: { limit: 10, ttl: 3600000 } }) // 10 per hour per address
   @ApiOperation({ summary: 'Resend Verification Email' })
   @ApiResponse({ status: 200, description: 'Verification email sent if user exists and is unverified' })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
