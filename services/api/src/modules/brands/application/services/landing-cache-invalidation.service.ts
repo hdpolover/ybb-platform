@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { LandingRevalidationService } from './landing-revalidation.service';
 
 /**
@@ -79,6 +80,7 @@ export class LandingCacheInvalidationService {
         } = options;
 
         await this.clearCacheLayers(brandId, { bustProgramCache, clearSnapshot, swallowErrors });
+        await this.bustBrandResolveCacheByUrl(options.revalidate);
 
         // LandingRevalidationService's methods already catch + log their own
         // HTTP failures (see landing-revalidation.service.ts), so they never
@@ -168,6 +170,27 @@ export class LandingCacheInvalidationService {
             // triggered them — the admin's save already succeeded; a stale
             // landing page for up to the cache TTL is the acceptable fallback.
             console.error('Failed to invalidate landing caches:', error);
+        }
+    }
+
+    /**
+     * resolveBrand()'s cache is keyed by normalised host, not brandId, so
+     * `cacheService.invalidateBrandLandingCaches(brandId)` above can't reach
+     * a host-keyed entry — only clearCacheLayers's brandId-as-key variant.
+     * A 'brand' revalidate request already carries the fresh websiteUrl
+     * (see update-brand.handler.ts), so bust that specific host entry here.
+     * A domain CHANGE leaves the old host's entry to expire on its own
+     * CACHE_TTL.MEDIUM (5 min) — accepted, matches every other bounded-
+     * staleness tradeoff in this file.
+     */
+    private async bustBrandResolveCacheByUrl(request: LandingRevalidationRequest): Promise<void> {
+        if (request.kind !== 'brand' || !request.urls?.websiteUrl) return;
+        try {
+            await this.cacheService.invalidateKey(
+                CACHE_KEYS.LANDING_BRAND_RESOLVE(request.urls.websiteUrl.trim().toLowerCase()),
+            );
+        } catch (error) {
+            console.error('Failed to invalidate resolveBrand cache by URL:', error);
         }
     }
 

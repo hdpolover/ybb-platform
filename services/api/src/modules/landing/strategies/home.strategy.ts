@@ -365,7 +365,7 @@ export class HomeStrategy implements ILandingPageStrategy {
       // everywhere else so this list and `program`'s own resolution never
       // silently disagree on ties. Query + include shared with
       // programs.strategy.ts via registration-editions.util.ts.
-      fetchOpenRegistrationPrograms(this.prisma, brand.id, nowForRegistrationWindow),
+      fetchOpenRegistrationPrograms(this.prisma, this.cacheService, brand.id, nowForRegistrationWindow),
     ]);
 
     // Shared with each edition's own `guidelines` in `programs[]` below (via
