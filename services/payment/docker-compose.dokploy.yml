@@ -46,6 +46,15 @@ services:
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
       POSTGRES_DB: ${DATABASE_NAME}
+    # Observability only — this DB is tiny, no memory tuning needed. See
+    # "Postgres tuning" section in DOCKPLOY_DEPLOYMENT.md.
+    command:
+      [
+        "postgres",
+        "-c", "track_io_timing=on",
+        "-c", "shared_preload_libraries=pg_stat_statements",
+        "-c", "pg_stat_statements.track=all"
+      ]
     volumes:
       - postgres_payment_data_prod_v2:/var/lib/postgresql/data
     networks:
