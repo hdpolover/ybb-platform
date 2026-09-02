@@ -6,6 +6,7 @@ import { AuthModule } from '../auth/auth.module';
 import { FilesModule } from '../files/files.module';
 import { UsersModule } from '../users/users.module';
 import { ProgramsModule } from '../programs/programs.module';
+import { AdminsModule } from '../admins/admins.module';
 import { LandingRevalidationService } from './application/services/landing-revalidation.service';
 import { LandingCacheInvalidationService } from './application/services/landing-cache-invalidation.service';
 import { BrandLogoAssetsService } from './application/services/brand-logo-assets.service';
@@ -39,7 +40,7 @@ import { UpdateSignatureHandler } from './application/commands/handlers/update-s
 import { DeleteSignatureHandler } from './application/commands/handlers/delete-signature.handler';
 
 @Module({
-    imports: [CqrsModule, HttpModule, ConfigModule, AuthModule, FilesModule, UsersModule, ProgramsModule],
+    imports: [CqrsModule, HttpModule, ConfigModule, AuthModule, FilesModule, UsersModule, ProgramsModule, AdminsModule],
     controllers: [BrandsController, SignatureAdminController],
     providers: [
         LandingRevalidationService,

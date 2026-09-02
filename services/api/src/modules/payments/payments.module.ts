@@ -5,6 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '../auth/auth.module';
 import { ParticipantsModule } from '../participants/participants.module';
 import { FilesModule } from '../files/files.module';
+import { AdminsModule } from '../admins/admins.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { PaymentsController } from './presentation/payments.controller';
 import { PaymentAdminController } from './presentation/payment-admin.controller';
@@ -31,6 +32,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         AuthModule,
         ParticipantsModule,
         FilesModule,
+        AdminsModule,
         MonitoringModule,
         HttpModule,
         ConfigModule,

@@ -41,5 +41,6 @@ import { AuthModule } from '../auth/auth.module';
         SupportAccessService,
         AdminAccessControlService,
     ],
+    exports: [AdminAccessControlService],
 })
 export class AdminsModule { }
