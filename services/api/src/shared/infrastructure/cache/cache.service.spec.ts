@@ -59,4 +59,15 @@ describe('CacheService', () => {
             );
         });
     });
+
+    describe('invalidateBrandLandingCaches', () => {
+        const brandId = 'brand-789';
+
+        it('busts the open-registration-editions and brandId-keyed resolveBrand entries alongside the existing landing keys', async () => {
+            await service.invalidateBrandLandingCaches(brandId);
+
+            expect(mockCacheManager.del).toHaveBeenCalledWith(CACHE_KEYS.LANDING_OPEN_REGISTRATION_PROGRAMS(brandId));
+            expect(mockCacheManager.del).toHaveBeenCalledWith(CACHE_KEYS.LANDING_BRAND_RESOLVE(brandId));
+        });
+    });
 });

@@ -38,6 +38,14 @@ export const CACHE_KEYS = {
   LANDING_SETTINGS: (brandId: string) => `landing:settings:${brandId}`,
   LANDING_ACTIVITY: (brandId: string) => `landing:activity:${brandId}`,
   LANDING_SNAPSHOT: (brandId: string, page: string, slug: string = '') => `landing:snapshot:${brandId}:${page}:${slug || 'root'}`,
+  // resolveBrand()'s host->Brand lookup, keyed by whatever normalised
+  // identifier (host or brand UUID) was passed in. Hit on every /landing/*
+  // and /meta-capi/* request before any other cache is consulted.
+  LANDING_BRAND_RESOLVE: (key: string) => `landing:brand-resolve:${key}`,
+  // fetchOpenRegistrationPrograms()'s "currently-relevant editions" query,
+  // shared by resolveEditionSlug (runs on every /landing/programs request,
+  // ahead of the snapshot cache) and home/programs strategy builders.
+  LANDING_OPEN_REGISTRATION_PROGRAMS: (brandId: string) => `landing:open-registration-programs:${brandId}`,
 
   // Portal cache keys
   PORTAL_DASHBOARD: (userId: string) => `portal:dashboard:${userId}`,
@@ -92,6 +100,11 @@ export const CACHE_KEYS = {
   METADATA_DIETARY: 'metadata:dietary',
   METADATA_KNOWLEDGE_SOURCES: 'metadata:knowledge-sources',
   METADATA_ENUMS: 'metadata:enums',
+
+  // Global (not brand-scoped — auth_providers carries no brandId) active
+  // provider list, read on every login-page load by both GetAuthContextHandler
+  // and GetAuthProvidersHandler.
+  AUTH_PROVIDERS_LIST: 'auth:providers:list',
 };
 
 export const CACHE_TTL = {
