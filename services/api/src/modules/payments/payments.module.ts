@@ -32,7 +32,10 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         ParticipantsModule,
         FilesModule,
         MonitoringModule,
-        HttpModule,
+        HttpModule.register({
+            timeout: 15000, // bound calls to the Go payment service — no timeout meant a hung request never returned
+            maxRedirects: 0,
+        }),
         ConfigModule,
         CacheModule,
     ],

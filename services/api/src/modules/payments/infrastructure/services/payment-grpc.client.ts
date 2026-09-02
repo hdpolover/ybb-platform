@@ -50,6 +50,12 @@ export class PaymentGrpcClient implements OnModuleInit {
     return md;
   }
 
+  // Bounds every unary call so a hung/unreachable Go payment service surfaces as
+  // DEADLINE_EXCEEDED (mapped to 504 below) instead of hanging the request forever.
+  private deadline(): { deadline: Date } {
+    return { deadline: new Date(Date.now() + 15000) };
+  }
+
   // Maps gRPC errors from the Go payment service to NestJS HttpException so the
   // controller surfaces a meaningful HTTP status and message instead of a generic
   // 500 "Internal server error" that hides the actual failure (e.g. invalid
@@ -65,7 +71,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async getIntentsByReference(req: GetIntentsByReferenceRequest): Promise<GetIntentsByReferenceResponse> {
     try {
-      return await lastValueFrom(this.paymentService.GetIntentsByReference(req, this.metadata()));
+      return await lastValueFrom(this.paymentService.GetIntentsByReference(req, this.metadata(), this.deadline()));
     } catch (error) {
       this.rethrowAsHttp(error, 'get intents by reference');
     }
@@ -73,7 +79,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async submitManualPayment(req: SubmitManualPaymentRequest): Promise<SubmitManualPaymentResponse> {
     try {
-        return await lastValueFrom(this.paymentService.SubmitManualPayment(req, this.metadata()));
+        return await lastValueFrom(this.paymentService.SubmitManualPayment(req, this.metadata(), this.deadline()));
     } catch (error) {
         this.rethrowAsHttp(error, 'submit manual payment');
     }
@@ -81,7 +87,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async verifyManualPayment(req: VerifyManualPaymentRequest): Promise<VerifyManualPaymentResponse> {
       try {
-          return await lastValueFrom(this.paymentService.VerifyManualPayment(req, this.metadata()));
+          return await lastValueFrom(this.paymentService.VerifyManualPayment(req, this.metadata(), this.deadline()));
       } catch (error) {
           this.rethrowAsHttp(error, 'verify manual payment');
       }
@@ -94,7 +100,7 @@ export class PaymentGrpcClient implements OnModuleInit {
             ...(req.exchange_rate !== undefined ? { exchangeRate: req.exchange_rate } : {}),
             ...(req.exchangeRate !== undefined ? { exchange_rate: req.exchangeRate } : {}),
           };
-          return await lastValueFrom(this.paymentService.CreateIntent(normalizedReq, this.metadata()));
+          return await lastValueFrom(this.paymentService.CreateIntent(normalizedReq, this.metadata(), this.deadline()));
       } catch (error) {
           this.rethrowAsHttp(error, 'create payment intent');
       }
@@ -102,7 +108,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async getPaymentMethods(req: GetPaymentMethodsRequest): Promise<GetPaymentMethodsResponse> {
     try {
-        return await lastValueFrom(this.paymentService.GetPaymentMethods(req, this.metadata()));
+        return await lastValueFrom(this.paymentService.GetPaymentMethods(req, this.metadata(), this.deadline()));
     } catch (error) {
         this.rethrowAsHttp(error, 'get payment methods');
     }
@@ -110,7 +116,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async processPayment(req: ProcessPaymentRequest): Promise<ProcessPaymentResponse> {
       try {
-          const resp = await lastValueFrom(this.paymentService.ProcessPayment(req, this.metadata()));
+          const resp = await lastValueFrom(this.paymentService.ProcessPayment(req, this.metadata(), this.deadline()));
           return resp;
       } catch (error) {
           this.rethrowAsHttp(error, 'process payment');
@@ -120,7 +126,7 @@ export class PaymentGrpcClient implements OnModuleInit {
   // Admin Methods
   async adminCreatePaymentMethod(req: AdminCreatePaymentMethodRequest) {
     try {
-        return await lastValueFrom(this.paymentService.AdminCreatePaymentMethod(req, this.metadata()));
+        return await lastValueFrom(this.paymentService.AdminCreatePaymentMethod(req, this.metadata(), this.deadline()));
     } catch (error) {
         this.rethrowAsHttp(error, 'create payment method');
     }
@@ -128,7 +134,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async adminUpdatePaymentMethod(req: AdminUpdatePaymentMethodRequest) {
     try {
-        return await lastValueFrom(this.paymentService.AdminUpdatePaymentMethod(req, this.metadata()));
+        return await lastValueFrom(this.paymentService.AdminUpdatePaymentMethod(req, this.metadata(), this.deadline()));
     } catch (error) {
         this.rethrowAsHttp(error, 'update payment method');
     }
@@ -136,7 +142,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async adminDeletePaymentMethod(req: AdminDeletePaymentMethodRequest) {
     try {
-        return await lastValueFrom(this.paymentService.AdminDeletePaymentMethod(req, this.metadata()));
+        return await lastValueFrom(this.paymentService.AdminDeletePaymentMethod(req, this.metadata(), this.deadline()));
     } catch (error) {
         this.rethrowAsHttp(error, 'delete payment method');
     }
@@ -144,7 +150,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async adminGetPaymentMethod(req: AdminGetPaymentMethodRequest) {
     try {
-        return await lastValueFrom(this.paymentService.AdminGetPaymentMethod(req, this.metadata()));
+        return await lastValueFrom(this.paymentService.AdminGetPaymentMethod(req, this.metadata(), this.deadline()));
     } catch (error) {
         this.rethrowAsHttp(error, 'get payment method');
     }
@@ -152,7 +158,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async adminListPaymentMethods(req: AdminListPaymentMethodsRequest) {
     try {
-        return await lastValueFrom(this.paymentService.AdminListPaymentMethods(req, this.metadata()));
+        return await lastValueFrom(this.paymentService.AdminListPaymentMethods(req, this.metadata(), this.deadline()));
     } catch (error) {
         this.rethrowAsHttp(error, 'list payment methods');
     }
@@ -160,7 +166,7 @@ export class PaymentGrpcClient implements OnModuleInit {
 
   async adminListPayments(req: AdminListPaymentsRequest) {
     try {
-        return await lastValueFrom(this.paymentService.AdminListPayments(req, this.metadata()));
+        return await lastValueFrom(this.paymentService.AdminListPayments(req, this.metadata(), this.deadline()));
     } catch (error) {
         this.rethrowAsHttp(error, 'list payments');
     }
