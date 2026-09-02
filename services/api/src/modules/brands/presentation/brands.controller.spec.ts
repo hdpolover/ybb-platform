@@ -13,6 +13,7 @@ import { ListBrandSocialFeedsQuery } from '../application/queries/list-brand-soc
 import { UpdateSocialFeedCommand } from '../application/commands/update-social-feed.command';
 import { DeleteSocialFeedCommand } from '../application/commands/delete-social-feed.command';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
 import { AdminAccessControlService } from '@modules/admins/application/services/admin-access-control.service';
 import { AssignBrandAdminCommand } from '../application/commands/assign-brand-admin.command';
 import { ForbiddenException } from '@nestjs/common';
@@ -50,6 +51,8 @@ describe('BrandsController', () => {
             ],
         })
         .overrideGuard(JwtAuthGuard)
+        .useValue({ canActivate: () => true })
+        .overrideGuard(AdminScopeGuard)
         .useValue({ canActivate: () => true })
         .compile();
 

@@ -47,7 +47,14 @@ function buildProviders(overrides: Record<string, unknown> = {}) {
     { provide: ListApplicationsHandler, useValue: overrides.listApplicationsHandler ?? noopHandler },
     { provide: ExportApplicationsHandler, useValue: overrides.exportApplicationsHandler ?? noopHandler },
     { provide: CacheService, useValue: overrides.cacheService ?? { get: jest.fn(), set: jest.fn() } },
-    { provide: PrismaReadService, useValue: overrides.readPrisma ?? {} },
+    {
+      provide: PrismaReadService,
+      useValue:
+        overrides.readPrisma ??
+        // Platform-scope admin: AdminScopeGuard / resolveScopedFilters must leave
+        // the caller's brand/program filters exactly as supplied.
+        { admin: { findUnique: jest.fn().mockResolvedValue({ accessLevel: 10, canManageAdmins: true, canAssignRoles: true, customPermissions: [], role: { name: 'super admin', permissions: ['*'] }, adminBrands: [], adminPrograms: [] }) } },
+    },
     { provide: GetApplicationReviewHandler, useValue: overrides.getApplicationReviewHandler ?? noopHandler },
     { provide: UpsertApplicationReviewHandler, useValue: overrides.upsertApplicationReviewHandler ?? noopHandler },
   ];
@@ -70,7 +77,7 @@ describe('ApplicationsController GET /applications scoreStatus filter', () => {
       .useValue({
         canActivate: (context: import('@nestjs/common').ExecutionContext) => {
           const req = context.switchToHttp().getRequest();
-          req.user = { userId: 'admin-1', role: [UserRole.ADMIN] };
+          req.user = { userId: 'admin-1', adminId: 'admin-1', role: [UserRole.ADMIN] };
           return true;
         },
       })
@@ -122,5 +129,82 @@ describe('ApplicationsController GET /applications scoreStatus filter', () => {
     const response = await request(app.getHttpServer()).get('/applications').query({ scoreStatus: 'bogus-value' });
     expect(response.status).toBe(400);
     expect(mockListApplicationsHandler.execute).not.toHaveBeenCalled();
+  });
+});
+
+describe('ApplicationsController GET /applications admin scope', () => {
+  let app: INestApplication;
+  const mockListApplicationsHandler = { execute: jest.fn() };
+  // Admin assigned to exactly one brand, mirroring an admin_brands row.
+  const brandScopedAdmin = {
+    admin: {
+      findUnique: jest.fn().mockResolvedValue({
+        accessLevel: 1,
+        canManageAdmins: false,
+        canAssignRoles: false,
+        customPermissions: [],
+        role: { name: 'admin', permissions: [] },
+        adminBrands: [{ brandId: 'brand-mine', permissions: [] }],
+        adminPrograms: [],
+      }),
+    },
+    participantApplication: { findMany: jest.fn().mockResolvedValue([]) },
+  };
+
+  beforeAll(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [ApplicationsController],
+      providers: buildProviders({
+        listApplicationsHandler: mockListApplicationsHandler,
+        readPrisma: brandScopedAdmin,
+      }),
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({
+        canActivate: (context: import('@nestjs/common').ExecutionContext) => {
+          const req = context.switchToHttp().getRequest();
+          req.user = { userId: 'admin-1', adminId: 'admin-1', role: [UserRole.ADMIN] };
+          return true;
+        },
+      })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+
+    app = module.createNestApplication();
+    app.useGlobalFilters(new HttpExceptionFilter());
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(() => {
+    mockListApplicationsHandler.execute.mockClear();
+    mockListApplicationsHandler.execute.mockResolvedValue({ applications: [], total: 0 });
+  });
+
+  it('rejects a brandId the caller is not assigned to', async () => {
+    await request(app.getHttpServer())
+      .get('/applications')
+      .query({ brandId: 'brand-theirs' })
+      .expect(403);
+
+    expect(mockListApplicationsHandler.execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unfiltered listing rather than serving every brand', async () => {
+    await request(app.getHttpServer()).get('/applications').expect(403);
+
+    expect(mockListApplicationsHandler.execute).not.toHaveBeenCalled();
+  });
+
+  it('passes the caller’s own brandId straight through', async () => {
+    await request(app.getHttpServer()).get('/applications').query({ brandId: 'brand-mine' }).expect(200);
+
+    const query = mockListApplicationsHandler.execute.mock.calls[0][0];
+    expect(query.filters.brandId).toBe('brand-mine');
   });
 });

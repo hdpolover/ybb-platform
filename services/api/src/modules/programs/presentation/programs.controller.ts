@@ -33,6 +33,8 @@ import { UserRole } from '@core/entities/user.entity';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
+import { AdminScopeGuard, ScopedBy, assertBrandAccess, getRequestAdminScope } from '@shared/guards/admin-scope.guard';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ChangeType } from '@prisma/client';
 import { UpdateProgramPaymentInfoDto, UpdateProgramPartnersCanvaUrlDto } from './dto/create-update-program-content.dto';
 import { UpdateProgramPaymentInfoCommand, UpdateProgramContactCommand, UpdateProgramPartnersCanvaUrlCommand, UpdateProgramLandingContentCommand } from '../application/commands/program-content.commands';
@@ -41,7 +43,7 @@ import { UpdateProgramLandingContentDto } from './dto/update-program-landing-con
 import { multerLimits } from '@common/constants';
 
 interface AuthenticatedRequest extends ExpressRequest {
-  user: { id: string; userId: string; email: string; brandId: string };
+  user: { id: string; userId: string; email: string; brandId: string; adminId?: string };
 }
 
 interface ProgramLike {
@@ -91,6 +93,7 @@ export class ProgramsController {
     private readonly deleteProgramHandler: DeleteProgramHandler,
     private readonly getParticipantProgressHandler: GetParticipantProgressHandler,
     private readonly commandBus: CommandBus,
+    private readonly readPrisma: PrismaReadService,
   ) { }
 
   @Get()
@@ -158,6 +161,11 @@ export class ProgramsController {
     @Body() dto: CreateProgramDto,
     @Request() req: AuthenticatedRequest,
   ) {
+    // No :id to scope against, so the destination brand comes from the body and
+    // has to be checked here: a brand/program-scoped admin must not be able to
+    // stand up a program under a brand they were never granted.
+    assertBrandAccess(await getRequestAdminScope(this.readPrisma, req), dto.brandId);
+
     const command = new CreateProgramCommand(dto, req.user.id);
     const program = await this.createProgramHandler.execute(command);
 
@@ -168,8 +176,9 @@ export class ProgramsController {
   }
 
   @Put(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update program (Admin only)' })
   @ApiResponse({ status: 200, description: 'Program updated successfully' })
@@ -182,6 +191,13 @@ export class ProgramsController {
     @Body() dto: UpdateProgramDto,
     @Request() req: AuthenticatedRequest,
   ) {
+    // AdminScopeGuard has already cleared the program itself; re-parenting it to
+    // another brand is a second, separate grant, so the destination brand is
+    // checked too. 'assigned' scope holds no brand grant at all and is refused.
+    if (dto.brandId !== undefined) {
+      assertBrandAccess(await getRequestAdminScope(this.readPrisma, req), dto.brandId);
+    }
+
     const command = new UpdateProgramCommand(id, dto, req.user.id);
     const program = await this.updateProgramHandler.execute(command);
 
@@ -192,8 +208,9 @@ export class ProgramsController {
   }
 
   @Put(':id/payment-info')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update program payment-info HTML',
@@ -217,8 +234,9 @@ export class ProgramsController {
   }
 
   @Put(':id/contact')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Replace program contact information' })
   @ApiResponse({ status: 200, description: 'Contact info updated successfully' })
@@ -233,8 +251,9 @@ export class ProgramsController {
   }
 
   @Put(':id/partners-canva-url')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update the Partners-page Canva embed URL for this program',
@@ -253,8 +272,9 @@ export class ProgramsController {
   }
 
   @Put(':id/landing-content')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update program-owned landing page content (partial merge)' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -300,8 +320,9 @@ export class ProgramsController {
   }
 
   @Post(':id/branding')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update program branding (logo, banner, thumbnail)' })
   @ApiConsumes('multipart/form-data')
@@ -331,8 +352,9 @@ export class ProgramsController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete program (Admin only)' })
   @ApiResponse({ status: 200, description: 'Program deleted successfully' })

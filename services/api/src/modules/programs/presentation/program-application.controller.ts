@@ -9,9 +9,11 @@ import { Public } from '../../../shared/decorators/public.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
+import { AdminScopeGuard, ScopedBy, assertProgramAccess, getRequestAdminScope } from '@shared/guards/admin-scope.guard';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 
 interface AuthenticatedRequest extends ExpressRequest {
-  user: { id: string; userId: string };
+  user: { id: string; userId: string; adminId?: string };
 }
 
 import {
@@ -97,6 +99,7 @@ import {
 export class ProgramApplicationConfigController {
   constructor(
     @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+    private readonly readPrisma: PrismaReadService,
     private readonly listProgramPricingTiersHandler: ListProgramPricingTiersHandler,
     private readonly getPricingTierByIdHandler: GetPricingTierByIdHandler,
     private readonly getPricingTierAlertsHandler: GetPricingTierAlertsHandler,
@@ -130,6 +133,42 @@ export class ProgramApplicationConfigController {
     private readonly deleteApplicationFormFieldHandler: DeleteApplicationFormFieldHandler,
   ) {}
 
+  /**
+   * Scope check for routes keyed by a pricing tier rather than a program: the
+   * owning programId is read back from the tier row, never taken from the
+   * request body, so a scoped admin cannot reach another brand's tier by id.
+   */
+  private async assertPricingTierScope(req: AuthenticatedRequest, tierId: string): Promise<string> {
+    const tier = await this.readPrisma.programPricingTier.findUnique({
+      where: { id: tierId },
+      select: { programId: true },
+    });
+
+    if (!tier) {
+      throw new NotFoundException(`Pricing tier ${tierId} not found`);
+    }
+
+    const scope = await getRequestAdminScope(this.readPrisma, req);
+    await assertProgramAccess(this.readPrisma, scope, tier.programId);
+    return tier.programId;
+  }
+
+  /** Same, one level deeper: validity period -> pricing tier -> program. */
+  private async assertValidityPeriodScope(req: AuthenticatedRequest, periodId: string): Promise<string> {
+    const period = await this.readPrisma.pricingTierValidityPeriod.findUnique({
+      where: { id: periodId },
+      select: { pricingTier: { select: { programId: true } } },
+    });
+
+    if (!period) {
+      throw new NotFoundException(`Validity period ${periodId} not found`);
+    }
+
+    const scope = await getRequestAdminScope(this.readPrisma, req);
+    await assertProgramAccess(this.readPrisma, scope, period.pricingTier.programId);
+    return period.pricingTier.programId;
+  }
+
   // --- Pricing Tier Endpoints ---
   @Get(':id/pricing-tiers')
   @Public()
@@ -147,8 +186,9 @@ export class ProgramApplicationConfigController {
   }
 
   @Get(':id/pricing-tiers/alerts')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get pricing tiers that are unpurchasable now (lapsed) or about to run out of coverage before registration closes (expiring)',
@@ -174,8 +214,9 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/pricing-tiers')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add pricing tier' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -190,6 +231,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Update pricing tier' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updatePricingTier(@Param('itemId') itemId: string, @Body() dto: UpdateProgramPricingTierDto, @Request() req: AuthenticatedRequest) {
+    await this.assertPricingTierScope(req, itemId);
     return this.updateProgramPricingTierHandler.execute(new UpdateProgramPricingTierCommand(itemId, dto, req.user.id));
   }
 
@@ -200,6 +242,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Delete pricing tier' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deletePricingTier(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
+    await this.assertPricingTierScope(req, itemId);
     return this.deleteProgramPricingTierHandler.execute(new DeleteProgramPricingTierCommand(itemId, req.user.id));
   }
 
@@ -211,6 +254,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Add validity period to a pricing tier' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addValidityPeriod(@Param('tierId') tierId: string, @Body() dto: CreateValidityPeriodDto, @Request() req: AuthenticatedRequest) {
+    await this.assertPricingTierScope(req, tierId);
     return this.createValidityPeriodHandler.execute(new CreateValidityPeriodCommand({ ...dto, pricingTierId: tierId }, req.user.id));
   }
 
@@ -221,6 +265,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Update a validity period' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateValidityPeriod(@Param('periodId') periodId: string, @Body() dto: UpdateValidityPeriodDto, @Request() req: AuthenticatedRequest) {
+    await this.assertValidityPeriodScope(req, periodId);
     return this.updateValidityPeriodHandler.execute(new UpdateValidityPeriodCommand(periodId, dto, req.user.id));
   }
 
@@ -231,6 +276,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Delete a validity period' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteValidityPeriod(@Param('periodId') periodId: string, @Request() req: AuthenticatedRequest) {
+    await this.assertValidityPeriodScope(req, periodId);
     return this.deleteValidityPeriodHandler.execute(new DeleteValidityPeriodCommand(periodId, req.user.id));
   }
 
@@ -244,8 +290,9 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/requirements')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add requirement' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -305,8 +352,9 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/essays')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add essay' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -335,8 +383,9 @@ export class ProgramApplicationConfigController {
   }
 
   @Put(':id/essay-guidelines')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update shared essay guidelines for a program' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -365,8 +414,9 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/participation-categories')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add participation category' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -409,8 +459,9 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/subthemes')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add subtheme' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
@@ -448,8 +499,9 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/form-fields')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add application form field' })
   @ApiResponse({ status: 201, type: ApplicationFormFieldResponseDto })
