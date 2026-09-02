@@ -10,6 +10,7 @@ import { UserRole } from '@core/entities/user.entity';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import { LANDING_BRAND_PATTERNS, PROGRAM_CONTENT_PATTERNS } from '@shared/constants/cache-patterns';
 import { ListBrandsQuery } from '../application/queries/list-brands.query';
 import { GetBrandDetailQuery } from '../application/queries/get-brand-detail.query';
@@ -96,8 +97,9 @@ export class BrandsController {
     }
 
     @Post(':id/sponsors')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Sponsor', action: ChangeType.create })
     @CacheInvalidate(LANDING_BRAND_PATTERNS)
@@ -115,8 +117,9 @@ export class BrandsController {
     }
 
     @Put(':id/sponsors/:sponsorId')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Sponsor', action: ChangeType.update })
     @CacheInvalidate(LANDING_BRAND_PATTERNS)
@@ -136,8 +139,9 @@ export class BrandsController {
     }
 
     @Delete(':id/sponsors/:sponsorId')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @HttpCode(HttpStatus.NO_CONTENT)
     @AuditTrail({ entityType: 'Sponsor', action: ChangeType.delete })
@@ -153,8 +157,9 @@ export class BrandsController {
     }
 
     @Get(':id/social-feeds')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'List brand social feeds' })
     @ApiResponse({ status: 200, description: 'Return list of social feeds', type: [SocialFeedResponseDto] })
@@ -165,8 +170,9 @@ export class BrandsController {
     }
 
     @Post(':id/social-feeds')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'BrandSocialFeed', action: ChangeType.create })
     @CacheInvalidate(LANDING_BRAND_PATTERNS)
@@ -180,8 +186,9 @@ export class BrandsController {
     }
 
     @Put(':id/social-feeds/:socialFeedId')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'BrandSocialFeed', action: ChangeType.update })
     @CacheInvalidate(LANDING_BRAND_PATTERNS)
@@ -197,8 +204,9 @@ export class BrandsController {
     }
 
     @Delete(':id/social-feeds/:socialFeedId')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @HttpCode(HttpStatus.NO_CONTENT)
     @AuditTrail({ entityType: 'BrandSocialFeed', action: ChangeType.delete })
@@ -214,8 +222,11 @@ export class BrandsController {
     }
 
     @Post()
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    // Creating a brand is not scopeable to an existing brand, so it stays with
+    // platform-scope admins rather than any admin holding the generic ADMIN role.
+    @ScopedBy('platform')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.create })
     @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -240,8 +251,9 @@ export class BrandsController {
     }
 
     @Put(':id')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
     @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -278,8 +290,9 @@ export class BrandsController {
     }
 
     @Put(':id/details')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
     @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -305,8 +318,9 @@ export class BrandsController {
     }
 
     @Put(':id/settings')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
     @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -322,8 +336,9 @@ export class BrandsController {
     }
 
     @Get(':id/metadata')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Get brand landing page metadata' })
     @ApiResponse({ status: 200, description: 'Brand metadata object' })
@@ -334,8 +349,9 @@ export class BrandsController {
     }
 
     @Put(':id/metadata')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.update })
     @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -350,8 +366,9 @@ export class BrandsController {
     }
 
     @Delete(':id')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'Brand', action: ChangeType.delete })
     @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -367,8 +384,9 @@ export class BrandsController {
     // -------------------------------------------------------------------------
 
     @Get(':id/admins')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'List admins with access to a brand' })
     @ApiResponse({ status: 200, description: 'List of brand admins', type: [BrandAdminResponseDto] })
@@ -381,8 +399,9 @@ export class BrandsController {
 
     // no cache bust: admin assignment isn't surfaced on landing pages
     @Post(':id/admins')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'AdminBrand', action: ChangeType.create })
     @ApiOperation({ summary: 'Assign an admin to a brand' })
@@ -401,8 +420,9 @@ export class BrandsController {
 
     // no cache bust: admin assignment isn't surfaced on landing pages
     @Delete(':id/admins/:adminId')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('brand', 'id')
     @ApiBearerAuth()
     @HttpCode(HttpStatus.OK)
     @AuditTrail({ entityType: 'AdminBrand', action: ChangeType.delete })

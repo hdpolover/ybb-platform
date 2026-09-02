@@ -12,7 +12,9 @@ import {
   HttpStatus,
   Logger,
   BadRequestException,
+  ForbiddenException,
   ParseEnumPipe,
+  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -23,6 +25,7 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
+import { assertBrandAccess, assertProgramAccess, getRequestAdminScope } from '@shared/guards/admin-scope.guard';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType, PaymentStatus, ScoringStage } from '@prisma/client';
 
@@ -164,6 +167,45 @@ export class ApplicationsController {
     private readonly upsertApplicationReviewHandler: UpsertApplicationReviewHandler,
   ) { }
 
+  /**
+   * Narrows the caller-supplied brand/program filters to what the caller is
+   * actually scoped to. Platform-scope admins (and super admins) are passed
+   * through untouched, so their behavior is exactly as before.
+   *
+   * For everyone else the query's brandId is never trusted on its own: an
+   * in-scope programId wins and the brandId is dropped, a brandId alone must be
+   * one of the caller's own admin_brands, and an admin holding only program
+   * assignments falls back to exactly those programIds. A scoped caller that
+   * supplies neither is refused rather than served the whole platform.
+   */
+  private async resolveScopedFilters(
+    req: { user?: { adminId?: string } },
+    brandId?: string,
+    programId?: string,
+  ): Promise<{ brandId?: string; programId?: string; programIds?: string[] }> {
+    const scope = await getRequestAdminScope(this.readPrisma, req);
+
+    if (scope.kind === 'platform') {
+      return { brandId, programId };
+    }
+
+    if (programId) {
+      await assertProgramAccess(this.readPrisma, scope, programId);
+      return { programId };
+    }
+
+    if (brandId) {
+      assertBrandAccess(scope, brandId);
+      return { brandId };
+    }
+
+    if (scope.kind === 'assigned') {
+      return { programIds: scope.allowedProgramIds ?? [] };
+    }
+
+    throw new ForbiddenException('Specify a brandId or programId you have access to.');
+  }
+
   // Scoring is a regular-admin job even though editing rubric weights (the
   // PUT programs/:id/scoring-rubrics/:stage route) is SuperAdmin-only. The
   // SuperAdmin-only rule for the interview gate override is enforced inside
@@ -289,14 +331,17 @@ export class ApplicationsController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('scoreStatus') scoreStatus?: ScoreStatus,
+    @Req() req?: { user?: { adminId?: string } },
   ): Promise<StreamableFile> {
     this.logger.log(`Exporting applications: brandId=${brandId}, programId=${programId}`);
     this.validateDateRange(startDate, endDate);
     this.validateListFilters({ scoreStatus });
 
+    const scoped = await this.resolveScopedFilters(req ?? {}, brandId, programId);
+
     // Handler is injected directly (practical CQRS pattern) because QueryBus
     // generic return type doesn't carry StreamableFile cleanly.
-    const query = new ExportApplicationsQuery(brandId, programId, status, category, search, startDate, endDate, scoreStatus);
+    const query = new ExportApplicationsQuery(scoped.brandId, scoped.programId, status, category, search, startDate, endDate, scoreStatus, scoped.programIds);
     return this.exportApplicationsHandler.execute(query);
   }
 
@@ -336,6 +381,7 @@ export class ApplicationsController {
     @Query('endDate') endDate?: string,
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
+    @Req() req?: { user?: { adminId?: string } },
   ): Promise<ApplicationListResponseDto> {
     this.logger.log(`Listing applications with filters: brandId=${brandId}, programId=${programId}`);
     this.validateDateRange(startDate, endDate);
@@ -347,6 +393,17 @@ export class ApplicationsController {
       programPaymentStatus,
       scoreStatus,
     });
+
+    const scoped = await this.resolveScopedFilters(req ?? {}, brandId, programId);
+    if (scoped.programIds) {
+      // This listing filters on one brand or one program at a time, so an admin
+      // holding only program assignments has to name which one.
+      throw new ForbiddenException('Specify a programId you have access to.');
+    }
+    // Everything below (including the cache key) uses the scoped values, so two
+    // admins with different scopes can never share a cached page.
+    brandId = scoped.brandId;
+    programId = scoped.programId;
 
     const actualLimit = ApplicationsController.parseLimit(limit);
     const actualOffset = ApplicationsController.parseOffset(offset);

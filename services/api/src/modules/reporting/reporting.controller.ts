@@ -8,6 +8,7 @@ import { PaymentSucceededPayload, UserRegisteredPayload } from '@common/types/ev
 import { JwtAuthGuard } from '../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/infrastructure/guards/roles.guard';
 import { Roles } from '../auth/application/decorators/roles.decorator';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import { UserRole } from '../../core/entities/user.entity';
 import { acknowledgeRmqMessage } from '@shared/infrastructure/rabbitmq/rmq-ack';
 
@@ -19,8 +20,11 @@ export class ReportingController {
   constructor(private readonly reportingService: ReportingService) { }
 
   @Get('audit-logs/export')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  // Unfiltered, cross-brand dumps: there is nothing here to scope to a brand or
+  // program, so they are platform-scope only rather than any ADMIN-role holder.
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Export Audit Logs (Admin)', operationId: 'exportAuditLogs' })
   @ApiResponse({ status: 200, description: 'Excel file with audit logs' })
@@ -31,8 +35,11 @@ export class ReportingController {
   }
 
   @Get('users/export')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  // Unfiltered, cross-brand dumps: there is nothing here to scope to a brand or
+  // program, so they are platform-scope only rather than any ADMIN-role holder.
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Export Users List (Admin)', operationId: 'exportUsers' })
   @ApiResponse({ status: 200, description: 'Excel file with users' })
@@ -43,8 +50,11 @@ export class ReportingController {
   }
 
   @Get('participants/export')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  // Unfiltered, cross-brand dumps: there is nothing here to scope to a brand or
+  // program, so they are platform-scope only rather than any ADMIN-role holder.
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Export Participants List (Admin)', operationId: 'exportParticipants' })
   @ApiResponse({ status: 200, description: 'Excel file with participants' })
@@ -55,8 +65,11 @@ export class ReportingController {
   }
 
   @Get('payments/export')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  // Unfiltered, cross-brand dumps: there is nothing here to scope to a brand or
+  // program, so they are platform-scope only rather than any ADMIN-role holder.
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Export Payments List (Admin)', operationId: 'exportPayments' })
   @ApiResponse({ status: 200, description: 'Excel file with payments' })
