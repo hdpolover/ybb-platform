@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
-import { CreateIntentDto, SubmitManualPaymentDto, VerifyManualPaymentDto, AdminListPaymentsDto } from './dto/payment.dto';
+import { SubmitManualPaymentDto, VerifyManualPaymentDto, AdminListPaymentsDto } from './dto/payment.dto';
 import { Request } from 'express';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
@@ -23,24 +23,6 @@ export class PaymentController {
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService,
   ) {}
-
-  @Post('intents')
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Create Payment Intent (Direct)' })
-  async createIntent(@Body() dto: CreateIntentDto, @Req() req: Request) {
-    const user = req.user as JwtPayload;
-    const userId = user.sub;
-    const userEmail = user.email; 
-    
-    return this.paymentClient.createIntent({
-      ...dto,
-      user_id: userId,
-      metadata: {
-          ...(dto.metadata || {}),
-          ...(userEmail ? { email: userEmail } : {}),
-      }
-    });
-  }
 
   @Post('manual')
   @UseGuards(JwtAuthGuard)
