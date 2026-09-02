@@ -5,7 +5,6 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { AuthModule } from '../auth/auth.module';
 import { PaymentGrpcClient } from './infrastructure/services/payment-grpc.client';
-import { PaymentController } from './infrastructure/presentation/payment.controller';
 
 @Global()
 @Module({
@@ -61,7 +60,6 @@ import { PaymentController } from './infrastructure/presentation/payment.control
       },
     ]),
   ],
-  controllers: [PaymentController],
   providers: [PaymentGrpcClient],
   exports: [PaymentGrpcClient],
 })
