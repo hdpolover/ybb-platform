@@ -25,10 +25,29 @@ describe('UserAwareThrottlerGuard', () => {
     expect(a).toBe(b);
   });
 
-  it('prefers the first x-forwarded-for entry when present', async () => {
+  it('bills the last x-forwarded-for entry, the address our own edge appended', async () => {
     const t = await guard.getTracker({
-      headers: { 'x-forwarded-for': '203.0.113.9, 10.0.0.1' },
+      headers: { 'x-forwarded-for': '10.0.0.1, 203.0.113.9' },
       ip: '10.0.0.1',
+    });
+    expect(t).toBe('ip:203.0.113.9');
+  });
+
+  it('ignores a spoofed leading entry, so a caller cannot pick its own bucket', async () => {
+    // The client sent "1.2.3.4"; our edge appended what it actually saw.
+    const spoofed = await guard.getTracker({
+      headers: { 'x-forwarded-for': '1.2.3.4, 203.0.113.9' },
+    });
+    const honest = await guard.getTracker({
+      headers: { 'x-forwarded-for': '203.0.113.9' },
+    });
+    expect(spoofed).toBe('ip:203.0.113.9');
+    expect(spoofed).toBe(honest);
+  });
+
+  it('handles a repeated header and stray padding', async () => {
+    const t = await guard.getTracker({
+      headers: { 'x-forwarded-for': ['1.2.3.4', ' 203.0.113.9 , '] },
     });
     expect(t).toBe('ip:203.0.113.9');
   });

@@ -50,13 +50,26 @@ export class UserAwareThrottlerGuard extends ThrottlerGuard {
       return `email:${email.trim().toLowerCase()}`;
     }
 
-    // Fall back to the IP exactly as the base guard would.
+    // Fall back to the client IP.
+    //
+    // Read the LAST x-forwarded-for entry, not the first. Every request
+    // reaches this service through exactly one trusted hop that APPENDS the
+    // peer it saw: Traefik for public traffic, and for server-side proxied
+    // calls ybb-program-next forwards the list Traefik already built. A client
+    // can put anything in the header, but those values land to the LEFT of the
+    // address our own edge observed, so the rightmost entry is the one it is
+    // safe to bill. Taking the first entry let any caller choose its own
+    // throttle bucket by sending a header.
     const forwarded = request.headers?.['x-forwarded-for'];
-    const firstForwarded = Array.isArray(forwarded)
-      ? forwarded[0]
-      : typeof forwarded === 'string'
-        ? forwarded.split(',')[0]?.trim()
+    const chain = Array.isArray(forwarded) ? forwarded.join(',') : forwarded;
+    const lastForwarded =
+      typeof chain === 'string'
+        ? chain
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter((entry) => entry.length > 0)
+            .pop()
         : undefined;
-    return `ip:${firstForwarded || request.ips?.[0] || request.ip || 'unknown'}`;
+    return `ip:${lastForwarded || request.ips?.[0] || request.ip || 'unknown'}`;
   }
 }
