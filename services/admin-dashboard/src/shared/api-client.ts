@@ -6,6 +6,7 @@
  * unwrap `data` envelope automatically).
  */
 
+import { validateUploadFile } from "@/lib/upload-validation";
 import { redirectToLogin } from "@/src/shared/login-redirect";
 import {
   requestAdminProfileRefresh,
@@ -2435,23 +2436,11 @@ export type UploadResult = {
   bucket: string;
 };
 
-const SUPPORTED_DOCUMENT_MIMES = new Set([
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-]);
-const SUPPORTED_IMAGE_MIMES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-]);
-
-export function isSupportedUploadMime(mime: string): boolean {
-  return SUPPORTED_DOCUMENT_MIMES.has(mime) || SUPPORTED_IMAGE_MIMES.has(mime);
-}
+// The MIME allowlist and size caps live in `lib/upload-validation` so every
+// upload surface — presigned or multipart — advertises and enforces the same
+// rules the file service does. Re-exported here because callers already reach
+// for the upload helpers through this module.
+export { isSupportedUploadMime } from "@/lib/upload-validation";
 
 /**
  * Compress an image file client-side using an offscreen Canvas before upload.
@@ -2632,11 +2621,13 @@ export async function uploadFileViaPresignedUrl(
   // before we hit the server's size validation.
   const processedFile = await compressImageFile(file);
 
-  if (!isSupportedUploadMime(processedFile.type)) {
-    throw new Error(
-      `Unsupported file type: ${processedFile.type || "unknown"}. Allowed: PDF, Word, Excel, JPEG/PNG/WebP/GIF.`,
-    );
-  }
+  // Pre-flight on the file we are actually about to send: for images that is
+  // the compressed one, so the size quoted back to the admin is the size the
+  // server would have judged. Anything the server would reject is explained
+  // here instead of coming back as an opaque 400/413.
+  const rejection = validateUploadFile(processedFile);
+  if (rejection) throw new Error(rejection);
+
   const url = await requestUploadUrl(processedFile, ctx);
   await putFileToStorage(processedFile, url.upload_url, onProgress, signal);
   await markFileReady(url.file_id, ctx.brandId, processedFile.size);

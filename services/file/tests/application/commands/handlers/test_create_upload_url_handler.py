@@ -2,7 +2,11 @@ import asyncio
 
 from app.application.commands.handlers.create_upload_url_handler import CreateUploadUrlHandler
 from app.application.commands.create_upload_url_command import CreateUploadUrlCommand
-from app.domain.exceptions.file_exceptions import FileSizeLimitException, InvalidFilenameException
+from app.domain.exceptions.file_exceptions import (
+    FileSizeLimitException,
+    InvalidFileTypeException,
+    InvalidFilenameException,
+)
 
 
 class _Storage:
@@ -72,3 +76,25 @@ def test_create_upload_url_rejects_image_over_reconciled_10mb_limit():
         assert False, "Expected FileSizeLimitException"
     except FileSizeLimitException as e:
         assert e.max_size == 10 * 1024 * 1024
+
+
+def test_create_upload_url_rejects_svg():
+    # SVG stays off the allowlist deliberately: it is an executable document
+    # (script elements, on* handlers, foreignObject, external entity refs) and
+    # uploaded files are served straight from the CDN, so accepting one without
+    # server-side sanitisation would be a stored-XSS vector. The admin
+    # dashboard advertises the same allowlist client-side.
+    handler = CreateUploadUrlHandler(_Storage(), _Repo())
+    command = CreateUploadUrlCommand(
+        filename="logo.svg",
+        content_type="image/svg+xml",
+        size=12 * 1024,
+        user_id="user-1",
+        brand_id="brand-1",
+    )
+
+    try:
+        asyncio.run(handler.execute(command))
+        assert False, "Expected InvalidFileTypeException"
+    except InvalidFileTypeException:
+        assert True

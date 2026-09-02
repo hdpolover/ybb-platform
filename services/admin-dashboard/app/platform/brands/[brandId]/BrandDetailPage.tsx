@@ -45,6 +45,7 @@ import {
   uploadFileViaPresignedUrl,
   type MediaFile,
 } from "@/src/shared/api-client";
+import { IMAGE_ACCEPT_ATTR, IMAGE_HINT, validateUploadType } from "@/lib/upload-validation";
 import {
   getPlatformBrand,
   listPlatformPrograms,
@@ -247,10 +248,19 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
 
   function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
-    setLogoFile(file);
-    if (file) setLogoPreview(URL.createObjectURL(file));
     setError(null);
     setSuccess(null);
+    // Refuse an unsupported type at selection, naming the file, rather than
+    // letting it fail against the file service after the admin hits Save.
+    const rejection = file ? validateUploadType(file, { imagesOnly: true }) : null;
+    if (rejection) {
+      setError(rejection);
+      setLogoFile(null);
+      e.target.value = "";
+      return;
+    }
+    setLogoFile(file);
+    if (file) setLogoPreview(URL.createObjectURL(file));
   }
 
   async function handleSave() {
@@ -314,8 +324,8 @@ function IdentitySheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
                     <Upload className="h-3.5 w-3.5" />
                     {logoFile ? logoFile.name : brand.logoUrl ? "Replace logo…" : "Upload logo…"}
                   </label>
-                  <input id="logoUpload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" onChange={onLogoChange} />
-                  <p className="mt-1 text-xs text-zinc-400">PNG, JPG, WEBP or GIF, up to 10MB. Square works best. SVG is not supported.</p>
+                  <input id="logoUpload" type="file" accept={IMAGE_ACCEPT_ATTR} className="sr-only" onChange={onLogoChange} />
+                  <p className="mt-1 text-xs text-zinc-400">{IMAGE_HINT}. Square works best. SVG is not supported.</p>
                 </div>
               </div>
             </div>
@@ -1050,7 +1060,7 @@ function SectionBackgroundSheet({
                   )}
                 </div>
               </div>
-              <input ref={desktopInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setPendingDesktopFile(f); if (f) set("desktop_url", undefined); e.target.value = ""; }} />
+              <input ref={desktopInputRef} type="file" accept={IMAGE_ACCEPT_ATTR} className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; e.target.value = ""; const rejection = f ? validateUploadType(f, { imagesOnly: true }) : null; if (rejection) { setError(rejection); return; } setError(null); setPendingDesktopFile(f); if (f) set("desktop_url", undefined); }} />
             </div>
 
             {/* Mobile Background Image */}
@@ -1095,7 +1105,7 @@ function SectionBackgroundSheet({
                   )}
                 </div>
               </div>
-              <input ref={mobileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; setPendingMobileFile(f); if (f) set("mobile_url", undefined); e.target.value = ""; }} />
+              <input ref={mobileInputRef} type="file" accept={IMAGE_ACCEPT_ATTR} className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; e.target.value = ""; const rejection = f ? validateUploadType(f, { imagesOnly: true }) : null; if (rejection) { setError(rejection); return; } setError(null); setPendingMobileFile(f); if (f) set("mobile_url", undefined); }} />
             </div>
 
             {/* Text Color Scheme */}
@@ -1563,6 +1573,12 @@ function SponsorSheet({
   function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
     if (!file) return;
+    const rejection = validateUploadType(file, { imagesOnly: true });
+    if (rejection) {
+      setError(rejection);
+      e.target.value = "";
+      return;
+    }
     setField("logo", file);
     setLogoImgError(false);
     if (!form.logoPreview && sponsor?.logoUrl) {
@@ -1743,7 +1759,7 @@ function SponsorSheet({
               <input
                 ref={logoInputRef}
                 type="file"
-                accept="image/*"
+                accept={IMAGE_ACCEPT_ATTR}
                 className="hidden"
                 onChange={onLogoChange}
               />
