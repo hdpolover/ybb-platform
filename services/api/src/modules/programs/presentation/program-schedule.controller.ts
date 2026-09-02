@@ -7,7 +7,9 @@ import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
-import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
+// Timeline and schedules render on landing pages only. No portal read selects
+// them, so the per-user portal:* keys stay intact.
+import { PROGRAM_PUBLIC_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string };
