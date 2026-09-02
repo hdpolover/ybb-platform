@@ -70,8 +70,11 @@ export class RegisterAdminHandler {
     // JwtAuthGuard + RolesGuard and is what the dashboard uses. This is kept
     // only as a break-glass path for a fresh local/staging database, so it
     // stays dark until ADMIN_REGISTRATION_ENABLED is explicitly 'true'.
-    // NotFound rather than Forbidden: a disabled route should be
-    // indistinguishable from a typo'd one.
+    // NotFound rather than Forbidden so a probe learns nothing about whether a
+    // secret exists to be guessed. It is not a perfect impersonation of a
+    // missing route — the global ValidationPipe runs first, so a malformed
+    // body still 400s, and a genuine 404 names the /v1 prefix — and it is not
+    // worth contorting the code to make it one.
     if (this.configService.get<string>('ADMIN_REGISTRATION_ENABLED') !== 'true') {
       throw new NotFoundException('Cannot POST /auth/register-admin');
     }

@@ -60,9 +60,15 @@ export class ResetPasswordHandler {
     });
 
     // A password reset means the old credential is presumed compromised, so
-    // every session it authorised has to go. This kills the 7-day refresh
-    // tokens, which is what actually matters: access tokens cannot be revoked
-    // retroactively (their jti is never persisted) and die at their own TTL.
+    // every session it authorised has to go.
+    //
+    // In practice this only bites for ADMINS: userSession rows are read for
+    // authentication in exactly one place (admin-refresh.handler.ts), so
+    // revoking them here is what stops an admin's 7-day refresh token from
+    // minting fresh access tokens. Participants have no refresh endpoint, so
+    // for them the rows are audit trail only and their access token simply
+    // dies at its own TTL — it cannot be revoked retroactively either way,
+    // because its jti is never persisted.
     await this.prisma.userSession.updateMany({
       where: { userId: user.id, revokedAt: null },
       data: { isActive: false, revokedAt: new Date() },

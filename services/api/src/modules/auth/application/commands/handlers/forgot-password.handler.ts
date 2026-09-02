@@ -82,22 +82,35 @@ export class ForgotPasswordHandler {
                 email: { equals: command.email, mode: 'insensitive' },
                 brandId: brandId,
                 deletedAt: null,
-                // Deactivated accounts get no reset mail. ResetPasswordHandler
-                // refuses their tokens anyway, so sending one would only mail a
-                // dead link to someone whose account an admin deactivated or
-                // approved for deletion. The response below is unchanged either
-                // way, so this stays enumeration-safe.
-                isActive: true,
             },
             orderBy: { createdAt: 'asc' },
         });
 
-        if (!user) {
+        // Deactivated accounts get no reset mail: ResetPasswordHandler refuses
+        // their tokens anyway, so sending one would only mail a dead link to
+        // someone an admin deactivated or approved for deletion. The lookup
+        // does NOT filter on isActive, though — that would route a deactivated
+        // account down the miss path and log the opposite of what happened.
+        if (!user || !user.isActive) {
             // Respond identically to the success path. A 404 here let callers
             // enumerate which emails have accounts. Timing still differs (the
             // success path does token generation, a user update, a brand fetch
             // and an event emit) — this closes the status/body channel only.
-            this.logger.warn('Forgot password requested for non-existent account');
+            this.logger.warn(
+                user
+                    ? 'Forgot password requested for a deactivated account; no reset mail sent'
+                    : 'Forgot password requested for non-existent account',
+            );
+
+            // Logged on BOTH paths. This is the security trail for who is
+            // asking for resets; dropping it on a miss would hide exactly the
+            // enumeration sweep it exists to make visible.
+            await this.authLoggingService.logForgotPasswordRequest(
+                command.email,
+                command.ipAddress || '0.0.0.0',
+                command.userAgent || 'unknown',
+            );
+
             return { message: FORGOT_PASSWORD_RESPONSE };
         }
 
