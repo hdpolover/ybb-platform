@@ -850,3 +850,24 @@ func TestHandleWebhookSettlesWhenAmountAndCurrencyMatch(t *testing.T) {
 	require.Equal(t, entities.TransactionStatusSuccess, txRepo.updated.Status)
 	require.Equal(t, entities.PaymentIntentStatusSucceeded, intentRepo.updated.Status)
 }
+
+// The gateways are charged a rounded version of the stored amount (Midtrans
+// truncates to int64, Xendit narrows to float32), so a fractional surcharge
+// total must still settle against the amount the callback echoes back.
+func TestVerifySettlementAmountAbsorbsGatewayRounding(t *testing.T) {
+	// 4,321,000 IDR with a 3.219% surcharge.
+	tx := &entities.PaymentTransaction{Currency: "IDR", AmountTotal: 4460092.99}
+
+	require.NoError(t, verifySettlementAmount(tx, map[string]interface{}{
+		"gross_amount": "4460092.00", // Midtrans int64 truncation
+		"currency":     "IDR",
+	}))
+	require.NoError(t, verifySettlementAmount(tx, map[string]interface{}{
+		"amount":   float64(float32(4460092.99)), // Xendit float32 narrowing
+		"currency": "IDR",
+	}))
+	require.Error(t, verifySettlementAmount(tx, map[string]interface{}{
+		"gross_amount": "4459092.99", // materially short by 1000
+		"currency":     "IDR",
+	}))
+}

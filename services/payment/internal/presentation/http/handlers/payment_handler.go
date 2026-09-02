@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -277,16 +278,27 @@ func (h *PaymentHandler) handleTransactionWebhook(c *gin.Context, tx *entities.P
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-// settlementAmountTolerance absorbs float representation drift between the
-// stored decimal amount and the value the gateway reports back.
-const settlementAmountTolerance = 0.01
+// The gateways are charged a rounded/narrowed version of the stored amount:
+// Midtrans truncates to int64 (loses < 1 unit) and Xendit narrows to float32
+// (loses a fraction proportional to the magnitude). The callback echoes back
+// what was charged, so the comparison has to absorb both. Anything larger than
+// this is a materially different amount.
+const (
+	settlementAmountTolerance         = 1.0
+	settlementAmountRelativeTolerance = 1e-6
+)
+
+// settlementTolerance is the largest difference that is still the same amount.
+func settlementTolerance(stored float64) float64 {
+	return settlementAmountTolerance + math.Abs(stored)*settlementAmountRelativeTolerance
+}
 
 // verifySettlementAmount checks a settlement callback against the stored
 // transaction. Fields the payload does not carry are not checked; a payload
 // carrying no amount and no currency at all passes unchanged.
 func verifySettlementAmount(tx *entities.PaymentTransaction, payload map[string]interface{}) error {
 	if amount, ok := gatewayReportedAmount(payload); ok {
-		if diff := amount - tx.AmountTotal; diff > settlementAmountTolerance || diff < -settlementAmountTolerance {
+		if math.Abs(amount-tx.AmountTotal) > settlementTolerance(tx.AmountTotal) {
 			return fmt.Errorf("gateway_amount=%v stored_amount=%v", amount, tx.AmountTotal)
 		}
 	}
