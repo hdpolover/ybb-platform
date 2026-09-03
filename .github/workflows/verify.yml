@@ -65,15 +65,16 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
-      # Build BEFORE test, which is not the conventional order and is load
-      # bearing here. bootstrap/payment-events-consumer.module.spec.ts builds the
-      # real DI graph, which constructs a gRPC client that reads
-      # dist/protos/file_service.proto - a path that only exists once `nest
-      # build` has copied it. Locally the suite passes either way because a stale
-      # dist/ is lying around from an earlier build; on a clean checkout it fails
-      # with "The invalid .proto definition ... not found". Production builds
-      # before it runs, so this order also matches how the service actually
-      # starts.
+      # Build before test because that is the order production starts in. This
+      # used to be load bearing: bootstrap/payment-events-consumer.module.spec.ts
+      # builds the real DI graph, which constructs a gRPC client that read
+      # dist/protos/file_service.proto - a path that only exists once `nest build`
+      # has copied it, so on a clean checkout the suite failed with "The invalid
+      # .proto definition ... not found". files.module.ts now resolves that proto
+      # relative to __dirname, which lands on src/protos under ts-jest and
+      # dist/protos after a build, so the suite no longer depends on this order.
+      # Keeping it anyway: a build failure is cheaper to read than 250 suites of
+      # fallout, and it still matches how the service actually starts.
       - name: Build
         run: npm run build
 
