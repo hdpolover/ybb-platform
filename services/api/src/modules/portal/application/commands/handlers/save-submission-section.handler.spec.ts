@@ -18,6 +18,7 @@ describe('SaveSubmissionSectionHandler', () => {
 
     const mockCacheService = {
         invalidateKey: jest.fn().mockResolvedValue(undefined),
+        invalidatePortalCache: jest.fn().mockResolvedValue(undefined),
     };
 
     const mockPortalCacheService = {
@@ -172,7 +173,9 @@ describe('SaveSubmissionSectionHandler', () => {
             new SaveSubmissionSectionCommand('user-1', 'personal_info', {}),
         );
 
-        expect(mockCacheService.invalidateKey).toHaveBeenCalledTimes(3);
+        // Portal reads are keyed per program, so a section save must clear every
+        // program variant for this user, not just the bare `:latest` key.
+        expect(mockCacheService.invalidatePortalCache).toHaveBeenCalledWith('user-1');
     });
 
     it('normalizes phone country code fields to dial code format', async () => {

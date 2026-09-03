@@ -103,7 +103,7 @@ export class PortalSubmitApplicationHandler {
             },
         });
 
-        await this.invalidateCaches(userId, participant.id, programId);
+        await this.invalidateCaches(userId, participant.id);
 
         // Non-blocking referral linking
         const resolvedProgramId = application.programId;
@@ -243,11 +243,9 @@ export class PortalSubmitApplicationHandler {
         return false;
     }
 
-    private async invalidateCaches(userId: string, participantId: string, programId?: string): Promise<void> {
+    private async invalidateCaches(userId: string, participantId: string): Promise<void> {
         await Promise.all([
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId, programId)),
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_SUBMISSIONS(userId)),
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
+            this.cacheService.invalidatePortalCache(userId),
             this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId)),
         ]);
     }

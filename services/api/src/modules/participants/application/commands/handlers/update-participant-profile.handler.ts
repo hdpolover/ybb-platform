@@ -124,11 +124,8 @@ export class UpdateParticipantProfileHandler implements ICommandHandler<UpdatePa
     private async invalidateParticipantCaches(userId: string, participantId: string): Promise<void> {
         try {
             await Promise.all([
-                // Portal caches
-                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
-                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_SUBMISSIONS(userId)),
-                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENTS(userId)),
-                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DOCUMENTS(userId)),
+                // Portal caches - every program variant, not just `:latest`.
+                this.cacheService.invalidatePortalCache(userId),
                 // Participant data caches
                 this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_PROFILE(userId)),
                 this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_STATS(participantId)),

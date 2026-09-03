@@ -53,6 +53,7 @@ describe('PortalSubmitApplicationHandler', () => {
 
     const mockCacheService = {
         invalidateKey: jest.fn().mockResolvedValue(undefined),
+        invalidatePortalCache: jest.fn().mockResolvedValue(undefined),
     };
 
     const mockPortalCacheService = {
@@ -308,8 +309,12 @@ describe('PortalSubmitApplicationHandler', () => {
 
             await handler.execute(command);
 
-            // Expect 4 cache key invalidations
-            expect(mockCacheService.invalidateKey).toHaveBeenCalledTimes(4);
+            // Portal reads are keyed per program, so submitting must clear every
+            // program variant for this user, not just the bare `:latest` key.
+            expect(mockCacheService.invalidatePortalCache).toHaveBeenCalledWith('user-1');
+            // The participant's latest-application key is not program-scoped and
+            // stays an explicit delete alongside it.
+            expect(mockCacheService.invalidateKey).toHaveBeenCalledTimes(1);
         });
     });
 
