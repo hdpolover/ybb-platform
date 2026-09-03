@@ -47,9 +47,9 @@ export class LoaDownloadService {
    * candidate is the answer. Several is genuinely ambiguous and says so, rather
    * than guessing at a document someone submits to an embassy. None reports why.
    *
-   * Scoped to `brandId`, which the caller has always passed and this service
-   * previously ignored entirely - a participant with applications under two
-   * brands could be served either one's letter.
+   * The candidate query itself lives in LoaEligibilityService so the documents
+   * list computes `downloadable` from exactly the same set - those two used to
+   * disagree, which is how a working-looking link could 403.
    *
    * The ACTIVE template check deliberately stays where it is, after selection: a
    * missing template is a program-level misconfiguration that affects every
@@ -61,37 +61,17 @@ export class LoaDownloadService {
     brandId: string,
     programId?: string,
   ): Promise<{ application: { id: string; programId: string }; eligibility: { eligible: boolean; batchId?: string } }> {
-    const candidates = await this.prisma.participantApplication.findMany({
-      where: {
-        participantId,
-        deletedAt: null,
-        withdrawnAt: null,
-        ...(programId ? { programId } : {}),
-        program: { brandId },
-      },
-      select: { id: true, programId: true },
-    });
-
-    if (candidates.length === 0) {
-      throw new ForbiddenException('Invitation Letter not available');
-    }
-
-    const eligible: Array<{ application: { id: string; programId: string }; eligibility: { eligible: boolean; batchId?: string } }> = [];
-    for (const candidate of candidates) {
-      const eligibility = await this.loaEligibilityService.checkEligibility(candidate.id, candidate.programId);
-      if (eligibility.eligible) eligible.push({ application: candidate, eligibility });
-    }
+    const eligible = await this.loaEligibilityService.resolveEligibleApplications(
+      participantId,
+      brandId,
+      programId,
+    );
 
     if (eligible.length === 1) {
-      // Logged so the rate of this narrowing is visible at all. The bug this
-      // replaced produced no signal whatsoever, so nobody knows how often
-      // multi-program participants hit this path today.
-      if (candidates.length > 1) {
-        this.logger.log(
-          `LOA: narrowed ${candidates.length} applications to 1 eligible for participant ${participantId}`,
-        );
-      }
-      return eligible[0];
+      return {
+        application: eligible[0].application,
+        eligibility: { eligible: true, batchId: eligible[0].batchId },
+      };
     }
 
     if (eligible.length === 0) {

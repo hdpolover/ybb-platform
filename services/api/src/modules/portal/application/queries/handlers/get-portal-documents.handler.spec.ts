@@ -64,7 +64,7 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
     let mockPrisma: any;
     let mockCacheService: { get: jest.Mock; set: jest.Mock };
     let mockPortalCacheService: { getParticipantProfile: jest.Mock };
-    let mockLoaEligibilityService: { checkEligibility: jest.Mock };
+    let mockLoaEligibilityService: { checkEligibility: jest.Mock; resolveEligibleApplications: jest.Mock };
     let mockPrivateFileUrlResolver: { resolve: jest.Mock };
 
     beforeEach(async () => {
@@ -86,6 +86,7 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
 
         mockLoaEligibilityService = {
             checkEligibility: jest.fn(),
+            resolveEligibleApplications: jest.fn().mockResolvedValue([]),
         };
 
         // Default: "not a private-category file" — preserves the existing
@@ -157,10 +158,9 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
     it('returns downloadable=true for LOA when participant is eligible', async () => {
         mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApplication());
         mockPrisma.documentTemplate.findMany.mockResolvedValue([makeLOATemplate()]);
-        mockLoaEligibilityService.checkEligibility.mockResolvedValue({
-            eligible: true,
-            batchId: 'batch-1',
-        });
+        mockLoaEligibilityService.resolveEligibleApplications.mockResolvedValue([
+            { application: { id: APPLICATION_ID, programId: PROGRAM_ID }, batchId: 'batch-1' },
+        ]);
 
         const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
 
@@ -170,14 +170,20 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
         expect(loaDoc?.fileUrl).toBeUndefined();
     });
 
-    it('calls checkEligibility with the correct applicationId and programId', async () => {
+    it('resolves eligibility from the shared candidate set, scoped by brand and programme', async () => {
         mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApplication());
         mockPrisma.documentTemplate.findMany.mockResolvedValue([makeLOATemplate()]);
-        mockLoaEligibilityService.checkEligibility.mockResolvedValue({ eligible: true, batchId: 'batch-1' });
+        mockLoaEligibilityService.resolveEligibleApplications.mockResolvedValue([
+            { application: { id: APPLICATION_ID, programId: PROGRAM_ID }, batchId: 'batch-1' },
+        ]);
 
         await handler.execute(new GetPortalDocumentsQuery(USER_ID));
 
-        expect(mockLoaEligibilityService.checkEligibility).toHaveBeenCalledWith(APPLICATION_ID, PROGRAM_ID);
+        expect(mockLoaEligibilityService.resolveEligibleApplications).toHaveBeenCalledWith(
+            PARTICIPANT_ID,
+            expect.any(String),
+            undefined,
+        );
     });
 
     it('includes existing documentNumber in LOA entry when a participant doc row with templateId exists', async () => {
@@ -201,7 +207,9 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
             makeApplication({ documents: [existingDoc] }),
         );
         mockPrisma.documentTemplate.findMany.mockResolvedValue([makeLOATemplate()]);
-        mockLoaEligibilityService.checkEligibility.mockResolvedValue({ eligible: true, batchId: 'batch-1' });
+        mockLoaEligibilityService.resolveEligibleApplications.mockResolvedValue([
+            { application: { id: APPLICATION_ID, programId: PROGRAM_ID }, batchId: 'batch-1' },
+        ]);
 
         const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
 
@@ -233,7 +241,9 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
             makeApplication({ documents: [existingDoc] }),
         );
         mockPrisma.documentTemplate.findMany.mockResolvedValue([makeLOATemplate()]);
-        mockLoaEligibilityService.checkEligibility.mockResolvedValue({ eligible: true, batchId: 'batch-1' });
+        mockLoaEligibilityService.resolveEligibleApplications.mockResolvedValue([
+            { application: { id: APPLICATION_ID, programId: PROGRAM_ID }, batchId: 'batch-1' },
+        ]);
 
         const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
 
@@ -246,7 +256,7 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
     it('returns downloadable=false (locked) for LOA when participant is NOT eligible', async () => {
         mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApplication());
         mockPrisma.documentTemplate.findMany.mockResolvedValue([makeLOATemplate()]);
-        mockLoaEligibilityService.checkEligibility.mockResolvedValue({ eligible: false });
+        mockLoaEligibilityService.resolveEligibleApplications.mockResolvedValue([]);
 
         const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
 
@@ -260,7 +270,7 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
         // Application has no documents at all — old code would have hidden the LOA entry
         mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApplication({ documents: [] }));
         mockPrisma.documentTemplate.findMany.mockResolvedValue([makeLOATemplate()]);
-        mockLoaEligibilityService.checkEligibility.mockResolvedValue({ eligible: false });
+        mockLoaEligibilityService.resolveEligibleApplications.mockResolvedValue([]);
 
         const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
 
@@ -289,7 +299,9 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
             makeLOATemplate(),
             makeAgreementTemplate(),
         ]);
-        mockLoaEligibilityService.checkEligibility.mockResolvedValue({ eligible: true, batchId: 'batch-1' });
+        mockLoaEligibilityService.resolveEligibleApplications.mockResolvedValue([
+            { application: { id: APPLICATION_ID, programId: PROGRAM_ID }, batchId: 'batch-1' },
+        ]);
 
         const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
 
@@ -298,8 +310,9 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
         const agreementDoc = result.myDocuments.find((d) => d.documentType === 'agreement_letter');
         expect(loaDoc?.downloadable).toBe(true);
         expect(agreementDoc?.documentType).toBe('agreement_letter');
-        // LOA eligibility only checked once, not for agreement
-        expect(mockLoaEligibilityService.checkEligibility).toHaveBeenCalledTimes(1);
+        // Eligibility is resolved once, for the LOA only - never for the agreement.
+        expect(mockLoaEligibilityService.resolveEligibleApplications).toHaveBeenCalledTimes(1);
+        expect(mockLoaEligibilityService.checkEligibility).not.toHaveBeenCalled();
     });
 
     // ─── Edge cases ────────────────────────────────────────────────────────────
