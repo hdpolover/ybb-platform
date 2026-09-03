@@ -38,21 +38,29 @@ describe('TokenBlacklistService', () => {
             await expect(service.isBlacklisted('jti-1')).resolves.toBe(false);
         });
 
-        // This is the only per-request revocation check in the auth path, so a
-        // cache failure here silently accepts logged-out tokens. We keep
-        // fail-open on purpose (Redis is a soft dependency everywhere else and
-        // failing closed would 401 every authenticated request), but it must be
-        // loud - before this it was invisible on every request.
-        it('fails open on a cache error, and says so at error level', async () => {
+        // A real Redis failure does NOT reach here as a rejection: cache-manager
+        // catches store errors in its own get loop and returns undefined, so
+        // this reads as an ordinary miss and the token is accepted. That is the
+        // deliberate fail-open, and the REPORTING of it lives in
+        // CacheService.onModuleInit's emitter subscription, which is tested in
+        // cache.service.spec.ts. Do not add a test here that mocks a rejection
+        // and calls it coverage of the outage path - it is not.
+        it('treats a swallowed store error as a miss, which is the fail-open we chose', async () => {
+            mockCacheService.get.mockResolvedValue(undefined);
+
+            await expect(service.isBlacklisted('jti-1')).resolves.toBe(false);
+        });
+
+        // Belt-and-braces only. This cannot fire against cache-manager today; it
+        // exists so that if CacheService.get ever starts throwing, this check
+        // degrades to the fail-open we chose rather than to an unhandled 500,
+        // which would be an accidental and much harsher fail-closed.
+        it('degrades to fail-open rather than throwing, if the cache layer ever rejects', async () => {
             const logSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
             mockCacheService.get.mockRejectedValue(new Error('redis connection refused'));
 
             await expect(service.isBlacklisted('jti-1')).resolves.toBe(false);
-
             expect(logSpy).toHaveBeenCalledTimes(1);
-            const message = String(logSpy.mock.calls[0][0]);
-            expect(message).toContain('jti-1');
-            expect(message).toContain('redis connection refused');
 
             logSpy.mockRestore();
         });

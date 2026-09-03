@@ -1,10 +1,18 @@
-import { Injectable, Inject, Optional, Logger } from '@nestjs/common';
+import { Injectable, Inject, Optional, Logger, OnModuleInit } from '@nestjs/common';
 import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
 import { CacheMetricsService } from './cache-metrics.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 
+/**
+ * First two colon-separated segments of a cache key, e.g. `auth:blacklist` or
+ * `portal:submissions`. Enough to identify which subsystem is failing without
+ * logging the user id or jti that follows.
+ */
+const keyPrefix = (key?: string): string =>
+  key ? key.split(':').slice(0, 2).join(':') : '(unknown)';
+
 @Injectable()
-export class CacheService {
+export class CacheService implements OnModuleInit {
   private readonly logger = new Logger(CacheService.name);
 
   constructor(
@@ -16,6 +24,43 @@ export class CacheService {
    * Invalidate cache by pattern (supports wildcards)
    * Example: invalidateByPattern('program:*') clears all program-related cache
    */
+  /**
+   * Surface cache store failures, which are otherwise completely silent.
+   *
+   * cache-manager catches every store error inside its own get/set loops,
+   * emits an event, and returns normally - `get` hands back `undefined`, which
+   * is indistinguishable from a miss. Nothing in this codebase subscribed, so a
+   * Redis outage produced zero log output while every read quietly behaved as a
+   * miss. Wrapping call sites in try/catch does NOT help: cache-manager never
+   * rethrows, so the catch cannot fire. The emitter is the only place the error
+   * exists.
+   *
+   * This matters most for TokenBlacklistService.isBlacklisted, where a
+   * swallowed read means a revoked token is silently accepted - the blacklist
+   * is the only per-request revocation check in the auth path.
+   *
+   * Logs the key PREFIX rather than the full key: keys carry user ids and jtis,
+   * and a store outage would otherwise emit one line per request per key.
+   */
+  onModuleInit(): void {
+    const cache = this.cacheManager as unknown as {
+      on?: (event: string, listener: (payload: { key?: string; error?: unknown }) => void) => unknown;
+    };
+
+    if (typeof cache.on !== 'function') {
+      this.logger.warn('Cache manager exposes no event emitter; store failures will not be logged.');
+      return;
+    }
+
+    for (const event of ['get', 'set', 'del'] as const) {
+      cache.on(event, (payload) => {
+        if (!payload?.error) return;
+        const msg = payload.error instanceof Error ? payload.error.message : String(payload.error);
+        this.logger.error(`Cache ${event} failed for "${keyPrefix(payload.key)}": ${msg}`);
+      });
+    }
+  }
+
   async invalidateByPattern(pattern: string): Promise<void> {
     const startTime = Date.now();
     try {
