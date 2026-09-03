@@ -1,7 +1,6 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
-import { assertBrandAccess } from '@shared/guards/admin-scope.guard';
 import { resolveRevenueAccessScope } from '@modules/stats/revenue/utils/revenue-access.util';
 
 /**
@@ -35,16 +34,69 @@ export async function resolveUsersBrandFilter(
 ): Promise<string | null> {
   const scope = await resolveRevenueAccessScope(prismaRead, actor);
 
+  if (scope.kind === 'platform') {
+    // A platform admin may name a brand, or omit it for the deliberate
+    // cross-brand listing.
+    return requestedBrandId || null;
+  }
+
+  const allowedBrandIds = await resolveAllowedBrandIds(prismaRead, scope);
+
   if (requestedBrandId) {
-    assertBrandAccess(scope, requestedBrandId);
+    if (!allowedBrandIds.includes(requestedBrandId)) {
+      throw new ForbiddenException('You do not have access to this brand.');
+    }
     return requestedBrandId;
   }
 
-  if (scope.kind === 'platform') {
-    return null;
+  // Omitting the parameter must never mean "no filter" for a scoped admin -
+  // Prisma would drop the condition and return every brand. But when the
+  // caller only has one brand there is nothing to disambiguate, so requiring
+  // the parameter would just be a 400 the frontend has to learn to avoid.
+  if (allowedBrandIds.length === 1) {
+    return allowedBrandIds[0];
+  }
+
+  if (allowedBrandIds.length === 0) {
+    throw new ForbiddenException('You do not have access to any brand.');
   }
 
   throw new BadRequestException('brandId is required.');
+}
+
+/**
+ * Which brands a non-platform admin may act on.
+ *
+ * assertBrandAccess is not usable on its own here. Its docblock is explicit
+ * that 'assigned' scope "carries no brand-level grant at all and never
+ * passes" - which is right for the revenue routes it was written for, and
+ * wrong here. A program-scoped admin (adminPrograms populated, adminBrands
+ * empty) legitimately manages the participants of their assigned programs,
+ * and the Users pages have always let them: they send the program's own
+ * brandId. Handing that straight to assertBrandAccess 403s them, and omitting
+ * it 400s them, so there was no way through in either direction.
+ *
+ * So for 'assigned' scope the allowed brands are derived from the brands of
+ * the programs they are actually assigned to, rather than from a brand-level
+ * grant they do not have.
+ */
+async function resolveAllowedBrandIds(
+  prismaRead: PrismaReadService,
+  scope: { kind: string; allowedBrandIds: string[] | null; allowedProgramIds: string[] | null },
+): Promise<string[]> {
+  if (scope.kind === 'brand_scope') {
+    return scope.allowedBrandIds ?? [];
+  }
+
+  const programIds = scope.allowedProgramIds ?? [];
+  if (programIds.length === 0) return [];
+
+  const programs = await prismaRead.program.findMany({
+    where: { id: { in: programIds } },
+    select: { brandId: true },
+  });
+
+  return [...new Set(programs.map((program) => program.brandId))];
 }
 
 /**
@@ -64,13 +116,22 @@ export async function assertCanChangeUserStatus(
   prismaRead: PrismaReadService,
   actor: CurrentUserData,
   targetUserId: string,
+  scopedBrandId: string | null,
 ): Promise<void> {
   if (actor.userId === targetUserId) {
     throw new ForbiddenException('You cannot change your own account status.');
   }
 
-  const targetAdmin = await prismaRead.admin.findUnique({
-    where: { userId: targetUserId },
+  // Scoped by the brand the caller was authorised for. This lookup runs BEFORE
+  // the handler's own brand-filtered findById, so an unscoped version answered
+  // "is this id an admin, and how senior" for users in brands the caller
+  // cannot see - a rank oracle reachable by id enumeration. A target outside
+  // the caller's brand simply reads as absent here; the handler then 404s it.
+  const targetAdmin = await prismaRead.admin.findFirst({
+    where: {
+      userId: targetUserId,
+      ...(scopedBrandId ? { user: { brandId: scopedBrandId } } : {}),
+    },
     select: { accessLevel: true },
   });
 

@@ -51,7 +51,13 @@ export class CreateUserHandler {
 
     // Invalidate user list cache for this brand
     // We use a wildcard pattern to match all pagination pages and roles
-    await this.cacheService.invalidateByPattern(`user:list:${command.brandId}:*`);
+    // Also clears the platform-wide listing, keyed `user:list:all:*`, which a
+    // brand-specific pattern never matched - so a cross-brand list kept showing
+    // a stale roster after a user was created.
+    await Promise.all([
+      this.cacheService.invalidateByPattern(`user:list:${command.brandId}:*`),
+      this.cacheService.invalidateByPattern('user:list:all:*'),
+    ]);
 
     // Return DTO
     return this.toDto(createdUser);

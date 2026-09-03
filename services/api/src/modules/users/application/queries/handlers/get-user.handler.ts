@@ -20,7 +20,13 @@ export class GetUserHandler {
     const cacheKey = CACHE_KEYS.USER(query.id);
 
     const cached = await this.cacheService.get<UserResponseDto>(cacheKey);
-    if (cached) {
+    // The cache key is the user id alone, so a warm entry would otherwise be
+    // returned before findById's brand filter ever ran - serving another
+    // brand's user to an admin the controller had only authorised for their
+    // own. Re-check the brand the controller resolved against the cached row
+    // rather than re-keying the cache, so entries written by a platform-scope
+    // read stay usable by a brand-scoped one.
+    if (cached && (!query.brandId || cached.brandId === query.brandId)) {
       return cached;
     }
 

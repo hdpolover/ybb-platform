@@ -52,8 +52,10 @@ describe('GetUserHandler', () => {
 
     it('should return cached user if available', async () => {
         const query = new GetUserQuery('user-1', 'brand-1');
-        const cachedUser = { id: 'user-1', email: 'test@example.com' };
-        
+        // A real UserResponseDto carries brandId; the cache hit is now checked
+        // against the brand the controller authorised.
+        const cachedUser = { id: 'user-1', email: 'test@example.com', brandId: 'brand-1' };
+
         mockCacheService.get.mockResolvedValue(cachedUser);
 
         const result = await handler.execute(query);
@@ -61,6 +63,28 @@ describe('GetUserHandler', () => {
         expect(result).toBe(cachedUser);
         expect(mockCacheService.get).toHaveBeenCalledWith(CACHE_KEYS.USER('user-1'));
         expect(mockUserRepository.findById).not.toHaveBeenCalled();
+    });
+
+    // The cache key is the user id alone, so before this a warm entry was
+    // returned before findById's brand filter ever ran - handing another brand's
+    // user to an admin the controller had only authorised for their own.
+    it('does NOT serve a cached user belonging to a brand the caller was not scoped to', async () => {
+        const query = new GetUserQuery('user-1', 'brand-1');
+        mockCacheService.get.mockResolvedValue({ id: 'user-1', email: 'x@y.z', brandId: 'brand-other' });
+        mockUserRepository.findById.mockResolvedValue(null);
+
+        await expect(handler.execute(query)).rejects.toThrow(NotFoundException);
+        // Falls through to the brand-filtered repository read rather than
+        // returning the cached row.
+        expect(mockUserRepository.findById).toHaveBeenCalledWith('user-1', 'brand-1');
+    });
+
+    it('still serves any cached user to a platform admin, who has no brand filter', async () => {
+        const query = new GetUserQuery('user-1', undefined);
+        const cachedUser = { id: 'user-1', email: 'x@y.z', brandId: 'brand-other' };
+        mockCacheService.get.mockResolvedValue(cachedUser);
+
+        await expect(handler.execute(query)).resolves.toBe(cachedUser);
     });
 
     it('should fetch from repository if cache miss, then cache and return DTO', async () => {
