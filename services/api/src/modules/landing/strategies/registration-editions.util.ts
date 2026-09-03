@@ -162,6 +162,38 @@ export async function resolveEditionGuidebooks(prisma: PrismaService, resources:
  * "Each surface re-derives the rule" is the root cause of that whole family of
  * bugs, so this deliberately adds no eighth implementation. If a third module
  * ever needs it, move the predicate to shared/ rather than copying it. */
+/** Whether an edition is the brand's CURRENT one, given `now`.
+ *
+ * Deliberately NOT the same question as editionStatus. Two different callers
+ * want two different rules and conflating them caused a regression:
+ *
+ *   - "should the marketing surface say Open?" must respect allowRegistration,
+ *     because that flag is a kill switch. That is editionStatus.
+ *   - "which edition is this brand currently running?" must NOT, because an
+ *     edition whose registration is temporarily paused between batches is still
+ *     the current edition. That is this.
+ *
+ * When editionStatus was tightened to honour allowRegistration, resolveEditionSlug
+ * inherited the strictness and a brand with a paused current edition fell through
+ * to newest-by-year - so pausing registration on this year's programme silently
+ * moved the landing page to next year's. Pausing is a normal operational action,
+ * so that fired easily.
+ *
+ * isPublished/isActive/status are not re-checked here because
+ * fetchOpenRegistrationPrograms' where-clause already guarantees them on every
+ * row it returns; isActive is kept as a cheap explicit guard since this is
+ * exported and could be handed a row from elsewhere. */
+export function isCurrentEdition(
+  program: Pick<OpenRegistrationProgram, 'isActive' | 'registrationOpenDate' | 'registrationCloseDate'>,
+  now: Date,
+): boolean {
+  return (
+    program.isActive &&
+    (!program.registrationOpenDate || program.registrationOpenDate <= now) &&
+    (!program.registrationCloseDate || program.registrationCloseDate >= now)
+  );
+}
+
 export function editionStatus(
   program: Pick<
     OpenRegistrationProgram,
@@ -244,8 +276,11 @@ export async function resolveEditionSlug(
     if (match) return match.slug;
   }
 
-  const openEdition = editions.find((edition) => editionStatus(edition, now) === 'open');
-  if (openEdition) return openEdition.slug;
+  // isCurrentEdition, not editionStatus: an edition with registration paused is
+  // still the edition this brand is running, and must keep winning slug
+  // resolution. See isCurrentEdition for why these are two separate questions.
+  const currentEdition = editions.find((edition) => isCurrentEdition(edition, now));
+  if (currentEdition) return currentEdition.slug;
 
   return editions.reduce((newest, edition) => (edition.year > newest.year ? edition : newest), editions[0]).slug;
 }
