@@ -1,3 +1,4 @@
+// src/shared/infrastructure/throttler/user-aware-throttler.guard.spec.ts
 import { clientIpTracker, emailTracker, UserAwareThrottlerGuard } from './user-aware-throttler.guard';
 
 // getTracker is protected; the tests exercise it the way the guard does.
@@ -10,19 +11,20 @@ describe('UserAwareThrottlerGuard', () => {
     {} as never,
   ) as unknown as TrackerAccess;
 
-  it('tracks an authenticated request by user, so people behind one NAT do not throttle each other', async () => {
-    const a = await guard.getTracker({ user: { userId: 'u1' }, ip: '10.0.0.1' });
-    const b = await guard.getTracker({ user: { userId: 'u2' }, ip: '10.0.0.1' });
-    expect(a).toBe('user:u1');
-    expect(b).toBe('user:u2');
-    expect(a).not.toBe(b);
-  });
-
-  it('still tracks anonymous traffic by IP, which is what rate limiting is for', async () => {
+  it('tracks by IP, which is what rate limiting is for', async () => {
     const a = await guard.getTracker({ ip: '10.0.0.1' });
     const b = await guard.getTracker({ ip: '10.0.0.1' });
     expect(a).toBe('ip:10.0.0.1');
     expect(a).toBe(b);
+  });
+
+  it('ignores req.user, because it is always undefined here', async () => {
+    // This guard is the app's only APP_GUARD and JwtAuthGuard is route-scoped;
+    // Nest runs global guards BEFORE controller guards, so authentication has
+    // not run yet at this point. The `user:` branch that used to sit here was
+    // unreachable, and per-user rate limiting is still unimplemented.
+    const authed = await guard.getTracker({ user: { userId: 'u1' }, ip: '10.0.0.1' });
+    expect(authed).toBe('ip:10.0.0.1');
   });
 
   it('bills the last x-forwarded-for entry when the request did not come through Cloudflare', async () => {
@@ -78,14 +80,24 @@ describe('UserAwareThrottlerGuard', () => {
     expect(spoofed).toBe(alsoSpoofed);
   });
 
-  it('falls back to the forwarded hop when a Cloudflare request has a malformed cf-connecting-ip', async () => {
-    const t = await guard.getTracker({
+  it('does not let a malformed cf-connecting-ip become an unbilled request', async () => {
+    // A Cloudflare-fronted request whose cf-connecting-ip we cannot parse still
+    // has to land in SOME bucket, and the only value left is the edge hop. This
+    // asserts the fallback fires, NOT that a CF edge is a sensible identity for
+    // a client — it is not, which is exactly why the header is forwarded now
+    // (ybb-program-next 96f0f83). Junk here must not buy a free pass.
+    const junk = await guard.getTracker({
       headers: { 'x-forwarded-for': '198.51.100.7, 172.68.1.1', 'cf-connecting-ip': 'not-an-ip' },
     });
-    expect(t).toBe('ip:172.68.1.1');
+    const alsoJunk = await guard.getTracker({
+      headers: { 'x-forwarded-for': '198.51.100.7, 172.68.1.1', 'cf-connecting-ip': '[::1]:80' },
+    });
+    expect(junk).toBe('ip:172.68.1.1');
+    expect(junk).toBe(alsoJunk);
+    expect(junk).not.toBe('ip:unknown');
   });
 
-  it('handles IPv6 on both paths', async () => {
+  it('handles IPv6 on both paths, keyed on the /64', async () => {
     // Cloudflare's IPv6 edges are recognised the same way, and an IPv6 client
     // that reaches the origin directly still keys on the appended hop.
     const viaCloudflare = await guard.getTracker({
@@ -97,8 +109,32 @@ describe('UserAwareThrottlerGuard', () => {
     const direct = await guard.getTracker({
       headers: { 'x-forwarded-for': '2001:db8::1, 2001:db8:ffff::9', 'cf-connecting-ip': '2001:db8::1' },
     });
-    expect(viaCloudflare).toBe('ip:2001:db8::1');
-    expect(direct).toBe('ip:2001:db8:ffff::9');
+    expect(viaCloudflare).toBe('ip:2001:db8:0:0::/64');
+    expect(direct).toBe('ip:2001:db8:ffff:0::/64');
+  });
+
+  it('gives one IPv6 host ONE bucket, not a routed /64 worth of them', async () => {
+    // Every VPS ships a /64 and residential ISPs a /56, so keying the full /128
+    // handed an attacker an unlimited supply of fresh ceilings.
+    const first = await guard.getTracker({ headers: { 'cf-connecting-ip': '2001:db8:1:2::1' }, ip: '2001:db8:1:2::1' });
+    const walked = await guard.getTracker({ ip: '2001:db8:1:2:ffff:ffff:ffff:ffff' });
+    expect(first).toBe(walked);
+  });
+
+  it('gives one address ONE bucket however it is spelled', async () => {
+    const keys = new Set(
+      [
+        '2001:db8::1',
+        '2001:DB8::1',
+        '2001:0db8:0000:0000:0000:0000:0000:0001',
+        '2001:db8::0.0.0.1',
+      ].map((ip) => clientIpTracker({ ip })),
+    );
+    expect(keys.size).toBe(1);
+
+    // An IPv4-mapped v6 address is the same host as its IPv4 form.
+    expect(clientIpTracker({ ip: '::ffff:198.51.100.7' })).toBe(clientIpTracker({ ip: '198.51.100.7' }));
+    expect(clientIpTracker({ ip: '::ffff:c633:6407' })).toBe('ip:198.51.100.7');
   });
 
   it('handles a repeated header and stray padding', async () => {
@@ -118,11 +154,6 @@ describe('UserAwareThrottlerGuard', () => {
     const b = await guard.getTracker({ body: { email: 'grace@example.com' }, ip: '10.0.0.1' });
     expect(a).toBe('ip:10.0.0.1');
     expect(a).toBe(b);
-  });
-
-  it('prefers the authenticated user over everything else', async () => {
-    const t = await guard.getTracker({ user: { userId: 'u1' }, body: { email: 'ada@example.com' } });
-    expect(t).toBe('user:u1');
   });
 
   it('never returns an empty tracker', async () => {
@@ -146,19 +177,34 @@ describe('emailTracker', () => {
     );
   });
 
-  it('falls back to the client IP for anything that is not email-shaped', () => {
-    // The STRICT direction: junk lands you in the shared IP bucket rather than
-    // an unlimited private one. Guards run before pipes, so this really is the
-    // raw body — `{ email: {} }` and friends are reachable.
-    for (const email of ['   ', 42, {}, [], null, 'no-at-sign', 'a@b', undefined]) {
-      expect(emailTracker({ body: { email }, ip: '10.0.0.1' })).toBe('ip:10.0.0.1');
-    }
-    expect(emailTracker({ ip: '10.0.0.1' })).toBe('ip:10.0.0.1');
+  it('strips a +tag, because those all land in one inbox', () => {
+    // Otherwise victim+1@ … victim+60@ is 60 buckets delivering 60 mails an
+    // hour to one person, on a tier that allows 10.
+    expect(emailTracker({ body: { email: 'victim+1@gmail.com' } })).toBe('email:victim@gmail.com');
+    expect(emailTracker({ body: { email: 'victim+1@gmail.com' } })).toBe(
+      emailTracker({ body: { email: 'victim+anything+else@gmail.com' } }),
+    );
+    // A '+' in the DOMAIN is not a tag and must not truncate the address.
+    expect(emailTracker({ body: { email: 'ada@ex+ample.com' } })).toBe('email:ada@ex+ample.com');
   });
 
-  it('resolves that IP fallback through the proxy chain, same as clientIpTracker', () => {
-    const req = { body: { email: 42 }, headers: { 'x-forwarded-for': '1.2.3.4, 203.0.113.9' } };
-    expect(emailTracker(req)).toBe(clientIpTracker(req));
-    expect(emailTracker(req)).toBe('ip:203.0.113.9');
+  it('gives an unresolved email its OWN key, never the shared IP bucket', () => {
+    // Falling back to the IP meant five typo'd logins from one office or
+    // carrier NAT ('ada@gmail,com', 'admin@ybbhub', a blank field) burned the
+    // 5-per-15-min mailbox tier for EVERY user on that address. Self-inflicted
+    // by accident, griefable on purpose. Junk is still bounded: the global
+    // short/medium tiers key on IP for every route, and every route pinning
+    // emailTracker also pins a clientIpTracker tier that must pass.
+    const ip = '10.0.0.1';
+    const keys = ['   ', 42, {}, [], null, 'no-at-sign', 'a@b', undefined].map((email) =>
+      emailTracker({ body: { email }, ip }),
+    );
+    for (const key of keys) {
+      expect(key).toMatch(/^email:unresolved:/);
+      expect(key).not.toBe(clientIpTracker({ ip }));
+    }
+    // Distinct per request, so one junk sender cannot evict another.
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(emailTracker({ ip })).not.toBe(emailTracker({ ip }));
   });
 });
