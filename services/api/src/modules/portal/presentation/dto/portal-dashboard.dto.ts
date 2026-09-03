@@ -87,6 +87,13 @@ export class PortalApplicationSummaryDto {
     @ApiProperty({ required: false })
     daysUntilDeadline?: number;
 
+    @ApiProperty({
+        required: false,
+        description:
+            'ISO deadline used by the "submit your application form" reminder popup: the Fully Funded registration window end while it is still open, otherwise the Self Funded one.',
+    })
+    submissionDeadline?: string;
+
     @ApiProperty({ required: false, type: [PortalGuidebookDto] })
     guidebooks?: PortalGuidebookDto[];
 }

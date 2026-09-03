@@ -214,6 +214,25 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                         (tier.validityPeriods ?? []).every((period) => period.endDate < now),
                 );
 
+            // Deadline shown in the "submit your application form" reminder.
+            // Sourced from the Fully Funded registration window while it is
+            // still open, then from the Self Funded one once FF has ended.
+            // Falls back to the program's applicationDeadline when no tier
+            // window is configured.
+            const latestWindowEnd = (category: string): Date | null => {
+                const ends = tiers
+                    .filter((tier) => Array.isArray(tier.allowedCategories) && tier.allowedCategories.includes(category))
+                    .flatMap((tier) => tier.validityPeriods ?? [])
+                    .map((period) => period.endDate.getTime());
+                return ends.length > 0 ? new Date(Math.max(...ends)) : null;
+            };
+            const ffWindowEnd = latestWindowEnd('fully_funded');
+            const sfWindowEnd = latestWindowEnd('self_funded');
+            const submissionDeadline =
+                (ffWindowEnd && ffWindowEnd >= now ? ffWindowEnd : sfWindowEnd ?? ffWindowEnd) ??
+                latestApplication.program.applicationDeadline ??
+                null;
+
             const switchLockedStatuses = new Set(['processing', 'paid']);
             const blockingRegistrationInvoice = latestApplication.invoices.find(
                 (invoice) =>
@@ -265,6 +284,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 progress: calculateSubmissionProgress(latestApplication),
                 currentStep: determineSubmissionCurrentStep(latestApplication),
                 daysUntilDeadline: this.calculateDaysUntilDeadline(latestApplication.program.applicationDeadline),
+                submissionDeadline: submissionDeadline ? submissionDeadline.toISOString() : undefined,
                 guidebooks,
             };
 
