@@ -70,14 +70,22 @@ const ONE_HOUR = 3600000;
  * reports on 2026-08-31: the Nth person through the door got locked out for the
  * rest of the window for doing nothing wrong.
  *
- * The IP tier does not have to bound per-account guessing, because two other
- * things already do, and they are the ones that actually fit the threat:
+ * The IP tier does not have to bound per-account guessing, because the
+ * per-MAILBOX tier below does (5 login attempts / 15 min for one address),
+ * and an attacker cannot dodge that by changing hosts.
  *
- *   - the per-MAILBOX tier below (5 login attempts / 15 min for one address,
- *     10 mails / hour for one address), which an attacker cannot dodge by
- *     changing hosts, and
- *   - MAX_FAILED_LOGIN_ATTEMPTS (account-lockout.constants.ts), which locks the
- *     account itself after 5 failures.
+ * There is a SECOND backstop, but only on two of the three routes here, so be
+ * precise about which:
+ *
+ *   - /login and /admin/login increment failedLoginAttempts on a bad password
+ *     and refuse the account once lockedUntil is set, per
+ *     MAX_FAILED_LOGIN_ATTEMPTS (account-lockout.constants.ts).
+ *   - /auth/ambassador-login has NO account lockout. It authenticates on email
+ *     + referral code with NO PASSWORD; its failure branch
+ *     (ambassador-login.handler.ts) throws without incrementing
+ *     failedLoginAttempts and never reads lockedUntil, it only resets the
+ *     counter on success. Guessing a referral code on that route is bounded by
+ *     these throttle tiers and by nothing else.
  *
  * So the IP tier only has to stop a single-host SPRAY — one attacker walking
  * many accounts from one address — not bound a building. At 600 per 15 minutes
@@ -105,7 +113,18 @@ const CREDENTIAL_THROTTLE = {
  */
 const MAILBOX_THROTTLE = {
   default: { limit: 10, ttl: ONE_HOUR, getTracker: emailTracker },
-  long: { limit: 300, ttl: ONE_HOUR, getTracker: clientIpTracker },
+  // Same building-sized ceiling as CREDENTIAL_THROTTLE, and for the same
+  // reason. A route-level @Throttle REPLACES the global tier of that name
+  // outright rather than ANDing with it, so writing an hour-long ttl here does
+  // not tighten 300/60s into something stricter for an attacker — it hands a
+  // whole school lab a 60-minute wall. Registration is the burstiest and most
+  // deadline-clustered route we have, the guard runs BEFORE the validation
+  // pipe so every 400 (weak password, duplicate email, missing consent) spends
+  // budget too, and blockDuration is unset so it falls through to ttl: 40
+  // students x 8 submits is 320, and everyone behind that NAT is out for an
+  // hour. The 10/hour mailbox tier above is what protects a victim's inbox;
+  // this tier only has to stop one host minting buckets by varying the address.
+  long: { limit: 600, ttl: FIFTEEN_MINUTES, getTracker: clientIpTracker },
 };
 
 /**
@@ -264,7 +283,7 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  // 10/hour per mailbox AND 300/hour per IP; see MAILBOX_THROTTLE.
+  // 10/hour per mailbox AND 600/15min per IP; see MAILBOX_THROTTLE.
   @Throttle(MAILBOX_THROTTLE)
   @ApiOperation({
     summary: 'Register User',
@@ -326,7 +345,7 @@ export class AuthController {
 
   @Public()
   @Post('forgot-password')
-  // 10/hour per mailbox AND 300/hour per IP; see MAILBOX_THROTTLE.
+  // 10/hour per mailbox AND 600/15min per IP; see MAILBOX_THROTTLE.
   @Throttle(MAILBOX_THROTTLE)
   @ApiOperation({ summary: 'Request Password Reset' })
   @ApiResponse({ status: 201, description: 'Password reset email sent' })
@@ -376,7 +395,7 @@ export class AuthController {
 
   @Public()
   @Post('resend-verification')
-  // 10/hour per mailbox AND 300/hour per IP; see MAILBOX_THROTTLE.
+  // 10/hour per mailbox AND 600/15min per IP; see MAILBOX_THROTTLE.
   @Throttle(MAILBOX_THROTTLE)
   @ApiOperation({ summary: 'Resend Verification Email' })
   @ApiResponse({ status: 200, description: 'Verification email sent if user exists and is unverified' })
