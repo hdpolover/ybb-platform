@@ -157,6 +157,30 @@ export const emailTracker = (req: Record<string, unknown>): string => {
  * resend-verification pin one tier to emailTracker and another to
  * clientIpTracker, and both have to pass — see auth.controller.ts.
  */
+/**
+ * Where a request's resolved tracker is cached for the life of that request.
+ *
+ * @nestjs/throttler calls getTracker ONCE PER CONFIGURED THROTTLER and four
+ * tiers are registered (short/medium/long/default), so without this every
+ * request paid four jwt.verify calls. The failing branch is the expensive one
+ * — jsonwebtoken constructs and stack-captures a JsonWebTokenError per call —
+ * so the attacker's input selects the cost: a bad signature measured 425us of
+ * canActivate against a 36us no-token baseline, ~2350 rps to saturate a core.
+ * And the tracker is computed BEFORE storageService.increment, so the bill is
+ * paid even on a request that is about to be refused with a 429: the rate
+ * limiter could not rate-limit its own cost.
+ *
+ * A Symbol so it cannot collide with anything else hung off the request, and
+ * so it never appears in JSON, logs or Object.keys.
+ *
+ * It cannot leak a key across trackers. throttler.guard.js resolves
+ * `routeOrClassGetTracker || namedThrottler.getTracker || commonOptions.getTracker`
+ * per tier, so a tier pinned to clientIpTracker or emailTracker with @Throttle
+ * calls that function directly and never enters this method — verified against
+ * @nestjs/throttler 6.5.0, and asserted in the spec.
+ */
+const TRACKER_MEMO: unique symbol = Symbol('ybb.throttler.tracker');
+
 @Injectable()
 export class UserAwareThrottlerGuard extends ThrottlerGuard {
   constructor(
@@ -169,7 +193,8 @@ export class UserAwareThrottlerGuard extends ThrottlerGuard {
   }
 
   protected async getTracker(req: Record<string, unknown>): Promise<string> {
-    return this.userTracker(req) ?? clientIpTracker(req);
+    const memo = req as { [TRACKER_MEMO]?: string };
+    return (memo[TRACKER_MEMO] ??= this.userTracker(req) ?? clientIpTracker(req));
   }
 
   /**

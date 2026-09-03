@@ -15,9 +15,24 @@ import { UserAwareThrottlerGuard } from './user-aware-throttler.guard';
     // auth.module.ts — module-scoped, so the two do not collide.
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
-      }),
+      useFactory: async (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET');
+        if (!secret) {
+          // Boot loudly rather than degrade silently. With no secret,
+          // jwt.verify throws "secretOrPublicKey must have a value", the
+          // guard's catch swallows it, EVERY request falls back to the IP key
+          // — and takes the most expensive path through the guard to get
+          // there. Per-user keying would be dead with nothing in the logs to
+          // say so. The app cannot sign a token without this value either, so
+          // there is no working configuration this refuses.
+          // Prior art for env-not-mapped-into-the-container: Dokploy env vars
+          // silently killed all cache revalidation (2026-08-23).
+          throw new Error(
+            'JWT_SECRET is not set: the throttler cannot verify bearer tokens to rate limit per user.',
+          );
+        }
+        return { secret };
+      },
       inject: [ConfigService],
     }),
     NestThrottlerModule.forRootAsync({

@@ -41,17 +41,51 @@ describe('throttler wiring for the auth routes', () => {
     expect(options.throttlers.map((throttler) => throttler.name)).toContain('default');
   });
 
+  // The JwtModule factory, found by the token the guard injects rather than by
+  // position, so adding an import cannot silently point this at the wrong one.
+  const jwtFactory = () => {
+    const provider = (Reflect.getMetadata('imports', ThrottlerModule) as DynamicModule[])
+      .flatMap((dynamicModule) => (dynamicModule.providers ?? []) as FactoryProvider[])
+      .find((candidate) => typeof candidate?.useFactory === 'function' && candidate.provide !== getOptionsToken());
+    return provider!.useFactory! as (config: { get: (key: string) => unknown }) => Promise<unknown>;
+  };
+
+  it.each([[undefined], ['']])('refuses to boot when JWT_SECRET is %p', async (secret) => {
+    // Without a secret, jwt.verify throws "secretOrPublicKey must have a
+    // value", the guard's catch swallows it, and per-user keying is dead on
+    // every request while each one takes the guard's MOST expensive path to
+    // find that out. Nothing in the logs would say so. The app cannot sign a
+    // token without this value either, so there is no working configuration
+    // this refuses. Prior art: a Dokploy env var that never reached the
+    // container silently killed all cache revalidation (2026-08-23).
+    await expect(jwtFactory()({ get: () => secret })).rejects.toThrow(/JWT_SECRET/);
+  });
+
+  it('boots with a secret present', async () => {
+    await expect(jwtFactory()({ get: () => 'a-secret' })).resolves.toEqual({ secret: 'a-secret' });
+  });
+
   it('makes JwtService resolvable where the guard is constructed', async () => {
     // The guard takes JwtService as a 4th constructor argument to VERIFY bearer
     // tokens. Nothing else in the suite touches the real injector, so a missing
     // JwtModule import would be invisible to tsc and to every unit test, and
     // would surface as a container crash on boot.
-    const moduleRef = await Test.createTestingModule({
-      imports: [ConfigModule.forRoot({ ignoreEnvFile: true }), ThrottlerModule],
-    }).compile();
+    // ignoreEnvFile means the factory sees only process.env, and the factory
+    // now refuses to build without a secret — which is the point of the test
+    // above.
+    const previous = process.env.JWT_SECRET;
+    process.env.JWT_SECRET = 'throttler-module-spec-secret';
+    try {
+      const moduleRef = await Test.createTestingModule({
+        imports: [ConfigModule.forRoot({ ignoreEnvFile: true }), ThrottlerModule],
+      }).compile();
 
-    expect(moduleRef.select(ThrottlerModule).get(JwtService)).toBeInstanceOf(JwtService);
-    await moduleRef.close();
+      expect(moduleRef.select(ThrottlerModule).get(JwtService)).toBeInstanceOf(JwtService);
+      await moduleRef.close();
+    } finally {
+      if (previous === undefined) delete process.env.JWT_SECRET;
+      else process.env.JWT_SECRET = previous;
+    }
   });
 
   // Per-route @Throttle metadata is looked up per THROTTLER NAME, so a route

@@ -1,4 +1,5 @@
 // src/shared/infrastructure/throttler/user-aware-throttler.guard.spec.ts
+import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { clientIpTracker, emailTracker, UserAwareThrottlerGuard } from './user-aware-throttler.guard';
 
@@ -346,5 +347,119 @@ describe('emailTracker', () => {
     // Distinct per request, so one junk sender cannot evict another.
     expect(new Set(keys).size).toBe(keys.length);
     expect(emailTracker({ ip })).not.toBe(emailTracker({ ip }));
+  });
+});
+
+describe('one request, one signature verification', () => {
+  // @nestjs/throttler calls getTracker ONCE PER CONFIGURED THROTTLER, and four
+  // tiers are registered. Before the memo every request paid four jwt.verify
+  // calls, and the FAILING branch is the expensive one — jsonwebtoken builds
+  // and stack-captures a JsonWebTokenError per call — so a bad signature cost
+  // 425us of canActivate against a 36us no-token baseline. The tracker is also
+  // resolved BEFORE storageService.increment, so the cost landed even on
+  // requests that were about to be refused: the rate limiter could not
+  // rate-limit its own cost.
+  const guardFor = (jwt: JwtService) =>
+    new UserAwareThrottlerGuard({} as never, {} as never, {} as never, jwt);
+
+  it('verifies once across four getTracker calls for the same request', async () => {
+    const jwt = new JwtService({ secret: SECRET });
+    const verify = jest.spyOn(jwt, 'verify');
+    const tracker = guardFor(jwt) as unknown as TrackerAccess;
+    const req = { ...bearer(accessTokenFor('ada')), ip: '203.0.113.9' };
+
+    const keys: string[] = [];
+    for (let i = 0; i < 4; i++) keys.push(await tracker.getTracker(req));
+
+    expect(keys).toEqual(['user:ada', 'user:ada', 'user:ada', 'user:ada']);
+    expect(verify).toHaveBeenCalledTimes(1);
+  });
+
+  it('memoises the expensive failure path too, which is the one an attacker picks', async () => {
+    const jwt = new JwtService({ secret: SECRET });
+    const verify = jest.spyOn(jwt, 'verify');
+    const tracker = guardFor(jwt) as unknown as TrackerAccess;
+    const forged = new JwtService({ secret: 'not-the-app-secret' }).sign(
+      { sub: 'victim', type: 'access' },
+      { expiresIn: '1h' },
+    );
+    const req = { ...bearer(forged), ip: '203.0.113.9' };
+
+    for (let i = 0; i < 4; i++) expect(await tracker.getTracker(req)).toBe('ip:203.0.113.9');
+    expect(verify).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not share a memo between two requests', async () => {
+    const jwt = new JwtService({ secret: SECRET });
+    const verify = jest.spyOn(jwt, 'verify');
+    const tracker = guardFor(jwt) as unknown as TrackerAccess;
+    const IP = '203.0.113.9';
+
+    const ada = await tracker.getTracker({ ...bearer(accessTokenFor('ada')), ip: IP });
+    const grace = await tracker.getTracker({ ...bearer(accessTokenFor('grace')), ip: IP });
+    const anonymous = await tracker.getTracker({ ip: IP });
+
+    expect(ada).toBe('user:ada');
+    expect(grace).toBe('user:grace');
+    expect(anonymous).toBe('ip:203.0.113.9');
+    expect(verify).toHaveBeenCalledTimes(2);
+  });
+
+  it('never lets the memo reach a tier that pins its own tracker', async () => {
+    // The memo would be a real bug if a route-pinned tracker read it: a route
+    // pinning emailTracker on one tier would get the user/IP key instead.
+    // @nestjs/throttler 6.5.0 resolves
+    // `routeOrClassGetTracker || namedThrottler.getTracker || commonOptions.getTracker`
+    // per tier, so the pinned function is called DIRECTLY and this guard's
+    // getTracker never runs for that tier. Asserted here against the real
+    // library rather than taken on trust.
+    const jwt = new JwtService({ secret: SECRET });
+    const verify = jest.spyOn(jwt, 'verify');
+    const pinned = jest.fn(() => 'pinned:key');
+    const storage = {
+      increment: jest.fn(async () => ({
+        totalHits: 1,
+        timeToExpire: 1,
+        isBlocked: false,
+        timeToBlockExpire: 0,
+      })),
+    };
+    const options = {
+      throttlers: [
+        { name: 'short', ttl: 1000, limit: 100 },
+        { name: 'medium', ttl: 10_000, limit: 100 },
+        { name: 'long', ttl: 60_000, limit: 100 },
+        { name: 'default', ttl: 60_000, limit: 100 },
+      ],
+    };
+
+    class Routes {
+      handler() {}
+    }
+    // What @Throttle({ default: { getTracker } }) writes.
+    Reflect.defineMetadata('THROTTLER:TRACKERdefault', pinned, Routes.prototype.handler);
+
+    const guard = new UserAwareThrottlerGuard(
+      options as never,
+      storage as never,
+      new Reflector(),
+      jwt,
+    );
+    await guard.onModuleInit();
+
+    const req = { ...bearer(accessTokenFor('ada')), ip: '203.0.113.9' };
+    const context = {
+      getHandler: () => Routes.prototype.handler,
+      getClass: () => Routes,
+      switchToHttp: () => ({ getRequest: () => req, getResponse: () => ({ header: jest.fn() }) }),
+    };
+
+    await expect(guard.canActivate(context as never)).resolves.toBe(true);
+
+    // Four tiers evaluated, one signature verification for the whole request.
+    expect(storage.increment).toHaveBeenCalledTimes(4);
+    expect(verify).toHaveBeenCalledTimes(1);
+    // The pinned tier used its own function and got its own key, memo or not.
+    expect(pinned).toHaveBeenCalledTimes(1);
   });
 });
