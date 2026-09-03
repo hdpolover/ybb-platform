@@ -1,14 +1,25 @@
 // src/shared/infrastructure/throttler/user-aware-throttler.guard.spec.ts
+import { Reflector } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
 import { clientIpTracker, emailTracker, UserAwareThrottlerGuard } from './user-aware-throttler.guard';
 
 // getTracker is protected; the tests exercise it the way the guard does.
 type TrackerAccess = { getTracker(req: Record<string, unknown>): Promise<string> };
+
+// Real signing and real verification. Mocking the JwtService here would mock
+// out the only thing that makes per-user keying safe.
+const SECRET = 'throttler-test-secret';
+const jwtService = new JwtService({ secret: SECRET });
+const bearer = (token: string) => ({ headers: { authorization: `Bearer ${token}` } });
+const accessTokenFor = (sub: string, options: Record<string, unknown> = {}) =>
+  jwtService.sign({ sub, type: 'access' }, { expiresIn: '1h', ...options });
 
 describe('UserAwareThrottlerGuard', () => {
   const guard = new UserAwareThrottlerGuard(
     {} as never,
     {} as never,
     {} as never,
+    jwtService,
   ) as unknown as TrackerAccess;
 
   it('tracks by IP, which is what rate limiting is for', async () => {
@@ -21,8 +32,9 @@ describe('UserAwareThrottlerGuard', () => {
   it('ignores req.user, because it is always undefined here', async () => {
     // This guard is the app's only APP_GUARD and JwtAuthGuard is route-scoped;
     // Nest runs global guards BEFORE controller guards, so authentication has
-    // not run yet at this point. The `user:` branch that used to sit here was
-    // unreachable, and per-user rate limiting is still unimplemented.
+    // not run yet at this point. A `user:` branch reading req.user (commit
+    // e233af76) was unreachable; identity has to come from the token itself,
+    // and a request that merely CLAIMS one in a property must not get a bucket.
     const authed = await guard.getTracker({ user: { userId: 'u1' }, ip: '10.0.0.1' });
     expect(authed).toBe('ip:10.0.0.1');
   });
@@ -165,6 +177,122 @@ describe('UserAwareThrottlerGuard', () => {
   });
 });
 
+describe('per-user throttle keying', () => {
+  const guard = new UserAwareThrottlerGuard(
+    {} as never,
+    {} as never,
+    {} as never,
+    jwtService,
+  ) as unknown as TrackerAccess;
+
+  const IP = '203.0.113.9';
+  const ipKey = clientIpTracker({ ip: IP });
+
+  it('bills a valid access token to its subject', async () => {
+    const key = await guard.getTracker({ ...bearer(accessTokenFor('user-1')), ip: IP });
+    expect(key).toBe('user:user-1');
+  });
+
+  it('REGRESSION 2026-08-31: two users behind one NAT get two buckets', async () => {
+    // A school lab, a university and an Indonesian carrier's CGNAT all present
+    // as one address. Keying signed-in traffic on the IP meant the Nth
+    // participant through the door inherited an exhausted bucket and got a
+    // ThrottlerException for doing nothing wrong. This is the whole point of
+    // the feature; if it ever regresses, this is the test that says so.
+    const ada = await guard.getTracker({ ...bearer(accessTokenFor('ada')), ip: IP });
+    const grace = await guard.getTracker({ ...bearer(accessTokenFor('grace')), ip: IP });
+    expect(ada).not.toBe(grace);
+    expect(ada).toBe('user:ada');
+    expect(grace).toBe('user:grace');
+  });
+
+  it('separates an authenticated request from an anonymous one on the same IP', async () => {
+    const authed = await guard.getTracker({ ...bearer(accessTokenFor('ada')), ip: IP });
+    const anonymous = await guard.getTracker({ ip: IP });
+    expect(authed).not.toBe(anonymous);
+    expect(anonymous).toBe(ipKey);
+  });
+
+  it('FORGERY: a token signed with the wrong secret gets no bucket of its own', async () => {
+    // The single most important assertion in this file. If the implementation
+    // ever decodes instead of verifying — jwt.decode(), or splitting on '.' —
+    // any caller writes their own `sub` and mints unlimited fresh ceilings,
+    // which is strictly worse than the shared IP bucket it replaced.
+    const forged = new JwtService({ secret: 'not-the-app-secret' }).sign(
+      { sub: 'victim', type: 'access' },
+      { expiresIn: '1h' },
+    );
+    expect(await guard.getTracker({ ...bearer(forged), ip: IP })).toBe(ipKey);
+
+    // Nor does hand-assembled unsigned garbage of the right SHAPE.
+    const unsigned = `${Buffer.from(JSON.stringify({ alg: 'none' })).toString('base64url')}.${Buffer.from(
+      JSON.stringify({ sub: 'victim', type: 'access' }),
+    ).toString('base64url')}.`;
+    expect(await guard.getTracker({ ...bearer(unsigned), ip: IP })).toBe(ipKey);
+  });
+
+  it('falls back to IP for an expired token', async () => {
+    const expired = accessTokenFor('ada', { expiresIn: '-1s' });
+    expect(await guard.getTracker({ ...bearer(expired), ip: IP })).toBe(ipKey);
+  });
+
+  it('falls back to IP for a refresh token, which is signed with the same secret', async () => {
+    // Valid signature, wrong half of the pair. jwt.strategy.ts already refuses
+    // it as a bearer; it must not buy a bucket here either.
+    const refresh = jwtService.sign({ sub: 'ada', type: 'refresh' }, { expiresIn: '7d' });
+    expect(await guard.getTracker({ ...bearer(refresh), ip: IP })).toBe(ipKey);
+  });
+
+  it('falls back to IP for an untyped legacy token', async () => {
+    // Pre-`type`-claim tokens cannot be classified, so they stay on the status
+    // quo and expire on their own. Never a bucket on a guess.
+    const untyped = jwtService.sign({ sub: 'ada' }, { expiresIn: '1h' });
+    expect(await guard.getTracker({ ...bearer(untyped), ip: IP })).toBe(ipKey);
+  });
+
+  it('falls back to IP for a valid token with no usable subject', async () => {
+    for (const payload of [{ type: 'access' }, { sub: '', type: 'access' }, { sub: 42, type: 'access' }]) {
+      const token = jwtService.sign(payload as object, { expiresIn: '1h' });
+      expect(await guard.getTracker({ ...bearer(token), ip: IP })).toBe(ipKey);
+    }
+  });
+
+  it('falls back to IP for an absent, malformed or non-Bearer header', async () => {
+    const token = accessTokenFor('ada');
+    const headers = [
+      undefined,
+      '',
+      '   ',
+      token, // no scheme
+      `Basic ${token}`,
+      `Bearer${token}`, // no separator
+      'Bearer',
+      'Bearer ',
+      `Bearer ${token} extra`,
+      'Bearer not.a.jwt',
+      ['Bearer nonsense'] as unknown as string,
+      42 as unknown as string,
+    ];
+    for (const authorization of headers) {
+      expect(await guard.getTracker({ headers: { authorization }, ip: IP })).toBe(ipKey);
+    }
+  });
+
+  it('accepts the scheme case-insensitively, the way HTTP does', async () => {
+    const token = accessTokenFor('ada');
+    expect(await guard.getTracker({ headers: { authorization: `bearer ${token}` }, ip: IP })).toBe(
+      'user:ada',
+    );
+  });
+
+  it('never throws, whatever the request looks like', async () => {
+    // A rate limiter that 500s a request is a worse outage than the one it
+    // prevents, so every path here has to end in a key.
+    await expect(guard.getTracker({})).resolves.toBe('ip:unknown');
+    await expect(guard.getTracker({ headers: null as never })).resolves.toBe('ip:unknown');
+  });
+});
+
 describe('emailTracker', () => {
   it('keys on the mailbox, normalised, so casing and padding buy no extra attempts', () => {
     expect(emailTracker({ body: { email: '  Ada@Example.COM ' } })).toBe('email:ada@example.com');
@@ -219,5 +347,119 @@ describe('emailTracker', () => {
     // Distinct per request, so one junk sender cannot evict another.
     expect(new Set(keys).size).toBe(keys.length);
     expect(emailTracker({ ip })).not.toBe(emailTracker({ ip }));
+  });
+});
+
+describe('one request, one signature verification', () => {
+  // @nestjs/throttler calls getTracker ONCE PER CONFIGURED THROTTLER, and four
+  // tiers are registered. Before the memo every request paid four jwt.verify
+  // calls, and the FAILING branch is the expensive one — jsonwebtoken builds
+  // and stack-captures a JsonWebTokenError per call — so a bad signature cost
+  // 425us of canActivate against a 36us no-token baseline. The tracker is also
+  // resolved BEFORE storageService.increment, so the cost landed even on
+  // requests that were about to be refused: the rate limiter could not
+  // rate-limit its own cost.
+  const guardFor = (jwt: JwtService) =>
+    new UserAwareThrottlerGuard({} as never, {} as never, {} as never, jwt);
+
+  it('verifies once across four getTracker calls for the same request', async () => {
+    const jwt = new JwtService({ secret: SECRET });
+    const verify = jest.spyOn(jwt, 'verify');
+    const tracker = guardFor(jwt) as unknown as TrackerAccess;
+    const req = { ...bearer(accessTokenFor('ada')), ip: '203.0.113.9' };
+
+    const keys: string[] = [];
+    for (let i = 0; i < 4; i++) keys.push(await tracker.getTracker(req));
+
+    expect(keys).toEqual(['user:ada', 'user:ada', 'user:ada', 'user:ada']);
+    expect(verify).toHaveBeenCalledTimes(1);
+  });
+
+  it('memoises the expensive failure path too, which is the one an attacker picks', async () => {
+    const jwt = new JwtService({ secret: SECRET });
+    const verify = jest.spyOn(jwt, 'verify');
+    const tracker = guardFor(jwt) as unknown as TrackerAccess;
+    const forged = new JwtService({ secret: 'not-the-app-secret' }).sign(
+      { sub: 'victim', type: 'access' },
+      { expiresIn: '1h' },
+    );
+    const req = { ...bearer(forged), ip: '203.0.113.9' };
+
+    for (let i = 0; i < 4; i++) expect(await tracker.getTracker(req)).toBe('ip:203.0.113.9');
+    expect(verify).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not share a memo between two requests', async () => {
+    const jwt = new JwtService({ secret: SECRET });
+    const verify = jest.spyOn(jwt, 'verify');
+    const tracker = guardFor(jwt) as unknown as TrackerAccess;
+    const IP = '203.0.113.9';
+
+    const ada = await tracker.getTracker({ ...bearer(accessTokenFor('ada')), ip: IP });
+    const grace = await tracker.getTracker({ ...bearer(accessTokenFor('grace')), ip: IP });
+    const anonymous = await tracker.getTracker({ ip: IP });
+
+    expect(ada).toBe('user:ada');
+    expect(grace).toBe('user:grace');
+    expect(anonymous).toBe('ip:203.0.113.9');
+    expect(verify).toHaveBeenCalledTimes(2);
+  });
+
+  it('never lets the memo reach a tier that pins its own tracker', async () => {
+    // The memo would be a real bug if a route-pinned tracker read it: a route
+    // pinning emailTracker on one tier would get the user/IP key instead.
+    // @nestjs/throttler 6.5.0 resolves
+    // `routeOrClassGetTracker || namedThrottler.getTracker || commonOptions.getTracker`
+    // per tier, so the pinned function is called DIRECTLY and this guard's
+    // getTracker never runs for that tier. Asserted here against the real
+    // library rather than taken on trust.
+    const jwt = new JwtService({ secret: SECRET });
+    const verify = jest.spyOn(jwt, 'verify');
+    const pinned = jest.fn(() => 'pinned:key');
+    const storage = {
+      increment: jest.fn(async () => ({
+        totalHits: 1,
+        timeToExpire: 1,
+        isBlocked: false,
+        timeToBlockExpire: 0,
+      })),
+    };
+    const options = {
+      throttlers: [
+        { name: 'short', ttl: 1000, limit: 100 },
+        { name: 'medium', ttl: 10_000, limit: 100 },
+        { name: 'long', ttl: 60_000, limit: 100 },
+        { name: 'default', ttl: 60_000, limit: 100 },
+      ],
+    };
+
+    class Routes {
+      handler() {}
+    }
+    // What @Throttle({ default: { getTracker } }) writes.
+    Reflect.defineMetadata('THROTTLER:TRACKERdefault', pinned, Routes.prototype.handler);
+
+    const guard = new UserAwareThrottlerGuard(
+      options as never,
+      storage as never,
+      new Reflector(),
+      jwt,
+    );
+    await guard.onModuleInit();
+
+    const req = { ...bearer(accessTokenFor('ada')), ip: '203.0.113.9' };
+    const context = {
+      getHandler: () => Routes.prototype.handler,
+      getClass: () => Routes,
+      switchToHttp: () => ({ getRequest: () => req, getResponse: () => ({ header: jest.fn() }) }),
+    };
+
+    await expect(guard.canActivate(context as never)).resolves.toBe(true);
+
+    // Four tiers evaluated, one signature verification for the whole request.
+    expect(storage.increment).toHaveBeenCalledTimes(4);
+    expect(verify).toHaveBeenCalledTimes(1);
+    // The pinned tier used its own function and got its own key, memo or not.
+    expect(pinned).toHaveBeenCalledTimes(1);
   });
 });

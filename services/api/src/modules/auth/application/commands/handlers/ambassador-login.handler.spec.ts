@@ -55,12 +55,18 @@ describe('AmbassadorLoginHandler', () => {
         handler = module.get<AmbassadorLoginHandler>(AmbassadorLoginHandler);
         jest.clearAllMocks();
 
+        // recordFailedAttempt reads the counter back from the write, the way
+        // Prisma returns it, instead of trusting the value it read earlier.
+        mockPrismaService.user.update.mockResolvedValue({ failedLoginAttempts: 1 });
+
         mockPrismaService.user.findFirst.mockResolvedValue({
             id: USER_ID,
             email: 'ambassador@example.com',
             brandId: BRAND_ID,
             isActive: true,
             isOnboardingCompleted: true,
+            failedLoginAttempts: 0,
+            lockedUntil: null,
         });
     });
 
@@ -115,5 +121,93 @@ describe('AmbassadorLoginHandler', () => {
 
         await expect(handler.execute(command)).rejects.toThrow(UnauthorizedException);
         expect(mockPrismaService.ambassador.findFirst).not.toHaveBeenCalled();
+    });
+    // The referral code is the ONLY credential this route takes — no password —
+    // and the handler hands back full access and refresh tokens. Until these
+    // landed, a wrong code cost the guesser nothing at all.
+    describe('account lockout', () => {
+        it('counts a wrong referral code as a failed attempt', async () => {
+            mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
+            mockPrismaService.user.update.mockResolvedValue({ failedLoginAttempts: 1 });
+
+            await expect(handler.execute(command)).rejects.toThrow(UnauthorizedException);
+
+            // The DATABASE increments. Reading the counter into JS and writing
+            // back n+1 let N concurrent guesses all write the same value.
+            expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+                where: { id: USER_ID },
+                data: { failedLoginAttempts: { increment: 1 }, lastFailedLogin: expect.any(Date) },
+                select: { failedLoginAttempts: true },
+            });
+            // Below the threshold nothing else is written — notably no
+            // `lockedUntil: null`, which is how a stale request un-locks an
+            // account another request just locked.
+            expect(mockPrismaService.user.update).toHaveBeenCalledTimes(1);
+        });
+
+        it('locks the account once failed attempts reach the threshold', async () => {
+            mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
+            mockPrismaService.user.findFirst.mockResolvedValue({
+                id: USER_ID,
+                email: 'ambassador@example.com',
+                brandId: BRAND_ID,
+                isActive: true,
+                failedLoginAttempts: 4,
+                lockedUntil: null,
+            });
+            // The threshold is decided by what the increment RETURNED, not by
+            // what this stale read said.
+            mockPrismaService.user.update.mockResolvedValue({ failedLoginAttempts: 5 });
+
+            await expect(handler.execute(command)).rejects.toThrow(UnauthorizedException);
+
+            expect(mockPrismaService.user.update).toHaveBeenLastCalledWith({
+                where: { id: USER_ID },
+                data: { lockedUntil: expect.any(Date) },
+            });
+        });
+
+        it('rejects a locked account without ever comparing the code', async () => {
+            mockPrismaService.user.findFirst.mockResolvedValue({
+                id: USER_ID,
+                email: 'ambassador@example.com',
+                brandId: BRAND_ID,
+                isActive: true,
+                failedLoginAttempts: 5,
+                lockedUntil: new Date(Date.now() + 60_000),
+            });
+
+            await expect(handler.execute(command)).rejects.toThrow(
+                'Too many failed attempts. Try again later.',
+            );
+            // No lookup means no oracle: a locked account cannot be used to test
+            // whether a guessed code is right.
+            expect(mockPrismaService.ambassador.findFirst).not.toHaveBeenCalled();
+        });
+
+        it('lets the account back in once the lockout has expired', async () => {
+            mockPrismaService.ambassador.findFirst.mockResolvedValue({ id: 'amb-1' });
+            mockPrismaService.user.findFirst.mockResolvedValue({
+                id: USER_ID,
+                email: 'ambassador@example.com',
+                brandId: BRAND_ID,
+                isActive: true,
+                failedLoginAttempts: 5,
+                lockedUntil: new Date(Date.now() - 60_000),
+            });
+
+            await expect(handler.execute(command)).resolves.toBeDefined();
+        });
+
+        it('clears the counter AND the lock on success', async () => {
+            mockPrismaService.ambassador.findFirst.mockResolvedValue({ id: 'amb-1' });
+
+            await handler.execute(command);
+
+            expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+                where: { id: USER_ID },
+                data: expect.objectContaining({ failedLoginAttempts: 0, lockedUntil: null }),
+            });
+        });
     });
 });

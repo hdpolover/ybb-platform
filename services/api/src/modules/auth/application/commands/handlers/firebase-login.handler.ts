@@ -11,6 +11,7 @@ import { FirebaseAuthService } from '../../../infrastructure/services/firebase-a
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
+import { isLockedOut } from '../../services/account-lockout.util';
 import {
   ensureProgramApplication,
   resolveAuthTargetProgram,
@@ -372,9 +373,16 @@ export class FirebaseLoginHandler {
     }
 
     // 7. Login Logic (Generate Tokens)
-    
-    // Reset failed attempts if any
-    if (user.failedLoginAttempts > 0) {
+
+    // Reset failed attempts if any — but NOT while a lockout is running.
+    // A Firebase sign-in is not a password guess, so no failures are counted
+    // here; it must still not be a way to wipe the counter that /login and
+    // /ambassador-login are busy accumulating. Clearing it mid-lockout hands
+    // the guesser a fresh MAX_FAILED_LOGIN_ATTEMPTS the moment lockedUntil
+    // expires, which is the control quietly refunding itself. lockedUntil is
+    // deliberately left alone either way: only a successful password login
+    // clears the lock.
+    if (user.failedLoginAttempts > 0 && !isLockedOut(user)) {
         await this.prisma.user.update({
             where: { id: user.id },
             data: { failedLoginAttempts: 0, lastLoginAt: new Date() }

@@ -2,6 +2,9 @@
 
 import 'reflect-metadata';
 import { DynamicModule, FactoryProvider } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import { JwtService } from '@nestjs/jwt';
 import { getOptionsToken } from '@nestjs/throttler';
 import { ThrottlerModule } from './throttler.module';
 import { clientIpTracker, emailTracker } from './user-aware-throttler.guard';
@@ -24,16 +27,65 @@ describe('throttler wiring for the auth routes', () => {
     // The factory is invoked directly rather than through Nest's injector so
     // this test stays about the names and does not drag in the whole guard
     // graph.
-    const [dynamicModule] = Reflect.getMetadata('imports', ThrottlerModule) as DynamicModule[];
-    const optionsProvider = (dynamicModule.providers as FactoryProvider[]).find(
-      (provider) => provider.provide === getOptionsToken(),
-    );
+    // Found by token, not by position: the module also imports JwtModule (the
+    // guard verifies bearer tokens), so indexing imports[0] would silently pick
+    // the wrong one.
+    const optionsProvider = (Reflect.getMetadata('imports', ThrottlerModule) as DynamicModule[])
+      .flatMap((dynamicModule) => (dynamicModule.providers ?? []) as FactoryProvider[])
+      .find((provider) => provider?.provide === getOptionsToken());
 
     const options = (await optionsProvider!.useFactory!({
       get: (_key: string, fallback: unknown) => fallback,
     })) as { throttlers: { name?: string }[] };
 
     expect(options.throttlers.map((throttler) => throttler.name)).toContain('default');
+  });
+
+  // The JwtModule factory, found by the token the guard injects rather than by
+  // position, so adding an import cannot silently point this at the wrong one.
+  const jwtFactory = () => {
+    const provider = (Reflect.getMetadata('imports', ThrottlerModule) as DynamicModule[])
+      .flatMap((dynamicModule) => (dynamicModule.providers ?? []) as FactoryProvider[])
+      .find((candidate) => typeof candidate?.useFactory === 'function' && candidate.provide !== getOptionsToken());
+    return provider!.useFactory! as (config: { get: (key: string) => unknown }) => Promise<unknown>;
+  };
+
+  it.each([[undefined], ['']])('refuses to boot when JWT_SECRET is %p', async (secret) => {
+    // Without a secret, jwt.verify throws "secretOrPublicKey must have a
+    // value", the guard's catch swallows it, and per-user keying is dead on
+    // every request while each one takes the guard's MOST expensive path to
+    // find that out. Nothing in the logs would say so. The app cannot sign a
+    // token without this value either, so there is no working configuration
+    // this refuses. Prior art: a Dokploy env var that never reached the
+    // container silently killed all cache revalidation (2026-08-23).
+    await expect(jwtFactory()({ get: () => secret })).rejects.toThrow(/JWT_SECRET/);
+  });
+
+  it('boots with a secret present', async () => {
+    await expect(jwtFactory()({ get: () => 'a-secret' })).resolves.toEqual({ secret: 'a-secret' });
+  });
+
+  it('makes JwtService resolvable where the guard is constructed', async () => {
+    // The guard takes JwtService as a 4th constructor argument to VERIFY bearer
+    // tokens. Nothing else in the suite touches the real injector, so a missing
+    // JwtModule import would be invisible to tsc and to every unit test, and
+    // would surface as a container crash on boot.
+    // ignoreEnvFile means the factory sees only process.env, and the factory
+    // now refuses to build without a secret — which is the point of the test
+    // above.
+    const previous = process.env.JWT_SECRET;
+    process.env.JWT_SECRET = 'throttler-module-spec-secret';
+    try {
+      const moduleRef = await Test.createTestingModule({
+        imports: [ConfigModule.forRoot({ ignoreEnvFile: true }), ThrottlerModule],
+      }).compile();
+
+      expect(moduleRef.select(ThrottlerModule).get(JwtService)).toBeInstanceOf(JwtService);
+      await moduleRef.close();
+    } finally {
+      if (previous === undefined) delete process.env.JWT_SECRET;
+      else process.env.JWT_SECRET = previous;
+    }
   });
 
   // Per-route @Throttle metadata is looked up per THROTTLER NAME, so a route
@@ -67,12 +119,16 @@ describe('throttler wiring for the auth routes', () => {
     expect(trackerFor(handler, 'long')).toBe(clientIpTracker);
   });
 
-  it('leaves register-admin on the guard default, which is the client IP', () => {
-    // It used to name clientIpTracker explicitly, to opt OUT of the guard's
-    // old body.email default. That default is gone, so naming it would be
-    // noise — but if anyone ever pins a tracker here it should not be the
-    // caller-chosen mailbox: this route guards a shared secret.
-    expect(trackerFor(AuthController.prototype.registerAdmin, 'default')).toBeUndefined();
+  it('pins register-admin to the client IP, never the guard default', () => {
+    // This assertion exists because the opposite one used to be here, and it
+    // was wrong. The guard's default tracker is USER-aware, and /auth/register
+    // hands out an access token with no email verification — so inheriting the
+    // default would let a caller mint throwaway accounts and spend a fresh
+    // 3-guess bucket per account against the shared admin secret, thousands of
+    // guesses an hour against an intended 3.
+    // The cap on this route is only meaningful if the bucket is something the
+    // caller cannot mint. That is the client IP, and it must stay named here.
+    expect(trackerFor(AuthController.prototype.registerAdmin, 'default')).toBe(clientIpTracker);
     expect(trackerFor(AuthController.prototype.registerAdmin, 'default')).not.toBe(emailTracker);
   });
 });

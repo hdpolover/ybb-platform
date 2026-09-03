@@ -74,18 +74,21 @@ const ONE_HOUR = 3600000;
  * per-MAILBOX tier below does (5 login attempts / 15 min for one address),
  * and an attacker cannot dodge that by changing hosts.
  *
- * There is a SECOND backstop, but only on two of the three routes here, so be
- * precise about which:
+ * There is a SECOND backstop, and it now covers all three routes here:
  *
  *   - /login and /admin/login increment failedLoginAttempts on a bad password
  *     and refuse the account once lockedUntil is set, per
  *     MAX_FAILED_LOGIN_ATTEMPTS (account-lockout.constants.ts).
- *   - /auth/ambassador-login has NO account lockout. It authenticates on email
- *     + referral code with NO PASSWORD; its failure branch
- *     (ambassador-login.handler.ts) throws without incrementing
- *     failedLoginAttempts and never reads lockedUntil, it only resets the
- *     counter on success. Guessing a referral code on that route is bounded by
- *     these throttle tiers and by nothing else.
+ *   - /auth/ambassador-login authenticates on email + referral code with NO
+ *     PASSWORD, so a wrong code is a wrong credential and costs the same: it
+ *     counts a failed attempt and locks at the same threshold (the shared
+ *     helper in account-lockout.util.ts). It had no lockout at all until then,
+ *     which left code guessing bounded by these throttle tiers and nothing
+ *     else.
+ *
+ * Nothing may quietly refund that counter either: /auth/firebase-login resets
+ * failedLoginAttempts on a successful sign-in, and now refuses to do so while
+ * lockedUntil is still running.
  *
  * So the IP tier only has to stop a single-host SPRAY — one attacker walking
  * many accounts from one address — not bound a building. At 600 per 15 minutes
@@ -129,8 +132,9 @@ const MAILBOX_THROTTLE = {
 
 /**
  * Routes that carry an opaque token and no email, so there is no mailbox tier
- * to pin and they are per-IP whether we like it or not — which makes them
- * per-BUILDING. A tight cap here buys nothing and costs lockouts: nobody
+ * to pin. An anonymous call here is per-IP — which makes it per-BUILDING; a
+ * call carrying a valid access token is per-user, since the guard's default
+ * tracker is user-aware. A tight cap here buys nothing and costs lockouts: nobody
  * guesses a 32-byte token, and nobody forges a Firebase-signed one either, so
  * a small-looking number is not protecting anything. All it does is lock a lab
  * out of finishing their signups. Sized to match the credential IP tier above,
@@ -323,11 +327,15 @@ export class AuthController {
 
   @Public()
   @Post('register-admin')
-  // 3 guesses per hour at the shared secret, per client IP — the guard's
-  // default tracker, so nothing extra is needed here. This used to name
-  // clientIpTracker explicitly because the guard keyed anonymous traffic on
-  // body.email, which handed every guess a fresh bucket. That is gone.
-  @Throttle({ default: { limit: 3, ttl: ONE_HOUR } })
+  // 3 guesses per hour at the shared secret, per client IP. clientIpTracker is
+  // named EXPLICITLY and must stay that way: the guard's default tracker is
+  // user-aware, and /auth/register hands out an access token immediately with
+  // no email verification, so leaving this on the default would let a caller
+  // mint throwaway accounts (~2400/hour per IP under MAILBOX_THROTTLE) and
+  // spend a fresh 3-guess bucket per account — thousands of guesses an hour
+  // against an intended 3. This is the one route in this file whose security
+  // rests on a small number, so it does not get to inherit a tracker.
+  @Throttle({ default: { limit: 3, ttl: ONE_HOUR, getTracker: clientIpTracker } })
   @ApiOperation({ summary: 'Register Admin (Requires Secret Key)' })
   @ApiResponse({ status: 201, description: 'Admin successfully registered', type: AuthResponseDto })
   async registerAdmin(@Body() dto: RegisterAdminDto): Promise<AuthResponseDto> {
@@ -429,10 +437,13 @@ export class AuthController {
 
   @Post('identities/local')
   @HttpCode(HttpStatus.CREATED)
-  // Per IP, NOT per user, despite being authenticated: the throttler is a
-  // global APP_GUARD and runs before the route's JwtAuthGuard, so req.user is
-  // undefined by the time the tracker is called. 5/hour was written as a
-  // per-user budget and silently applied to a whole building.
+  // Per authenticated USER, back to the original intent: the throttler is
+  // still a global APP_GUARD that runs before this route's JwtAuthGuard, so
+  // req.user is still undefined when the tracker is called — but the guard now
+  // verifies the Bearer token itself and keys on its subject (ab35c318). A
+  // caller with no valid token still keys on the client IP.
+  // The 60/hour is the widened value from when this tier was per-IP and one
+  // building shared it; as a per-user budget the original figure was 5/hour.
   @Throttle({ default: { limit: 60, ttl: ONE_HOUR } })
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

@@ -30,6 +30,7 @@ import { ListApplicationsHandler } from '../application/queries/handlers/list-ap
 import { ExportApplicationsHandler } from '../application/queries/handlers/export-applications.handler';
 import { GetApplicationReviewHandler } from '../application/queries/handlers/get-application-review.handler';
 import { UpsertApplicationReviewHandler } from '../application/commands/handlers/upsert-application-review.handler';
+import { RegistrationFeeMismatchesHandler } from '../application/queries/handlers/registration-fee-mismatches.handler';
 
 const noopHandler = { execute: jest.fn() };
 
@@ -57,6 +58,7 @@ function buildProviders(overrides: Record<string, unknown> = {}) {
     },
     { provide: GetApplicationReviewHandler, useValue: overrides.getApplicationReviewHandler ?? noopHandler },
     { provide: UpsertApplicationReviewHandler, useValue: overrides.upsertApplicationReviewHandler ?? noopHandler },
+    { provide: RegistrationFeeMismatchesHandler, useValue: overrides.registrationFeeMismatchesHandler ?? noopHandler },
   ];
 }
 

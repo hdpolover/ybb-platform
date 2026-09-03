@@ -16,7 +16,7 @@ import {
     mapAdminProgramAssignment,
     normalizePermissions,
 } from '../../../../../shared/admin-access-response';
-import { MAX_FAILED_LOGIN_ATTEMPTS, LOCKOUT_DURATION_MINUTES } from '../../services/account-lockout.constants';
+import { recordFailedAttempt, isLockedOut, LOCKED_OUT_MESSAGE } from '../../services/account-lockout.util';
 
 @Injectable()
 export class AdminLoginHandler {
@@ -125,8 +125,8 @@ export class AdminLoginHandler {
         }
 
         // Locked out from prior failed attempts
-        if (user.lockedUntil && user.lockedUntil > new Date()) {
-            throw new UnauthorizedException('Too many failed attempts. Try again later.');
+        if (isLockedOut(user)) {
+            throw new UnauthorizedException(LOCKED_OUT_MESSAGE);
         }
 
         const isPasswordValid = await bcrypt.compare(
@@ -135,20 +135,7 @@ export class AdminLoginHandler {
         );
 
         if (!isPasswordValid) {
-            const failedLoginAttempts = user.failedLoginAttempts + 1;
-            const lockedUntil =
-                failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS
-                    ? new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60_000)
-                    : null;
-
-            await this.prisma.user.update({
-                where: { id: user.id },
-                data: {
-                    failedLoginAttempts,
-                    lastFailedLogin: new Date(),
-                    lockedUntil,
-                },
-            });
+            await recordFailedAttempt(this.prisma, user.id);
 
             await this.authLoggingService.logFailedLogin(user.email, command.ipAddress, command.userAgent, 'Invalid Admin Password');
             this.metricsService.loginTotal.inc({ method: 'admin_email', result: 'failure' });
