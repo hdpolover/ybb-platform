@@ -13,6 +13,7 @@ import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tok
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { createCacheServiceMock } from '@test/utils/cache-service-mock';
 
 describe('ReviewApplicationHandler', () => {
   let handler: ReviewApplicationHandler;
@@ -48,10 +49,10 @@ describe('ReviewApplicationHandler', () => {
     toDto: jest.fn((app: unknown) => app),
   };
 
-  const mockCacheService = {
-    invalidateKey: jest.fn().mockResolvedValue(undefined),
-    invalidateByPattern: jest.fn().mockResolvedValue(undefined),
-  };
+  // Derived from the real CacheService: this handler catches and logs
+  // invalidation failures, so a hand-listed mock missing a method surfaced only
+  // as a TypeError in the CI log while every test still passed.
+  const mockCacheService = createCacheServiceMock();
 
   const mockReferralFunnel = {
     advanceToAccepted: jest.fn().mockResolvedValue(undefined),
@@ -106,6 +107,22 @@ describe('ReviewApplicationHandler', () => {
 
     expect(application.accept).toHaveBeenCalledWith('reviewer-1', 'looks good');
     expect(mockApplicationRepository.update).toHaveBeenCalledWith(application);
+  });
+
+  // Coverage this file only appears to have had. The handler catches and logs
+  // invalidation failures, so with a mock missing invalidatePortalCache these
+  // specs passed while the whole invalidation path threw on every run. Silencing
+  // the TypeError is not the point - asserting the call is.
+  it('invalidates the participant portal cache after a successful review', async () => {
+    const application = buildApplication(ApplicationStatus.SUBMITTED);
+    mockApplicationRepository.findById.mockResolvedValue(application);
+    mockApplicationRepository.update.mockResolvedValue(application);
+
+    await handler.execute(
+      new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.ACCEPTED, 'ok'),
+    );
+
+    expect(mockCacheService.invalidatePortalCache).toHaveBeenCalled();
   });
 
   it('throws BadRequestException when the application is not in a reviewable state', async () => {
