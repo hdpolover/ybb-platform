@@ -4,12 +4,35 @@ import { CacheMetricsService } from './cache-metrics.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 
 /**
- * First two colon-separated segments of a cache key, e.g. `auth:blacklist` or
+ * A cache key reduced to its static label, e.g. `auth:blacklist` or
  * `portal:submissions`. Enough to identify which subsystem is failing without
- * logging the user id or jti that follows.
+ * logging the identifier that follows.
+ *
+ * Selects by SHAPE, not by position. Slicing the first two segments looks right
+ * for `auth:blacklist:<jti>` but leaks the id outright for the builders whose
+ * second segment IS the identifier - `user:<id>`, `application:<id>`,
+ * `category:<id>` - which is exactly what this function exists to prevent.
+ *
+ * A segment is kept only if it is letters-and-hyphens with no digits. Every
+ * identifier this system puts in a key (uuid, jti, numeric id, hostname, or a
+ * free-text search term) contains a digit, a dot, or other punctuation, so this
+ * admits the static labels and nothing else. It also means a kept segment
+ * cannot contain a newline, so a user-supplied key fragment cannot forge a log
+ * line. The two-segment cap then bounds anything that slips through.
  */
-const keyPrefix = (key?: string): string =>
-  key ? key.split(':').slice(0, 2).join(':') : '(unknown)';
+const STATIC_SEGMENT = /^[a-z][a-z-]{0,31}$/;
+
+const keyPrefix = (key?: string): string => {
+  if (!key) return '(unknown)';
+
+  const label: string[] = [];
+  for (const segment of key.split(':')) {
+    if (label.length === 2 || !STATIC_SEGMENT.test(segment)) break;
+    label.push(segment);
+  }
+
+  return label.length > 0 ? label.join(':') : '(unrecognised)';
+};
 
 @Injectable()
 export class CacheService implements OnModuleInit {
