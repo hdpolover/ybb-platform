@@ -181,6 +181,7 @@ export class GetApplicationFormFieldsHandler implements IQueryHandler<GetApplica
           ? (field.validationRules as Record<string, unknown>).defaultValue as string | undefined
           : undefined,
       order: field.order,
+      allowedCategories: field.allowedCategories,
     }));
   }
 }

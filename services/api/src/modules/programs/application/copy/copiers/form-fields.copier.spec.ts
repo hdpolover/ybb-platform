@@ -36,6 +36,7 @@ type SourceField = {
   validationRules: unknown;
   source: 'system' | 'custom';
   systemFieldKey: string | null;
+  allowedCategories?: string[];
 };
 
 function srcField(over: Partial<SourceField>): SourceField {
@@ -56,6 +57,7 @@ function srcField(over: Partial<SourceField>): SourceField {
     validationRules: over.validationRules ?? {},
     source: over.source ?? 'custom',
     systemFieldKey: over.systemFieldKey ?? null,
+    allowedCategories: over.allowedCategories ?? [],
   };
 }
 
@@ -218,7 +220,7 @@ describe('FormFieldsCopier.exportTemplate', () => {
     // unlike label/type/helpText/options they're never re-resolved and must
     // round-trip through the thin shape too.
     expect(payload.items).toEqual([
-      { source: 'system', systemFieldKey: 'full_name', section: 'personal_details', isRequired: true, order: 0, mediaUrl: null, mediaAlt: null, helpAssets: [] },
+      { source: 'system', systemFieldKey: 'full_name', section: 'personal_details', isRequired: true, order: 0, mediaUrl: null, mediaAlt: null, helpAssets: [], allowedCategories: [] },
     ]);
     // Explicitly not present — a system field's label is never frozen at export time.
     expect(payload.items[0]).not.toHaveProperty('label');
@@ -507,5 +509,25 @@ describe('FormFieldsCopier round-trip', () => {
       expect.objectContaining({ name: 'tshirt_size', label: 'T-Shirt Size', type: 'select', options: [{ label: 'M', value: 'm' }] }),
     );
     expect(result).toEqual({ created: 1, skipped: 0, replaced: 0 });
+  });
+
+  it('carries allowedCategories through both copy() and exportTemplate/applyTemplate', async () => {
+    const { prisma, tx } = mkPrisma({
+      sourceFields: [srcField({ id: 'f1', name: 'scholarship_essay', allowedCategories: ['fully_funded'] })],
+    });
+    const copier = new FormFieldsCopier(prisma);
+
+    await copier.copy(tx, { sourceProgramId: 'src', targetProgramId: 'tgt', mode: 'append' });
+    const copyCreate = (tx as any).applicationFormField.create as jest.Mock;
+    expect(copyCreate.mock.calls[0][0].data.allowedCategories).toEqual(['fully_funded']);
+
+    const payload = await copier.exportTemplate('src');
+    expect(payload.items[0]).toEqual(expect.objectContaining({ allowedCategories: ['fully_funded'] }));
+
+    const applyResult = await copier.applyTemplate(tx, payload, 'tgt2', 'append');
+    const applyCreate = (tx as any).applicationFormField.create as jest.Mock;
+    const lastCall = applyCreate.mock.calls[applyCreate.mock.calls.length - 1][0];
+    expect(lastCall.data.allowedCategories).toEqual(['fully_funded']);
+    expect(applyResult).toEqual({ created: 1, skipped: 0, replaced: 0 });
   });
 });

@@ -107,6 +107,11 @@ model ApplicationFormField {
   order           Int     @default(0)
   isActive        Boolean @default(true) @map("is_active")
 
+  // Category scoping: empty/null means "applies to every category" (see
+  // ProgramPricingTier.allowedCategories for the same convention). Keeps all
+  // pre-existing rows visible to every applicant with no backfill needed.
+  allowedCategories ApplicationCategory[] @default([]) @map("allowed_categories")
+
   // NEW: catalog linkage
   source         String  @default("custom") @db.VarChar(16)
   // Intentionally no FK to system_form_field_definitions.key — loose coupling

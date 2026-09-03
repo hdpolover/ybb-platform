@@ -8,7 +8,7 @@ import {
   DeleteApplicationFormFieldCommand,
 } from '../application-form-field.commands';
 import { CreateApplicationFormFieldDto } from '../../dto/application-form-field/create-application-form-field.dto';
-import { ApplicationFormField, Prisma } from '@prisma/client';
+import { ApplicationCategory, ApplicationFormField, Prisma } from '@prisma/client';
 import {
   FormFieldKeyValidator,
   FieldKeyValidationError,
@@ -47,6 +47,9 @@ function mapDtoToField(
     ...(dto.order !== undefined ? { order: dto.order } : {}),
     ...(dto.validationRules !== undefined || dto.defaultValue !== undefined
       ? { validationRules: buildValidationRules(dto) }
+      : {}),
+    ...(dto.allowedCategories !== undefined
+      ? { allowedCategories: dto.allowedCategories as ApplicationCategory[] }
       : {}),
   };
 }

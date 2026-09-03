@@ -39,6 +39,7 @@ import { TimelinesCopier } from './application/copy/copiers/timelines.copier';
 import { RundownsCopier } from './application/copy/copiers/rundowns.copier';
 import { FaqsCopier } from './application/copy/copiers/faqs.copier';
 import { SubThemesCopier } from './application/copy/copiers/sub-themes.copier';
+import { EssaysCopier } from './application/copy/copiers/essays.copier';
 import { PaymentsCopier } from './application/copy/copiers/payments.copier';
 import { ProgramDetailsCopier } from './application/copy/copiers/program-details.copier';
 import { ContactCopier } from './application/copy/copiers/contact.copier';
@@ -248,6 +249,7 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
     SpeakersCopier,
     TestimonialsCopier,
     PhotosCopier,
+    EssaysCopier,
     {
       provide: ProgramCopierRegistry,
       useFactory: (...copiers: ProgramCopier[]) => new ProgramCopierRegistry(...copiers),
@@ -265,6 +267,7 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
         SpeakersCopier,
         TestimonialsCopier,
         PhotosCopier,
+        EssaysCopier,
       ],
     },
 

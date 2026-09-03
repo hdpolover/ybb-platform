@@ -332,6 +332,11 @@ model ProgramEssay {
   order       Int     @default(0)
   isActive    Boolean @default(true) @map("is_active")
 
+  // Category scoping: empty/null means "applies to every category" (see
+  // ProgramPricingTier.allowedCategories for the same convention). Keeps all
+  // pre-existing rows visible to every applicant with no backfill needed.
+  allowedCategories ApplicationCategory[] @default([]) @map("allowed_categories")
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)

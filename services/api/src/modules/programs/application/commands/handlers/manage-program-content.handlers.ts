@@ -1438,6 +1438,7 @@ export class CreateProgramEssayHandler implements ICommandHandler<CreateProgramE
         const result = await this.repository.createEssay({
             ...command.dto,
             question: assertValidEssayQuestion(command.dto.question),
+            allowedCategories: command.dto.allowedCategories?.map((c) => c as ApplicationCategory),
         });
         await invalidatePortalEssayCaches(command.dto.programId, this.cacheService);
         return result;
@@ -1451,11 +1452,13 @@ export class UpdateProgramEssayHandler implements ICommandHandler<UpdateProgramE
     ) {}
     async execute(command: UpdateProgramEssayCommand) {
         const existingEssay = await this.repository.findEssayById(command.id);
+        const { allowedCategories, ...restDto } = command.dto;
         const result = await this.repository.updateEssay(command.id, {
-            ...command.dto,
+            ...restDto,
             ...(typeof command.dto.question === 'string'
                 ? { question: assertValidEssayQuestion(command.dto.question) }
                 : {}),
+            ...(allowedCategories ? { allowedCategories: allowedCategories.map((c) => c as ApplicationCategory) } : {}),
         });
         const programId = existingEssay?.programId ?? result.programId;
         if (programId) {
