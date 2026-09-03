@@ -22,6 +22,7 @@ import { ValidationRulesEditor, type ValidationRules } from "./ValidationRulesEd
 import { MediaLibraryPicker } from "./MediaLibraryPicker";
 import { HelpAssetsRepeater, type HelpAssetRow, HELP_ASSETS_MAX } from "./HelpAssetsRepeater";
 import type { ApplicationFormFieldRow } from "./FormFieldsTable";
+import { CATEGORY_SCOPE_OPTIONS } from "@/app/components/submissionsMasterData/CategoryScopeBadge";
 
 const SLUG_MAX_LEN = 64;
 
@@ -91,6 +92,8 @@ type EditorState = {
   order: number;
   fieldNameTouched: boolean;
   advancedOpen: boolean;
+  /** '' = all categories; otherwise a single ApplicationCategory value. */
+  categoryScope: string;
 };
 
 function helpAssetsFromRaw(raw: unknown): HelpAssetRow[] {
@@ -239,6 +242,7 @@ function toEditorState(field: ApplicationFormFieldRow | null): EditorState {
       order: 0,
       fieldNameTouched: false,
       advancedOpen: false,
+      categoryScope: "",
     };
   }
   return {
@@ -258,6 +262,7 @@ function toEditorState(field: ApplicationFormFieldRow | null): EditorState {
     order: field.order ?? 0,
     fieldNameTouched: true,
     advancedOpen: false,
+    categoryScope: field.allowedCategories?.[0] ?? "",
   };
 }
 
@@ -426,6 +431,7 @@ export function FormFieldEditor({
             })
         : undefined,
       validationRules: needsOptions ? undefined : pruneRules(state.validationRules),
+      allowedCategories: state.categoryScope ? [state.categoryScope] : [],
     };
 
     if (!isEditing) {
@@ -631,6 +637,19 @@ export function FormFieldEditor({
               >
                 <option value="false">Optional</option>
                 <option value="true">Required</option>
+              </select>
+            </Field>
+            <Field label="Category Scope" hint="Restrict this field to one application category. Defaults to all categories.">
+              <select
+                value={state.categoryScope}
+                onChange={(e) => patch("categoryScope", e.target.value)}
+                className={INPUT_CLS}
+              >
+                {CATEGORY_SCOPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </Field>
           </div>

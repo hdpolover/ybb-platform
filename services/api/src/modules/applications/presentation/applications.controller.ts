@@ -53,6 +53,8 @@ import { GetApplicationHandler } from '../application/queries/handlers/get-appli
 import { ListApplicationsHandler } from '../application/queries/handlers/list-applications.handler';
 import { ExportApplicationsHandler } from '../application/queries/handlers/export-applications.handler';
 import { GetApplicationReviewHandler } from '../application/queries/handlers/get-application-review.handler';
+import { RegistrationFeeMismatchesHandler } from '../application/queries/handlers/registration-fee-mismatches.handler';
+import { RegistrationFeeMismatchesQuery } from '../application/queries/registration-fee-mismatches.query';
 import { GetApplicationQuery } from '../application/queries/get-application.query';
 import { GetApplicationReviewQuery } from '../application/queries/get-application-review.query';
 import {
@@ -77,6 +79,7 @@ import { SwitchApplicationCategoryRequestDto } from './dto/switch-application-ca
 import { AdminUpdateSubmissionDto } from './dto/admin-update-submission.dto';
 import { UpsertApplicationReviewRequestDto } from './dto/upsert-application-review-request.dto';
 import { ApplicationResponseDto, ApplicationListResponseDto } from '../application/dto/application-response.dto';
+import { RegistrationFeeMismatchListResponseDto } from '../application/dto/registration-fee-mismatch-response.dto';
 import { ApplicationReviewResponseDto } from '../application/dto/application-review-response.dto';
 import { ApplicationCategory, ApplicationStatus, ScoreStatus } from '@core/entities/participant-application.entity';
 
@@ -165,6 +168,7 @@ export class ApplicationsController {
     private readonly readPrisma: PrismaReadService,
     private readonly getApplicationReviewHandler: GetApplicationReviewHandler,
     private readonly upsertApplicationReviewHandler: UpsertApplicationReviewHandler,
+    private readonly registrationFeeMismatchesHandler: RegistrationFeeMismatchesHandler,
   ) { }
 
   /**
@@ -518,6 +522,39 @@ export class ApplicationsController {
     return result;
   }
 
+  @Get('registration-fee-mismatches')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'List applications whose paid/processing registration fee no longer matches their current category (admin)' })
+  @ApiQuery({ name: 'programId', required: true })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'offset', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Mismatches retrieved successfully', type: RegistrationFeeMismatchListResponseDto })
+  async findRegistrationFeeMismatches(
+    @Query('programId') programId: string,
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+    @Req() req?: { user?: { adminId?: string } },
+  ): Promise<RegistrationFeeMismatchListResponseDto> {
+    if (!programId) {
+      throw new BadRequestException('programId is required.');
+    }
+
+    // Same scoping as the plain list endpoint: a brand/assigned-scope admin
+    // can only run this against a program they're actually allowed to see.
+    const scoped = await this.resolveScopedFilters(req ?? {}, undefined, programId);
+    if (scoped.programIds) {
+      throw new ForbiddenException('Specify a programId you have access to.');
+    }
+
+    const query = new RegistrationFeeMismatchesQuery(
+      scoped.programId as string,
+      ApplicationsController.parseLimit(limit),
+      ApplicationsController.parseOffset(offset),
+    );
+    return this.registrationFeeMismatchesHandler.execute(query);
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
@@ -568,7 +605,17 @@ export class ApplicationsController {
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Switching category for application ${id} to ${dto.targetCategory}`);
 
-    const command = new SwitchApplicationCategoryCommand(id, dto.targetCategory, user.userId);
+    // user.adminId is only set for admin principals, so participants keep the
+    // ownership check while the reviewer queue can fix a miscategorised
+    // applicant. resolveActingAdminId is deliberately NOT used here: it throws
+    // for participants, and this endpoint serves both.
+    const command = new SwitchApplicationCategoryCommand(
+      id,
+      dto.targetCategory,
+      user.userId,
+      user.adminId,
+      dto.overrideReason,
+    );
     return this.switchApplicationCategoryHandler.execute(command);
   }
 

@@ -15,6 +15,7 @@ import {
   UnauthorizedException as DomainUnauthorizedException,
   DuplicateEntityException,
 } from '@core/exceptions/domain.exception';
+import { prismaToHttp } from '../utils/prisma-error.util';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -55,6 +56,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // were ever read off the exception body below. Only included when present,
     // to stay backward compatible with every other thrown exception shape.
     let errors: unknown;
+    // Server-side-only detail appended to the 4xx warn line. A Prisma error
+    // that now maps to a 4xx would otherwise lose its trail entirely: the
+    // client message is hand-written and the 5xx error+stack branch no longer
+    // runs. Never included in the JSON response.
+    let serverDetail: string | undefined;
+
+    const prismaMapping = prismaToHttp(exception);
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -94,6 +102,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
     } else if (exception instanceof DomainException) {
       ({ status, message: userMessage } = domainToHttp(exception));
+    } else if (prismaMapping) {
+      status = prismaMapping.status;
+      userMessage = prismaMapping.message;
+      errorCode = prismaMapping.errorCode;
+      const raw = exception instanceof Error ? exception.message : String(exception);
+      const code = (exception as { code?: unknown }).code;
+      serverDetail = `${typeof code === 'string' ? code : 'prisma'} | ${raw}`;
+      if (status >= 500) {
+        this.logger.error(
+          `[${req.method}] ${req.url} \u2192 ${status} | ${serverDetail}`,
+          exception instanceof Error ? exception.stack : undefined,
+        );
+      }
     } else {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
       const raw = exception instanceof Error ? exception.message : String(exception);
@@ -114,8 +135,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
       const userId = (req.user as { userId?: string } | undefined)?.userId;
       this.logger.warn(
         `[${req.method}] ${req.url} → ${status} | ${userMessage}${
-          userId ? ` | user=${userId}` : ''
-        }`,
+          serverDetail ? ` | ${serverDetail}` : ''
+        }${userId ? ` | user=${userId}` : ''}`,
       );
     }
 

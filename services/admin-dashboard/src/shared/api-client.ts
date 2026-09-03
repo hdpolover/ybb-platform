@@ -1919,6 +1919,7 @@ export async function exportApplicationsExcel(params: {
   startDate?: string;
   endDate?: string;
   scoreStatus?: "pending" | "scored" | "go_to_interview" | "rejected" | "finalist" | "not_selected";
+  registrationPaymentStatus?: string;
 }): Promise<void> {
   const q = new URLSearchParams();
   q.set("brandId", params.brandId);
@@ -1929,6 +1930,7 @@ export async function exportApplicationsExcel(params: {
   if (params.startDate) q.set("startDate", params.startDate);
   if (params.endDate) q.set("endDate", params.endDate);
   if (params.scoreStatus) q.set("scoreStatus", params.scoreStatus);
+  if (params.registrationPaymentStatus) q.set("registrationPaymentStatus", params.registrationPaymentStatus);
 
   const response = await fetch(buildApiUrl(`/applications/export?${q}`), {
     method: "GET",
@@ -2023,6 +2025,23 @@ export function reviewApplication(
   return request<Application>(`/applications/${id}/review`, {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Moves an application between fully_funded and self_funded. Admin-only in
+ * practice: participants switch from their own portal. `overrideReason` is
+ * required by the API when the registration fee is already paid or
+ * processing, which is the usual case in the reviewer queue.
+ */
+export function switchApplicationCategory(
+  applicationId: string,
+  targetCategory: "fully_funded" | "self_funded",
+  overrideReason?: string,
+): Promise<Application> {
+  return request<Application>(`/applications/${encodeURIComponent(applicationId)}/switch-category`, {
+    method: "POST",
+    body: JSON.stringify({ targetCategory, overrideReason }),
   });
 }
 
@@ -3652,6 +3671,42 @@ export type PlatformRevenueStats = {
 
 export function getProgramRevenueStats(programId: string): Promise<ProgramRevenueStats> {
   return request<ProgramRevenueStats>(`/stats/admin/programs/${programId}/revenue`);
+}
+
+/**
+ * One application whose already-paid/processing registration fee no longer
+ * matches its current fully_funded/self_funded category (an admin switched
+ * the category after the fee was paid; the invoice is deliberately left
+ * untouched). See RegistrationFeeMismatchRowDto on the API.
+ */
+export type RegistrationFeeMismatchRow = {
+  applicationId: string;
+  participantFullName: string;
+  participantEmail: string | null;
+  currentCategory: string;
+  invoicedCategory: string;
+  invoiceId: string;
+  invoiceStatus: string;
+  amountPaid: number;
+  currency: string;
+  paidAt: string | null;
+  currentTierPrice: number | null;
+  difference: number | null;
+};
+
+export type RegistrationFeeMismatchList = {
+  rows: RegistrationFeeMismatchRow[];
+  total: number;
+};
+
+export function getRegistrationFeeMismatches(
+  programId: string,
+  params?: { limit?: number; offset?: number },
+): Promise<RegistrationFeeMismatchList> {
+  const q = new URLSearchParams({ programId });
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.offset) q.set("offset", String(params.offset));
+  return request<RegistrationFeeMismatchList>(`/applications/registration-fee-mismatches?${q.toString()}`);
 }
 
 export function getPlatformRevenueStats(params?: { brandId?: string }): Promise<PlatformRevenueStats> {

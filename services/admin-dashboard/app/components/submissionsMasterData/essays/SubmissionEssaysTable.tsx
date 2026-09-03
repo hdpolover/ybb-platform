@@ -12,6 +12,9 @@ import { buildApiUrl, getAccessToken, readErrorMessage, readJsonData } from "@/a
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
+import { CategoryScopeBadge, CATEGORY_SCOPE_OPTIONS } from "@/app/components/submissionsMasterData/CategoryScopeBadge";
+import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
+import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
@@ -25,6 +28,7 @@ export interface SubmissionEssayRow {
   order: number;
   isActive?: boolean;
   status: "Active" | "Inactive";
+  allowedCategories?: string[];
 }
 
 interface EssayModalState {
@@ -35,6 +39,8 @@ interface EssayModalState {
   isRequired: boolean;
   order: string;
   status: "Active" | "Inactive";
+  /** '' = all categories; otherwise a single ApplicationCategory value. */
+  categoryScope: string;
 }
 
 function createEmptyEssayState(): EssayModalState {
@@ -45,6 +51,7 @@ function createEmptyEssayState(): EssayModalState {
     isRequired: false,
     order: "0",
     status: "Active",
+    categoryScope: "",
   };
 }
 
@@ -61,6 +68,7 @@ function toEssayState(essay?: SubmissionEssayRow): EssayModalState {
     isRequired: essay.isRequired ?? false,
     order: String(essay.order ?? 0),
     status: essay.status,
+    categoryScope: essay.allowedCategories?.[0] ?? "",
   };
 }
 
@@ -205,6 +213,20 @@ function EssayModal({
             <option value="Inactive">Inactive</option>
           </select>
         </div>
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-zinc-500">Category Scope</label>
+          <select
+            value={formState.categoryScope}
+            onChange={(event) => onChange({ categoryScope: event.target.value })}
+            className={INPUT_CLS}
+          >
+            {CATEGORY_SCOPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
     </DrawerShell>
   );
@@ -282,6 +304,8 @@ function EssayGuidelineModal({
 export function SubmissionEssaysTable({ programId }: { programId: string }) {
   const resolvedProgramId = useResolvedProgramId(programId);
   const [data, setData] = useState<SubmissionEssayRow[]>([]);
+  const [copyTemplateOpen, setCopyTemplateOpen] = useState(false);
+  const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -602,6 +626,20 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
             <PencilSquareIcon className="h-4 w-4" />
             <span>Essay Guidelines</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setCopyTemplateOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+          >
+            <span>Copy from Template</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCopyFromProgramOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+          >
+            <span>Copy from Program</span>
+          </button>
           <button type="button" onClick={openCreateModal} className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600">
             <PlusIcon className="h-4 w-4" />
             <span>Add Essay</span>
@@ -720,6 +758,31 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
         onSubmit={() => void saveGuidelines()}
         isSaving={isSavingGuideline}
         errorMessage={guidelineErrorMessage}
+      />
+      <CopyFromTemplateDialog
+        open={copyTemplateOpen}
+        entityKey="essays"
+        entityLabel="Essays"
+        programId={resolvedProgramId}
+        supportsAppend
+        onClose={() => setCopyTemplateOpen(false)}
+        onApplied={() => {
+          setCopyTemplateOpen(false);
+          void loadEssays();
+        }}
+      />
+      <CopyFromProgramDialog
+        open={copyFromProgramOpen}
+        entityKey="essays"
+        entityLabel="Essays"
+        programId={resolvedProgramId}
+        supportsAppend
+        replaceCaveat="Answers participants have already written are kept, but may no longer match the new questions."
+        onClose={() => setCopyFromProgramOpen(false)}
+        onApplied={() => {
+          setCopyFromProgramOpen(false);
+          void loadEssays();
+        }}
       />
     </section>
   );

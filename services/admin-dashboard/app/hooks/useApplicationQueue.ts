@@ -65,7 +65,7 @@ export function useApplicationQueue({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [filters] = useQueryStates(fullyFundedFilterParsers);
-  const { search, status, scoreStatus, sortBy, sortOrder, page } = filters;
+  const { search, status, scoreStatus, registrationPaymentStatus, sortBy, sortOrder, page } = filters;
   const pageSize = clampPageSize(filters.pageSize);
 
   const filterKey = JSON.stringify({
@@ -73,6 +73,7 @@ export function useApplicationQueue({
     search,
     status,
     scoreStatus,
+    registrationPaymentStatus,
     sortBy,
     sortOrder,
     pageSize,
@@ -103,6 +104,7 @@ export function useApplicationQueue({
         category: "fully_funded",
         status: status === "all" ? undefined : status,
         scoreStatus: scoreStatus === "all" ? undefined : scoreStatus,
+        registrationPaymentStatus: registrationPaymentStatus === "all" ? undefined : registrationPaymentStatus,
         search: search || undefined,
         sortBy,
         sortOrder,
@@ -113,7 +115,7 @@ export function useApplicationQueue({
       cacheRef.current.pages.set(pageNum, result);
       return result;
     },
-    [resolvedProgramId, search, status, scoreStatus, sortBy, sortOrder, pageSize],
+    [resolvedProgramId, search, status, scoreStatus, registrationPaymentStatus, sortBy, sortOrder, pageSize],
   );
 
   useEffect(() => {

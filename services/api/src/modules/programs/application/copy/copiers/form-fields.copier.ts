@@ -22,6 +22,7 @@ type FormFieldRow = {
   validationRules: unknown;
   source: string;
   systemFieldKey: string | null;
+  allowedCategories: string[];
 };
 
 // The thin exported shape for a system-sourced item — deliberately missing
@@ -52,6 +53,7 @@ type TemplateItem = {
   order: number;
   labelOverride?: string | null;
   helpTextOverride?: string | null;
+  allowedCategories?: string[];
 };
 
 @Injectable()
@@ -112,6 +114,7 @@ export class FormFieldsCopier implements ProgramCopier {
         validationRules: (row.validationRules as never) ?? {},
         source: row.source,
         systemFieldKey: row.systemFieldKey,
+        allowedCategories: row.allowedCategories,
       }),
       replaceData: { deletedAt: new Date(), isActive: false },
     });
@@ -144,6 +147,7 @@ export class FormFieldsCopier implements ProgramCopier {
           mediaUrl: row.mediaUrl,
           mediaAlt: row.mediaAlt,
           helpAssets: row.helpAssets,
+          allowedCategories: row.allowedCategories,
         };
       }
       return {
@@ -161,6 +165,7 @@ export class FormFieldsCopier implements ProgramCopier {
         section: row.section,
         isRequired: row.isRequired,
         order: row.order,
+        allowedCategories: row.allowedCategories,
       };
     });
     return { entityType: this.key, payloadVersion: 1, items: items as unknown as Record<string, unknown>[] };
@@ -231,6 +236,7 @@ export class FormFieldsCopier implements ProgramCopier {
           validationRules: (item.validationRules as never) ?? {},
           source: 'system',
           systemFieldKey: item.systemFieldKey,
+          allowedCategories: item.allowedCategories ?? [],
         });
       } else if (item.source === 'custom' && item.name) {
         // labelOverride/helpTextOverride are not gated by source in the
@@ -254,6 +260,7 @@ export class FormFieldsCopier implements ProgramCopier {
           validationRules: (item.validationRules as never) ?? {},
           source: 'custom',
           systemFieldKey: null,
+          allowedCategories: item.allowedCategories ?? [],
         });
       }
     }
@@ -284,6 +291,7 @@ export class FormFieldsCopier implements ProgramCopier {
         validationRules: (row.validationRules as never) ?? {},
         source: row.source,
         systemFieldKey: row.systemFieldKey,
+        allowedCategories: row.allowedCategories,
       }),
       replaceData: { deletedAt: new Date(), isActive: false },
     });

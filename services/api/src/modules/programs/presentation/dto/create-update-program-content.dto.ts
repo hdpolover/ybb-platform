@@ -1313,6 +1313,11 @@ export class CreateProgramEssayDto {
     @IsOptional()
     isActive?: boolean;
 
+    @ApiProperty({ required: false, description: 'Category scope; empty/omitted applies to every category.' })
+    @IsArray()
+    @IsOptional()
+    allowedCategories?: string[];
+
 }
 
 export class UpdateProgramEssayDto {
@@ -1345,6 +1350,11 @@ export class UpdateProgramEssayDto {
     @IsBoolean()
     @IsOptional()
     isActive?: boolean;
+
+    @ApiProperty({ required: false, description: 'Category scope; empty/omitted applies to every category.' })
+    @IsArray()
+    @IsOptional()
+    allowedCategories?: string[];
 
 }
 

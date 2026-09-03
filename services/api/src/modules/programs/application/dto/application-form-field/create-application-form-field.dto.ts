@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsNumber,
   IsOptional,
@@ -114,4 +115,12 @@ export class CreateApplicationFormFieldDto {
   @IsOptional()
   @IsString()
   systemFieldKey?: string;
+
+  @ApiPropertyOptional({
+    description: "Category scope ('fully_funded' | 'self_funded'); empty/omitted applies to every category.",
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  allowedCategories?: string[];
 }

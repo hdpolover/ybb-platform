@@ -16,6 +16,7 @@ import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
 import { isRenderableEssayQuestion, coalesceStr } from '../../helpers/application-coalesce.helpers';
+import { isAllowedForCategory } from '@shared/utils/category-scope.util';
 import { resolveApplicationBirthdate } from '@shared/utils/birthdate-resolution';
 
 /**
@@ -175,6 +176,7 @@ export class GetApplicationHandler {
             isRequired: true,
             wordLimit: true,
             order: true,
+            allowedCategories: true,
           },
           orderBy: { order: 'asc' },
         });
@@ -182,6 +184,9 @@ export class GetApplicationHandler {
         const essayAnswers = (application.essayAnswers ?? {}) as Record<string, unknown>;
 
         dto.essays = programEssays
+          // Essays scoped to a category the applicant isn't in are hidden, not
+          // deleted — an answer already saved stays in essayAnswers untouched.
+          .filter((essay) => isAllowedForCategory(essay.allowedCategories, application.applicationCategory))
           .filter((essay) => isRenderableEssayQuestion(essay.question))
           .map((essay) => ({
             id: essay.id,
@@ -212,10 +217,16 @@ export class GetApplicationHandler {
     }
 
     try {
-      const fields = await this.prisma.applicationFormField.findMany({
+      const allFields = await this.prisma.applicationFormField.findMany({
         where: { programId: application.programId, isActive: true },
         orderBy: { order: 'asc' },
       });
+      // Fields scoped to a category the applicant isn't in are hidden, not
+      // deleted — any answer already saved under their name stays in
+      // personalData/essayAnswers untouched, just excluded from the form.
+      const fields = allFields.filter((field) =>
+        isAllowedForCategory(field.allowedCategories, application.applicationCategory),
+      );
 
       if (fields.length > 0) {
         dto.steps = this.calculateSteps(application, fields);
