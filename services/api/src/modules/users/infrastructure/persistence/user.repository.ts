@@ -30,11 +30,15 @@ export class UserRepository implements IUserRepository {
     this.readClient = readPrisma ?? prisma;
   }
 
-  async findById(id: string, brandId: string): Promise<User | null> {
+  async findById(id: string, brandId?: string): Promise<User | null> {
     const user = await this.readClient.user.findFirst({
-      where: { 
+      where: {
         id,
-        brandId: brandId,
+        // Spread rather than `brandId: brandId`. Prisma treats an undefined value
+        // as "no condition", so the old form silently widened to every brand when
+        // the caller omitted the parameter. Callers must have been authorised for
+        // the unscoped case before reaching here.
+        ...(brandId ? { brandId } : {}),
         deletedAt: null,
       },
     });
@@ -55,9 +59,11 @@ export class UserRepository implements IUserRepository {
     return user ? UserMapper.toDomain(user) : null;
   }
 
-  async findAll(brandId: string, skip?: number, take?: number, role?: string): Promise<User[]> {
+  async findAll(brandId?: string, skip?: number, take?: number, role?: string): Promise<User[]> {
     const where: Prisma.UserWhereInput = {
-      brandId: brandId,
+      // See findById: an undefined brandId is "every brand", so it is spread in
+      // deliberately rather than assigned and silently dropped.
+      ...(brandId ? { brandId } : {}),
       deletedAt: null,
     };
 
