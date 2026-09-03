@@ -43,6 +43,28 @@ describe('EnsurePortalPaymentInvoiceHandler', () => {
         jest.clearAllMocks();
     });
 
+    // Same wiring gap as save-submission-section, and this handler decides which
+    // application an invoice is raised against - so resolving the wrong one bills
+    // the wrong programme.
+    it('resolves the application through the shared rule, not its own clause', async () => {
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({ id: 'participant-1', userId: 'user-1' });
+        // Resolve nothing: we only care which query was issued. The handler then
+        // throws, which is fine - the assertion is on the call it already made.
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(null);
+
+        await expect(
+            handler.execute(new EnsurePortalPaymentInvoiceCommand('user-1', 'registration_fee', 'prog-1')),
+        ).rejects.toThrow();
+
+        const args = mockPrisma.participantApplication.findFirst.mock.calls[0][0];
+        expect(args.where).toMatchObject({
+            participantId: 'participant-1',
+            programId: 'prog-1',
+            deletedAt: null,
+        });
+        expect(args.orderBy[0]).toEqual({ withdrawnAt: { sort: 'asc', nulls: 'first' } });
+    });
+
     it('stores the program exchange-rate snapshot on newly created USD invoices (legacy tier)', async () => {
         mockPortalCacheService.getParticipantProfile.mockResolvedValue({
             id: 'participant-1',

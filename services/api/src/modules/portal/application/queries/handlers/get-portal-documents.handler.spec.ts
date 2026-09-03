@@ -110,6 +110,26 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
         handler = module.get(GetPortalDocumentsHandler);
     });
 
+    // The regression #153 introduced and this fixes: when the caller omits
+    // programId, the eligible-candidate set used to be resolved brand-wide, so a
+    // participant whose OTHER programme was eligible saw downloadable=true on the
+    // tile for the programme on screen - and clicking it served the other
+    // programme's letter under this heading, silently.
+    it('does not mark this programme\'s letter downloadable because a DIFFERENT programme is eligible', async () => {
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApplication());
+        mockPrisma.documentTemplate.findMany.mockResolvedValue([makeLOATemplate()]);
+        // The shown application is prog-1; the only eligible one is prog-2.
+        mockLoaEligibilityService.resolveEligibleApplications.mockImplementation(
+            async (_participantId: string, _brandId: string, scopedProgramId?: string) =>
+                scopedProgramId === PROGRAM_ID ? [] : [{ application: { id: 'app-2', programId: 'prog-2' }, batchId: 'b2' }],
+        );
+
+        const result = await handler.execute(new GetPortalDocumentsQuery(USER_ID));
+
+        const loaDoc = result.myDocuments.find((d) => d.documentType === 'letter_of_acceptance');
+        expect(loaDoc?.downloadable).toBe(false);
+    });
+
     // ─── programId scoping ────────────────────────────────────────────────────
     //
     // The portal and the Next proxy both already sent programId; the API used to
@@ -179,10 +199,14 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
 
         await handler.execute(new GetPortalDocumentsQuery(USER_ID));
 
+        // Scoped to the application actually being rendered, NOT to the request's
+        // programId. When the caller omits programId, passing it through made the
+        // resolver scan the whole brand, so another programme's eligibility could
+        // light up this programme's tile.
         expect(mockLoaEligibilityService.resolveEligibleApplications).toHaveBeenCalledWith(
             PARTICIPANT_ID,
             expect.any(String),
-            undefined,
+            PROGRAM_ID,
         );
     });
 

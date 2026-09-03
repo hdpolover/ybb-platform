@@ -166,7 +166,12 @@ describe('start-boundary widening', () => {
         expect(effectiveStart(only, [only])).toEqual(WIB_MIDNIGHT_8_SEP);
     });
 
-    it('makes an unchained period resolvable on its opening morning', () => {
+    // DOCUMENTATION, not a regression guard: this passes under the old
+    // earliest-only rule too, because resolveTierPeriod's activeOrUpcoming
+    // fallback returns batch2 either way. Kept because it records the
+    // user-visible outcome; the four assertions above are what actually
+    // discriminate the rules.
+    it('makes an unchained period resolvable on its opening morning (documents the outcome; does not discriminate)', () => {
         const batch1 = { startDate: wib('2026-08-31T17:00:00Z'), endDate: wib('2026-09-04T00:00:00Z') };
         const batch2 = { startDate: wib('2026-09-08T16:59:00Z'), endDate: wib('2026-09-20T00:00:00Z') };
         const openingMorning = wib('2026-09-08T02:00:00Z'); // 09:00 WIB

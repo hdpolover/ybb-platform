@@ -39,6 +39,33 @@ describe('SaveSubmissionSectionHandler', () => {
         jest.clearAllMocks();
     });
 
+    // The rule itself is unit-tested in current-application.query.spec.ts, but
+    // nothing asserted this handler actually USES it. Its sibling
+    // portal-submit-application got that assertion; this one did not, so a
+    // reintroduced bare findFirst - or a typo'd participant id - would write a
+    // participant's section edits onto the wrong application row silently.
+    it('resolves the application through the shared rule, not its own clause', async () => {
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'participant-1',
+            userId: 'user-1',
+        });
+        // Resolve nothing: we only care which query was issued. The handler then
+        // throws, which is fine - the assertion is on the call it already made.
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(null);
+
+        await expect(
+            handler.execute(new SaveSubmissionSectionCommand('user-1', 'personal_info', {}, 'prog-1')),
+        ).rejects.toThrow();
+
+        const args = mockPrisma.participantApplication.findFirst.mock.calls[0][0];
+        expect(args.where).toMatchObject({
+            participantId: 'participant-1',
+            programId: 'prog-1',
+            deletedAt: null,
+        });
+        expect(args.orderBy[0]).toEqual({ withdrawnAt: { sort: 'asc', nulls: 'first' } });
+    });
+
     it('should save personal_info section data', async () => {
         mockPortalCacheService.getParticipantProfile.mockResolvedValue({
             id: 'participant-1',
