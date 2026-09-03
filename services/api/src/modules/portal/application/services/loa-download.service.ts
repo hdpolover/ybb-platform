@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { LoaEligibilityService } from './loa-eligibility.service';
@@ -14,6 +14,8 @@ export interface LoaDownloadResult {
 
 @Injectable()
 export class LoaDownloadService {
+  private readonly logger = new Logger(LoaDownloadService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly portalCacheService: PortalCacheService,
@@ -23,32 +25,107 @@ export class LoaDownloadService {
     private readonly fileServiceClient: FileServiceClient,
   ) {}
 
-  async downloadLoa(userId: string, brandId: string): Promise<LoaDownloadResult> {
+  /**
+   * Choose the application this LOA is for, by eligibility.
+   *
+   * The order here is the whole point. This used to pick one application with an
+   * unordered findFirst and THEN gate it on eligibility, throwing without ever
+   * trying another. For a participant with applications in several programs that
+   * produced a silent false denial: pick the draft for program B, fail the
+   * eligibility check, and report "Invitation Letter not available" while a
+   * perfectly eligible acceptance sat one row over. It is invisible - no error,
+   * no alert, and support cannot tell it apart from a batch that genuinely has
+   * not been released, so it never becomes a bug report.
+   *
+   * Ordering the candidates would not have fixed that; it would have made it
+   * worse. `updatedAt desc` promotes the newest row, and starting a fresh
+   * application for another program is exactly what makes a row newest - so a
+   * participant accepted in program A who later applies to program B would lose
+   * access to their acceptance letter the moment they did so.
+   *
+   * So: filter to what is actually eligible, then let the count decide. One
+   * candidate is the answer. Several is genuinely ambiguous and says so, rather
+   * than guessing at a document someone submits to an embassy. None reports why.
+   *
+   * Scoped to `brandId`, which the caller has always passed and this service
+   * previously ignored entirely - a participant with applications under two
+   * brands could be served either one's letter.
+   *
+   * The ACTIVE template check deliberately stays where it is, after selection: a
+   * missing template is a program-level misconfiguration that affects every
+   * participant of that program equally, so it cannot disambiguate BETWEEN two
+   * applications and should be reported as its own failure.
+   */
+  private async resolveEligibleApplication(
+    participantId: string,
+    brandId: string,
+    programId?: string,
+  ): Promise<{ application: { id: string; programId: string }; eligibility: { eligible: boolean; batchId?: string } }> {
+    const candidates = await this.prisma.participantApplication.findMany({
+      where: {
+        participantId,
+        deletedAt: null,
+        withdrawnAt: null,
+        ...(programId ? { programId } : {}),
+        program: { brandId },
+      },
+      select: { id: true, programId: true },
+    });
+
+    if (candidates.length === 0) {
+      throw new ForbiddenException('Invitation Letter not available');
+    }
+
+    const eligible: Array<{ application: { id: string; programId: string }; eligibility: { eligible: boolean; batchId?: string } }> = [];
+    for (const candidate of candidates) {
+      const eligibility = await this.loaEligibilityService.checkEligibility(candidate.id, candidate.programId);
+      if (eligibility.eligible) eligible.push({ application: candidate, eligibility });
+    }
+
+    if (eligible.length === 1) {
+      // Logged so the rate of this narrowing is visible at all. The bug this
+      // replaced produced no signal whatsoever, so nobody knows how often
+      // multi-program participants hit this path today.
+      if (candidates.length > 1) {
+        this.logger.log(
+          `LOA: narrowed ${candidates.length} applications to 1 eligible for participant ${participantId}`,
+        );
+      }
+      return eligible[0];
+    }
+
+    if (eligible.length === 0) {
+      throw new ForbiddenException('Invitation Letter not available');
+    }
+
+    this.logger.warn(
+      `LOA: ${eligible.length} eligible applications for participant ${participantId}; programId required to disambiguate`,
+    );
+    throw new ConflictException(
+      'You have more than one programme with an Invitation Letter available. Please choose a programme and try again.',
+    );
+  }
+
+  async downloadLoa(userId: string, brandId: string, programId?: string): Promise<LoaDownloadResult> {
     // 1. Resolve participant
     const participant = await this.portalCacheService.getParticipantProfile(userId);
     if (!participant) throw new NotFoundException('Participant not found');
 
-    // 2. Resolve the participant's application first (Bug 1 fix: invert resolution order).
-    //    A brand can have >1 active program, so resolving program by brandId alone risks
-    //    picking the wrong one. Instead we find the application and read programId from it.
-    const application = await this.prisma.participantApplication.findFirst({
-      where: { participantId: participant.id },
-      select: { id: true, programId: true },
-    });
-    if (!application) throw new ForbiddenException('Invitation Letter not available');
+    // 2-4. Select the application BY eligibility rather than picking one and then
+    //      gating it. See resolveEligibleApplication for why the order matters.
+    const { application, eligibility } = await this.resolveEligibleApplication(
+      participant.id,
+      brandId,
+      programId,
+    );
 
-    // 3. Resolve the program deterministically from the application's own programId.
-    //    Only `id`/`year` needed here - LoaRenderDataService (step 8) fetches the full
-    //    program row on its own.
+    // Resolve the program from the application's own programId. Only `id`/`year`
+    // needed here - LoaRenderDataService (step 8) fetches the full program row.
     const program = await this.prisma.program.findUnique({
       where: { id: application.programId },
       select: { id: true, year: true },
     });
     if (!program) throw new NotFoundException('Program not found');
-
-    // 4. Eligibility gate
-    const eligibility = await this.loaEligibilityService.checkEligibility(application.id, program.id);
-    if (!eligibility.eligible) throw new ForbiddenException('Invitation Letter not available');
 
     // 5. Fetch the active LOA document template (moved before assignOrGet so we can pass
     //    its id to assignOrGet - Bug 2 fix: templateId must be set on the created row)

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException, ConflictException } from '@nestjs/common';
 import { LoaDownloadService } from './loa-download.service';
 import { LoaEligibilityService } from './loa-eligibility.service';
 import { LoaDocumentNumberService } from './loa-document-number.service';
@@ -69,7 +69,7 @@ describe('LoaDownloadService', () => {
         {
           provide: PrismaService,
           useValue: {
-            participantApplication: { findFirst: jest.fn() },
+            participantApplication: { findFirst: jest.fn(), findMany: jest.fn() },
             program: { findUnique: jest.fn() },
             documentTemplate: { findFirst: jest.fn() },
             participantDocument: {
@@ -98,6 +98,7 @@ describe('LoaDownloadService', () => {
   function mockHappyPath() {
     (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValue(mockParticipant);
     (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue(mockApplication);
+    (prisma.participantApplication.findMany as jest.Mock).mockResolvedValue([mockApplication]);
     (prisma.program.findUnique as jest.Mock).mockResolvedValue(mockProgram);
     (prisma.documentTemplate.findFirst as jest.Mock).mockResolvedValue(mockTemplate);
     (loaEligibilityService.checkEligibility as jest.Mock).mockResolvedValue({ eligible: true, batchId: 'batch-1' });
@@ -115,7 +116,7 @@ describe('LoaDownloadService', () => {
   describe('downloadLoa', () => {
     it('(a) throws ForbiddenException when participant is not eligible', async () => {
       (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValue(mockParticipant);
-      (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue(mockApplication);
+      (prisma.participantApplication.findMany as jest.Mock).mockResolvedValue([mockApplication]);
       (prisma.program.findUnique as jest.Mock).mockResolvedValue(mockProgram);
       (loaEligibilityService.checkEligibility as jest.Mock).mockResolvedValue({ eligible: false });
 
@@ -180,9 +181,9 @@ describe('LoaDownloadService', () => {
       await expect(service.downloadLoa('user-1', 'brand-1')).rejects.toThrow(NotFoundException);
     });
 
-    it('throws ForbiddenException when application not found (inverted resolution: application first)', async () => {
+    it('throws ForbiddenException when the participant has no application in this brand', async () => {
       (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValue(mockParticipant);
-      (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.participantApplication.findMany as jest.Mock).mockResolvedValue([]);
 
       await expect(service.downloadLoa('user-1', 'brand-1')).rejects.toThrow(ForbiddenException);
       expect(prisma.program.findUnique).not.toHaveBeenCalled();
@@ -190,11 +191,78 @@ describe('LoaDownloadService', () => {
 
     it('throws NotFoundException when program not found', async () => {
       (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValue(mockParticipant);
-      (prisma.participantApplication.findFirst as jest.Mock).mockResolvedValue(mockApplication);
+      (prisma.participantApplication.findMany as jest.Mock).mockResolvedValue([mockApplication]);
+      (loaEligibilityService.checkEligibility as jest.Mock).mockResolvedValue({ eligible: true, batchId: 'batch-1' });
       (prisma.program.findUnique as jest.Mock).mockResolvedValue(null);
 
       await expect(service.downloadLoa('user-1', 'brand-1')).rejects.toThrow(NotFoundException);
-      expect(loaEligibilityService.checkEligibility).not.toHaveBeenCalled();
+      // Eligibility now runs BEFORE the program lookup, because eligibility is what
+      // SELECTS the application rather than a gate applied after one was picked.
+      // The previous assertion here (checkEligibility not called) pinned the old
+      // order and is intentionally inverted.
+      expect(loaEligibilityService.checkEligibility).toHaveBeenCalled();
+    });
+
+    // ─── selection by eligibility ─────────────────────────────────────────────
+    //
+    // The bug this replaced: pick one application with an unordered findFirst,
+    // then gate it on eligibility and throw without trying another. For a
+    // multi-program participant that produced a SILENT false denial - "Invitation
+    // Letter not available" while an eligible acceptance sat one row over. It is
+    // invisible: support cannot tell it apart from an unreleased batch.
+
+    describe('selection by eligibility', () => {
+      const otherApplication = { id: 'app-2', programId: 'prog-2' };
+
+      it('picks the eligible application even when it is not the one listed first', async () => {
+        mockHappyPath();
+        (prisma.participantApplication.findMany as jest.Mock).mockResolvedValue([otherApplication, mockApplication]);
+        (loaEligibilityService.checkEligibility as jest.Mock).mockImplementation(
+          async (applicationId: string) =>
+            applicationId === mockApplication.id ? { eligible: true, batchId: 'batch-1' } : { eligible: false },
+        );
+
+        await service.downloadLoa('user-1', 'brand-1');
+
+        expect(prisma.program.findUnique).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { id: mockApplication.programId } }),
+        );
+      });
+
+      it('refuses to guess when more than one application is eligible', async () => {
+        mockHappyPath();
+        (prisma.participantApplication.findMany as jest.Mock).mockResolvedValue([mockApplication, otherApplication]);
+
+        await expect(service.downloadLoa('user-1', 'brand-1')).rejects.toThrow(ConflictException);
+        expect(fileServiceClient.generateLoa).not.toHaveBeenCalled();
+      });
+
+      it('uses the caller-supplied programId to disambiguate instead of 409ing', async () => {
+        mockHappyPath();
+
+        await service.downloadLoa('user-1', 'brand-1', 'prog-1');
+
+        const where = (prisma.participantApplication.findMany as jest.Mock).mock.calls[0][0].where;
+        expect(where).toMatchObject({ programId: 'prog-1' });
+      });
+
+      it('scopes candidates to the caller\'s brand, which this service used to ignore entirely', async () => {
+        mockHappyPath();
+
+        await service.downloadLoa('user-1', 'brand-1');
+
+        const where = (prisma.participantApplication.findMany as jest.Mock).mock.calls[0][0].where;
+        expect(where).toMatchObject({ program: { brandId: 'brand-1' } });
+      });
+
+      it('never offers a withdrawn or deleted application as a letter candidate', async () => {
+        mockHappyPath();
+
+        await service.downloadLoa('user-1', 'brand-1');
+
+        const where = (prisma.participantApplication.findMany as jest.Mock).mock.calls[0][0].where;
+        expect(where).toMatchObject({ deletedAt: null, withdrawnAt: null });
+      });
     });
 
     it('delegates the flat placeholder-source-map construction entirely to LoaRenderDataService, passing documentNumber/signerName/signerTitle', async () => {

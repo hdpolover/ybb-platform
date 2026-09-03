@@ -85,7 +85,12 @@ describe('LOA preview/download parity', () => {
 
   function makeMockPrisma() {
     return {
-      participantApplication: { findFirst: jest.fn().mockResolvedValue(fixtureApplication) },
+      participantApplication: {
+        findFirst: jest.fn().mockResolvedValue(fixtureApplication),
+        // downloadLoa now SELECTS by eligibility rather than picking one row and
+        // gating it, so it reads the candidate set with findMany.
+        findMany: jest.fn().mockResolvedValue([fixtureApplication]),
+      },
       program: { findUnique: jest.fn().mockResolvedValue(fixtureProgram) },
       documentTemplate: { findFirst: jest.fn().mockResolvedValue(fixtureTemplate) },
       participantDocument: {
