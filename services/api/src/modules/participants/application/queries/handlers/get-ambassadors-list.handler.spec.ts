@@ -90,4 +90,63 @@ describe('GetAmbassadorsListHandler', () => {
         expect(expectedWhere.OR).toBeDefined();
         expect(expectedWhere.OR.length).toBeGreaterThanOrEqual(2);
     });
+
+    // The two traps the pre-implementation map identified for this route.
+    describe('programme scoping', () => {
+        beforeEach(() => {
+            mockPrismaService.ambassador.findMany.mockResolvedValue([]);
+            mockPrismaService.ambassador.count.mockResolvedValue(0);
+        });
+
+        // THE hole. An omitted programId used to leave where.programId undefined,
+        // which Prisma treats as no condition, so the DEFAULT call listed every
+        // ambassador in every brand. A scoped caller must always be narrowed.
+        it('narrows to the caller programmes when no programId is supplied', async () => {
+            await handler.execute(new GetAmbassadorsListQuery(undefined, undefined, 1, 20, undefined, undefined, ['p1', 'p2']));
+
+            const where = mockPrismaService.ambassador.findMany.mock.calls[0][0].where;
+            expect(where.programId).toEqual({ in: ['p1', 'p2'] });
+        });
+
+        it('narrows to NOTHING, not everything, for an admin scoped to no programmes', async () => {
+            await handler.execute(new GetAmbassadorsListQuery(undefined, undefined, 1, 20, undefined, undefined, []));
+
+            const where = mockPrismaService.ambassador.findMany.mock.calls[0][0].where;
+            expect(where.programId).toEqual({ in: [] });
+        });
+
+        it('leaves a platform admin unrestricted', async () => {
+            await handler.execute(new GetAmbassadorsListQuery(undefined, undefined, 1, 20, undefined, undefined, null));
+
+            const where = mockPrismaService.ambassador.findMany.mock.calls[0][0].where;
+            expect(where.programId).toBeUndefined();
+        });
+
+        // The second trap: this route accepts a SLUG. Checking the raw value in
+        // the controller would have rejected a legitimate slug, so the check
+        // happens here, after resolution.
+        it('resolves a SLUG before checking it against the caller scope', async () => {
+            mockPrismaService.program.findFirst.mockResolvedValue({ id: 'prog-real' });
+
+            await handler.execute(new GetAmbassadorsListQuery('my-program-slug', undefined, 1, 20, undefined, undefined, ['prog-real']));
+
+            const where = mockPrismaService.ambassador.findMany.mock.calls[0][0].where;
+            expect(where.programId).toBe('prog-real');
+        });
+
+        it('refuses an explicit programme outside the caller scope', async () => {
+            await expect(
+                handler.execute(new GetAmbassadorsListQuery('prog-other', undefined, 1, 20, undefined, undefined, ['p1'])),
+            ).rejects.toThrow();
+        });
+
+        it('refuses a SLUG that resolves outside the caller scope', async () => {
+            mockPrismaService.program.findFirst.mockResolvedValue({ id: 'prog-other' });
+
+            await expect(
+                handler.execute(new GetAmbassadorsListQuery('someone-elses-slug', undefined, 1, 20, undefined, undefined, ['p1'])),
+            ).rejects.toThrow();
+        });
+    });
 });
+
