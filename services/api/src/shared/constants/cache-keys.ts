@@ -53,7 +53,7 @@ export const CACHE_KEYS = {
   PORTAL_PAYMENTS: (userId: string, programId?: string) => `portal:payments:${userId}:${programId || 'latest'}`,
   // userId is included in the key to prevent cross-participant cache leakage (IDOR).
   PORTAL_PAYMENT_DETAIL: (userId: string, invoiceId: string) => `portal:payment-detail:${userId}:${invoiceId}`,
-  PORTAL_DOCUMENTS: (userId: string) => `portal:documents:${userId}`,
+  PORTAL_DOCUMENTS: (userId: string, programId?: string) => `portal:documents:${userId}:${programId || 'latest'}`,
   PORTAL_SUBMISSION_DETAIL: (userId: string, programId?: string) => `portal:submission-detail:${userId}:${programId || 'latest'}`,
   PORTAL_CERTIFICATES: (userId: string) => `portal:certificates:${userId}`,
 

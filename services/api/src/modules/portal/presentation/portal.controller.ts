@@ -3,7 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { Readable } from 'stream';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PortalReceiptService } from '../application/services/portal-receipt.service';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { QueryBus, CommandBus } from '@nestjs/cqrs';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
@@ -40,6 +40,7 @@ import { PaymentServiceHttpClient } from '../../payments/infrastructure/services
 import type { AdminPaymentMethod } from '../../payments/common/proto/payment.interface';
 import { LoaDownloadService } from '../application/services/loa-download.service';
 import { multerLimits } from '@common/constants';
+import { currentApplicationWhere, currentApplicationOrderBy } from '../application/utils/current-application.query';
 
 // Subset of the Go payment service's ProgramMethodView (merged, fallback-aware
 // per-program payment methods response) needed to project onto PortalPaymentMethodDto.
@@ -347,12 +348,15 @@ export class PortalController {
         }
     }
 
-    // Resolves the participant's current program the same way GetPortalPaymentsHandler
-    // does (participant -> latest participantApplication.programId). The
-    // payment-methods route has no invoiceId/applicationId param of its own, so this
-    // "current application" lookup is the only reliable signal short of the caller
-    // passing ?programId= explicitly (mirrors the optional programId query param
-    // already accepted by GET /portal/payments and GET /portal/submissions).
+    // Resolves the participant's current program (participant -> current
+    // participantApplication.programId). The payment-methods route has no
+    // invoiceId/applicationId param of its own, so this lookup is the fallback
+    // when the caller does not pass ?programId= explicitly - the same optional
+    // param GET /portal/payments and GET /portal/submissions already accept.
+    //
+    // Uses the shared rule rather than a bare findFirst: this used to take
+    // whichever row Postgres returned, so a multi-program participant could be
+    // offered another program's payment methods.
     private async resolveCurrentProgramId(userId: string): Promise<string | null> {
         const participant = await this.prisma.participant.findUnique({
             where: { userId },
@@ -361,7 +365,8 @@ export class PortalController {
         if (!participant) return null;
 
         const application = await this.prisma.participantApplication.findFirst({
-            where: { participantId: participant.id },
+            where: currentApplicationWhere(participant.id),
+            orderBy: currentApplicationOrderBy,
             select: { programId: true },
         });
         return application?.programId ?? null;
@@ -428,10 +433,14 @@ export class PortalController {
     @Get('documents')
     @ApiOperation({ summary: 'Get program resources and my documents' })
     @ApiResponse({ status: 200, type: PortalDocumentResponseDto })
-    async getDocuments(@CurrentUser() user: CurrentUserData): Promise<PortalDocumentResponseDto> {
+    @ApiQuery({ name: 'programId', required: false, description: 'Defaults to the current application when omitted' })
+    async getDocuments(
+        @CurrentUser() user: CurrentUserData,
+        @Query('programId') programId?: string,
+    ): Promise<PortalDocumentResponseDto> {
         const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
-        return this.queryBus.execute(new GetPortalDocumentsQuery(userId));
+        return this.queryBus.execute(new GetPortalDocumentsQuery(userId, programId));
     }
 
     @Throttle({ default: { limit: 5, ttl: 60000 } })

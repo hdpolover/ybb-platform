@@ -210,6 +210,7 @@ describe('CacheService', () => {
                 expect(matches(CACHE_KEYS.PORTAL_SUBMISSIONS(userId, programId))).toBe(true);
                 expect(matches(CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId, programId))).toBe(true);
                 expect(matches(CACHE_KEYS.PORTAL_PAYMENTS(userId, programId))).toBe(true);
+                expect(matches(CACHE_KEYS.PORTAL_DOCUMENTS(userId, programId))).toBe(true);
             }
         });
 

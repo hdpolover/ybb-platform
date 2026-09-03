@@ -22,6 +22,7 @@ import {
     SubmissionPreviewPrimaryActionDto,
     HelpAsset,
 } from '../../../presentation/dto/portal-submission-detail.dto';
+import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 
 const HELP_ASSET_KINDS = new Set(['link', 'video', 'file']);
 const INVALID_ESSAY_QUESTION_VALUES = new Set(['-', '--', 'n/a', 'na', 'tbd', 'coming soon']);
@@ -187,11 +188,8 @@ export class GetPortalSubmissionDetailHandler
 
     private async findApplication(participantId: string, programId?: string) {
         return this.prisma.participantApplication.findFirst({
-            where: {
-                participantId,
-                ...(programId ? { programId } : {}),
-            },
-            orderBy: { updatedAt: 'desc' },
+            where: currentApplicationWhere(participantId, programId),
+            orderBy: currentApplicationOrderBy,
             select: {
                 id: true,
                 status: true,

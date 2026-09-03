@@ -87,8 +87,9 @@ export class UploadSignedCopyHandler implements ICommandHandler<UploadSignedCopy
             });
         }
 
-        // Invalidate portal documents cache
-        await this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DOCUMENTS(userId));
+        // Invalidate portal documents cache for every program variant, not just
+        // the bare `:latest` key - the documents read is keyed by programId.
+        await this.cacheService.invalidateByPattern(CACHE_KEYS.PORTAL_DOCUMENTS(userId, '*'));
 
         return { success: true, submissionStatus: 'uploaded' };
     }

@@ -70,7 +70,13 @@ export class EnsurePortalPaymentInvoiceCommand {
 
 // Documents
 export class GetPortalDocumentsQuery {
-  constructor(public readonly userId: string) { }
+  constructor(
+    public readonly userId: string,
+    // The portal already sends this and the Next proxy already forwards it;
+    // the API used to drop it on the floor, which is what made a multi-program
+    // participant see another program's documents.
+    public readonly programId?: string,
+  ) { }
 }
 
 // Certificates

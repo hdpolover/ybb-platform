@@ -46,22 +46,15 @@ export class UpdateAmbassadorStatusHandler implements ICommandHandler<UpdateAmba
             const participantId = participant?.id;
 
             const keys = [
-                CACHE_KEYS.PORTAL_DASHBOARD(userId),
-                CACHE_KEYS.PORTAL_DOCUMENTS(userId),
                 CACHE_KEYS.PARTICIPANT_PROFILE(userId),
                 ...(participantId ? [
                     CACHE_KEYS.PARTICIPANT_STATS(participantId),
                     CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId),
                 ] : []),
             ];
-            const patterns = [
-                `portal:submissions:${userId}:*`,
-                `portal:submission-detail:${userId}:*`,
-                `portal:payments:${userId}:*`,
-            ];
             await Promise.all([
+                this.cacheService.invalidatePortalCache(userId),
                 ...keys.map(k => this.cacheService.invalidateKey(k)),
-                ...patterns.map(p => this.cacheService.invalidateByPattern(p)),
             ]);
         } catch (error) {
             this.logger.warn(`Failed to invalidate caches for user ${userId}: ${error instanceof Error ? error.message : String(error)}`);
