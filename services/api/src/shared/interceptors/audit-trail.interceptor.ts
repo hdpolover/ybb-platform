@@ -22,6 +22,43 @@ import { AUDIT_TRAIL_KEY, AuditTrailMetadata } from '../decorators/audit-trail.d
  * 3. After handler completes → capture "after" state from the response
  * 4. Write DataChangeLog entry asynchronously (fire-and-forget)
  */
+/**
+ * Who an audited action is attributed to.
+ *
+ * Exported for testing: the interceptor itself needs an ExecutionContext, a
+ * reflector and a service to construct, which is a lot of scaffolding around one
+ * branch - and this branch decides whether an action is traceable to the person
+ * who performed it.
+ *
+ * An admin-impersonation session is a PARTICIPANT session by design: it carries
+ * no adminId, because adminId grants admin identity elsewhere (admin-refresh
+ * requires isAdmin + adminId + sid). That meant every action taken while
+ * impersonating was recorded as the participant with no route back to the admin,
+ * across 228 redeemed tickets as of 2026-09-04.
+ *
+ * So impersonatedByAdminId is checked FIRST. The participant is still
+ * identifiable - they are the entity being acted on - and the ticket id ties the
+ * action to one support session rather than merely to a person.
+ */
+export function resolveAuditActor(user: {
+    adminId?: string;
+    userId?: string;
+    impersonatedByAdminId?: string;
+} | undefined): { actorId: string | null; actorType: ChangedByType } {
+    const impersonatorId = user?.impersonatedByAdminId;
+
+    if (impersonatorId) {
+        return { actorId: impersonatorId, actorType: ChangedByType.admin };
+    }
+    if (user?.adminId) {
+        return { actorId: user.adminId, actorType: ChangedByType.admin };
+    }
+    if (user?.userId) {
+        return { actorId: user.userId, actorType: ChangedByType.participant };
+    }
+    return { actorId: null, actorType: ChangedByType.system };
+}
+
 @Injectable()
 export class AuditTrailInterceptor implements NestInterceptor {
     private readonly logger = new Logger(AuditTrailInterceptor.name);
@@ -82,14 +119,20 @@ export class AuditTrailInterceptor implements NestInterceptor {
         const paramKey = idParam || 'id';
         const entityId: string | undefined = request.params?.[paramKey];
 
-        // Extract actor info from JWT user
-        const user = request.user;
-        const actorId = user?.adminId || user?.userId || null;
-        const actorType = user?.adminId
-            ? ChangedByType.admin
-            : user?.userId
-                ? ChangedByType.participant
-                : ChangedByType.system;
+        // Extract actor info from JWT user.
+        //
+        // An admin-impersonation session is a PARTICIPANT session by design - it
+        // carries no adminId, because adminId grants admin identity elsewhere.
+        // That meant every action taken while impersonating was recorded as the
+        // participant with no route back to the admin who performed it, across
+        // 228 redeemed tickets as of 2026-09-04.
+        //
+        // impersonatedByAdminId is checked FIRST so those actions attribute to
+        // the admin, which is the whole point of an audit trail. The participant
+        // is still identifiable - they are the entity being acted on - and the
+        // ticket id is recorded so the action can be tied to one support
+        // session rather than just to a person.
+        const { actorId, actorType } = resolveAuditActor(request.user);
 
         // Build endpoint string
         const endpoint = `${request.method} ${request.route?.path || request.url}`;
@@ -136,7 +179,7 @@ export class AuditTrailInterceptor implements NestInterceptor {
                         beforeState: beforeState ?? undefined,
                         afterState: afterState ?? undefined,
                         actorType,
-                        actorId,
+                        actorId: actorId ?? undefined,
                         source: 'http',
                         endpoint,
                         httpMethod,
