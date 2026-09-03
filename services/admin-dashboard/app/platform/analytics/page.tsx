@@ -11,6 +11,7 @@ import {
   type AdminAnalytics,
 } from "../../../src/shared/api-client";
 import { useAuth } from "../../contexts/AuthContext";
+import { useAccessibleBrands } from "../../hooks/useAccessibleBrands";
 import { PageHeader } from "@/src/admin/page-header";
 import { StatCard } from "@/src/admin/stat-card";
 import { Button } from "@/src/ui/button";
@@ -31,7 +32,10 @@ export default function AnalyticsPage() {
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  const brandId = adminProfile?.assignedBrands?.[0]?.brandId ?? undefined;
+  // Same derivation as platform/users so the three platform pages cannot
+  // disagree about which brands this admin has. No picker here yet; this at
+  // least means a programme-scoped admin resolves a brand at all.
+  const brandId = useAccessibleBrands()[0]?.brandId ?? undefined;
 
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);

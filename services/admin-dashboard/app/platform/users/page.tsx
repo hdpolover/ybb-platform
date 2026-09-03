@@ -13,6 +13,7 @@ import {
   type AdminAnalytics,
 } from "@/src/shared/api-client";
 import { useAuth } from "../../contexts/AuthContext";
+import { useAccessibleBrands } from "../../hooks/useAccessibleBrands";
 import { PageHeader } from "@/src/admin/page-header";
 import { StatCard } from "@/src/admin/stat-card";
 import { StatusBadge } from "@/src/admin/status-badge";
@@ -43,8 +44,16 @@ const ROLE_BADGE: Record<string, string> = {
 
 export default function UsersPage() {
   const { adminProfile } = useAuth();
-  const brandId = adminProfile?.assignedBrands?.[0]?.brandId ?? undefined;
-  const brandSlug = adminProfile?.assignedBrands?.[0]?.brandSlug ?? "";
+  // Was `assignedBrands?.[0]`, which confined a multi-brand admin to whichever
+  // brand came back first with no way to reach the others, and left a
+  // programme-scoped admin (no admin_brands rows) with no brand at all. See
+  // useAccessibleBrands.
+  const accessibleBrands = useAccessibleBrands();
+  const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
+  const activeBrand =
+    accessibleBrands.find((b) => b.brandId === selectedBrandId) ?? accessibleBrands[0];
+  const brandId = activeBrand?.brandId;
+  const brandSlug = activeBrand?.brandSlug ?? "";
 
   const [users, setUsers] = useState<User[]>([]);
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
@@ -74,6 +83,10 @@ export default function UsersPage() {
   }, [fetchAnalytics]);
 
   const fetchData = useCallback(async () => {
+    // adminProfile loads async and the API requires a brandId for anything but
+    // platform scope, so firing before it resolves 400s and flashes
+    // "Failed to load users" before the retry succeeds.
+    if (!adminProfile) return;
     setLoading(true);
     setError(null);
     try {
@@ -86,7 +99,7 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, brandId, roleFilter]);
+  }, [page, brandId, roleFilter, adminProfile]);
 
   useEffect(() => {
     fetchData();
@@ -231,6 +244,24 @@ export default function UsersPage() {
       <div className="rounded-lg border border-zinc-200 bg-white">
         <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3">
           <p className="text-sm font-semibold text-zinc-900">Users — Page {page}</p>
+          <div className="flex items-center gap-2">
+            {accessibleBrands.length > 1 && (
+              <select
+                value={brandId ?? ""}
+                onChange={(e) => {
+                  setSelectedBrandId(e.target.value);
+                  setPage(1);
+                }}
+                aria-label="Brand"
+                className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {accessibleBrands.map((brand) => (
+                  <option key={brand.brandId} value={brand.brandId}>
+                    {brand.brandName}
+                  </option>
+                ))}
+              </select>
+            )}
           <select
             value={roleFilter}
             onChange={(e) => handleRoleFilterChange(e.target.value)}
@@ -242,6 +273,7 @@ export default function UsersPage() {
               </option>
             ))}
           </select>
+          </div>
         </div>
 
         <Table>
