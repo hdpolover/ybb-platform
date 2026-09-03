@@ -65,12 +65,21 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # Build BEFORE test, which is not the conventional order and is load
+      # bearing here. bootstrap/payment-events-consumer.module.spec.ts builds the
+      # real DI graph, which constructs a gRPC client that reads
+      # dist/protos/file_service.proto - a path that only exists once `nest
+      # build` has copied it. Locally the suite passes either way because a stale
+      # dist/ is lying around from an earlier build; on a clean checkout it fails
+      # with "The invalid .proto definition ... not found". Production builds
+      # before it runs, so this order also matches how the service actually
+      # starts.
+      - name: Build
+        run: npm run build
+
       # maxWorkers is pinned to 50% in package.json on purpose: the default
       # oversubscribed and produced "a worker process has failed to exit
       # gracefully" on every full run. Do not override it here.
       - name: Test
         run: npx jest
-
-      - name: Build
-        run: npm run build
 
