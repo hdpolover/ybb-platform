@@ -13,28 +13,57 @@
  * midnight) instead of end of day Jakarta. The end boundary is always
  * normalized to WIB end-of-day.
  *
- * The start boundary is left exactly as entered EXCEPT for a tier's
- * chronologically-earliest period, which is the one that gates "is
- * registration open" for the whole tier. 2026-09-01 incident: admins pick a
- * whole calendar day for that first period too, but it was being stored at
+ * The start boundary is left exactly as entered EXCEPT where widening it to
+ * WIB midnight cannot overlap a preceding period. 2026-09-01 incident: admins
+ * pick a whole calendar day for a period's start, but it was being stored at
  * 23:59 WIB (the same end-of-day convention used for `endDate`), so a window
  * advertised as opening on a given date actually opened one minute before
  * midnight — Middle East Youth Summit 7th read as "Closed" all day it opened.
- * Widening every period's start this way would be wrong: chained periods
+ *
+ * Widening every start unconditionally would be wrong: chained periods
  * intentionally hand over at an exact instant (installment 2 starts exactly
  * when installment 1 ends, frequently 23:59 WIB) and normalizing those to
- * midnight would create ~280 extra overlapping period pairs — i.e. two
- * prices valid simultaneously, charging participants the wrong installment.
- * Restricting the widening to the single earliest period avoids that.
+ * midnight would create ~280 extra overlapping period pairs — two prices valid
+ * simultaneously, charging participants the wrong installment.
+ *
+ * This used to be restricted to the tier's chronologically-earliest period,
+ * which is safe but too narrow: it keys on POSITION IN THE ARRAY rather than on
+ * the property that actually distinguishes a batch handover from a genuine gap.
+ * An unchained later period — batch 2 opening some days after batch 1 closed —
+ * has no preceding period to overlap and was still being read at 23:59 WIB, so
+ * it read as closed for the whole first day exactly like MEYS 7th did.
+ *
+ * The rule is therefore the overlap test itself: widen to WIB midnight unless a
+ * period that starts earlier is still open at that moment. That subsumes the
+ * earliest-period case (nothing precedes it), leaves exactly-chained handovers
+ * untouched (the preceding period is still open at midnight), and refuses to
+ * widen a same-day handover that is not exactly chained. It also matches what
+ * the frontend now does, so the two sides agree again.
  */
 import { endOfWibDay, startOfWibDay } from './wib-time';
 
 export type TierValidityPeriod = { startDate: Date; endDate: Date };
 
-/** The effective start of `period` used for open/closed comparisons. */
-function effectiveStart(period: TierValidityPeriod, allPeriods: readonly TierValidityPeriod[]): Date {
-    const isEarliest = allPeriods.every((other) => period.startDate <= other.startDate);
-    return isEarliest ? startOfWibDay(period.startDate) : period.startDate;
+/** The effective start of `period` used for open/closed comparisons.
+ *
+ * Exported for testing. resolveTierPeriod's activeOrUpcoming fallback masks
+ * differences in this rule - it picks the same period whether or not the start
+ * was widened - so a test that only goes through resolveTierPeriod cannot tell
+ * the widening rule from its predecessor. This is the boundary that carries the
+ * incident history, so it is asserted directly. */
+export function effectiveStart(period: TierValidityPeriod, allPeriods: readonly TierValidityPeriod[]): Date {
+    const widened = startOfWibDay(period.startDate);
+
+    // Never widen back into a period that is still open at the widened instant.
+    // This is what keeps chained installments from both being valid at once.
+    const wouldOverlapPreceding = allPeriods.some(
+        (other) =>
+            other !== period &&
+            other.startDate < period.startDate &&
+            endOfWibDay(other.endDate) >= widened,
+    );
+
+    return wouldOverlapPreceding ? period.startDate : widened;
 }
 
 /** Whether `date` falls within `period`, end boundary inclusive through WIB end-of-day. */
