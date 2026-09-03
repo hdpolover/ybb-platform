@@ -432,10 +432,13 @@ export class AuthController {
 
   @Post('identities/local')
   @HttpCode(HttpStatus.CREATED)
-  // Per IP, NOT per user, despite being authenticated: the throttler is a
-  // global APP_GUARD and runs before the route's JwtAuthGuard, so req.user is
-  // undefined by the time the tracker is called. 5/hour was written as a
-  // per-user budget and silently applied to a whole building.
+  // Per authenticated USER, back to the original intent: the throttler is
+  // still a global APP_GUARD that runs before this route's JwtAuthGuard, so
+  // req.user is still undefined when the tracker is called — but the guard now
+  // verifies the Bearer token itself and keys on its subject (ab35c318). A
+  // caller with no valid token still keys on the client IP.
+  // The 60/hour is the widened value from when this tier was per-IP and one
+  // building shared it; as a per-user budget the original figure was 5/hour.
   @Throttle({ default: { limit: 60, ttl: ONE_HOUR } })
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
