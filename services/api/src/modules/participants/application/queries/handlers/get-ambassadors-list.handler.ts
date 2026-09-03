@@ -1,4 +1,5 @@
 import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
+import { ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { GetAmbassadorsListQuery } from '../../commands/ambassador-admin.commands'; // Corrected path
 import { Prisma } from '@prisma/client';
@@ -8,19 +9,39 @@ export class GetAmbassadorsListHandler implements IQueryHandler<GetAmbassadorsLi
     constructor(private readonly prisma: PrismaService) {}
 
     async execute(query: GetAmbassadorsListQuery): Promise<any> {
-        const { programId, search, page, limit, sortBy, sortOrder } = query;
+        const { programId, search, page, limit, sortBy, sortOrder, allowedProgramIds } = query;
         const skip = (page - 1) * limit;
 
         const where: Prisma.AmbassadorWhereInput = { deletedAt: null };
 
+        let resolvedProgramId: string | undefined;
         if (programId) {
             const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(programId);
             if (isUuid) {
-                where.programId = programId;
+                resolvedProgramId = programId;
             } else {
                 const program = await this.prisma.program.findFirst({ where: { slug: programId }, select: { id: true } });
                 if (!program) return { data: [], meta: { total: 0, page, limit, lastPage: 0 } };
-                where.programId = program.id;
+                resolvedProgramId = program.id;
+            }
+            where.programId = resolvedProgramId;
+        }
+
+        // Scope, applied here rather than in the controller because programId may
+        // arrive as a slug and this is where that is resolved.
+        //
+        // null means no restriction, which only a platform admin gets. Anything
+        // else - INCLUDING an empty array - must narrow the query. Leaving the
+        // filter off for a scoped admin is how the users list ended up returning
+        // every brand when its parameter was simply omitted: Prisma treats an
+        // absent condition as no condition.
+        if (allowedProgramIds !== null) {
+            if (resolvedProgramId) {
+                if (!allowedProgramIds.includes(resolvedProgramId)) {
+                    throw new ForbiddenException('You do not have access to this program.');
+                }
+            } else {
+                where.programId = { in: allowedProgramIds };
             }
         }
 

@@ -35,6 +35,9 @@ import { ChangeType } from '@prisma/client';
 import { createAmbassadorShareToken } from '../application/utils/ambassador-share-token.util';
 import { Logger } from '@nestjs/common';
 import { CreateAmbassadorAdminDto, UpdateAmbassadorAdminDto } from './dto/ambassador.dto';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { assertAmbassadorAccess, assertAmbassadorCreateAccess, resolveAmbassadorProgramScope } from '../application/utils/ambassador-access.util';
 
 @ApiTags('Ambassadors')
 @Controller('admin/ambassadors')
@@ -50,6 +53,7 @@ export class AmbassadorAdminController {
     private readonly prisma: PrismaService,
     private readonly rabbitMQProducerService: RabbitMQProducerService,
     private readonly configService: ConfigService,
+    private readonly prismaRead: PrismaReadService,
   ) { }
 
   // gender is optional, but when present it must match the Prisma Gender enum
@@ -71,6 +75,7 @@ export class AmbassadorAdminController {
   @ApiQuery({ name: 'sortBy', required: false })
   @ApiQuery({ name: 'sortOrder', required: false })
   async findAll(
+    @CurrentUser() actor: CurrentUserData,
     @Query('programId') programId?: string,
     @Query('search') search?: string,
     @Query('page') page: number = 1,
@@ -78,12 +83,18 @@ export class AmbassadorAdminController {
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: string,
   ) {
-    return this.queryBus.execute(new GetAmbassadorsListQuery(programId, search, Number(page), Number(limit), sortBy, sortOrder));
+    // The scope is resolved here but APPLIED in the handler: programId may be a
+    // slug, and the handler is where that is resolved.
+    const allowedProgramIds = await resolveAmbassadorProgramScope(this.prismaRead, actor);
+    return this.queryBus.execute(
+      new GetAmbassadorsListQuery(programId, search, Number(page), Number(limit), sortBy, sortOrder, allowedProgramIds),
+    );
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get ambassador detail (Admin)' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id') id: string, @CurrentUser() actor: CurrentUserData) {
+    await assertAmbassadorAccess(this.prismaRead, actor, id);
     const ambassador = await this.prisma.ambassador.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -152,8 +163,16 @@ export class AmbassadorAdminController {
   @ApiOperation({ summary: 'Create a new ambassador (Admin)' })
   async create(
     @Body() body: CreateAmbassadorAdminDto,
+    @CurrentUser() actor: CurrentUserData,
   ) {
     const { email, fullName, programId, phoneNumber, institution, gender, notes } = body;
+
+    // programId arrives in the body, so there is no route param for a guard to
+    // check. Asserted on the value this handler actually creates against.
+    // Without it, an admin of one brand could plant an ambassador in another -
+    // and this route mints and emails login credentials, so it is account
+    // creation, not just a row.
+    await assertAmbassadorCreateAccess(this.prismaRead, actor, programId);
 
     // email/fullName/programId presence is enforced by CreateAmbassadorAdminDto
     // (@IsEmail, @IsNotEmpty, @IsUUID) via the global ValidationPipe before this
@@ -272,7 +291,8 @@ export class AmbassadorAdminController {
 
   @Post(':id/resend-credentials')
   @ApiOperation({ summary: 'Resend ambassador credentials email (Admin)' })
-  async resendCredentials(@Param('id') id: string) {
+  async resendCredentials(@Param('id') id: string, @CurrentUser() actor: CurrentUserData) {
+    await assertAmbassadorAccess(this.prismaRead, actor, id);
     const ambassador = await this.prisma.ambassador.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -332,7 +352,9 @@ export class AmbassadorAdminController {
   async update(
     @Param('id') id: string,
     @Body() body: UpdateAmbassadorAdminDto,
+    @CurrentUser() actor: CurrentUserData,
   ) {
+    await assertAmbassadorAccess(this.prismaRead, actor, id);
     this.assertValidGender(body.gender);
 
     const ambassador = await this.prisma.ambassador.findUnique({ where: { id } });
@@ -354,14 +376,16 @@ export class AmbassadorAdminController {
   @Patch(':id/activate')
   @AuditTrail({ entityType: 'Ambassador', action: ChangeType.update })
   @ApiOperation({ summary: 'Activate an ambassador' })
-  async activate(@Param('id') id: string) {
+  async activate(@Param('id') id: string, @CurrentUser() actor: CurrentUserData) {
+    await assertAmbassadorAccess(this.prismaRead, actor, id);
     return this.commandBus.execute(new UpdateAmbassadorStatusCommand(id, true));
   }
 
   @Patch(':id/deactivate')
   @AuditTrail({ entityType: 'Ambassador', action: ChangeType.update })
   @ApiOperation({ summary: 'Deactivate an ambassador' })
-  async deactivate(@Param('id') id: string) {
+  async deactivate(@Param('id') id: string, @CurrentUser() actor: CurrentUserData) {
+    await assertAmbassadorAccess(this.prismaRead, actor, id);
     return this.commandBus.execute(new UpdateAmbassadorStatusCommand(id, false));
   }
 
@@ -370,15 +394,18 @@ export class AmbassadorAdminController {
   @ApiQuery({ name: 'page', required: false })
   async getReferrals(
     @Param('id') id: string,
+    @CurrentUser() actor: CurrentUserData,
     @Query('page') page: number = 1,
   ) {
+    await assertAmbassadorAccess(this.prismaRead, actor, id);
     return this.queryBus.execute(new GetAmbassadorReferralsQuery(id, page));
   }
 
   @Delete(':id')
   @AuditTrail({ entityType: 'Ambassador', action: ChangeType.delete })
   @ApiOperation({ summary: 'Soft-delete an ambassador (Admin)' })
-  async remove(@Param('id') id: string, @Req() req: any) {
+  async remove(@Param('id') id: string, @Req() req: any, @CurrentUser() actor: CurrentUserData) {
+    await assertAmbassadorAccess(this.prismaRead, actor, id);
     const deletedBy: string = req.user?.id ?? req.user?.sub;
     return this.commandBus.execute(new DeleteAmbassadorCommand(id, deletedBy));
   }
