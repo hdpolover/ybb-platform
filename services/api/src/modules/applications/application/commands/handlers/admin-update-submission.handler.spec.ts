@@ -8,6 +8,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { AdminUpdateSubmissionHandler } from './admin-update-submission.handler';
 import { AdminUpdateSubmissionCommand } from '../admin-update-submission.command';
+import { createCacheServiceMock } from '@test/utils/cache-service-mock';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -61,11 +62,12 @@ function buildPrismaMock(applicationOverride?: ApplicationOverride) {
   return { prisma, updateApplication, updateParticipant, createEditHistory };
 }
 
+// Derived from the real CacheService rather than listed by hand. The previous
+// literal predated invalidatePortalCache, and because this handler catches and
+// logs invalidation failures - it must never fail the write - the missing method
+// surfaced only as a TypeError in the CI log while every test still passed.
 function buildCacheMock() {
-  return {
-    invalidateKey: jest.fn().mockResolvedValue(undefined),
-    invalidateByPattern: jest.fn().mockResolvedValue(undefined),
-  };
+  return createCacheServiceMock();
 }
 
 function makeHandler(prisma: ReturnType<typeof buildPrismaMock>['prisma'], cache = buildCacheMock()) {
