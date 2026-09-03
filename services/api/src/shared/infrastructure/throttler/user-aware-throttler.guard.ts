@@ -55,6 +55,19 @@ const EMAIL_SHAPE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/;
  * tags they can be bothered to type. Never do this for storage, lookup or
  * delivery — the tag is part of the address the user actually gave us.
  *
+ * DOTS are stripped too, but ONLY on gmail.com / googlemail.com, which are one
+ * inbox and ignore dots in the local part. `v.ictim@`, `vi.ctim@`, `v.i.ctim@`
+ * are the same person: an 8-character local part yields ~64 same-inbox spellings
+ * and /auth/register accepted 301 requests for one inbox from one host against
+ * an intended 10, every one of them a real verification mail whose bounce and
+ * spam-complaint damage lands on OUR sending domain. googlemail.com folds to
+ * gmail.com for the same reason — same inbox, and otherwise it is a free 2x.
+ *
+ * This is PROVIDER-SPECIFIC behaviour and is deliberately not generalised.
+ * On most domains a dot is significant, so `a.b@example.com` and `ab@example.com`
+ * are two different people and must keep two different budgets. Do not extend
+ * this list without checking that the provider genuinely ignores dots.
+ *
  * When there is no email-shaped value, the request gets its OWN key, unique to
  * that request. It deliberately does NOT fall back onto the shared IP bucket:
  * on the 5-per-15-min mailbox tier, five typo'd logins from one office or
@@ -73,10 +86,13 @@ export const emailTracker = (req: Record<string, unknown>): string => {
     const normalised = email.trim().toLowerCase();
     if (normalised.length <= 254 && EMAIL_SHAPE.test(normalised)) {
       const at = normalised.lastIndexOf('@');
-      const local = normalised.slice(0, at);
-      const plus = local.indexOf('+');
-      const mailbox = plus === -1 ? normalised : local.slice(0, plus) + normalised.slice(at);
-      return `email:${mailbox}`;
+      const plus = normalised.slice(0, at).indexOf('+');
+      const local = normalised.slice(0, plus === -1 ? at : plus);
+      const domain = normalised.slice(at + 1);
+      if (domain === 'gmail.com' || domain === 'googlemail.com') {
+        return `email:${local.split('.').join('')}@gmail.com`;
+      }
+      return `email:${local}@${domain}`;
     }
   }
   return `email:unresolved:${randomUUID()}`;
@@ -91,13 +107,28 @@ export const emailTracker = (req: Record<string, unknown>): string => {
  *
  * It briefly keyed on `request.body.email` instead, to stop the whole site
  * sharing one bucket back when ybb-program-next's auth proxy routes did not
- * forward x-forwarded-for. They do now (lib/server/forwardedFor.ts, nine auth
- * routes, plus cf-connecting-ip since 96f0f83), so the address here is the real
- * caller and the workaround is not needed — which matters, because the
- * workaround was worse than the problem: guards run before pipes, so that email
- * was the RAW unvalidated body, and any caller on any anonymous POST route
- * could mint a fresh bucket per request just by varying a JSON field. The cap
- * bounded nothing.
+ * forward x-forwarded-for. That workaround is gone, and had to be: guards run
+ * before pipes, so that email was the RAW unvalidated body, and any caller on
+ * any anonymous POST route could mint a fresh bucket per request just by
+ * varying a JSON field. The cap bounded nothing.
+ *
+ * But be honest about how far the replacement reaches. This guard is GLOBAL,
+ * and there are TWO cases:
+ *
+ *   - The 9 auth routes that call forwardedForHeader (lib/server/forwardedFor.ts,
+ *     plus cf-connecting-ip since 96f0f83). There the address here really is
+ *     the caller, and the per-IP tiers mean what they say.
+ *   - The other ~52 route.ts handlers under ybb-program-next/app/api, which
+ *     forward nothing. resolveClientIp finds no trustworthy header and falls
+ *     through to req.ip — the Next container. Every one of those routes keys
+ *     into ONE constant bucket shared by the whole internet, exactly the
+ *     failure this guard was written to remove. Their limits are effectively a
+ *     global cap, not a per-caller one: useless against an attacker and a
+ *     denial-of-service against everyone else if it ever trips.
+ *
+ * Closing the second case means forwarding the header from those handlers, not
+ * changing anything here. Filed separately; do not read the per-IP sizing in
+ * auth.controller.ts as applying to routes outside that list of 9.
  *
  * NOT per-user, despite the class name and despite what commit e233af76 claimed
  * to ship. This guard is registered as an APP_GUARD (throttler.module.ts, the

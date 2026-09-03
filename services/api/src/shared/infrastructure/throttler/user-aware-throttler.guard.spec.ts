@@ -188,6 +188,19 @@ describe('emailTracker', () => {
     expect(emailTracker({ body: { email: 'ada@ex+ample.com' } })).toBe('email:ada@ex+ample.com');
   });
 
+  it('strips dots on gmail only, because gmail ignores them and other domains do not', () => {
+    // ~64 spellings of one 8-char local part, all delivering to one inbox, on a
+    // tier that allows 10 mails an hour.
+    expect(emailTracker({ body: { email: 'v.i.ctim@gmail.com' } })).toBe('email:victim@gmail.com');
+    expect(emailTracker({ body: { email: 'v.ictim+2@googlemail.com' } })).toBe(
+      'email:victim@gmail.com',
+    );
+    // Everywhere else a dot is part of the address and two people keep two budgets.
+    expect(emailTracker({ body: { email: 'a.b@example.com' } })).not.toBe(
+      emailTracker({ body: { email: 'ab@example.com' } }),
+    );
+  });
+
   it('gives an unresolved email its OWN key, never the shared IP bucket', () => {
     // Falling back to the IP meant five typo'd logins from one office or
     // carrier NAT ('ada@gmail,com', 'admin@ybbhub', a blank field) burned the
