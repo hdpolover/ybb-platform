@@ -3673,6 +3673,42 @@ export function getProgramRevenueStats(programId: string): Promise<ProgramRevenu
   return request<ProgramRevenueStats>(`/stats/admin/programs/${programId}/revenue`);
 }
 
+/**
+ * One application whose already-paid/processing registration fee no longer
+ * matches its current fully_funded/self_funded category (an admin switched
+ * the category after the fee was paid; the invoice is deliberately left
+ * untouched). See RegistrationFeeMismatchRowDto on the API.
+ */
+export type RegistrationFeeMismatchRow = {
+  applicationId: string;
+  participantFullName: string;
+  participantEmail: string | null;
+  currentCategory: string;
+  invoicedCategory: string;
+  invoiceId: string;
+  invoiceStatus: string;
+  amountPaid: number;
+  currency: string;
+  paidAt: string | null;
+  currentTierPrice: number | null;
+  difference: number | null;
+};
+
+export type RegistrationFeeMismatchList = {
+  rows: RegistrationFeeMismatchRow[];
+  total: number;
+};
+
+export function getRegistrationFeeMismatches(
+  programId: string,
+  params?: { limit?: number; offset?: number },
+): Promise<RegistrationFeeMismatchList> {
+  const q = new URLSearchParams({ programId });
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.offset) q.set("offset", String(params.offset));
+  return request<RegistrationFeeMismatchList>(`/applications/registration-fee-mismatches?${q.toString()}`);
+}
+
 export function getPlatformRevenueStats(params?: { brandId?: string }): Promise<PlatformRevenueStats> {
   const q = new URLSearchParams();
   if (params?.brandId) q.set("brandId", params.brandId);

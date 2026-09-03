@@ -3,7 +3,12 @@
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { getProgramRevenueStats, type ProgramRevenueStats } from "@/src/shared/api-client";
+import {
+  getProgramRevenueStats,
+  getRegistrationFeeMismatches,
+  type ProgramRevenueStats,
+  type RegistrationFeeMismatchRow,
+} from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { PageHeader } from "@/src/admin/page-header";
 import { Button } from "@/src/ui/button";
@@ -13,6 +18,7 @@ import { RevenueKpiCards } from "@/app/components/revenue/RevenueKpiCards";
 import { RevenueTrendChart } from "@/app/components/revenue/RevenueTrendChart";
 import { RevenueBarBreakdown } from "@/app/components/revenue/RevenueBarBreakdown";
 import { RevenueTransactionsTable } from "@/app/components/revenue/RevenueTransactionsTable";
+import { RegistrationFeeMismatchesTable } from "@/app/components/revenue/RegistrationFeeMismatchesTable";
 import { UnbackfilledBanner } from "@/app/components/revenue/UnbackfilledBanner";
 import { formatPaymentMethodLabel, type CurrencyMode } from "@/app/components/revenue/revenue-format";
 
@@ -34,14 +40,21 @@ export default function ProgramRevenuePage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currencyMode, setCurrencyMode] = useState<CurrencyMode>("IDR");
+  const [mismatches, setMismatches] = useState<RegistrationFeeMismatchRow[]>([]);
+  const [mismatchTotal, setMismatchTotal] = useState(0);
 
   const fetchStats = useCallback(async () => {
     if (!resolvedProgramId) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await getProgramRevenueStats(resolvedProgramId);
+      const [data, mismatchData] = await Promise.all([
+        getProgramRevenueStats(resolvedProgramId),
+        getRegistrationFeeMismatches(resolvedProgramId, { limit: 500 }),
+      ]);
       setStats(data);
+      setMismatches(mismatchData.rows);
+      setMismatchTotal(mismatchData.total);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load revenue data.");
     } finally {
@@ -113,6 +126,8 @@ export default function ProgramRevenuePage({
           </div>
         </>
       )}
+
+      {!loading && <RegistrationFeeMismatchesTable rows={mismatches} total={mismatchTotal} />}
 
       <RevenueTransactionsTable fixedProgramId={resolvedProgramId} />
     </div>

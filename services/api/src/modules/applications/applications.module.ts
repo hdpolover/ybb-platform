@@ -23,6 +23,7 @@ import { GetApplicationHandler } from './application/queries/handlers/get-applic
 import { ListApplicationsHandler } from './application/queries/handlers/list-applications.handler';
 import { ExportApplicationsHandler } from './application/queries/handlers/export-applications.handler';
 import { GetApplicationReviewHandler } from './application/queries/handlers/get-application-review.handler';
+import { RegistrationFeeMismatchesHandler } from './application/queries/handlers/registration-fee-mismatches.handler';
 
 // Infrastructure
 import { ApplicationRepository } from './infrastructure/persistence/application.repository';
@@ -54,6 +55,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
     ListApplicationsHandler,
     ExportApplicationsHandler,
     GetApplicationReviewHandler,
+    RegistrationFeeMismatchesHandler,
 
     // Infrastructure
     ApplicationMapper,
