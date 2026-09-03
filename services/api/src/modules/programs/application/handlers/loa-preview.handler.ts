@@ -1,6 +1,9 @@
 import { QueryHandler, IQueryHandler } from '@nestjs/cqrs';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
+import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { parseProgramBatch } from '@shared/utils/parse-program-batch';
 import {
@@ -11,6 +14,25 @@ import {
 } from '@shared/utils/loa-render-payload.util';
 import { LoaRenderDataService } from '@modules/portal/application/services/loa-render-data.service';
 import { LoaPreviewParticipantService, PREVIEW_DOCUMENT_NUMBER } from '../services/loa-preview-participant.service';
+import { assertProgramContentAccess } from '../utils/program-content-access.util';
+
+// Same shape as resolveProgramId() in loa-batch.handlers.ts. This route's :id
+// is reached from the same admin pages (LoaTemplateEditor via
+// useResolvedProgramId), which falls back to the raw route value - a program
+// SLUG - whenever the program isn't in the caller's accessiblePrograms. That
+// is the normal steady state for a program-scoped admin on their own page,
+// not a first-paint race, so it must be resolved before any scope check or
+// participant lookup, not assumed to already be a UUID.
+async function resolveProgramId(
+  repo: IProgramRepository,
+  identifier: string,
+): Promise<string | null> {
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+  if (isUUID) return identifier;
+
+  const program = await repo.findBySlug(identifier);
+  return program ? program.id : null;
+}
 
 // Clearly-fake sample participant used for admin template previews. Never a
 // real person. Program fields (name/year/location/dates/theme/brand) are the
@@ -38,6 +60,9 @@ export class PreviewLoaTemplateQuery {
     public readonly htmlContent: string,
     public readonly layoutConfig: Record<string, unknown>,
     public readonly placeholders: Array<{ key: string; source: string }>,
+    // The caller, so the handler can refuse a programme their scope does not
+    // cover before reading any participant data.
+    public readonly actor: CurrentUserData,
     public readonly applicationId?: string,
     public readonly source: 'draft' | 'saved' = 'draft',
   ) {}
@@ -61,11 +86,24 @@ export class PreviewLoaTemplateHandler implements IQueryHandler<PreviewLoaTempla
     private readonly fileServiceClient: FileServiceClient,
     private readonly loaRenderDataService: LoaRenderDataService,
     private readonly loaPreviewParticipantService: LoaPreviewParticipantService,
+    @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+    private readonly prismaRead: PrismaReadService,
   ) {}
 
   async execute(query: PreviewLoaTemplateQuery): Promise<PreviewLoaResult> {
+    // Resolve id-or-slug and assert scope BEFORE any participant data (or even
+    // program metadata) is read. This route was @Roles-gated but otherwise
+    // unscoped: any admin/super_admin-role caller could preview any
+    // programme's Invitation Letter with a REAL applicant's name, institution,
+    // nationality, birthdate, gender, email and phone by passing an arbitrary
+    // programId - the same defect class as the rest of this controller, just
+    // reached by a render action instead of a CRUD write.
+    const programId = await resolveProgramId(this.programRepository, query.programId);
+    if (!programId) throw new NotFoundException('Program not found');
+    await assertProgramContentAccess(this.prismaRead, query.actor, programId);
+
     const program = await this.prisma.program.findUnique({
-      where: { id: query.programId },
+      where: { id: programId },
       select: {
         id: true,
         name: true,
@@ -86,7 +124,7 @@ export class PreviewLoaTemplateHandler implements IQueryHandler<PreviewLoaTempla
     let layoutConfig = query.layoutConfig ?? {};
     if (query.source === 'saved') {
       const savedTemplate = await this.prisma.documentTemplate.findFirst({
-        where: { programId: query.programId, type: 'letter_of_acceptance', isActive: true, deletedAt: null },
+        where: { programId, type: 'letter_of_acceptance', isActive: true, deletedAt: null },
         select: { htmlContent: true, placeholders: true, layoutConfig: true },
       });
       if (!savedTemplate || !savedTemplate.htmlContent) {
@@ -114,7 +152,7 @@ export class PreviewLoaTemplateHandler implements IQueryHandler<PreviewLoaTempla
     // deliberately not injected into this handler at all - preview can never
     // allocate a real document number.
     const resolved = await this.loaPreviewParticipantService.resolveApplicationId(
-      query.programId,
+      programId,
       query.applicationId,
     );
 

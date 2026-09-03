@@ -1,11 +1,12 @@
 // src/modules/programs/application/handlers/loa-recipient-sends.handler.spec.ts
 import { Test } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { GetLoaBatchRecipientSendsHandler } from './loa-batch.handlers';
 import { GetLoaBatchRecipientSendsQuery } from '../queries/loa-batch.queries';
 import { LoaReleaseBatchRepository } from '../../infrastructure/persistence/loa-release-batch.repository';
 import { LoaBatchRecipientSendRepository } from '../../infrastructure/persistence/loa-batch-recipient-send.repository';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 
 const batch = {
   id: 'batch-1',
@@ -15,6 +16,26 @@ const batch = {
   submissionTo: new Date('2026-01-31'),
   releasedAt: new Date('2026-02-01'),
 };
+
+const platformAdmin = {
+  accessLevel: 5,
+  canManageAdmins: true,
+  canAssignRoles: true,
+  customPermissions: [],
+  role: { name: 'super_admin', permissions: ['platform_access'] },
+  adminBrands: [],
+  adminPrograms: [],
+};
+const assignedAdminFor = (programIds: string[]) => ({
+  accessLevel: 1,
+  canManageAdmins: false,
+  canAssignRoles: false,
+  customPermissions: [],
+  role: { name: 'reviewer', permissions: [] },
+  adminBrands: [],
+  adminPrograms: programIds.map((programId) => ({ programId, permissions: [] })),
+});
+const actor = { userId: 'admin-1', email: 'a@b.c', brandId: 'brand-x', adminId: 'adm-1' } as any;
 
 const sentRow = {
   participantId: 'p-1',
@@ -41,8 +62,18 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
   let mockBatchRepo: any;
   let mockSendRepo: any;
   let mockPrisma: any;
+  let mockProgramRepository: any;
+  let mockReadPrisma: any;
 
   beforeEach(async () => {
+    mockProgramRepository = { findBySlug: jest.fn().mockResolvedValue({ id: 'prog-1' }) };
+    mockReadPrisma = {
+      admin: { findUnique: jest.fn().mockResolvedValue(platformAdmin) },
+      program: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'prog-1', brandId: 'brand-x', name: 'P', deletedAt: null }),
+      },
+    };
+
     const module = await Test.createTestingModule({
       providers: [
         GetLoaBatchRecipientSendsHandler,
@@ -65,6 +96,8 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
             },
           },
         },
+        { provide: 'IProgramRepository', useValue: mockProgramRepository },
+        { provide: PrismaReadService, useValue: mockReadPrisma },
       ],
     }).compile();
 
@@ -75,11 +108,47 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
   });
 
   const run = () =>
-    handler.execute(new GetLoaBatchRecipientSendsQuery('prog-1', 'batch-1'));
+    handler.execute(new GetLoaBatchRecipientSendsQuery('prog-1', 'batch-1', actor));
 
   it('throws NotFound for a batch belonging to another program', async () => {
     mockBatchRepo.findById.mockResolvedValue({ ...batch, programId: 'other-prog' });
     await expect(run()).rejects.toThrow(NotFoundException);
+  });
+
+  it('refuses a programme-scoped admin outside their assigned programmes', async () => {
+    mockReadPrisma.admin.findUnique.mockResolvedValue(assignedAdminFor(['someone-elses-program']));
+    await expect(run()).rejects.toThrow(ForbiddenException);
+    expect(mockBatchRepo.findById).not.toHaveBeenCalled();
+  });
+
+  // Same M203-shaped bug as GetLoaBatchesHandler (loa-batch.handlers.spec.ts):
+  // this route is called from the same LoaBatchesTab with the same
+  // useResolvedProgramId output, so it can receive a program SLUG too. The
+  // program.findUnique mock below only resolves for the id resolveProgramId()
+  // is supposed to produce - it returns null for the raw slug - so this test
+  // fails if the fix regresses to asserting on the unresolved identifier.
+  it('resolves a SLUG to the real programme id before asserting scope, so a super admin is NOT 404d', async () => {
+    const realProgramId = '123e4567-e89b-12d3-a456-426614174000';
+    const slug = 'china-youth-summit-2026';
+
+    mockProgramRepository.findBySlug.mockImplementation((identifier: string) =>
+      identifier === slug ? Promise.resolve({ id: realProgramId }) : Promise.resolve(null),
+    );
+    mockReadPrisma.program.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+      where.id === realProgramId
+        ? Promise.resolve({ id: realProgramId, brandId: 'brand-x', name: 'China Youth Summit', deletedAt: null })
+        : Promise.resolve(null),
+    );
+    mockBatchRepo.findById.mockResolvedValue({ ...batch, programId: realProgramId });
+
+    await expect(
+      handler.execute(new GetLoaBatchRecipientSendsQuery(slug, 'batch-1', actor)),
+    ).resolves.toBeDefined();
+
+    expect(mockProgramRepository.findBySlug).toHaveBeenCalledWith(slug);
+    expect(mockReadPrisma.program.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: realProgramId } }),
+    );
   });
 
   it('summarises sent and failed counts and lists every recipient', async () => {

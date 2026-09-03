@@ -59,6 +59,7 @@ describe('ProgramContentController', () => {
 
     // Mocks
     const mockExecute = { execute: jest.fn() };
+    const actor = { userId: 'admin-1', email: 'a@b.c', brandId: 'brand-1', adminId: 'adm-1' } as any;
 
     // Function to create providers list
     const createMockProviders = () => {
@@ -129,8 +130,6 @@ describe('ProgramContentController', () => {
             const req = { user: { id: 'admin-1' } } as any;
             const file = { originalname: 'image.jpg' } as unknown as Express.Multer.File;
 
-            const actor = { userId: 'admin-1', email: 'a@b.c', brandId: 'brand-1', adminId: 'adm-1' } as any;
-
             await controller.addGallery('prog-1', dto, file, req, actor);
 
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(CreateProgramGalleryCommand));
@@ -146,7 +145,7 @@ describe('ProgramContentController', () => {
     describe('getLoaBatches', () => {
         it('dispatches GetLoaBatchesQuery with programId', async () => {
             mockExecute.execute.mockResolvedValue([]);
-            await controller.getLoaBatches('prog-1');
+            await controller.getLoaBatches('prog-1', actor);
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(GetLoaBatchesQuery));
             const q = mockExecute.execute.mock.calls[0][0] as GetLoaBatchesQuery;
             expect(q.programId).toBe('prog-1');
@@ -158,7 +157,7 @@ describe('ProgramContentController', () => {
             mockExecute.execute.mockResolvedValue({ id: 'b1' });
             const dto = { name: 'Wave 1', submissionFrom: '2026-01-01', submissionTo: '2026-03-31' };
             const req = { user: { id: 'admin-1' } } as any;
-            await controller.createLoaBatch('prog-1', dto as any, req);
+            await controller.createLoaBatch('prog-1', dto as any, req, actor);
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(CreateLoaBatchCommand));
             const cmd = mockExecute.execute.mock.calls[0][0] as CreateLoaBatchCommand;
             expect(cmd.programId).toBe('prog-1');
@@ -173,7 +172,7 @@ describe('ProgramContentController', () => {
         it('dispatches UpdateLoaBatchCommand with parsed dates', async () => {
             mockExecute.execute.mockResolvedValue({ id: 'b1' });
             const dto = { name: 'Wave 1 Updated', submissionFrom: '2026-02-01', submissionTo: '2026-04-30' };
-            await controller.updateLoaBatch('prog-1', 'b1', dto as any);
+            await controller.updateLoaBatch('prog-1', 'b1', dto as any, actor);
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(UpdateLoaBatchCommand));
             const cmd = mockExecute.execute.mock.calls[0][0] as UpdateLoaBatchCommand;
             expect(cmd.batchId).toBe('b1');
@@ -186,7 +185,7 @@ describe('ProgramContentController', () => {
         it('dispatches UpdateLoaBatchCommand with undefined dates when not provided', async () => {
             mockExecute.execute.mockResolvedValue({ id: 'b1' });
             const dto = { name: 'Renamed' };
-            await controller.updateLoaBatch('prog-1', 'b1', dto as any);
+            await controller.updateLoaBatch('prog-1', 'b1', dto as any, actor);
             const cmd = mockExecute.execute.mock.calls[0][0] as UpdateLoaBatchCommand;
             expect(cmd.submissionFrom).toBeUndefined();
             expect(cmd.submissionTo).toBeUndefined();
@@ -196,7 +195,7 @@ describe('ProgramContentController', () => {
     describe('releaseLoaBatch', () => {
         it('dispatches ReleaseLoaBatchCommand with batchId and programId', async () => {
             mockExecute.execute.mockResolvedValue({ id: 'b1', releasedAt: new Date() });
-            await controller.releaseLoaBatch('prog-1', 'b1');
+            await controller.releaseLoaBatch('prog-1', 'b1', actor);
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(ReleaseLoaBatchCommand));
             const cmd = mockExecute.execute.mock.calls[0][0] as ReleaseLoaBatchCommand;
             expect(cmd.batchId).toBe('b1');
@@ -207,7 +206,7 @@ describe('ProgramContentController', () => {
     describe('unreleaseLoaBatch', () => {
         it('dispatches UnreleaseLoaBatchCommand with batchId and programId', async () => {
             mockExecute.execute.mockResolvedValue({ id: 'b1', releasedAt: null });
-            await controller.unreleaseLoaBatch('prog-1', 'b1');
+            await controller.unreleaseLoaBatch('prog-1', 'b1', actor);
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(UnreleaseLoaBatchCommand));
             const cmd = mockExecute.execute.mock.calls[0][0] as UnreleaseLoaBatchCommand;
             expect(cmd.batchId).toBe('b1');
@@ -218,7 +217,7 @@ describe('ProgramContentController', () => {
     describe('deleteLoaBatch', () => {
         it('dispatches DeleteLoaBatchCommand with batchId and programId', async () => {
             mockExecute.execute.mockResolvedValue(undefined);
-            await controller.deleteLoaBatch('prog-1', 'b1');
+            await controller.deleteLoaBatch('prog-1', 'b1', actor);
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(DeleteLoaBatchCommand));
             const cmd = mockExecute.execute.mock.calls[0][0] as DeleteLoaBatchCommand;
             expect(cmd.batchId).toBe('b1');
@@ -228,7 +227,7 @@ describe('ProgramContentController', () => {
 
     describe('getLoaBatchRecipientSends', () => {
         it('dispatches GetLoaBatchRecipientSendsQuery with programId and batchId', async () => {
-            await controller.getLoaBatchRecipientSends('prog-1', 'b1');
+            await controller.getLoaBatchRecipientSends('prog-1', 'b1', actor);
             expect(mockExecute.execute).toHaveBeenCalledWith(
                 expect.any(GetLoaBatchRecipientSendsQuery),
             );
@@ -241,7 +240,7 @@ describe('ProgramContentController', () => {
     describe('getLoaDownloads', () => {
         it('dispatches GetLoaDownloadsQuery with programId', async () => {
             mockExecute.execute.mockResolvedValue([]);
-            await controller.getLoaDownloads('prog-1');
+            await controller.getLoaDownloads('prog-1', actor);
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(GetLoaDownloadsQuery));
             const q = mockExecute.execute.mock.calls[0][0] as GetLoaDownloadsQuery;
             expect(q.programId).toBe('prog-1');

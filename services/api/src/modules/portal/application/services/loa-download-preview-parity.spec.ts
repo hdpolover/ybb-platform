@@ -5,10 +5,22 @@ import { LoaDocumentNumberService } from './loa-document-number.service';
 import { LoaRenderDataService } from './loa-render-data.service';
 import { PortalCacheService } from './portal-cache.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import type { GenerateLoaParams } from '@modules/files/infrastructure/clients/file-service.client';
 import { PreviewLoaTemplateHandler, PreviewLoaTemplateQuery } from '@modules/programs/application/handlers/loa-preview.handler';
 import { LoaPreviewParticipantService } from '@modules/programs/application/services/loa-preview-participant.service';
+
+const platformAdmin = {
+  accessLevel: 5,
+  canManageAdmins: true,
+  canAssignRoles: true,
+  customPermissions: [],
+  role: { name: 'super_admin', permissions: ['platform_access'] },
+  adminBrands: [],
+  adminPrograms: [],
+};
+const parityActor = { userId: 'admin-1', email: 'a@b.c', brandId: 'brand-x', adminId: 'adm-1' } as any;
 
 describe('LOA preview/download parity', () => {
   const applicationId = 'app-parity-1';
@@ -155,11 +167,21 @@ describe('LOA preview/download parity', () => {
             resolveDocumentNumber: jest.fn().mockResolvedValue('PREVIEW/000'),
           },
         },
+        { provide: 'IProgramRepository', useValue: { findBySlug: jest.fn().mockResolvedValue({ id: programId }) } },
+        {
+          provide: PrismaReadService,
+          useValue: {
+            admin: { findUnique: jest.fn().mockResolvedValue(platformAdmin) },
+            program: {
+              findUnique: jest.fn().mockResolvedValue({ id: programId, brandId: 'brand-x', name: 'P', deletedAt: null }),
+            },
+          },
+        },
       ],
     }).compile();
     const previewHandler = previewModule.get(PreviewLoaTemplateHandler);
     await previewHandler.execute(
-      new PreviewLoaTemplateQuery(programId, '<p>ignored - source is saved</p>', {}, [], applicationId, 'saved'),
+      new PreviewLoaTemplateQuery(programId, '<p>ignored - source is saved</p>', {}, [], parityActor, applicationId, 'saved'),
     );
     const previewParams: GenerateLoaParams = previewFileServiceClient.generateLoa.mock.calls[0][0];
 

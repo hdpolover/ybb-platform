@@ -193,28 +193,6 @@ export class ProgramContentController {
     return this.deleteProgramGalleryHandler.execute(new DeleteProgramGalleryCommand(itemId, req.user.id, actor));
   }
 
-  // ---------------------------------------------------------------------------
-  // SCOPING STATUS of this controller, so the gap is not mistaken for a
-  // deliberate choice.
-  //
-  // The gallery write routes above assert the caller's programme scope via
-  // assertProgramContentAccess. The families BELOW - testimonials, faqs,
-  // resources, document templates and loa batches - do NOT, and have the
-  // identical shape: create takes the programme id from the BODY and drops the
-  // route param, and update/delete are keyed only by the item id with no
-  // programme id in the URL at all. Any admin can therefore still write to any
-  // programme's content in those families by id.
-  //
-  // Left unscoped in this pass on purpose rather than half-done: each family
-  // needs the same actor threading through its command classes, and doing them
-  // one at a time produces a state where some routes 403 and others 200 for the
-  // same admin, which reads as a flaky page rather than a bug. Tracked in the
-  // audit backlog alongside M215.
-  //
-  // If you fix one, fix them all - and assert on the id the handler ACTUALLY
-  // writes, not a parallel one from the route. See addGallery above for why.
-  // ---------------------------------------------------------------------------
-
   // --- Testimonial Endpoints ---
   @Get(':id/testimonials')
   @Public()
@@ -230,8 +208,15 @@ export class ProgramContentController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add testimonial' })
   @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
-  async addTestimonial(@Param('id') programId: string, @Body() dto: CreateProgramTestimonialDto, @Request() req: ExpressRequest & { user: { id: string } }) {
-    return this.createProgramTestimonialHandler.execute(new CreateProgramTestimonialCommand(dto, req.user.id));
+  async addTestimonial(
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramTestimonialDto,
+    @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    // Same reasoning as addGallery: the handler acts on dto.programId/dto.brandId,
+    // not this route param, so the scope check lives in the handler.
+    return this.createProgramTestimonialHandler.execute(new CreateProgramTestimonialCommand(dto, req.user.id, actor));
   }
 
   @Put('testimonials/:itemId')
@@ -240,8 +225,13 @@ export class ProgramContentController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update testimonial' })
   @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
-  async updateTestimonial(@Param('itemId') itemId: string, @Body() dto: UpdateProgramTestimonialDto, @Request() req: ExpressRequest & { user: { id: string } }) {
-    return this.updateProgramTestimonialHandler.execute(new UpdateProgramTestimonialCommand(itemId, dto, req.user.id));
+  async updateTestimonial(
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateProgramTestimonialDto,
+    @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.updateProgramTestimonialHandler.execute(new UpdateProgramTestimonialCommand(itemId, dto, req.user.id, actor));
   }
 
   @Delete('testimonials/:itemId')
@@ -250,8 +240,12 @@ export class ProgramContentController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete testimonial' })
   @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
-  async deleteTestimonial(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
-    return this.deleteProgramTestimonialHandler.execute(new DeleteProgramTestimonialCommand(itemId, req.user.id));
+  async deleteTestimonial(
+    @Param('itemId') itemId: string,
+    @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.deleteProgramTestimonialHandler.execute(new DeleteProgramTestimonialCommand(itemId, req.user.id, actor));
   }
 
   // --- FAQ Endpoints ---
@@ -269,8 +263,14 @@ export class ProgramContentController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add FAQ' })
   @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
-  async addFaq(@Param('id') programId: string, @Body() dto: CreateProgramFaqDto, @Request() req: ExpressRequest & { user: { id: string } }) {
-    return this.createProgramFaqHandler.execute(new CreateProgramFaqCommand(dto, req.user.id));
+  async addFaq(
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramFaqDto,
+    @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    // dto.programId, not this route param - see addGallery above for why.
+    return this.createProgramFaqHandler.execute(new CreateProgramFaqCommand(dto, req.user.id, actor));
   }
 
   @Put('faqs/:itemId')
@@ -279,8 +279,13 @@ export class ProgramContentController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update FAQ' })
   @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
-  async updateFaq(@Param('itemId') itemId: string, @Body() dto: UpdateProgramFaqDto, @Request() req: ExpressRequest & { user: { id: string } }) {
-    return this.updateProgramFaqHandler.execute(new UpdateProgramFaqCommand(itemId, dto, req.user.id));
+  async updateFaq(
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateProgramFaqDto,
+    @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.updateProgramFaqHandler.execute(new UpdateProgramFaqCommand(itemId, dto, req.user.id, actor));
   }
 
   @Delete('faqs/:itemId')
@@ -289,8 +294,12 @@ export class ProgramContentController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete FAQ' })
   @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
-  async deleteFaq(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
-    return this.deleteProgramFaqHandler.execute(new DeleteProgramFaqCommand(itemId, req.user.id));
+  async deleteFaq(
+    @Param('itemId') itemId: string,
+    @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.deleteProgramFaqHandler.execute(new DeleteProgramFaqCommand(itemId, req.user.id, actor));
   }
 
   // --- Resource Endpoints ---
@@ -311,12 +320,14 @@ export class ProgramContentController {
   @UseInterceptors(FileInterceptor('file', multerLimits()))
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async addResource(
-    @Param('id') programId: string, 
-    @Body() dto: CreateProgramResourceDto, 
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramResourceDto,
     @UploadedFile() file: Express.Multer.File,
-    @Request() req: ExpressRequest & { user: { id: string } }
+    @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.createProgramResourceHandler.execute(new CreateProgramResourceCommand(dto, req.user.id, file));
+    // dto.programId, not this route param - see addGallery above for why.
+    return this.createProgramResourceHandler.execute(new CreateProgramResourceCommand(dto, req.user.id, actor, file));
   }
 
   @Put('resources/:itemId')
@@ -328,12 +339,13 @@ export class ProgramContentController {
   @UseInterceptors(FileInterceptor('file', multerLimits()))
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async updateResource(
-    @Param('itemId') itemId: string, 
-    @Body() dto: UpdateProgramResourceDto, 
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateProgramResourceDto,
     @UploadedFile() file: Express.Multer.File,
-    @Request() req: ExpressRequest & { user: { id: string } }
+    @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.updateProgramResourceHandler.execute(new UpdateProgramResourceCommand(itemId, dto, req.user.id, file));
+    return this.updateProgramResourceHandler.execute(new UpdateProgramResourceCommand(itemId, dto, req.user.id, actor, file));
   }
 
   @Delete('resources/:itemId')
@@ -342,8 +354,12 @@ export class ProgramContentController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete resource' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
-  async deleteResource(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
-    return this.deleteProgramResourceHandler.execute(new DeleteProgramResourceCommand(itemId, req.user.id));
+  async deleteResource(
+    @Param('itemId') itemId: string,
+    @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.deleteProgramResourceHandler.execute(new DeleteProgramResourceCommand(itemId, req.user.id, actor));
   }
 
   // --- Document Template Endpoints ---
@@ -354,9 +370,12 @@ export class ProgramContentController {
   @ApiOperation({ summary: 'List document templates for a program' })
   async listDocumentTemplates(
     @Param('id') programId: string,
+    @CurrentUser() actor: CurrentUserData,
     @Query('type') type?: string,
   ) {
-    return this.listDocumentTemplatesHandler.execute(new ListDocumentTemplatesQuery(programId, type));
+    // Admin-only, previously unscoped: any admin could list any programme's
+    // document templates by id.
+    return this.listDocumentTemplatesHandler.execute(new ListDocumentTemplatesQuery(programId, actor, type));
   }
 
   @Post(':id/document-templates')
@@ -372,9 +391,13 @@ export class ProgramContentController {
     @Body() dto: CreateDocumentTemplateDto,
     @UploadedFile() file: Express.Multer.File | undefined,
     @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
   ) {
+    // dto.programId is stamped from the route param right here, so the two
+    // never diverge for this route - but the handler still asserts on
+    // dto.programId, matching the pattern everywhere else in this controller.
     dto.programId = programId;
-    return this.createDocumentTemplateHandler.execute(new CreateDocumentTemplateCommand(dto, req.user.id, file));
+    return this.createDocumentTemplateHandler.execute(new CreateDocumentTemplateCommand(dto, req.user.id, actor, file));
   }
 
   @Post(':id/document-templates/preview')
@@ -389,6 +412,7 @@ export class ProgramContentController {
     @Param('id') programId: string,
     @Body() dto: PreviewDocumentTemplateDto,
     @Response({ passthrough: true }) res: ExpressResponse,
+    @CurrentUser() actor: CurrentUserData,
   ) {
     const result = await this.previewLoaTemplateHandler.execute(
       new PreviewLoaTemplateQuery(
@@ -396,6 +420,7 @@ export class ProgramContentController {
         dto.htmlContent,
         dto.layoutConfig ?? {},
         dto.placeholders ?? [],
+        actor,
         dto.applicationId,
         dto.source ?? 'draft',
       ),
@@ -428,8 +453,9 @@ export class ProgramContentController {
     @Body() dto: UpdateDocumentTemplateDto,
     @UploadedFile() file: Express.Multer.File | undefined,
     @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.updateDocumentTemplateHandler.execute(new UpdateDocumentTemplateCommand(id, dto, req.user.id, file));
+    return this.updateDocumentTemplateHandler.execute(new UpdateDocumentTemplateCommand(id, dto, req.user.id, actor, file));
   }
 
   @Delete('document-templates/:itemId')
@@ -441,19 +467,34 @@ export class ProgramContentController {
   async deleteDocumentTemplate(
     @Param('itemId') id: string,
     @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.deleteDocumentTemplateHandler.execute(new DeleteDocumentTemplateCommand(id, req.user.id));
+    return this.deleteDocumentTemplateHandler.execute(new DeleteDocumentTemplateCommand(id, req.user.id, actor));
   }
 
   // --- LOA Release Batch Endpoints ---
+  //
+  // :programId here may be a program SLUG, not a UUID - the admin dashboard's
+  // useResolvedProgramId falls back to the raw route value whenever the
+  // program is not (yet, or ever, for this admin) in accessiblePrograms, and
+  // that is the normal steady state for a program-scoped admin on their own
+  // page, not just a first-load race. A controller-level @ScopedBy on this
+  // param would 404 that admin - and a super admin too, since
+  // assertProgramAccess looks the row up by id before its platform-scope
+  // short-circuit. So there is deliberately no guard decorator here: each
+  // handler in loa-batch.handlers.ts resolves the slug to an id once
+  // (resolveProgramId) and asserts on the resolved id itself.
 
   @Get(':programId/loa-batches')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List LOA release batches for a program' })
-  async getLoaBatches(@Param('programId') programId: string) {
-    return this.getLoaBatchesHandlerSvc.execute(new GetLoaBatchesQuery(programId));
+  async getLoaBatches(
+    @Param('programId') programId: string,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.getLoaBatchesHandlerSvc.execute(new GetLoaBatchesQuery(programId, actor));
   }
 
   @Get(':programId/loa-batches/:id/recipient-sends')
@@ -467,9 +508,10 @@ export class ProgramContentController {
   async getLoaBatchRecipientSends(
     @Param('programId') programId: string,
     @Param('id') batchId: string,
+    @CurrentUser() actor: CurrentUserData,
   ) {
     return this.getLoaBatchRecipientSendsHandlerSvc.execute(
-      new GetLoaBatchRecipientSendsQuery(programId, batchId),
+      new GetLoaBatchRecipientSendsQuery(programId, batchId, actor),
     );
   }
 
@@ -482,6 +524,7 @@ export class ProgramContentController {
     @Param('programId') programId: string,
     @Body() dto: CreateLoaBatchDto,
     @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
   ) {
     return this.createLoaBatchHandler.execute(
       new CreateLoaBatchCommand(
@@ -490,6 +533,7 @@ export class ProgramContentController {
         new Date(dto.submissionFrom),
         new Date(dto.submissionTo),
         req.user.id,
+        actor,
       ),
     );
   }
@@ -503,11 +547,13 @@ export class ProgramContentController {
     @Param('programId') programId: string,
     @Param('id') batchId: string,
     @Body() dto: UpdateLoaBatchDto,
+    @CurrentUser() actor: CurrentUserData,
   ) {
     return this.updateLoaBatchHandlerSvc.execute(
       new UpdateLoaBatchCommand(
         batchId,
         programId,
+        actor,
         dto.name,
         dto.submissionFrom ? new Date(dto.submissionFrom) : undefined,
         dto.submissionTo ? new Date(dto.submissionTo) : undefined,
@@ -523,8 +569,9 @@ export class ProgramContentController {
   async releaseLoaBatch(
     @Param('programId') programId: string,
     @Param('id') batchId: string,
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.releaseLoaBatchHandlerSvc.execute(new ReleaseLoaBatchCommand(batchId, programId));
+    return this.releaseLoaBatchHandlerSvc.execute(new ReleaseLoaBatchCommand(batchId, programId, actor));
   }
 
   @Post(':programId/loa-batches/:id/unrelease')
@@ -535,8 +582,9 @@ export class ProgramContentController {
   async unreleaseLoaBatch(
     @Param('programId') programId: string,
     @Param('id') batchId: string,
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.unreleaseLoaBatchHandlerSvc.execute(new UnreleaseLoaBatchCommand(batchId, programId));
+    return this.unreleaseLoaBatchHandlerSvc.execute(new UnreleaseLoaBatchCommand(batchId, programId, actor));
   }
 
   @Delete(':programId/loa-batches/:id')
@@ -547,8 +595,9 @@ export class ProgramContentController {
   async deleteLoaBatch(
     @Param('programId') programId: string,
     @Param('id') batchId: string,
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.deleteLoaBatchHandlerSvc.execute(new DeleteLoaBatchCommand(batchId, programId));
+    return this.deleteLoaBatchHandlerSvc.execute(new DeleteLoaBatchCommand(batchId, programId, actor));
   }
 
   @Get(':programId/loa-downloads')
@@ -556,7 +605,10 @@ export class ProgramContentController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List LOA download records for a program' })
-  async getLoaDownloads(@Param('programId') programId: string) {
-    return this.getLoaDownloadsHandlerSvc.execute(new GetLoaDownloadsQuery(programId));
+  async getLoaDownloads(
+    @Param('programId') programId: string,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.getLoaDownloadsHandlerSvc.execute(new GetLoaDownloadsQuery(programId, actor));
   }
 }

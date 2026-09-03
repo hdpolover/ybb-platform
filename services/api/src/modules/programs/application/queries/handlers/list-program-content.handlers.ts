@@ -3,6 +3,8 @@ import { IProgramContentRepository } from '../../../../../core/interfaces/reposi
 import { IProgramRepository } from '../../../../../core/interfaces/repositories/program.repository.interface';
 import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '@modules/files/application/private-file-url-resolver.service';
 import { detectPricingTierAlerts } from '../../services/pricing-tier-alerts.util';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { assertProgramContentAccess } from '../../utils/program-content-access.util';
 import {
     ListProgramTimelineQuery,
     ListProgramSchedulesQuery,
@@ -457,11 +459,16 @@ export class ListDocumentTemplatesHandler {
         @Inject('IProgramRepository')
         private readonly programRepository: IProgramRepository,
         private readonly privateFileUrlResolver: PrivateFileUrlResolver,
+        private readonly prismaRead: PrismaReadService,
     ) { }
 
     async execute(query: ListDocumentTemplatesQuery) {
         const programId = await resolveProgramId(this.programRepository, query.programId);
         if (!programId) return [];
+
+        // Admin-only route (@Roles), previously unscoped: any admin could list
+        // any programme's document templates by id.
+        await assertProgramContentAccess(this.prismaRead, query.actor, programId);
 
         const templates = await this.repository.findDocumentTemplatesByProgramId(programId, query.type);
         return Promise.all(

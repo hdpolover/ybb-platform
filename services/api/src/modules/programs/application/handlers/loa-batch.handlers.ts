@@ -1,8 +1,10 @@
 import { CommandHandler, ICommandHandler, QueryHandler, IQueryHandler } from '@nestjs/cqrs';
 import { BadRequestException, ConflictException, Inject, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { IUserNotificationRepository } from '@core/interfaces/repositories/user-notification.repository.interface';
+import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { UserNotification } from '@core/entities/user-notification.entity';
 import { LoaBatchReleasedPayload, LoaBatchReleasedRecipient } from '../../../../common/types/events';
 import { LoaReleaseBatchRepository } from '../../infrastructure/persistence/loa-release-batch.repository';
@@ -22,6 +24,30 @@ import {
 import { LoaRecipientSendResponseDto } from '../dto/loa-batch.dto';
 import { ACTIVE_PARTICIPANT_WHERE } from '@shared/utils/active-participant.filter';
 import { Prisma } from '@prisma/client';
+import { assertProgramContentAccess } from '../../application/utils/program-content-access.util';
+
+// ─── Program id/slug resolution ────────────────────────────────────────────────
+// The admin dashboard's route param is frequently a program SLUG, not a UUID
+// (useResolvedProgramId falls back to the raw route value whenever the program
+// is not in the caller's accessiblePrograms - the normal steady state for a
+// program-scoped admin viewing their own program, not just a first-paint race).
+// A controller-level assertion on the raw param would 404 that admin - and a
+// super admin too, since assertProgramAccess looks the row up by id before its
+// platform-scope short-circuit. Resolved once per handler, then used for both
+// the scope check and the rest of the handler's own queries - the batch
+// handlers below previously compared existing.programId to the raw route value
+// throughout, which already 404'd on a slug for update/release/unrelease/delete
+// today; this fixes that same bug while adding the scope check.
+async function resolveProgramId(
+  repo: IProgramRepository,
+  identifier: string,
+): Promise<string | null> {
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+  if (isUUID) return identifier;
+
+  const program = await repo.findBySlug(identifier);
+  return program ? program.id : null;
+}
 
 // The uncovered-applicant list rides along with every LOA batch read, so it is
 // capped for payload size; the count returned beside it is the true total.
@@ -43,10 +69,21 @@ const LOA_DOCUMENT_TYPE = 'letter_of_acceptance';
 
 @CommandHandler(CreateLoaBatchCommand)
 export class CreateLoaBatchHandler implements ICommandHandler<CreateLoaBatchCommand> {
-  constructor(private readonly batchRepo: LoaReleaseBatchRepository) {}
+  constructor(
+    private readonly batchRepo: LoaReleaseBatchRepository,
+    @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+    private readonly prismaRead: PrismaReadService,
+  ) {}
 
   async execute(command: CreateLoaBatchCommand) {
-    const { programId, name, adminUserId } = command;
+    const { name, adminUserId } = command;
+
+    const programId = await resolveProgramId(this.programRepository, command.programId);
+    if (!programId) {
+      throw new NotFoundException(`Program ${command.programId} not found`);
+    }
+    await assertProgramContentAccess(this.prismaRead, command.actor, programId);
+
     const submissionFrom = startOfWibDay(command.submissionFrom);
     const submissionTo = endOfWibDay(command.submissionTo);
 
@@ -67,10 +104,21 @@ export class CreateLoaBatchHandler implements ICommandHandler<CreateLoaBatchComm
 
 @CommandHandler(UpdateLoaBatchCommand)
 export class UpdateLoaBatchHandler implements ICommandHandler<UpdateLoaBatchCommand> {
-  constructor(private readonly batchRepo: LoaReleaseBatchRepository) {}
+  constructor(
+    private readonly batchRepo: LoaReleaseBatchRepository,
+    @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+    private readonly prismaRead: PrismaReadService,
+  ) {}
 
   async execute(command: UpdateLoaBatchCommand) {
-    const { batchId, programId, name } = command;
+    const { batchId, name } = command;
+
+    const programId = await resolveProgramId(this.programRepository, command.programId);
+    if (!programId) {
+      throw new NotFoundException('Batch not found');
+    }
+    await assertProgramContentAccess(this.prismaRead, command.actor, programId);
+
     const submissionFrom = command.submissionFrom ? startOfWibDay(command.submissionFrom) : undefined;
     const submissionTo = command.submissionTo ? endOfWibDay(command.submissionTo) : undefined;
 
@@ -109,11 +157,19 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
     private readonly recipientSendRepo: LoaBatchRecipientSendRepository,
     @Inject(IUserNotificationRepository)
     private readonly userNotificationRepository: IUserNotificationRepository,
+    @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+    private readonly prismaRead: PrismaReadService,
   ) {}
 
   async execute(command: ReleaseLoaBatchCommand) {
+    const programId = await resolveProgramId(this.programRepository, command.programId);
+    if (!programId) {
+      throw new NotFoundException('Batch not found');
+    }
+    await assertProgramContentAccess(this.prismaRead, command.actor, programId);
+
     const existing = await this.batchRepo.findById(command.batchId);
-    if (!existing || existing.programId !== command.programId) {
+    if (!existing || existing.programId !== programId) {
       throw new NotFoundException('Batch not found');
     }
 
@@ -278,11 +334,21 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
 
 @CommandHandler(UnreleaseLoaBatchCommand)
 export class UnreleaseLoaBatchHandler implements ICommandHandler<UnreleaseLoaBatchCommand> {
-  constructor(private readonly batchRepo: LoaReleaseBatchRepository) {}
+  constructor(
+    private readonly batchRepo: LoaReleaseBatchRepository,
+    @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+    private readonly prismaRead: PrismaReadService,
+  ) {}
 
   async execute(command: UnreleaseLoaBatchCommand) {
+    const programId = await resolveProgramId(this.programRepository, command.programId);
+    if (!programId) {
+      throw new NotFoundException('Batch not found');
+    }
+    await assertProgramContentAccess(this.prismaRead, command.actor, programId);
+
     const batch = await this.batchRepo.findById(command.batchId);
-    if (!batch || batch.programId !== command.programId) {
+    if (!batch || batch.programId !== programId) {
       throw new NotFoundException('Batch not found');
     }
     return this.batchRepo.unrelease(command.batchId);
@@ -291,11 +357,21 @@ export class UnreleaseLoaBatchHandler implements ICommandHandler<UnreleaseLoaBat
 
 @CommandHandler(DeleteLoaBatchCommand)
 export class DeleteLoaBatchHandler implements ICommandHandler<DeleteLoaBatchCommand> {
-  constructor(private readonly batchRepo: LoaReleaseBatchRepository) {}
+  constructor(
+    private readonly batchRepo: LoaReleaseBatchRepository,
+    @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+    private readonly prismaRead: PrismaReadService,
+  ) {}
 
   async execute(command: DeleteLoaBatchCommand) {
+    const programId = await resolveProgramId(this.programRepository, command.programId);
+    if (!programId) {
+      throw new NotFoundException('Batch not found');
+    }
+    await assertProgramContentAccess(this.prismaRead, command.actor, programId);
+
     const batch = await this.batchRepo.findById(command.batchId);
-    if (!batch || batch.programId !== command.programId) {
+    if (!batch || batch.programId !== programId) {
       throw new NotFoundException('Batch not found');
     }
     return this.batchRepo.softDelete(command.batchId);
@@ -309,10 +385,19 @@ export class GetLoaBatchesHandler implements IQueryHandler<GetLoaBatchesQuery> {
   constructor(
     private readonly batchRepo: LoaReleaseBatchRepository,
     private readonly prisma: PrismaService,
+    @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+    private readonly prismaRead: PrismaReadService,
   ) {}
 
   async execute(query: GetLoaBatchesQuery) {
-    const batches = await this.batchRepo.findByProgram(query.programId);
+    // Admin-only route (@Roles), previously unscoped, and previously degraded
+    // silently to an empty list for a slug (findByProgram never matched). Now
+    // resolved once and used throughout.
+    const programId = await resolveProgramId(this.programRepository, query.programId);
+    if (!programId) return [];
+    await assertProgramContentAccess(this.prismaRead, query.actor, programId);
+
+    const batches = await this.batchRepo.findByProgram(programId);
 
     return Promise.all(
       batches.map(async (batch) => {
@@ -320,7 +405,7 @@ export class GetLoaBatchesHandler implements IQueryHandler<GetLoaBatchesQuery> {
           // Eligible: submitted or accepted applications whose submittedAt falls within batch window
           this.prisma.participantApplication.count({
             where: {
-              programId: query.programId,
+              programId,
               status: { in: ['submitted', 'accepted'] },
               submittedAt: { gte: batch.submissionFrom, lte: batch.submissionTo },
             },
@@ -342,13 +427,21 @@ export class GetLoaBatchesHandler implements IQueryHandler<GetLoaBatchesQuery> {
 
 @QueryHandler(GetLoaDownloadsQuery)
 export class GetLoaDownloadsHandler implements IQueryHandler<GetLoaDownloadsQuery> {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+    private readonly prismaRead: PrismaReadService,
+  ) {}
 
   async execute(query: GetLoaDownloadsQuery) {
+    const programId = await resolveProgramId(this.programRepository, query.programId);
+    if (!programId) return [];
+    await assertProgramContentAccess(this.prismaRead, query.actor, programId);
+
     const docs = await this.prisma.participantDocument.findMany({
       where: {
         type: LOA_DOCUMENT_TYPE,
-        application: { programId: query.programId },
+        application: { programId },
       },
       include: {
         application: {
@@ -384,17 +477,25 @@ export class GetLoaBatchRecipientSendsHandler
     private readonly batchRepo: LoaReleaseBatchRepository,
     private readonly recipientSendRepo: LoaBatchRecipientSendRepository,
     private readonly prisma: PrismaService,
+    @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+    private readonly prismaRead: PrismaReadService,
   ) {}
 
   async execute(query: GetLoaBatchRecipientSendsQuery) {
+    const programId = await resolveProgramId(this.programRepository, query.programId);
+    if (!programId) {
+      throw new NotFoundException('Batch not found');
+    }
+    await assertProgramContentAccess(this.prismaRead, query.actor, programId);
+
     const batch = await this.batchRepo.findById(query.batchId);
-    if (!batch || batch.programId !== query.programId) {
+    if (!batch || batch.programId !== programId) {
       throw new NotFoundException('Batch not found');
     }
 
     const [sends, uncovered] = await Promise.all([
       this.recipientSendRepo.findByBatch(query.batchId),
-      this.summariseUncoveredParticipants(query.programId),
+      this.summariseUncoveredParticipants(programId),
     ]);
 
     const recipients = await this.attachParticipantNames(sends);
