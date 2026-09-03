@@ -254,6 +254,21 @@ export class SupportAccessService {
         roles: [],
         sid: sessionToken,
         type: 'access',
+        // Who is really behind this session, and under which ticket.
+        //
+        // Without these the token is indistinguishable from the participant's
+        // own: audit-trail.interceptor resolves the actor as
+        // `user?.adminId || user?.userId`, and an impersonation token carries no
+        // adminId - so every action taken while impersonating was recorded as
+        // the participant, with no way to reach the admin who performed it. As
+        // of 2026-09-04 that had happened across 228 redeemed tickets.
+        //
+        // Deliberately NOT named `adminId`. That claim grants admin identity
+        // elsewhere (admin-refresh.handler requires isAdmin + adminId + sid),
+        // and this session must stay a participant session - it only needs to
+        // be ATTRIBUTABLE to an admin, not to become one.
+        impersonatedByAdminId: ticket.adminId,
+        impersonationTicketId: ticket.id,
       },
       { expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h') },
     );

@@ -16,6 +16,12 @@ export interface JwtPayload {
   adminId?: string; // Admin ID
   sid?: string; // Session ID for refresh/logout coordination
   type?: 'access' | 'refresh'; // Which half of the pair this token is
+  // Present only on an admin-impersonation session. Names the admin behind a
+  // participant session so their actions stay attributable. Deliberately not
+  // `adminId`: this session must remain a participant session, and adminId
+  // grants admin identity elsewhere.
+  impersonatedByAdminId?: string;
+  impersonationTicketId?: string;
 }
 
 /**
@@ -194,6 +200,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       sid: payload.sid,
       role: payload.roles || [], // Map roles to role for RolesGuard compatibility
       adminId: payload.adminId,
+      // Present only on an admin-impersonation session. Carried through so the
+      // audit trail can name the admin behind a participant action. These do
+      // NOT confer admin identity - see support-access.service for why they are
+      // not called adminId.
+      impersonatedByAdminId: payload.impersonatedByAdminId,
+      impersonationTicketId: payload.impersonationTicketId,
     };
   }
 }
