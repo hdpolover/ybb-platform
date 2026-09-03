@@ -1,9 +1,18 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { EyeIcon } from "@heroicons/react/24/solid";
 import { ScoreStatusBadge } from "./ScoreStatusBadge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/src/ui/dialog";
+import { Button } from "@/src/ui/button";
 
 export interface FullyFundedParticipantRow {
   id: number;
@@ -13,6 +22,10 @@ export interface FullyFundedParticipantRow {
   participantId: string;
   nationality: string;
   formStatus: "Not Started" | "On Progress" | "Submitted";
+  /** Raw application status, e.g. "draft" — gates the force-submit action. */
+  status: string;
+  /** Raw registration payment status, e.g. "paid" — gates the force-submit action. */
+  registrationPaymentStatus: string;
   registeredOn: string;
   /** Essay-completeness summary from the list endpoint (see Application.essayFilled). */
   essayFilled?: "filled" | "partial" | "empty";
@@ -28,6 +41,10 @@ interface FullyFundedParticipantsTableProps {
   /** Total row count across all pages, from the server response. */
   total: number;
   onPageChange: (page: number) => void;
+  /** Force-submits the row's application on the participant's behalf. */
+  onForceSubmit: (row: FullyFundedParticipantRow) => Promise<void>;
+  /** accountId of the row currently being submitted, if any. */
+  submittingId: string | null;
 }
 
 export function FullyFundedParticipantsTable({
@@ -36,10 +53,13 @@ export function FullyFundedParticipantsTable({
   pageSize,
   total,
   onPageChange,
+  onForceSubmit,
+  submittingId,
 }: FullyFundedParticipantsTableProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const [confirmRow, setConfirmRow] = useState<FullyFundedParticipantRow | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const startIndex = (page - 1) * pageSize;
@@ -132,6 +152,17 @@ export function FullyFundedParticipantsTable({
                         >
                           <EyeIcon className="h-4 w-4" />
                         </button>
+                        {row.status === "draft" && row.registrationPaymentStatus === "paid" && (
+                          <button
+                            type="button"
+                            title="Submit on participant's behalf"
+                            disabled={submittingId === row.accountId}
+                            className="rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-600 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => setConfirmRow(row)}
+                          >
+                            {submittingId === row.accountId ? "Submitting…" : "Force Submit"}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -166,6 +197,33 @@ export function FullyFundedParticipantsTable({
           </button>
         </div>
       </div>
+
+      <Dialog open={confirmRow !== null} onOpenChange={(open) => !open && setConfirmRow(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Submit application on participant&apos;s behalf?</DialogTitle>
+            <DialogDescription>
+              {confirmRow &&
+                `This locks ${confirmRow.name}'s application from further edits and moves it into the scoring queue. Use this only after the deadline has passed.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmRow(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!confirmRow) return;
+                const row = confirmRow;
+                setConfirmRow(null);
+                await onForceSubmit(row);
+              }}
+            >
+              Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

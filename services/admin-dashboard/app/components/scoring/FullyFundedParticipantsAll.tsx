@@ -2,9 +2,10 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryStates } from "nuqs";
+import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
-import { listApplications, exportApplicationsExcel, type Application } from "@/src/shared/api-client";
+import { listApplications, exportApplicationsExcel, submitApplication, type Application } from "@/src/shared/api-client";
 import {
   FullyFundedParticipantsFilters,
   MIN_PAGE_SIZE,
@@ -14,6 +15,7 @@ import {
   type FullyFundedSortOrder,
   type FullyFundedStatusFilter,
   type FullyFundedScoreStatusFilter,
+  type FullyFundedRegistrationPaymentStatusFilter,
 } from "./FullyFundedParticipantsFilters";
 import { fullyFundedFilterParsers } from "./fullyFundedFilterParsers";
 import { FullyFundedParticipantsTable, type FullyFundedParticipantRow } from "./FullyFundedParticipantsTable";
@@ -22,6 +24,9 @@ import { formatDate } from "@/lib/utils";
 
 interface FullyFundedParticipantsAllProps {
   programId: string;
+  /** Which application category this queue lists — reused for both the
+   *  fully-funded reviewer queue and the self-funded spot-check tab. */
+  category: "fully_funded" | "self_funded";
 }
 
 /** Clamps a URL-sourced page size to [MIN_PAGE_SIZE, MAX_PAGE_SIZE] — a user can hand-edit the query string. */
@@ -30,7 +35,7 @@ function clampPageSize(value: number): number {
   return Math.min(Math.max(Math.floor(value), MIN_PAGE_SIZE), MAX_PAGE_SIZE);
 }
 
-export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipantsAllProps) {
+export function FullyFundedParticipantsAll({ programId, category }: FullyFundedParticipantsAllProps) {
   const { accessiblePrograms } = useAuth();
   const resolvedProgramId = useResolvedProgramId(programId);
   const resolvedBrandId = useMemo(
@@ -42,7 +47,7 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
   );
 
   const [filters, setFilters] = useQueryStates(fullyFundedFilterParsers);
-  const { search, status, scoreStatus, sortBy, sortOrder, page } = filters;
+  const { search, status, scoreStatus, registrationPaymentStatus, sortBy, sortOrder, page } = filters;
   const pageSize = clampPageSize(filters.pageSize);
 
   const [items, setItems] = useState<Application[]>([]);
@@ -51,6 +56,7 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!resolvedProgramId) return;
@@ -59,9 +65,10 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
     try {
       const res = await listApplications({
         programId: resolvedProgramId,
-        category: "fully_funded",
+        category,
         status: status === "all" ? undefined : status,
         scoreStatus: scoreStatus === "all" ? undefined : scoreStatus,
+        registrationPaymentStatus: registrationPaymentStatus === "all" ? undefined : registrationPaymentStatus,
         search: search || undefined,
         sortBy,
         sortOrder,
@@ -75,7 +82,7 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
     } finally {
       setLoading(false);
     }
-  }, [resolvedProgramId, search, status, scoreStatus, sortBy, sortOrder, page, pageSize]);
+  }, [resolvedProgramId, category, search, status, scoreStatus, registrationPaymentStatus, sortBy, sortOrder, page, pageSize]);
 
   useEffect(() => {
     void fetchData();
@@ -100,6 +107,11 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
   );
   const handleScoreStatusChange = useCallback(
     (value: FullyFundedScoreStatusFilter) => void setFilters({ scoreStatus: value, page: 1 }),
+    [setFilters],
+  );
+  const handleRegistrationPaymentStatusChange = useCallback(
+    (value: FullyFundedRegistrationPaymentStatusFilter) =>
+      void setFilters({ registrationPaymentStatus: value, page: 1 }),
     [setFilters],
   );
   const handleSortByChange = useCallback(
@@ -127,9 +139,10 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
       await exportApplicationsExcel({
         brandId: resolvedBrandId,
         programId: resolvedProgramId,
-        category: "fully_funded",
+        category,
         status: status === "all" ? undefined : status,
         scoreStatus: scoreStatus === "all" ? undefined : scoreStatus,
+        registrationPaymentStatus: registrationPaymentStatus === "all" ? undefined : registrationPaymentStatus,
         search: search || undefined,
       });
     } catch (err) {
@@ -138,6 +151,25 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
       setExporting(false);
     }
   };
+
+  // Force-submit on the participant's behalf once the deadline has passed —
+  // submit is only an edit-lock and must not block scoring eligibility.
+  // Gated in the table to draft + paid applications only.
+  const handleForceSubmit = useCallback(
+    async (row: FullyFundedParticipantRow) => {
+      setSubmittingId(row.accountId);
+      try {
+        await submitApplication(row.accountId, row.participantId);
+        toast.success("Application submitted successfully.");
+        await fetchData();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to submit application.");
+      } finally {
+        setSubmittingId(null);
+      }
+    },
+    [fetchData],
+  );
 
   const rows: FullyFundedParticipantRow[] = items.map((app, index) => ({
     id: index + 1,
@@ -148,6 +180,8 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
     nationality:
       app.participant?.nationality ?? app.participant?.originCountry ?? "",
     formStatus: mapFormStatus(app.status),
+    status: app.status,
+    registrationPaymentStatus: app.registrationPaymentStatus,
     registeredOn: formatDate(app.createdAt),
     essayFilled: app.essayFilled,
     scoreTotal: app.scoreTotal,
@@ -183,6 +217,8 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
         onStatusChange={handleStatusChange}
         scoreStatus={scoreStatus}
         onScoreStatusChange={handleScoreStatusChange}
+        registrationPaymentStatus={registrationPaymentStatus}
+        onRegistrationPaymentStatusChange={handleRegistrationPaymentStatusChange}
         sortBy={sortBy}
         sortOrder={sortOrder}
         onSortByChange={handleSortByChange}
@@ -204,6 +240,8 @@ export function FullyFundedParticipantsAll({ programId }: FullyFundedParticipant
           pageSize={pageSize}
           total={total}
           onPageChange={handlePageChange}
+          onForceSubmit={handleForceSubmit}
+          submittingId={submittingId}
         />
       )}
     </section>
