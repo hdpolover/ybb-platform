@@ -116,9 +116,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // The check works by lifetime: an untyped token that outlives every access
     // token can only be a legacy refresh token. If the longest access TTL
     // reaches the refresh TTL there is no gap left to detect, so the check is
-    // live but can never fire. That is exactly the shape of the dev and
-    // staging env files (JWT_EXPIRES_IN=7d), and it is worth saying out loud
-    // rather than looking like protection that is not there.
+    // live but can never fire.
+    //
+    // No environment is in that state today. .env, .env.staging and .env.prod
+    // all set JWT_EXPIRES_IN=1h and JWT_REFRESH_EXPIRES_IN=7d; only .env.prod
+    // sets JWT_ADMIN_EXPIRES_IN (8h), so the other two take the 8h default
+    // here. 8h < 7d either way, and this warning stays quiet. It is here to
+    // catch someone widening an access TTL later without noticing they turned
+    // the check into decoration.
     if (refresh.seconds === undefined || maxAccess >= refresh.seconds) {
       JwtStrategy.logger.warn(
         `JWT_EXPIRES_IN/JWT_ADMIN_EXPIRES_IN (longest ${maxAccess}s) is not shorter than ` +
