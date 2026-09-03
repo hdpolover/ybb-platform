@@ -5,7 +5,13 @@ import { useQueryStates } from "nuqs";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
-import { listApplications, exportApplicationsExcel, submitApplication, type Application } from "@/src/shared/api-client";
+import {
+  listApplications,
+  exportApplicationsExcel,
+  submitApplication,
+  switchApplicationCategory,
+  type Application,
+} from "@/src/shared/api-client";
 import {
   FullyFundedParticipantsFilters,
   MIN_PAGE_SIZE,
@@ -57,6 +63,7 @@ export function FullyFundedParticipantsAll({ programId, category }: FullyFundedP
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!resolvedProgramId) return;
@@ -171,6 +178,26 @@ export function FullyFundedParticipantsAll({ programId, category }: FullyFundedP
     [fetchData],
   );
 
+  // Fixes an applicant who registered under the wrong category. The API
+  // requires a reason to move an application whose registration fee is already
+  // paid, which is the normal case in this queue.
+  const handleSwitchCategory = useCallback(
+    async (row: FullyFundedParticipantRow, reason: string) => {
+      const target = category === "fully_funded" ? "self_funded" : "fully_funded";
+      setSwitchingId(row.accountId);
+      try {
+        await switchApplicationCategory(row.accountId, target, reason);
+        toast.success(`Moved to ${target === "fully_funded" ? "Fully Funded" : "Self Funded"}.`);
+        await fetchData();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to switch category.");
+      } finally {
+        setSwitchingId(null);
+      }
+    },
+    [category, fetchData],
+  );
+
   const rows: FullyFundedParticipantRow[] = items.map((app, index) => ({
     id: index + 1,
     accountId: app.id,
@@ -242,6 +269,9 @@ export function FullyFundedParticipantsAll({ programId, category }: FullyFundedP
           onPageChange={handlePageChange}
           onForceSubmit={handleForceSubmit}
           submittingId={submittingId}
+          onSwitchCategory={handleSwitchCategory}
+          category={category}
+          switchingId={switchingId}
         />
       )}
     </section>

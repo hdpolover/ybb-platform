@@ -98,6 +98,57 @@ describe('SwitchApplicationCategoryHandler', () => {
     },
   });
 
+  const paidApplication = () => ({
+    ...buildApplication([
+      { startDate: new Date(Date.now() - 86400000), endDate: new Date(Date.now() + 86400000) },
+    ]),
+    registrationPaymentStatus: 'paid',
+  });
+
+  it('rejects an admin switching a paid application without a reason', async () => {
+    mockPrisma.participantApplication.findUnique.mockResolvedValue(paidApplication());
+
+    await expect(
+      handler.execute(
+        new SwitchApplicationCategoryCommand(
+          'app-1',
+          'fully_funded' as ApplicationCategory,
+          'admin-user',
+          'admin-1',
+        ),
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('lets an admin switch someone else\'s paid application when a reason is given', async () => {
+    mockPrisma.participantApplication.findUnique.mockResolvedValue(paidApplication());
+    mockTx.participantApplication.update.mockResolvedValue({ id: 'app-1', applicationCategory: 'fully_funded' });
+
+    await handler.execute(
+      new SwitchApplicationCategoryCommand(
+        'app-1',
+        'fully_funded' as ApplicationCategory,
+        'admin-user',
+        'admin-1',
+        'Registered Self Funded by mistake',
+      ),
+    );
+
+    expect(mockTx.participantApplication.update).toHaveBeenCalled();
+  });
+
+  it('still refuses a participant acting on an application that is not theirs', async () => {
+    mockPrisma.participantApplication.findUnique.mockResolvedValue(
+      buildApplication([{ startDate: new Date(Date.now() - 86400000), endDate: new Date(Date.now() + 86400000) }]),
+    );
+
+    await expect(
+      handler.execute(
+        new SwitchApplicationCategoryCommand('app-1', 'fully_funded' as ApplicationCategory, 'someone-else'),
+      ),
+    ).rejects.toThrow();
+  });
+
   it('throws FULLY_FUNDED_REGISTRATION_CLOSED when switching to fully_funded after all FF windows ended', async () => {
     mockPrisma.participantApplication.findUnique.mockResolvedValue(
       buildApplication([
