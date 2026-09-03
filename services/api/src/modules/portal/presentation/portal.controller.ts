@@ -3,7 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { Readable } from 'stream';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PortalReceiptService } from '../application/services/portal-receipt.service';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { QueryBus, CommandBus } from '@nestjs/cqrs';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
@@ -440,11 +440,16 @@ export class PortalController {
     @ApiOperation({ summary: 'Download the participant LOA PDF on-demand (gated by release batch)' })
     @ApiResponse({ status: 200, description: 'PDF binary stream' })
     @ApiResponse({ status: 403, description: 'Not eligible — no released batch covers this participant' })
-    async downloadLoa(@CurrentUser() user: CurrentUserData): Promise<StreamableFile> {
+    @ApiQuery({ name: 'programId', required: false, description: 'Required only when more than one programme has a letter available' })
+    @ApiResponse({ status: 409, description: 'More than one programme is eligible - resend with programId' })
+    async downloadLoa(
+        @CurrentUser() user: CurrentUserData,
+        @Query('programId') programId?: string,
+    ): Promise<StreamableFile> {
         const { userId, brandId } = user;
         if (!userId) throw new UnauthorizedException();
 
-        const { buffer, filename } = await this.loaDownloadService.downloadLoa(userId, brandId);
+        const { buffer, filename } = await this.loaDownloadService.downloadLoa(userId, brandId, programId);
 
         return new StreamableFile(buffer, {
             type: 'application/pdf',
