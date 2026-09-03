@@ -57,6 +57,68 @@ import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
 import { ClientIp } from '../../../shared/decorators/client-ip.decorator';
 import { clientIpTracker, emailTracker } from '../../../shared/infrastructure/throttler/user-aware-throttler.guard';
 
+const FIFTEEN_MINUTES = 900000;
+const ONE_HOUR = 3600000;
+
+/**
+ * WHY THE PER-IP CEILINGS ARE LOOSE, AND WHY THAT IS THE RIGHT CALL.
+ *
+ * An IP is a BUILDING, not a person. A 40-seat school lab, a university, an
+ * Indonesian carrier's CGNAT pool and one office all present as a single
+ * address, and on a deadline day they all hit these routes at once. Sizing the
+ * IP tier as if it were a per-user budget is what produced the ThrottlerException
+ * reports on 2026-08-31: the Nth person through the door got locked out for the
+ * rest of the window for doing nothing wrong.
+ *
+ * The IP tier does not have to bound per-account guessing, because two other
+ * things already do, and they are the ones that actually fit the threat:
+ *
+ *   - the per-MAILBOX tier below (5 login attempts / 15 min for one address,
+ *     10 mails / hour for one address), which an attacker cannot dodge by
+ *     changing hosts, and
+ *   - MAX_FAILED_LOGIN_ATTEMPTS (account-lockout.constants.ts), which locks the
+ *     account itself after 5 failures.
+ *
+ * So the IP tier only has to stop a single-host SPRAY — one attacker walking
+ * many accounts from one address — not bound a building. At 600 per 15 minutes
+ * that attacker gets ~40 login attempts a minute and every account they touch
+ * still hits the 5-per-mailbox wall first. That is the trade the user chose:
+ * loose enough that no legitimate building is ever locked out, tight enough
+ * that one host cannot run a sweep at machine speed.
+ */
+const CREDENTIAL_THROTTLE = {
+  // 600 per 15 min per client IP (a building), ANDed with
+  // 5 per 15 min per mailbox (the per-account guessing budget).
+  // The guard evaluates every configured throttler and requires all to pass.
+  default: { limit: 600, ttl: FIFTEEN_MINUTES, getTracker: clientIpTracker },
+  long: { limit: 5, ttl: FIFTEEN_MINUTES, getTracker: emailTracker },
+};
+
+/**
+ * Mail-sending routes: the MAILBOX is the resource being protected, so that is
+ * the tight tier. One address gets one mail allowance whoever asks, which is
+ * safe to key on the caller-written body HERE and only here.
+ *
+ * The IP tier beside it exists so one host cannot mint unlimited buckets by
+ * varying the address it sends, and is sized for a building for the reasons
+ * above — a lab full of students registering together is normal traffic.
+ */
+const MAILBOX_THROTTLE = {
+  default: { limit: 10, ttl: ONE_HOUR, getTracker: emailTracker },
+  long: { limit: 300, ttl: ONE_HOUR, getTracker: clientIpTracker },
+};
+
+/**
+ * Routes that carry an opaque token and no email, so there is no mailbox tier
+ * to pin and they are per-IP whether we like it or not — which makes them
+ * per-BUILDING. A tight cap here buys nothing and costs lockouts: nobody
+ * guesses a 32-byte token, and nobody forges a Firebase-signed one either, so
+ * a small-looking number is not protecting anything. All it does is lock a lab
+ * out of finishing their signups. Sized to match the credential IP tier above,
+ * for the same reason.
+ */
+const TOKEN_ROUTE_THROTTLE = { default: { limit: 600, ttl: FIFTEEN_MINUTES } };
+
 @ApiTags('auth')
 @Controller('auth')
 @ApiHeader({
@@ -86,7 +148,11 @@ export class AuthController {
 
   @Public()
   @Post('firebase-login')
-  @Throttle({ default: { limit: 20, ttl: 900000 } }) // Higher limit than login
+  // Carries a Firebase idToken, no email; see TOKEN_ROUTE_THROTTLE. 20/15min
+  // was the same lockout shape as the credential routes below — a lab doing
+  // Google sign-in exhausted it before lunch and everyone on that address got
+  // a 429 for the rest of the window.
+  @Throttle(TOKEN_ROUTE_THROTTLE)
   @ApiOperation({ summary: 'Login/Register with Firebase Token (Google, Apple, etc.)' })
   @ApiResponse({ status: 200, description: 'User successfully logged in or registered', type: AuthResponseDto })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
@@ -112,22 +178,11 @@ export class AuthController {
 
   @Public()
   @Post('login')
-  // Two ceilings, both must pass (the guard evaluates every configured
-  // throttler and ANDs the results).
-  //
-  //   default -> 60 per 15 min per client IP. Sized for a BUILDING, not a
-  //     person: a school lab or a carrier-grade NAT is one address, and the
-  //     old 5-per-15-min bucket locked the sixth student out for an hour.
-  //   long    -> 5 per 15 min per mailbox. The per-account guessing budget,
-  //     unchanged.
-  //
-  // The email tier alone (what this route used to have) is not a limit at all
-  // on a credential route: the caller writes the body, so spraying one
-  // password across many accounts never touches the same bucket twice.
-  @Throttle({
-    default: { limit: 60, ttl: 900000, getTracker: clientIpTracker },
-    long: { limit: 5, ttl: 900000, getTracker: emailTracker },
-  })
+  // Two ceilings, both must pass. See CREDENTIAL_THROTTLE for the sizing
+  // argument. The email tier ALONE (what this route used to have) is not a
+  // limit at all on a credential route: the caller writes the body, so spraying
+  // one password across many accounts never touches the same bucket twice.
+  @Throttle(CREDENTIAL_THROTTLE)
   @ApiOperation({ summary: 'Login User' })
   @ApiResponse({ status: 200, description: 'User successfully logged in', type: AuthResponseDto })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
@@ -152,11 +207,8 @@ export class AuthController {
 
   @Public()
   @Post('ambassador-login')
-  // Same two-ceiling shape as /login; see the note there.
-  @Throttle({
-    default: { limit: 60, ttl: 900000, getTracker: clientIpTracker },
-    long: { limit: 5, ttl: 900000, getTracker: emailTracker },
-  })
+  // Same two ceilings as /login; see CREDENTIAL_THROTTLE.
+  @Throttle(CREDENTIAL_THROTTLE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Ambassador Login (email + referral code)' })
   @ApiResponse({ status: 200, description: 'Ambassador successfully logged in', type: AuthResponseDto })
@@ -179,12 +231,9 @@ export class AuthController {
 
   @Public()
   @Post('admin/login')
-  // Same two-ceiling shape as /login; see the note there. Admins share an
+  // Same two ceilings as /login; see CREDENTIAL_THROTTLE. Admins share an
   // office IP as readily as students share a lab one.
-  @Throttle({
-    default: { limit: 60, ttl: 900000, getTracker: clientIpTracker },
-    long: { limit: 5, ttl: 900000, getTracker: emailTracker },
-  })
+  @Throttle(CREDENTIAL_THROTTLE)
   @ApiOperation({ summary: 'Admin Login' })
   @ApiResponse({ status: 200, description: 'Admin successfully logged in', type: AdminAuthResponseDto })
   async adminLogin(
@@ -204,7 +253,9 @@ export class AuthController {
 
   @Public()
   @Post('admin/refresh')
-  @Throttle({ default: { limit: 20, ttl: 900000 } })
+  // Carries a refresh token, no email, so this is per-IP — i.e. per OFFICE.
+  // 20 was a per-person number applied to a building; see TOKEN_ROUTE_THROTTLE.
+  @Throttle(TOKEN_ROUTE_THROTTLE)
   @ApiOperation({ summary: 'Refresh Admin Session' })
   @ApiResponse({ status: 200, description: 'Admin tokens refreshed successfully', type: AdminAuthResponseDto })
   async adminRefresh(@Body() dto: AdminRefreshDto): Promise<AdminAuthResponseDto> {
@@ -213,19 +264,8 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  // Two ceilings, both must pass.
-  //
-  //   default -> 10 per hour per mailbox. This is the budget the limit was
-  //     always meant to express: one address, one mail allowance, whoever
-  //     asks. It is safe HERE, and only here, because the address IS the
-  //     resource being protected.
-  //   long    -> 60 per hour per client IP. Sized for a building, so a lab
-  //     full of students registering together fits, while one host cannot mint
-  //     unlimited buckets by varying the address it sends.
-  @Throttle({
-    default: { limit: 10, ttl: 3600000, getTracker: emailTracker },
-    long: { limit: 60, ttl: 3600000, getTracker: clientIpTracker },
-  })
+  // 10/hour per mailbox AND 300/hour per IP; see MAILBOX_THROTTLE.
+  @Throttle(MAILBOX_THROTTLE)
   @ApiOperation({
     summary: 'Register User',
     description: `
@@ -268,7 +308,7 @@ export class AuthController {
   // default tracker, so nothing extra is needed here. This used to name
   // clientIpTracker explicitly because the guard keyed anonymous traffic on
   // body.email, which handed every guess a fresh bucket. That is gone.
-  @Throttle({ default: { limit: 3, ttl: 3600000 } })
+  @Throttle({ default: { limit: 3, ttl: ONE_HOUR } })
   @ApiOperation({ summary: 'Register Admin (Requires Secret Key)' })
   @ApiResponse({ status: 201, description: 'Admin successfully registered', type: AuthResponseDto })
   async registerAdmin(@Body() dto: RegisterAdminDto): Promise<AuthResponseDto> {
@@ -286,19 +326,8 @@ export class AuthController {
 
   @Public()
   @Post('forgot-password')
-  // Two ceilings, both must pass.
-  //
-  //   default -> 10 per hour per mailbox. This is the budget the limit was
-  //     always meant to express: one address, one mail allowance, whoever
-  //     asks. It is safe HERE, and only here, because the address IS the
-  //     resource being protected.
-  //   long    -> 60 per hour per client IP. Sized for a building, so a lab
-  //     full of students registering together fits, while one host cannot mint
-  //     unlimited buckets by varying the address it sends.
-  @Throttle({
-    default: { limit: 10, ttl: 3600000, getTracker: emailTracker },
-    long: { limit: 60, ttl: 3600000, getTracker: clientIpTracker },
-  })
+  // 10/hour per mailbox AND 300/hour per IP; see MAILBOX_THROTTLE.
+  @Throttle(MAILBOX_THROTTLE)
   @ApiOperation({ summary: 'Request Password Reset' })
   @ApiResponse({ status: 201, description: 'Password reset email sent' })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
@@ -315,7 +344,8 @@ export class AuthController {
 
   @Public()
   @Post('reset-password')
-  @Throttle({ default: { limit: 3, ttl: 900000 } })
+  // Carries a reset token, no email; see TOKEN_ROUTE_THROTTLE.
+  @Throttle(TOKEN_ROUTE_THROTTLE)
   @ApiOperation({ summary: 'Reset Password' })
   @ApiResponse({ status: 201, description: 'Password successfully reset' })
   async resetPassword(
@@ -330,7 +360,8 @@ export class AuthController {
 
   @Public()
   @Post('verify-email')
-  @Throttle({ default: { limit: 5, ttl: 900000 } })
+  // Carries a verification token, no email; see TOKEN_ROUTE_THROTTLE.
+  @Throttle(TOKEN_ROUTE_THROTTLE)
   @ApiOperation({ summary: 'Verify Email' })
   @ApiResponse({ status: 201, description: 'Email successfully verified' })
   async verifyEmail(
@@ -345,19 +376,8 @@ export class AuthController {
 
   @Public()
   @Post('resend-verification')
-  // Two ceilings, both must pass.
-  //
-  //   default -> 10 per hour per mailbox. This is the budget the limit was
-  //     always meant to express: one address, one mail allowance, whoever
-  //     asks. It is safe HERE, and only here, because the address IS the
-  //     resource being protected.
-  //   long    -> 60 per hour per client IP. Sized for a building, so a lab
-  //     full of students registering together fits, while one host cannot mint
-  //     unlimited buckets by varying the address it sends.
-  @Throttle({
-    default: { limit: 10, ttl: 3600000, getTracker: emailTracker },
-    long: { limit: 60, ttl: 3600000, getTracker: clientIpTracker },
-  })
+  // 10/hour per mailbox AND 300/hour per IP; see MAILBOX_THROTTLE.
+  @Throttle(MAILBOX_THROTTLE)
   @ApiOperation({ summary: 'Resend Verification Email' })
   @ApiResponse({ status: 200, description: 'Verification email sent if user exists and is unverified' })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
@@ -390,7 +410,11 @@ export class AuthController {
 
   @Post('identities/local')
   @HttpCode(HttpStatus.CREATED)
-  @Throttle({ default: { limit: 5, ttl: 3600000 } }) // 5 per hour per user
+  // Per IP, NOT per user, despite being authenticated: the throttler is a
+  // global APP_GUARD and runs before the route's JwtAuthGuard, so req.user is
+  // undefined by the time the tracker is called. 5/hour was written as a
+  // per-user budget and silently applied to a whole building.
+  @Throttle({ default: { limit: 60, ttl: ONE_HOUR } })
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add Email & Password Sign-in to the Current Account' })
