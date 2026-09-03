@@ -2,11 +2,24 @@ import { Module } from '@nestjs/common';
 import { ThrottlerModule as NestThrottlerModule, seconds } from '@nestjs/throttler';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { JwtModule } from '@nestjs/jwt';
 import { RedisThrottlerStorage } from './redis-throttler.storage';
 import { UserAwareThrottlerGuard } from './user-aware-throttler.guard';
 
 @Module({
   imports: [
+    // The guard VERIFIES the Bearer token to bill a request to its user rather
+    // than to the whole building behind one NAT, so it needs the same secret
+    // the app signs with. Verification is the entire security of that feature:
+    // decoding would let any caller pick their own bucket. Same registration as
+    // auth.module.ts — module-scoped, so the two do not collide.
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_SECRET'),
+      }),
+      inject: [ConfigService],
+    }),
     NestThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

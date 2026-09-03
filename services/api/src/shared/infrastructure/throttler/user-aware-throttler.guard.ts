@@ -1,7 +1,9 @@
 // src/shared/infrastructure/throttler/user-aware-throttler.guard.ts
 import { randomUUID } from 'crypto';
 import { Injectable } from '@nestjs/common';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { Reflector } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
+import { ThrottlerGuard, ThrottlerModuleOptions, ThrottlerStorage } from '@nestjs/throttler';
 import { ipThrottleKey, resolveClientIp } from '../../utils/client-ip';
 
 type ThrottledRequest = {
@@ -13,8 +15,10 @@ type ThrottledRequest = {
 /**
  * Key a throttle bucket on the client IP.
  *
- * This is the guard's tracker for ALL traffic and the only one that bounds an
- * attacker, because it is the only input the caller cannot choose. See
+ * This is the guard's tracker for all ANONYMOUS traffic, and the only one that
+ * bounds a caller who has no account, because it is the only input they cannot
+ * choose. Signed-in requests key on the verified token subject instead — see
+ * the guard below, and the trade that comes with it. See
  * resolveClientIp for how the address survives the Cloudflare + Traefik chain;
  * the important half is that it reads the RIGHTMOST x-forwarded-for entry, the
  * one our own edge appended, so a prepended value buys nothing.
@@ -99,63 +103,98 @@ export const emailTracker = (req: Record<string, unknown>): string => {
 };
 
 /**
- * Track every request by client IP, resolved through the proxy chain.
+ * Track a request by the AUTHENTICATED USER when there is one, else by client
+ * IP resolved through the proxy chain.
  *
- * The library's own default is `req.ip`, which behind Traefik and Cloudflare is
- * a load balancer — one bucket shared by the entire internet. This guard exists
- * to swap that for resolveClientIp; that is its whole job.
+ * WHY NOT JUST THE IP. An IP is a building. A 40-seat school lab, a university
+ * and an Indonesian carrier's CGNAT pool all present as one address, so on a
+ * deadline day the Nth participant through the door ate the whole bucket and
+ * got a ThrottlerException for doing nothing wrong — the 2026-08-31 incident.
+ * Signed-in traffic carries a better identity than its address, so it should
+ * be billed to that identity and stop colliding with the neighbours.
  *
- * It briefly keyed on `request.body.email` instead, to stop the whole site
- * sharing one bucket back when ybb-program-next's auth proxy routes did not
- * forward x-forwarded-for. That workaround is gone, and had to be: guards run
- * before pipes, so that email was the RAW unvalidated body, and any caller on
- * any anonymous POST route could mint a fresh bucket per request just by
- * varying a JSON field. The cap bounded nothing.
+ * WHY THE TOKEN IS VERIFIED, NOT DECODED. This guard is the app's only
+ * APP_GUARD and JwtAuthGuard is route/controller-scoped; Nest runs global
+ * guards BEFORE controller guards, so `req.user` is always undefined here.
+ * That is exactly why commit e233af76's `if (userId) return user:${userId}`
+ * branch could never execute. The fix is to read the Bearer token ourselves —
+ * and then the ONLY thing standing between an attacker and a bucket of their
+ * choosing is the signature. jwt.decode(), or splitting the token on '.', would
+ * let any caller write `{"sub":"whatever"}` and mint unlimited fresh ceilings:
+ * strictly worse than the shared IP bucket it replaces. So it goes through
+ * JwtService.verify with the app's signing secret, and every failure — no
+ * header, wrong scheme, bad signature, expired, wrong type, no subject — falls
+ * back to the IP key. This method never throws: a rate limiter that 500s a
+ * request is a worse outage than the one it prevents.
  *
- * But be honest about how far the replacement reaches. This guard is GLOBAL,
- * and there are TWO cases:
+ * Only `type: 'access'` earns a user bucket. A refresh token is signed with the
+ * same secret and is rejected downstream as a bearer (jwt.strategy.ts), so it
+ * must not buy a bucket here either. Untyped legacy tokens fall back to IP too:
+ * they are simply status quo, and they expire on their own.
  *
- *   - The 9 auth routes that call forwardedForHeader (lib/server/forwardedFor.ts).
- *     Those forward x-forwarded-for, which is merged and deployed.
- *     DEPLOY ORDER MATTERS HERE: they only forward cf-connecting-ip once
- *     ybb-program-next's fix/forward-cf-connecting-ip ships. Until it does,
- *     the last forwarded hop is a Cloudflare EDGE and there is no
- *     cf-connecting-ip to read, so resolveClientIp returns that edge — which
- *     Cloudflare rotates between connections. The per-IP tiers below are then
- *     coarser than they look: several participants share an edge bucket and
- *     one attacker gets a fresh one per rotation. Ship that branch with or
- *     before this one, and only then do these tiers mean what they say.
- *   - The other ~52 route.ts handlers under ybb-program-next/app/api, which
- *     forward nothing. resolveClientIp finds no trustworthy header and falls
- *     through to req.ip — the Next container. Every one of those routes keys
- *     into ONE constant bucket shared by the whole internet, exactly the
- *     failure this guard was written to remove. Their limits are effectively a
- *     global cap, not a per-caller one: useless against an attacker and a
- *     denial-of-service against everyone else if it ever trips.
+ * THE TRADE, STATED PLAINLY. Once authenticated traffic keys per user, the
+ * per-IP tiers no longer bound a caller who holds N valid accounts — N accounts
+ * is N buckets, from one host. That is inherent to per-user limiting and it is
+ * the intent, not an oversight: the per-IP ceiling exists to stop ANONYMOUS
+ * abuse and to keep one host from sweeping, and the anonymous credential routes
+ * (login, register, forgot-password) pin clientIpTracker/emailTracker
+ * explicitly, so they are unaffected by this change — you cannot present a
+ * valid access token before you have logged in. What an attacker gains is
+ * proportional to how many real accounts they can create and keep, which is
+ * bounded by registration throttling and account lockout, not by this guard.
+ * The alternative — leaving every signed-in participant sharing their
+ * building's bucket — was a live denial of service against legitimate users.
  *
- * Closing the second case means forwarding the header from those handlers, not
- * changing anything here. Filed separately; do not read the per-IP sizing in
- * auth.controller.ts as applying to routes outside that list of 9.
+ * Reach caveat, unchanged by this commit: only the 9 auth routes in
+ * ybb-program-next that call forwardedForHeader forward x-forwarded-for. The
+ * other ~52 route.ts handlers forward nothing, so resolveClientIp falls through
+ * to req.ip (the Next container) and they all key into ONE bucket shared by the
+ * whole internet. Closing that means forwarding the header from those handlers,
+ * not changing anything here. Per-user keying does soften it for signed-in
+ * traffic on those routes, which is a side benefit, not the fix.
  *
- * NOT per-user, despite the class name and despite what commit e233af76 claimed
- * to ship. This guard is registered as an APP_GUARD (throttler.module.ts, the
- * only one in the app) and JwtAuthGuard is route/controller-scoped, and Nest
- * runs global guards BEFORE controller guards. So `req.user` is always
- * undefined at this point — verified empirically, not assumed — and the
- * `if (userId) return \`user:${userId}\`` branch that used to sit here could
- * never execute. Rate limiting authenticated traffic by identity instead of
- * address is therefore still UNIMPLEMENTED. Doing it properly means running
- * after authentication (an interceptor, or a guard ordered behind JwtAuthGuard)
- * — not a line in getTracker.
- *
- * Mailbox protection is separate and real. The routes that genuinely need
- * per-address budgeting (register, forgot-password, resend-verification) pin
- * one tier to emailTracker and another to clientIpTracker, and both have to
- * pass — see auth.controller.ts.
+ * Mailbox protection is separate and real: register, forgot-password and
+ * resend-verification pin one tier to emailTracker and another to
+ * clientIpTracker, and both have to pass — see auth.controller.ts.
  */
 @Injectable()
 export class UserAwareThrottlerGuard extends ThrottlerGuard {
+  constructor(
+    options: ThrottlerModuleOptions,
+    storageService: ThrottlerStorage,
+    reflector: Reflector,
+    private readonly jwtService: JwtService,
+  ) {
+    super(options, storageService, reflector);
+  }
+
   protected async getTracker(req: Record<string, unknown>): Promise<string> {
-    return clientIpTracker(req);
+    return this.userTracker(req) ?? clientIpTracker(req);
+  }
+
+  /**
+   * `user:<sub>` for a genuinely valid access token, null for everything else.
+   * Never throws — every rejection is a fall-through to IP keying.
+   */
+  private userTracker(req: Record<string, unknown>): string | null {
+    const header = (req as ThrottledRequest).headers?.authorization;
+    const raw = Array.isArray(header) ? header[0] : header;
+    if (typeof raw !== 'string') return null;
+
+    const match = /^Bearer\s+(\S+)$/i.exec(raw.trim());
+    if (!match) return null;
+
+    try {
+      // verify(), not decode(): the signature is the only reason a caller
+      // cannot pick their own bucket. It also enforces exp, so an expired
+      // token lands back on the IP key.
+      const payload = this.jwtService.verify(match[1]) as { sub?: unknown; type?: unknown };
+      if (payload.type !== 'access') return null;
+      return typeof payload.sub === 'string' && payload.sub.length > 0
+        ? `user:${payload.sub}`
+        : null;
+    } catch {
+      return null;
+    }
   }
 }

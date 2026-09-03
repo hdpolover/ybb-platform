@@ -2,6 +2,9 @@
 
 import 'reflect-metadata';
 import { DynamicModule, FactoryProvider } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import { JwtService } from '@nestjs/jwt';
 import { getOptionsToken } from '@nestjs/throttler';
 import { ThrottlerModule } from './throttler.module';
 import { clientIpTracker, emailTracker } from './user-aware-throttler.guard';
@@ -24,16 +27,31 @@ describe('throttler wiring for the auth routes', () => {
     // The factory is invoked directly rather than through Nest's injector so
     // this test stays about the names and does not drag in the whole guard
     // graph.
-    const [dynamicModule] = Reflect.getMetadata('imports', ThrottlerModule) as DynamicModule[];
-    const optionsProvider = (dynamicModule.providers as FactoryProvider[]).find(
-      (provider) => provider.provide === getOptionsToken(),
-    );
+    // Found by token, not by position: the module also imports JwtModule (the
+    // guard verifies bearer tokens), so indexing imports[0] would silently pick
+    // the wrong one.
+    const optionsProvider = (Reflect.getMetadata('imports', ThrottlerModule) as DynamicModule[])
+      .flatMap((dynamicModule) => (dynamicModule.providers ?? []) as FactoryProvider[])
+      .find((provider) => provider?.provide === getOptionsToken());
 
     const options = (await optionsProvider!.useFactory!({
       get: (_key: string, fallback: unknown) => fallback,
     })) as { throttlers: { name?: string }[] };
 
     expect(options.throttlers.map((throttler) => throttler.name)).toContain('default');
+  });
+
+  it('makes JwtService resolvable where the guard is constructed', async () => {
+    // The guard takes JwtService as a 4th constructor argument to VERIFY bearer
+    // tokens. Nothing else in the suite touches the real injector, so a missing
+    // JwtModule import would be invisible to tsc and to every unit test, and
+    // would surface as a container crash on boot.
+    const moduleRef = await Test.createTestingModule({
+      imports: [ConfigModule.forRoot({ ignoreEnvFile: true }), ThrottlerModule],
+    }).compile();
+
+    expect(moduleRef.select(ThrottlerModule).get(JwtService)).toBeInstanceOf(JwtService);
+    await moduleRef.close();
   });
 
   // Per-route @Throttle metadata is looked up per THROTTLER NAME, so a route
