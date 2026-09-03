@@ -2,7 +2,6 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { ApplicationCategory } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
-import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { normalizePhoneCountryCode } from '@shared/utils/phone-country-code';
 import { extractAndSanitizePhone } from '@shared/utils/phone-e164';
 import { PortalCacheService } from '../../services/portal-cache.service';
@@ -65,7 +64,7 @@ export class SaveSubmissionSectionHandler {
             data: updateData,
         });
 
-        await this.invalidateCaches(userId, programId);
+        await this.invalidateCaches(userId);
 
         return { success: true, section };
     }
@@ -318,11 +317,7 @@ export class SaveSubmissionSectionHandler {
         return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
     }
 
-    private async invalidateCaches(userId: string, programId?: string): Promise<void> {
-        await Promise.all([
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId, programId)),
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_SUBMISSIONS(userId)),
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
-        ]);
+    private async invalidateCaches(userId: string): Promise<void> {
+        await this.cacheService.invalidatePortalCache(userId);
     }
 }

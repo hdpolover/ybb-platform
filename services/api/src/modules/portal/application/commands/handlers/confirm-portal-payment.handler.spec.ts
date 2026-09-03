@@ -20,6 +20,7 @@ describe('ConfirmPortalPaymentHandler', () => {
 
     const mockCacheService = {
         invalidateKey: jest.fn().mockResolvedValue(undefined),
+        invalidatePortalCache: jest.fn().mockResolvedValue(undefined),
     };
 
     const mockPortalCacheService = {

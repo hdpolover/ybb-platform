@@ -155,6 +155,46 @@ export class CacheService {
   }
 
   /**
+   * Invalidate every portal read cache for a user, across all of their programs.
+   *
+   * The portal read handlers key on (userId, programId) - e.g.
+   * `portal:submissions:<userId>:<programId>` - but most write paths either do
+   * not carry a programId or only have one of several. Deleting the bare key
+   * clears just the `:latest` variant and leaves the program-scoped entry to
+   * serve stale data for the rest of its TTL, which is what made saves look
+   * like they had not applied.
+   *
+   * So: always clear by pattern (covers every program variant including
+   * `latest`), and also delete the non-program-scoped keys explicitly, since
+   * patterns need a live Redis client for SCAN while plain deletes work on any
+   * cache store.
+   *
+   * Patterns are built from CACHE_KEYS with '*' as the programId so they cannot
+   * drift away from the key builders the read handlers use.
+   */
+  async invalidatePortalCache(userId: string): Promise<void> {
+    try {
+      await Promise.all([
+        this.invalidateKeys([
+          CACHE_KEYS.PORTAL_DASHBOARD(userId),
+          CACHE_KEYS.PORTAL_DOCUMENTS(userId),
+          CACHE_KEYS.PORTAL_SUBMISSIONS(userId),
+          CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId),
+          CACHE_KEYS.PORTAL_PAYMENTS(userId),
+        ]),
+        this.invalidateByPatterns([
+          CACHE_KEYS.PORTAL_SUBMISSIONS(userId, '*'),
+          CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId, '*'),
+          CACHE_KEYS.PORTAL_PAYMENTS(userId, '*'),
+        ]),
+      ]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Failed to invalidate portal cache for user ${userId}: ${msg}`);
+    }
+  }
+
+  /**
    * Invalidate specific key
    */
   async invalidateKey(key: string): Promise<void> {

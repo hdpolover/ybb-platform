@@ -60,6 +60,57 @@ describe('CacheService', () => {
         });
     });
 
+    describe('invalidatePortalCache', () => {
+        const userId = 'user-123';
+
+        // The bug this guards: portal reads key on (userId, programId) while the
+        // write paths deleted only the bare `:latest` key, so a save left the
+        // program-scoped entry serving stale data for its whole TTL.
+        it('busts every program variant of the keys the portal read handlers use', async () => {
+            const patternSpy = jest.spyOn(service, 'invalidateByPattern').mockResolvedValue();
+
+            await service.invalidatePortalCache(userId);
+
+            const emitted = patternSpy.mock.calls.map(([pattern]) => pattern);
+            const matches = (key: string) =>
+                emitted.some((pattern) => new RegExp(`^${pattern.replace(/\*/g, '.*')}$`).test(key));
+
+            // A read for a real programId, and the `latest` fallback, must both be covered.
+            for (const programId of ['program-abc', undefined]) {
+                expect(matches(CACHE_KEYS.PORTAL_SUBMISSIONS(userId, programId))).toBe(true);
+                expect(matches(CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId, programId))).toBe(true);
+                expect(matches(CACHE_KEYS.PORTAL_PAYMENTS(userId, programId))).toBe(true);
+            }
+        });
+
+        it('does not bust another user\'s cache', async () => {
+            const patternSpy = jest.spyOn(service, 'invalidateByPattern').mockResolvedValue();
+
+            await service.invalidatePortalCache(userId);
+
+            const emitted = patternSpy.mock.calls.map(([pattern]) => pattern);
+            const otherUsersKey = CACHE_KEYS.PORTAL_SUBMISSIONS('user-999', 'program-abc');
+            expect(
+                emitted.some((pattern) => new RegExp(`^${pattern.replace(/\*/g, '.*')}$`).test(otherUsersKey)),
+            ).toBe(false);
+        });
+
+        it('also deletes the keys that carry no programId, which patterns cannot reach without Redis', async () => {
+            jest.spyOn(service, 'invalidateByPattern').mockResolvedValue();
+
+            await service.invalidatePortalCache(userId);
+
+            expect(mockCacheManager.del).toHaveBeenCalledWith(CACHE_KEYS.PORTAL_DASHBOARD(userId));
+            expect(mockCacheManager.del).toHaveBeenCalledWith(CACHE_KEYS.PORTAL_DOCUMENTS(userId));
+        });
+
+        it('never throws - cache invalidation must not fail the write that triggered it', async () => {
+            jest.spyOn(service, 'invalidateByPattern').mockRejectedValue(new Error('redis down'));
+
+            await expect(service.invalidatePortalCache(userId)).resolves.toBeUndefined();
+        });
+    });
+
     describe('invalidateBrandLandingCaches', () => {
         const brandId = 'brand-789';
 

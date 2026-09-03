@@ -237,9 +237,8 @@ export class ConfirmPortalPaymentHandler {
 
             // Invalidate caches
             await Promise.all([
-                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENTS(userId)),
+                this.cacheService.invalidatePortalCache(userId),
                 this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(userId, invoiceId)),
-                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
             ]);
 
             return {
@@ -271,9 +270,8 @@ export class ConfirmPortalPaymentHandler {
 
         // Invalidate caches
         await Promise.all([
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENTS(userId)),
+            this.cacheService.invalidatePortalCache(userId),
             this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(userId, invoiceId)),
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
         ]);
 
         const action = processResponse.action
