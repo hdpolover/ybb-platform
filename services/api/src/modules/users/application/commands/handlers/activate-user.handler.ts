@@ -20,7 +20,13 @@ export class ActivateUserHandler {
     user.activate();
     const updated = await this.userRepository.update(user);
 
-    await this.cacheService.invalidateByPattern(`user:list:${command.brandId}:*`);
+    // Also clears the platform-wide listing. That entry is keyed `user:list:all:*`
+    // and a brand-specific pattern never matched it, so a cross-brand list stayed
+    // stale after a status change.
+    await Promise.all([
+      this.cacheService.invalidateByPattern(`user:list:${command.brandId ?? 'all'}:*`),
+      this.cacheService.invalidateByPattern('user:list:all:*'),
+    ]);
 
     return this.toDto(updated);
   }

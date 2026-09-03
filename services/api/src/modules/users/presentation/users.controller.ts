@@ -30,6 +30,8 @@ import { DeactivateUserHandler } from '../application/commands/handlers/deactiva
 import { ActivateUserCommand } from '../application/commands/activate-user.command';
 import { DeactivateUserCommand } from '../application/commands/deactivate-user.command';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { resolveUsersBrandFilter, assertCanChangeUserStatus } from '../application/utils/user-access.util';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/infrastructure/guards/roles.guard';
 import { Roles } from '../../auth/application/decorators/roles.decorator';
@@ -58,6 +60,7 @@ export class UsersController {
     private readonly activateUserHandler: ActivateUserHandler,
     private readonly deactivateUserHandler: DeactivateUserHandler,
     private readonly cacheService: CacheService,
+    private readonly prismaRead: PrismaReadService,
   ) { }
 
   @Get('me/preferences')
@@ -188,10 +191,12 @@ export class UsersController {
   @ApiOperation({ summary: 'Get User By ID' })
   @ApiResponse({ status: 200, description: 'Successfully retrieved user details', type: UserResponseDto })
   async findOne(
+    @CurrentUser() actor: CurrentUserData,
     @Param('id') id: string,
-    @Query('brandId') brandId: string,
+    @Query('brandId') brandId?: string,
   ): Promise<UserResponseDto> {
-    const query = new GetUserQuery(id, brandId);
+    const scopedBrandId = await resolveUsersBrandFilter(this.prismaRead, actor, brandId);
+    const query = new GetUserQuery(id, scopedBrandId ?? undefined);
     return this.getUserHandler.execute(query);
   }
 
@@ -204,16 +209,21 @@ export class UsersController {
   @ApiQuery({ name: 'take', required: false, type: Number })
   @ApiQuery({ name: 'role', required: false, enum: ['admin', 'participant', 'ambassador'], description: 'Filter users by role' })
   async findAll(
-    @Query('brandId') brandId: string,
+    @CurrentUser() actor: CurrentUserData,
+    @Query('brandId') brandId?: string,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
     @Query('role') role?: string,
   ): Promise<UserResponseDto[]> {
+    // Resolved BEFORE the cache read below. If this check moved into the
+    // handler, a warm cache entry would be returned without it ever running.
+    const scopedBrandId = await resolveUsersBrandFilter(this.prismaRead, actor, brandId);
+
     const skipNum = skip ? parseInt(skip, 10) : 0;
     const takeNum = take ? parseInt(take, 10) : 20;
 
     // Cache key includes role now
-    const cacheKey = CACHE_KEYS.USER_LIST(brandId, skipNum, takeNum, role);
+    const cacheKey = CACHE_KEYS.USER_LIST(scopedBrandId, skipNum, takeNum, role);
 
     try {
       const cached = await this.cacheService.get<UserResponseDto[]>(cacheKey);
@@ -225,7 +235,7 @@ export class UsersController {
     }
 
     const query = new GetUsersQuery(
-      brandId,
+      scopedBrandId ?? undefined,
       skipNum,
       takeNum,
       role,
@@ -248,10 +258,13 @@ export class UsersController {
   @AuditTrail({ entityType: 'User', action: ChangeType.status_change })
   @ApiQuery({ name: 'brandId', required: true, type: String })
   async activateUser(
+    @CurrentUser() actor: CurrentUserData,
     @Param('id') id: string,
-    @Query('brandId') brandId: string,
+    @Query('brandId') brandId?: string,
   ): Promise<UserResponseDto> {
-    return this.activateUserHandler.execute(new ActivateUserCommand(id, brandId));
+    const scopedBrandId = await resolveUsersBrandFilter(this.prismaRead, actor, brandId);
+    await assertCanChangeUserStatus(this.prismaRead, actor, id);
+    return this.activateUserHandler.execute(new ActivateUserCommand(id, scopedBrandId ?? undefined));
   }
 
   @Patch(':id/deactivate')
@@ -261,9 +274,12 @@ export class UsersController {
   @AuditTrail({ entityType: 'User', action: ChangeType.status_change })
   @ApiQuery({ name: 'brandId', required: true, type: String })
   async deactivateUser(
+    @CurrentUser() actor: CurrentUserData,
     @Param('id') id: string,
-    @Query('brandId') brandId: string,
+    @Query('brandId') brandId?: string,
   ): Promise<UserResponseDto> {
-    return this.deactivateUserHandler.execute(new DeactivateUserCommand(id, brandId));
+    const scopedBrandId = await resolveUsersBrandFilter(this.prismaRead, actor, brandId);
+    await assertCanChangeUserStatus(this.prismaRead, actor, id);
+    return this.deactivateUserHandler.execute(new DeactivateUserCommand(id, scopedBrandId ?? undefined));
   }
 }

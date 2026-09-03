@@ -1,6 +1,7 @@
 export class ActivateUserCommand {
   constructor(
     public readonly userId: string,
-    public readonly brandId: string,
+    /** undefined = no brand restriction; only reachable by a platform-scope admin. */
+    public readonly brandId?: string,
   ) {}
 }

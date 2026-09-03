@@ -27,6 +27,7 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 
 // Guards
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 
 describe('UsersController', () => {
   let controller: UsersController;
@@ -50,11 +51,18 @@ describe('UsersController', () => {
     del: jest.fn(),
     invalidateByPattern: jest.fn(),
   };
+  // The brand-scope and outrank checks read the admin tables directly from the
+  // controller, above the users-list cache read - a check placed in the handler
+  // would be skipped entirely on a warm cache entry.
+  const mockPrismaRead = {
+    admin: { findUnique: jest.fn(), findFirst: jest.fn() },
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
       providers: [
+        { provide: PrismaReadService, useValue: mockPrismaRead },
         { provide: CreateUserHandler, useValue: mockCreateUserHandler },
         { provide: GetUserHandler, useValue: mockGetUserHandler },
         { provide: GetUsersHandler, useValue: mockGetUsersHandler },
