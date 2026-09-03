@@ -315,4 +315,58 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
       expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
     });
   });
+  // A Firebase sign-in resets failedLoginAttempts. If it does so while a
+  // lockout is running it refunds the guesser a full MAX_FAILED_LOGIN_ATTEMPTS
+  // for the moment lockedUntil expires — a bypass of the lockout the password
+  // and ambassador routes rely on. No failures are counted here (a
+  // Firebase-signed token cannot be brute-forced); it just must not CLEAR one.
+  describe('lockout is not cleared by a Firebase sign-in', () => {
+    const lockedUser = {
+      ...existingUser,
+      failedLoginAttempts: 5,
+      lockedUntil: new Date(Date.now() + 60_000),
+    };
+
+    const command = () =>
+      new FirebaseLoginCommand(
+        'firebase-id-token',
+        'provider-id-123',
+        '127.0.0.1',
+        'Mozilla/5.0 Chrome/120',
+        'brand-id-123',
+      );
+
+    it('leaves the counter alone while the account is locked', async () => {
+      mockPrismaService.userIdentity.findFirst.mockResolvedValue({
+        id: 'identity-id-123',
+        userId: lockedUser.id,
+        user: lockedUser,
+      });
+
+      await handler.execute(command());
+
+      expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+        where: { id: lockedUser.id },
+        data: { lastLoginAt: expect.any(Date) },
+      });
+      expect(mockPrismaService.user.update).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ failedLoginAttempts: 0 }) }),
+      );
+    });
+
+    it('still resets the counter once the lockout has expired', async () => {
+      mockPrismaService.userIdentity.findFirst.mockResolvedValue({
+        id: 'identity-id-123',
+        userId: lockedUser.id,
+        user: { ...lockedUser, lockedUntil: new Date(Date.now() - 60_000) },
+      });
+
+      await handler.execute(command());
+
+      expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+        where: { id: lockedUser.id },
+        data: { failedLoginAttempts: 0, lastLoginAt: expect.any(Date) },
+      });
+    });
+  });
 });

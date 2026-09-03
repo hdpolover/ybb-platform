@@ -9,6 +9,11 @@ import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { normalizeReferralCode } from '@modules/participants/application/utils/referral-code.util';
+import {
+  failedAttemptUpdate,
+  isLockedOut,
+  LOCKED_OUT_MESSAGE,
+} from '../../services/account-lockout.util';
 
 @Injectable()
 export class AmbassadorLoginHandler {
@@ -74,6 +79,13 @@ export class AmbassadorLoginHandler {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Locked out from prior failed attempts, checked BEFORE the code is
+    // compared — same order as login.handler, so a locked account leaks
+    // nothing about whether the guess was right.
+    if (isLockedOut(user)) {
+      throw new UnauthorizedException(LOCKED_OUT_MESSAGE);
+    }
+
     // Verify this user has an active ambassador record with matching referral code
     const ambassador = await this.prisma.ambassador.findFirst({
       where: {
@@ -85,6 +97,14 @@ export class AmbassadorLoginHandler {
     });
 
     if (!ambassador) {
+      // The referral code IS the credential on this route, so a wrong one is a
+      // wrong password and has to cost the same. Without this the code was
+      // guessable at whatever rate the throttle tiers allowed, forever.
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: failedAttemptUpdate(user),
+      });
+
       await this.authLoggingService.logFailedLogin(
         user.email,
         command.ipAddress,
@@ -101,7 +121,7 @@ export class AmbassadorLoginHandler {
 
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { failedLoginAttempts: 0, lastLoginAt: new Date() },
+      data: { failedLoginAttempts: 0, lastLoginAt: new Date(), lockedUntil: null },
     });
 
     // Session id is minted BEFORE the token so the access token can carry it

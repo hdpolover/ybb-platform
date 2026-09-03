@@ -1,4 +1,5 @@
 // services/api/src/modules/participants/application/commands/handlers/apply-ambassador.handler.ts
+import { randomInt } from 'crypto';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Inject, ConflictException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -122,10 +123,14 @@ export class ApplyAmbassadorHandler implements ICommandHandler<ApplyAmbassadorCo
     private async generateReferralCode(name: string): Promise<string> {
         // Generate a fully anonymous opaque code (looks like a session or tracking ID)
         // Format: 8 random alphanumeric chars (e.g., K9X2M4P1)
+        // CSPRNG, not Math.random(): this code is a credential, because
+        // /auth/ambassador-login accepts email + code with no password. V8's
+        // PRNG state is recoverable from observed outputs, so codes minted in
+        // one process would predict each other.
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No ambiguous chars
         let result = '';
         for (let i = 0; i < 8; i++) {
-            result += chars.charAt(Math.floor(Math.random() * chars.length));
+            result += chars.charAt(randomInt(chars.length));
         }
         return result;
     }

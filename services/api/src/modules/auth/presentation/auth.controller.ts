@@ -74,18 +74,21 @@ const ONE_HOUR = 3600000;
  * per-MAILBOX tier below does (5 login attempts / 15 min for one address),
  * and an attacker cannot dodge that by changing hosts.
  *
- * There is a SECOND backstop, but only on two of the three routes here, so be
- * precise about which:
+ * There is a SECOND backstop, and it now covers all three routes here:
  *
  *   - /login and /admin/login increment failedLoginAttempts on a bad password
  *     and refuse the account once lockedUntil is set, per
  *     MAX_FAILED_LOGIN_ATTEMPTS (account-lockout.constants.ts).
- *   - /auth/ambassador-login has NO account lockout. It authenticates on email
- *     + referral code with NO PASSWORD; its failure branch
- *     (ambassador-login.handler.ts) throws without incrementing
- *     failedLoginAttempts and never reads lockedUntil, it only resets the
- *     counter on success. Guessing a referral code on that route is bounded by
- *     these throttle tiers and by nothing else.
+ *   - /auth/ambassador-login authenticates on email + referral code with NO
+ *     PASSWORD, so a wrong code is a wrong credential and costs the same: it
+ *     counts a failed attempt and locks at the same threshold (the shared
+ *     helper in account-lockout.util.ts). It had no lockout at all until then,
+ *     which left code guessing bounded by these throttle tiers and nothing
+ *     else.
+ *
+ * Nothing may quietly refund that counter either: /auth/firebase-login resets
+ * failedLoginAttempts on a successful sign-in, and now refuses to do so while
+ * lockedUntil is still running.
  *
  * So the IP tier only has to stop a single-host SPRAY — one attacker walking
  * many accounts from one address — not bound a building. At 600 per 15 minutes

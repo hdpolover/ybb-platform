@@ -14,6 +14,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { randomInt } from 'crypto';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ConfigService } from '@nestjs/config';
@@ -199,14 +200,28 @@ export class AmbassadorAdminController {
       throw new ConflictException('This user is already an ambassador');
     }
 
-    // Generate referral code: up to 3 letters from name + 5 random digits
+    // Generate referral code: up to 3 letters from name + 8 random digits.
+    //
+    // This code is a CREDENTIAL — /auth/ambassador-login accepts email + code
+    // with no password and returns full tokens — so it has to be unguessable,
+    // and Math.random() is not. V8's xorshift128+ is seeded per context and its
+    // internal state is recoverable from a handful of observed outputs, so an
+    // attacker holding a couple of codes minted in the same process can predict
+    // the rest. crypto.randomInt is a CSPRNG and costs nothing here.
+    //
+    // The digits went 5 -> 8 for free: the prefix is derivable from the
+    // ambassador's public name, so the digits ARE the secret, and 90,000 of
+    // them is a few minutes of guessing at any throttle we would tolerate.
+    // 11 chars still fits referral_code VarChar(20) (prisma/schema/roles.prisma),
+    // so no migration. Existing shorter codes keep working — every lookup path
+    // matches the stored string, nothing parses its length.
     const namePrefix = fullName.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 3).padEnd(3, 'X');
-    const digits = Math.floor(10000 + Math.random() * 90000).toString();
-    let referralCode = namePrefix + digits;
+    const mintDigits = () => randomInt(10_000_000, 100_000_000).toString();
+    let referralCode = namePrefix + mintDigits();
     // Ensure uniqueness — retry once on collision
     const collision = await this.prisma.ambassador.findFirst({ where: { referralCode } });
     if (collision) {
-      referralCode = namePrefix + Math.floor(10000 + Math.random() * 90000).toString();
+      referralCode = namePrefix + mintDigits();
     }
 
     const ambassador = await this.prisma.ambassador.create({
