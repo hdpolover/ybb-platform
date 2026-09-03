@@ -11,6 +11,7 @@ import { PortalCacheService } from '../../services/portal-cache.service';
 import { EnsurePortalPaymentInvoiceCommand } from '../../queries/portal-queries';
 import { EnsurePortalPaymentInvoiceResponseDto } from '../../../presentation/dto/portal-payment.dto';
 import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
+import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 
 @Injectable()
 export class EnsurePortalPaymentInvoiceHandler {
@@ -31,10 +32,8 @@ export class EnsurePortalPaymentInvoiceHandler {
         }
 
         const application = await this.prisma.participantApplication.findFirst({
-            where: {
-                participantId: participant.id,
-                ...(programId ? { programId } : {}),
-            },
+            where: currentApplicationWhere(participant.id, programId),
+            orderBy: currentApplicationOrderBy,
             select: {
                 id: true,
                 programId: true,
@@ -46,7 +45,6 @@ export class EnsurePortalPaymentInvoiceHandler {
                     },
                 },
             },
-            orderBy: { createdAt: 'desc' },
         });
 
         if (!application) {

@@ -7,6 +7,7 @@ import { extractAndSanitizePhone } from '@shared/utils/phone-e164';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { SaveSubmissionSectionCommand } from '../../queries/portal-queries';
 import { SubmissionSection } from '../../../presentation/dto/save-submission-section.dto';
+import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 
 /**
  * Save Submission Section Handler
@@ -31,11 +32,8 @@ export class SaveSubmissionSectionHandler {
         if (!participant) throw new NotFoundException('Participant not found');
 
         const application = await this.prisma.participantApplication.findFirst({
-            where: {
-                participantId: participant.id,
-                ...(programId ? { programId } : {}),
-            },
-            orderBy: { updatedAt: 'desc' },
+            where: currentApplicationWhere(participant.id, programId),
+            orderBy: currentApplicationOrderBy,
             select: {
                 id: true,
                 programId: true,
