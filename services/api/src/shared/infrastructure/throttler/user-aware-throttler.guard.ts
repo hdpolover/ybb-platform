@@ -137,8 +137,9 @@ export const emailTracker = (req: Record<string, unknown>): string => {
  * is N buckets, from one host. That is inherent to per-user limiting and it is
  * the intent, not an oversight: the per-IP ceiling exists to stop ANONYMOUS
  * abuse and to keep one host from sweeping, and the anonymous credential routes
- * (login, register, forgot-password) pin clientIpTracker/emailTracker
- * explicitly, so they are unaffected by this change — you cannot present a
+ * (login, register, forgot-password, register-admin) pin
+ * clientIpTracker/emailTracker explicitly, so they are unaffected by this
+ * change — you cannot present a
  * valid access token before you have logged in. What an attacker gains is
  * proportional to how many real accounts they can create and keep, which is
  * bounded by registration throttling and account lockout, not by this guard.

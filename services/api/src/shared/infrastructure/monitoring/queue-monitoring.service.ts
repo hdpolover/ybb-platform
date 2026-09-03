@@ -32,6 +32,11 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
             await this.ensureMonitoringChannel();
             this.logger.log('Queue Monitoring Connected');
             this.intervalParams = setInterval(() => this.checkQueueDepths(), 15000);
+            // Do not let queue polling hold the event loop open on its own. The
+            // interval still fires for the life of the process; it just stops a
+            // shutdown (or a jest worker) from hanging on it, matching what
+            // PrismaService already does for its pool-metrics interval.
+            this.intervalParams.unref();
         } catch (error) {
             this.logger.error(`Failed to connect to RabbitMQ for monitoring: ${error instanceof Error ? error.message : String(error)}`);
         }

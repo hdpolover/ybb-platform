@@ -132,8 +132,9 @@ const MAILBOX_THROTTLE = {
 
 /**
  * Routes that carry an opaque token and no email, so there is no mailbox tier
- * to pin and they are per-IP whether we like it or not — which makes them
- * per-BUILDING. A tight cap here buys nothing and costs lockouts: nobody
+ * to pin. An anonymous call here is per-IP — which makes it per-BUILDING; a
+ * call carrying a valid access token is per-user, since the guard's default
+ * tracker is user-aware. A tight cap here buys nothing and costs lockouts: nobody
  * guesses a 32-byte token, and nobody forges a Firebase-signed one either, so
  * a small-looking number is not protecting anything. All it does is lock a lab
  * out of finishing their signups. Sized to match the credential IP tier above,
@@ -326,11 +327,15 @@ export class AuthController {
 
   @Public()
   @Post('register-admin')
-  // 3 guesses per hour at the shared secret, per client IP — the guard's
-  // default tracker, so nothing extra is needed here. This used to name
-  // clientIpTracker explicitly because the guard keyed anonymous traffic on
-  // body.email, which handed every guess a fresh bucket. That is gone.
-  @Throttle({ default: { limit: 3, ttl: ONE_HOUR } })
+  // 3 guesses per hour at the shared secret, per client IP. clientIpTracker is
+  // named EXPLICITLY and must stay that way: the guard's default tracker is
+  // user-aware, and /auth/register hands out an access token immediately with
+  // no email verification, so leaving this on the default would let a caller
+  // mint throwaway accounts (~2400/hour per IP under MAILBOX_THROTTLE) and
+  // spend a fresh 3-guess bucket per account — thousands of guesses an hour
+  // against an intended 3. This is the one route in this file whose security
+  // rests on a small number, so it does not get to inherit a tracker.
+  @Throttle({ default: { limit: 3, ttl: ONE_HOUR, getTracker: clientIpTracker } })
   @ApiOperation({ summary: 'Register Admin (Requires Secret Key)' })
   @ApiResponse({ status: 201, description: 'Admin successfully registered', type: AuthResponseDto })
   async registerAdmin(@Body() dto: RegisterAdminDto): Promise<AuthResponseDto> {

@@ -119,12 +119,16 @@ describe('throttler wiring for the auth routes', () => {
     expect(trackerFor(handler, 'long')).toBe(clientIpTracker);
   });
 
-  it('leaves register-admin on the guard default, which is the client IP', () => {
-    // It used to name clientIpTracker explicitly, to opt OUT of the guard's
-    // old body.email default. That default is gone, so naming it would be
-    // noise — but if anyone ever pins a tracker here it should not be the
-    // caller-chosen mailbox: this route guards a shared secret.
-    expect(trackerFor(AuthController.prototype.registerAdmin, 'default')).toBeUndefined();
+  it('pins register-admin to the client IP, never the guard default', () => {
+    // This assertion exists because the opposite one used to be here, and it
+    // was wrong. The guard's default tracker is USER-aware, and /auth/register
+    // hands out an access token with no email verification — so inheriting the
+    // default would let a caller mint throwaway accounts and spend a fresh
+    // 3-guess bucket per account against the shared admin secret, thousands of
+    // guesses an hour against an intended 3.
+    // The cap on this route is only meaningful if the bucket is something the
+    // caller cannot mint. That is the client IP, and it must stay named here.
+    expect(trackerFor(AuthController.prototype.registerAdmin, 'default')).toBe(clientIpTracker);
     expect(trackerFor(AuthController.prototype.registerAdmin, 'default')).not.toBe(emailTracker);
   });
 });
