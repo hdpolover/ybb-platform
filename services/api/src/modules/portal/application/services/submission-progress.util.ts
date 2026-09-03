@@ -1,3 +1,5 @@
+import { isAllowedForCategory } from '@shared/utils/category-scope.util';
+
 type ProgressStatus = 'pending' | 'in_progress' | 'completed';
 
 interface ApplicationForProgress {
@@ -8,8 +10,8 @@ interface ApplicationForProgress {
     uploadedFiles?: unknown;
     program?: {
         id?: string;
-        formFields?: { section?: string | null; name: string; isRequired: boolean }[];
-        essays?: { id: string; isRequired: boolean }[];
+        formFields?: { section?: string | null; name: string; isRequired: boolean; allowedCategories?: string[] | null }[];
+        essays?: { id: string; isRequired: boolean; allowedCategories?: string[] | null }[];
         requirements?: { id: string; isRequired: boolean }[];
         subthemes?: unknown[];
     };
@@ -129,7 +131,15 @@ function calculateAggregateStatus(items: { isRequired: boolean; completed: boole
 
 export function buildSubmissionProgressSections(application: ApplicationForProgress): ProgressSection[] {
     const personalData = (application.personalData as Record<string, unknown>) || {};
-    const formFields = application.program?.formFields || [];
+    const currentCategory = application.applicationCategory;
+    // Category-scoped fields/essays that don't apply to this applicant must not
+    // count against them — otherwise a Self Funded applicant can never reach
+    // 100% because of Fully Funded-only essays they can't even see, and vice
+    // versa. Hidden answers already saved (e.g. after a category switch) are
+    // left untouched in personalData/essayAnswers, just excluded from progress.
+    const formFields = (application.program?.formFields || []).filter((field) =>
+        isAllowedForCategory(field.allowedCategories, currentCategory),
+    );
     const groupedFields = new Map<string, ProgressField[]>();
 
     for (const field of formFields) {
@@ -159,7 +169,9 @@ export function buildSubmissionProgressSections(application: ApplicationForProgr
         });
     }
 
-    const essays = application.program?.essays || [];
+    const essays = (application.program?.essays || []).filter((essay) =>
+        isAllowedForCategory(essay.allowedCategories, currentCategory),
+    );
     if (essays.length > 0) {
         const essayAnswers = (application.essayAnswers as Record<string, unknown>) || {};
         sections.push({

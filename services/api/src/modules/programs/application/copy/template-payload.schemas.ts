@@ -97,6 +97,10 @@ const formFieldsItemSchema = z
     order: z.number(),
     labelOverride: z.string().nullable().optional(),
     helpTextOverride: z.string().nullable().optional(),
+    // Category scoping (ApplicationFormField.allowedCategories): empty array
+    // means "applies to every category" — see category-scope.util.ts.
+    // Optional so an export made before this field existed still validates.
+    allowedCategories: z.array(applicationCategorySchema).optional(),
   })
   .strict();
 
@@ -275,6 +279,19 @@ const subThemesItemSchema = z
   })
   .strict();
 
+const essaysItemSchema = z
+  .object({
+    question: z.string().min(1),
+    description: z.string().nullable(),
+    wordLimit: z.number().nullable(),
+    isRequired: z.boolean(),
+    isActive: z.boolean(),
+    // Category scoping (ProgramEssay.allowedCategories): empty array means
+    // "applies to every category" — see category-scope.util.ts.
+    allowedCategories: z.array(applicationCategorySchema),
+  })
+  .strict();
+
 // Keyed by ProgramCopier.key — adding another copier means adding one
 // entry here, not touching any call site.
 const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
@@ -291,6 +308,7 @@ const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
   testimonials: testimonialsItemSchema,
   photos: photosItemSchema,
   'sub-themes': subThemesItemSchema,
+  essays: essaysItemSchema,
 };
 
 /**

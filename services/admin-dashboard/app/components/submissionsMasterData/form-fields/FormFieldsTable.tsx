@@ -21,6 +21,7 @@ import { AddFieldDialog } from "./AddFieldDialog";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import type { HelpAssetRow } from "./HelpAssetsRepeater";
+import { CategoryScopeBadge } from "@/app/components/submissionsMasterData/CategoryScopeBadge";
 
 export interface ApplicationFormFieldRow {
   id: string;
@@ -40,6 +41,7 @@ export interface ApplicationFormFieldRow {
   validationRules?: unknown;
   defaultValue?: string;
   order: number;
+  allowedCategories?: string[];
 }
 
 const OPTION_FIELD_TYPES = new Set(["select", "radio", "checkbox"]);
@@ -337,7 +339,10 @@ export function FormFieldsTable({ programId }: { programId: string }) {
                     <td className="px-6 py-4 align-top text-xs font-medium text-zinc-500">{index + 1}</td>
                     <td className="px-6 py-4 align-top">
                       <div className="space-y-1">
-                        <div className="font-semibold text-zinc-900">{row.label}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-zinc-900">{row.label}</span>
+                          <CategoryScopeBadge allowedCategories={row.allowedCategories} />
+                        </div>
                         <div className="text-xs text-zinc-500">{row.fieldName}</div>
                       </div>
                     </td>

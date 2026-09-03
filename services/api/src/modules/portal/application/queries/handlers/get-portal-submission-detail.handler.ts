@@ -8,6 +8,7 @@ import { PortalCacheService } from '../../services/portal-cache.service';
 import { buildE164Phone } from '@shared/utils/phone-e164';
 import { isYearOnlyBirthdate } from '@shared/utils/birthdate-resolution';
 import { formatSubmissionDeadlineMessage, isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
+import { isAllowedForCategory } from '@shared/utils/category-scope.util';
 import { GetPortalSubmissionDetailQuery } from '../portal-queries';
 import {
     PortalSubmissionDetailResponseDto,
@@ -88,6 +89,7 @@ type ApplicationDetail = {
             validationRules: unknown;
             isRequired: boolean;
             order: number;
+            allowedCategories: string[];
         }[];
         essays: {
             id: string;
@@ -95,6 +97,7 @@ type ApplicationDetail = {
             isRequired: boolean;
             wordLimit: number | null;
             order: number;
+            allowedCategories: string[];
         }[];
         requirements: {
             id: string;
@@ -268,6 +271,7 @@ export class GetPortalSubmissionDetailHandler
                                 validationRules: true,
                                 isRequired: true,
                                 order: true,
+                                allowedCategories: true,
                             },
                             orderBy: { order: 'asc' },
                         },
@@ -279,6 +283,7 @@ export class GetPortalSubmissionDetailHandler
                                 isRequired: true,
                                 wordLimit: true,
                                 order: true,
+                                allowedCategories: true,
                             },
                             orderBy: { order: 'asc' },
                         },
@@ -305,7 +310,12 @@ export class GetPortalSubmissionDetailHandler
         participant: PortalParticipantProfile,
     ): SubmissionSectionDetailDto[] {
         const personalData = (application.personalData as Record<string, unknown>) || {};
-        const formFields = application.program.formFields || [];
+        // Fields scoped to a category the applicant isn't in are hidden, not
+        // deleted — any answer already saved under their name stays in
+        // personalData untouched, just excluded from what's rendered here.
+        const formFields = (application.program.formFields || []).filter((field) =>
+            isAllowedForCategory(field.allowedCategories, application.applicationCategory),
+        );
 
         // Group form fields by section
         const sectionMap = new Map<string, SubmissionFormFieldDto[]>();
@@ -976,6 +986,7 @@ export class GetPortalSubmissionDetailHandler
         const programEssays = application.program.essays || [];
 
         return programEssays
+            .filter((essay) => isAllowedForCategory(essay.allowedCategories, application.applicationCategory))
             .filter((essay) => this.isRenderableEssayQuestion(essay.question))
             .map((essay) => ({
                 id: essay.id,

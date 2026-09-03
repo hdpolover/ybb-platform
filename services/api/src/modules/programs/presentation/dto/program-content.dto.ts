@@ -390,6 +390,9 @@ export class ApplicationFormFieldResponseDto {
 
     @ApiProperty()
     order: number;
+
+    @ApiProperty({ type: [String], required: false })
+    allowedCategories?: string[];
 }
 
 export class ProgramEssayResponseDto {
@@ -413,6 +416,9 @@ export class ProgramEssayResponseDto {
 
     @ApiProperty()
     isActive: boolean;
+
+    @ApiProperty({ type: [String], required: false })
+    allowedCategories?: string[];
 }
 
 export class ProgramEssayGuidelinesResponseDto {

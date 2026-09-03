@@ -60,6 +60,7 @@ export class GetPortalSubmissionsHandler implements IQueryHandler<GetPortalSubmi
                                 section: true,
                                 name: true,
                                 isRequired: true,
+                                allowedCategories: true,
                             },
                             orderBy: { order: 'asc' },
                         },
@@ -67,7 +68,8 @@ export class GetPortalSubmissionsHandler implements IQueryHandler<GetPortalSubmi
                             where: { isActive: true },
                             select: {
                                 id: true,
-                                isRequired: true
+                                isRequired: true,
+                                allowedCategories: true
                             }
                         },
                         requirements: {

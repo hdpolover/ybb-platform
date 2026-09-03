@@ -68,6 +68,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                                 section: true,
                                 name: true,
                                 isRequired: true,
+                                allowedCategories: true,
                             },
                             orderBy: { order: 'asc' },
                         },
@@ -76,6 +77,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                             select: {
                                 id: true,
                                 isRequired: true,
+                                allowedCategories: true,
                             },
                             orderBy: { order: 'asc' },
                         },
