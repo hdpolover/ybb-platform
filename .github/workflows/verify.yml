@@ -23,6 +23,23 @@ jobs:
     defaults:
       run:
         working-directory: services/api
+    env:
+      # Throwaway values, needed only so things RESOLVE. Nothing in this job
+      # connects to a database, a cache or an identity provider.
+      #
+      # DATABASE_URL: prisma.config.ts calls env('DATABASE_URL') at load time and
+      # THROWS when it resolves from neither the environment nor a .env file.
+      # JWT_SECRET: three bootstrap consumer-module specs build the real DI
+      # graph, which constructs JwtStrategy, which fails with "requires a secret
+      # or key" without it.
+      #
+      # This is what the first version of this workflow got wrong. It was
+      # "verified" locally with `env -u DATABASE_URL`, which unsets the shell
+      # variable but leaves services/api/.env in place - so Prisma and Nest both
+      # still found everything and the run passed. A local run only matches CI if
+      # the .env file is moved aside too, which is how these two were found.
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+      JWT_SECRET: ci-verify-only-not-a-real-secret
     steps:
       - uses: actions/checkout@v4
 
@@ -39,7 +56,9 @@ jobs:
       # No postinstall hook in this package, and 153 source files import types
       # from @prisma/client, so the client must be generated before tsc.
       # `prisma.schema` in package.json points at the multi-file prisma/schema
-      # directory. This generates types only - it touches no database.
+      # directory.
+      # It generates types only - it never connects. See the job-level env for
+      # why DATABASE_URL has to be present anyway.
       - name: Generate Prisma client
         run: npx prisma generate
 
