@@ -565,8 +565,20 @@ describe('HomeStrategy', () => {
         // (the mock is shared across both real Prisma calls, same as production
         // shares one client — see other tests in this file for the same pattern).
         const mockProgramFindMany = (openEditions: unknown[]) => {
+            // fetchOpenRegistrationPrograms' where-clause already guarantees
+            // status/isPublished/isActive on every row it returns, and
+            // allowRegistration defaults true in the schema - so a fixture
+            // omitting them models a row the real query cannot produce. Defaulted
+            // here rather than repeated per fixture; override to test the gates.
+            const withProgramDefaults = (openEditions as Record<string, unknown>[]).map((edition) => ({
+                status: 'published',
+                isPublished: true,
+                isActive: true,
+                allowRegistration: true,
+                ...edition,
+            }));
             mockPrismaService.program.findMany.mockImplementation((args: any) =>
-                Promise.resolve(args?.include?.pricingTiers ? openEditions : []),
+                Promise.resolve(args?.include?.pricingTiers ? withProgramDefaults : []),
             );
         };
 

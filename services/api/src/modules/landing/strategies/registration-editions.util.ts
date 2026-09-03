@@ -12,6 +12,7 @@ import { CacheService } from '../../../shared/infrastructure/cache/cache.service
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 import { ACTIVE_PROGRAM_ORDER_BY } from '@shared/utils/active-program-resolver';
+import { isProgramRegistrationOpen } from '@modules/auth/application/services/auth-program-linking.util';
 
 /** Shared shape for a program's pricing tiers, reused by a single-program
  * `registration_types`/`pricing_tiers` field and by each entry in a
@@ -148,16 +149,27 @@ export async function resolveEditionGuidebooks(prisma: PrismaService, resources:
 
 /** Whether an edition's registration is currently open, given `now`. Shared
  * by `buildRegistrationEditions` and `resolveEditionSlug` so both agree on
- * which edition is "running". */
+ * which edition is "running".
+ *
+ * Delegates to isProgramRegistrationOpen rather than re-deriving the rule. This
+ * used to check only isActive and the two dates, so it ignored
+ * `allowRegistration` entirely - and that flag exists precisely to be a kill
+ * switch. A program with registration switched off was still reported to the
+ * marketing surfaces as `status: 'open'`, which is how a brand ended up showing
+ * "Register Now" and a countdown beside fee cards that correctly said closed.
+ * It also ignored `isPublished` and `status`.
+ *
+ * "Each surface re-derives the rule" is the root cause of that whole family of
+ * bugs, so this deliberately adds no eighth implementation. If a third module
+ * ever needs it, move the predicate to shared/ rather than copying it. */
 export function editionStatus(
-  program: Pick<OpenRegistrationProgram, 'isActive' | 'registrationOpenDate' | 'registrationCloseDate'>,
+  program: Pick<
+    OpenRegistrationProgram,
+    'status' | 'isPublished' | 'isActive' | 'allowRegistration' | 'registrationOpenDate' | 'registrationCloseDate'
+  >,
   now: Date,
 ): 'open' | 'closed' {
-  return program.isActive &&
-    (!program.registrationOpenDate || program.registrationOpenDate <= now) &&
-    (!program.registrationCloseDate || program.registrationCloseDate >= now)
-    ? 'open'
-    : 'closed';
+  return isProgramRegistrationOpen(program, now) ? 'open' : 'closed';
 }
 
 /** Maps `fetchOpenRegistrationPrograms` results to the `programs[]` edition
@@ -183,6 +195,12 @@ export async function buildRegistrationEditions(
     program_slug: editionProgram.slug,
     year: editionProgram.year,
     status: editionStatus(editionProgram, now),
+    // Exposed so a surface can distinguish "not open yet" from "switched off".
+    // Without these the frontend cannot see the kill switch at all and can only
+    // infer a reason from the dates, which is what made a closed registration
+    // render as an open one.
+    allow_registration: editionProgram.allowRegistration,
+    is_published: editionProgram.isPublished,
     registration_dates: {
       open: editionProgram.registrationOpenDate?.toISOString() ?? null,
       close: editionProgram.registrationCloseDate?.toISOString() ?? null,
