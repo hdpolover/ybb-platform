@@ -165,7 +165,7 @@ describe('AdminScopeGuard', () => {
 
     await expect(
       guard.canActivate(buildContext({ user: { adminId: 'admin-1' }, params: { id: 'program-1' } })),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toThrow(NotFoundException);
   });
 
   it('lets a program-assigned admin reach only their assigned program', async () => {

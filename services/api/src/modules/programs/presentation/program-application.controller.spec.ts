@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { ProgramApplicationConfigController } from './program-application.controller';
@@ -160,7 +160,7 @@ describe('ProgramApplicationConfigController', () => {
                 deletedAt: null,
             });
 
-            await expect(controller.updatePricingTier('tier-1', {} as any, newReq())).rejects.toThrow(ForbiddenException);
+            await expect(controller.updatePricingTier('tier-1', {} as any, newReq())).rejects.toThrow(NotFoundException);
             expect(mockExecute.execute).not.toHaveBeenCalled();
         });
     });

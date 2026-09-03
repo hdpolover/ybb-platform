@@ -76,10 +76,10 @@ describe('assertProgramAccess', () => {
     await expect(assertProgramAccess(mockPrisma as any, scope, 'program-1')).resolves.toEqual(program);
   });
 
-  it('brand-scoped admin is FORBIDDEN from a program in a brand they do not own', async () => {
+  it('brand-scoped admin is refused a program in a brand they do not own', async () => {
     mockPrisma.program.findUnique.mockResolvedValue(program);
     const scope: RevenueAccessScope = { kind: 'brand_scope', allowedBrandIds: ['brand-other'], allowedProgramIds: null };
-    await expect(assertProgramAccess(mockPrisma as any, scope, 'program-1')).rejects.toThrow(ForbiddenException);
+    await expect(assertProgramAccess(mockPrisma as any, scope, 'program-1')).rejects.toThrow(NotFoundException);
   });
 
   it('assigned-scope admin can only access explicitly assigned programIds', async () => {
@@ -88,6 +88,34 @@ describe('assertProgramAccess', () => {
     await expect(assertProgramAccess(mockPrisma as any, allowed, 'program-1')).resolves.toEqual(program);
 
     const forbidden: RevenueAccessScope = { kind: 'assigned', allowedBrandIds: null, allowedProgramIds: ['program-other'] };
-    await expect(assertProgramAccess(mockPrisma as any, forbidden, 'program-1')).rejects.toThrow(ForbiddenException);
+    await expect(assertProgramAccess(mockPrisma as any, forbidden, 'program-1')).rejects.toThrow(NotFoundException);
+  });
+
+  // The point of the change: a scoped admin must not be able to tell "does not
+  // exist" from "exists but is not yours". Before this, the status code alone
+  // let an admin scoped to brand A enumerate which programme ids exist in brand
+  // B. No data was disclosed, which is why it was medium - but it is exactly the
+  // existence oracle the id-keyed routes were otherwise built to avoid.
+  it('gives a scoped admin the SAME answer for missing and out-of-scope', async () => {
+    const scope: RevenueAccessScope = { kind: 'brand_scope', allowedBrandIds: ['brand-other'], allowedProgramIds: null };
+
+    mockPrisma.program.findUnique.mockResolvedValue(null);
+    const whenMissing = await assertProgramAccess(mockPrisma as any, scope, 'program-1').catch((e) => e);
+
+    mockPrisma.program.findUnique.mockResolvedValue(program);
+    const whenOutOfScope = await assertProgramAccess(mockPrisma as any, scope, 'program-1').catch((e) => e);
+
+    expect(whenMissing.constructor).toBe(whenOutOfScope.constructor);
+    expect(whenMissing.getStatus()).toBe(whenOutOfScope.getStatus());
+    expect(whenMissing.message).toBe(whenOutOfScope.message);
+  });
+
+  // A platform admin sees every programme, so telling them the truth leaks
+  // nothing - and a genuine 404 is the more useful answer.
+  it('still tells a platform admin honestly that a program does not exist', async () => {
+    mockPrisma.program.findUnique.mockResolvedValue(null);
+    const scope: RevenueAccessScope = { kind: 'platform', allowedBrandIds: null, allowedProgramIds: null };
+
+    await expect(assertProgramAccess(mockPrisma as any, scope, 'nope')).rejects.toThrow(NotFoundException);
   });
 });

@@ -58,7 +58,7 @@ describe('assertProgramContentAccess', () => {
     it('refuses a brand admin a programme outside their brands', async () => {
         await expect(
             assertProgramContentAccess(makePrisma(brandAdmin(['brand-other'])), actor, 'prog-1'),
-        ).rejects.toThrow(ForbiddenException);
+        ).rejects.toThrow(NotFoundException);
     });
 
     // The persona whose absence from a sibling spec caused a live lockout. Note
@@ -73,7 +73,7 @@ describe('assertProgramContentAccess', () => {
     it('refuses a program-scoped admin a programme they are not assigned to', async () => {
         await expect(
             assertProgramContentAccess(makePrisma(assignedAdmin(['prog-other'])), actor, 'prog-1'),
-        ).rejects.toThrow(ForbiddenException);
+        ).rejects.toThrow(NotFoundException);
     });
 
     // Spans two brands, proving the check is not collapsed to a single brand id.
@@ -86,7 +86,7 @@ describe('assertProgramContentAccess', () => {
     it('refuses an admin with no assignments at all', async () => {
         await expect(
             assertProgramContentAccess(makePrisma(assignedAdmin([])), actor, 'prog-1'),
-        ).rejects.toThrow(ForbiddenException);
+        ).rejects.toThrow(NotFoundException);
     });
 
     // resolveRevenueAccessScope fails closed to 'assigned' with an empty list
@@ -94,7 +94,7 @@ describe('assertProgramContentAccess', () => {
     it('fails closed when the caller has no admin record', async () => {
         await expect(
             assertProgramContentAccess(makePrisma(null), actor, 'prog-1'),
-        ).rejects.toThrow(ForbiddenException);
+        ).rejects.toThrow(NotFoundException);
     });
 
     it('404s a programme that does not exist or is soft-deleted', async () => {

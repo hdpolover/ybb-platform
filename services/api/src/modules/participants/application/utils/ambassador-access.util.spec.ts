@@ -126,12 +126,12 @@ describe('assertAmbassadorCreateAccess', () => {
     it('refuses a programme the caller does not hold', async () => {
         await expect(
             assertAmbassadorCreateAccess(makePrisma(assignedAdmin(['prog-other'])), actor, 'prog-1'),
-        ).rejects.toThrow(ForbiddenException);
+        ).rejects.toThrow(NotFoundException);
     });
 
     it('refuses an admin with no assignments at all', async () => {
         await expect(
             assertAmbassadorCreateAccess(makePrisma(assignedAdmin([])), actor, 'prog-1'),
-        ).rejects.toThrow(ForbiddenException);
+        ).rejects.toThrow(NotFoundException);
     });
 });
