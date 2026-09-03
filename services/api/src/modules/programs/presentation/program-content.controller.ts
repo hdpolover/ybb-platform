@@ -65,6 +65,7 @@ import {
   UnreleaseLoaBatchCommand,
   DeleteLoaBatchCommand,
 } from '../application/commands/loa-batch.commands';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import {
   GetLoaBatchesQuery,
   GetLoaDownloadsQuery,
@@ -142,9 +143,22 @@ export class ProgramContentController {
     @Param('id') programId: string, 
     @Body() dto: CreateProgramGalleryDto, 
     @UploadedFile() image: Express.Multer.File,
-    @Request() req: ExpressRequest & { user: { id: string } }
+    @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.createProgramGalleryHandler.execute(new CreateProgramGalleryCommand(dto, req.user.id, image));
+    // NOTE: @ScopedBy('program', 'id') is deliberately NOT used here even though
+    // the route carries a program id. The handler acts on dto.programId, not the
+    // route param, and the two are separate inputs - a caller can diverge them.
+    // A guard on the route param would authorise one program while the row
+    // landed on another, and the audit trail would record a clean check. The
+    // handler asserts on the id it actually writes instead.
+    //
+    // Removing programId from the DTO so the route param became the only source
+    // was considered and rejected: ValidationPipe runs whitelist +
+    // forbidNonWhitelisted, and the admin dashboard sends programId in the body
+    // as well as the URL, so dropping it from the DTO would 400 every live
+    // create until the frontend shipped.
+    return this.createProgramGalleryHandler.execute(new CreateProgramGalleryCommand(dto, req.user.id, actor, image));
   }
 
   @Put('gallery/:itemId')
@@ -159,9 +173,10 @@ export class ProgramContentController {
     @Param('itemId') itemId: string, 
     @Body() dto: UpdateProgramGalleryDto, 
     @UploadedFile() image: Express.Multer.File,
-    @Request() req: ExpressRequest & { user: { id: string } }
+    @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.updateProgramGalleryHandler.execute(new UpdateProgramGalleryCommand(itemId, dto, req.user.id, image));
+    return this.updateProgramGalleryHandler.execute(new UpdateProgramGalleryCommand(itemId, dto, req.user.id, actor, image));
   }
 
   @Delete('gallery/:itemId')
@@ -170,9 +185,35 @@ export class ProgramContentController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete gallery item' })
   @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
-  async deleteGallery(@Param('itemId') itemId: string, @Request() req: ExpressRequest & { user: { id: string } }) {
-    return this.deleteProgramGalleryHandler.execute(new DeleteProgramGalleryCommand(itemId, req.user.id));
+  async deleteGallery(
+    @Param('itemId') itemId: string,
+    @Request() req: ExpressRequest & { user: { id: string } },
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.deleteProgramGalleryHandler.execute(new DeleteProgramGalleryCommand(itemId, req.user.id, actor));
   }
+
+  // ---------------------------------------------------------------------------
+  // SCOPING STATUS of this controller, so the gap is not mistaken for a
+  // deliberate choice.
+  //
+  // The gallery write routes above assert the caller's programme scope via
+  // assertProgramContentAccess. The families BELOW - testimonials, faqs,
+  // resources, document templates and loa batches - do NOT, and have the
+  // identical shape: create takes the programme id from the BODY and drops the
+  // route param, and update/delete are keyed only by the item id with no
+  // programme id in the URL at all. Any admin can therefore still write to any
+  // programme's content in those families by id.
+  //
+  // Left unscoped in this pass on purpose rather than half-done: each family
+  // needs the same actor threading through its command classes, and doing them
+  // one at a time produces a state where some routes 403 and others 200 for the
+  // same admin, which reads as a flaky page rather than a bug. Tracked in the
+  // audit backlog alongside M215.
+  //
+  // If you fix one, fix them all - and assert on the id the handler ACTUALLY
+  // writes, not a parallel one from the route. See addGallery above for why.
+  // ---------------------------------------------------------------------------
 
   // --- Testimonial Endpoints ---
   @Get(':id/testimonials')

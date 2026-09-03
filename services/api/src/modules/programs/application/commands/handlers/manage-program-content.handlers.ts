@@ -40,6 +40,8 @@ import {
     UpdateProgramLandingContentCommand,
 } from '../program-content.commands';
 import { PROGRAM_LANDING_CONTENT_KEYS, isProgramLandingContentKey } from '../../copy/program-landing-content.constants';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { assertProgramContentAccess } from '../../utils/program-content-access.util';
 
 // ─── Shared cache-invalidation helpers ───────────────────────────────────────
 // Used by ~9 call sites (gallery, faq, document-template x3 each) plus the
@@ -524,8 +526,15 @@ export class CreateProgramGalleryHandler implements ICommandHandler<CreateProgra
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramGalleryCommand) {
+        // Asserted on dto.programId because that is the id createGallery writes.
+        // The route also carries a program id, but the handler ignores it, so
+        // checking the route param would authorise a different program than the
+        // one the row lands on.
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
         let imageUrl = command.dto.imageUrl;
 
         if (command.image) {
@@ -560,6 +569,7 @@ export class UpdateProgramGalleryHandler implements ICommandHandler<UpdateProgra
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: UpdateProgramGalleryCommand) {
         let imageUrl = command.dto.imageUrl;
@@ -571,6 +581,11 @@ export class UpdateProgramGalleryHandler implements ICommandHandler<UpdateProgra
         if (!galleryItem.programId) {
             throw new NotFoundException('Program ID missing on gallery item');
         }
+
+        // The parent program is resolved from the target row, so this costs no
+        // extra query. The route carries only the item id - there is no program
+        // id for a guard to check.
+        await assertProgramContentAccess(this.prismaRead, command.actor, galleryItem.programId);
 
         if (command.image) {
             const program = await this.prisma.program.findUnique({ where: { id: galleryItem.programId } });
@@ -603,13 +618,25 @@ export class DeleteProgramGalleryHandler implements ICommandHandler<DeleteProgra
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: DeleteProgramGalleryCommand) {
         const existing = await this.repository.findGalleryById(command.id);
-        const result = await this.repository.deleteGallery(command.id);
-        if (existing?.programId) {
-            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
+        if (!existing) {
+            throw new NotFoundException('Gallery item not found');
         }
+        if (!existing.programId) {
+            throw new NotFoundException('Program ID missing on gallery item');
+        }
+
+        // Assert BEFORE deleting. This used to delete first and read programId
+        // afterwards only to invalidate the cache, so the row was already gone
+        // by the time anything knew which program it belonged to - there was no
+        // point at which a check could have refused it.
+        await assertProgramContentAccess(this.prismaRead, command.actor, existing.programId);
+
+        const result = await this.repository.deleteGallery(command.id);
+        await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
         return result;
     }
 }
