@@ -1,4 +1,11 @@
-import { Injectable, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { createHash, randomUUID, timingSafeEqual } from 'crypto';
 import { RegisterAdminCommand } from '../register-admin.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
@@ -6,6 +13,44 @@ import { UnitOfWork } from '../../../../../shared/infrastructure/database/unit-o
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
+
+/**
+ * The only roles this route may hand out, mapped to the AdminRole rows the
+ * seed actually creates.
+ *
+ * Two different vocabularies meet here. AdminRole.name is the unique key and
+ * prisma/seeds/seed-auth.ts writes DISPLAY names ('Super Admin', 'Program
+ * Admin', ...); the slugs on the left are what admin_brands.role_in_brand
+ * stores and what the request body sends, matching prisma/seeds/seed-admins.ts.
+ * Looking a slug up as a role name missed on every seeded database, so the old
+ * auto-create branch fired every time and produced a duplicate,
+ * permission-less AdminRole that the new roleId link then pointed at.
+ *
+ * A Map rather than an object literal so a body of "constructor" or
+ * "__proto__" cannot resolve to something inherited.
+ */
+const ADMIN_ROLE_CATALOG = new Map<string, { roleName: string; accessLevel: number }>([
+  ['super_admin', { roleName: 'Super Admin', accessLevel: 10 }],
+  ['super-admin', { roleName: 'Super Admin', accessLevel: 10 }],
+  ['owner', { roleName: 'Super Admin', accessLevel: 10 }],
+  ['program_coordinator', { roleName: 'Program Admin', accessLevel: 5 }],
+  ['manager', { roleName: 'Program Admin', accessLevel: 5 }],
+  ['news_writer', { roleName: 'News Writer', accessLevel: 3 }],
+  ['editor', { roleName: 'Editor', accessLevel: 3 }],
+]);
+
+/**
+ * Constant-time secret comparison.
+ *
+ * timingSafeEqual throws on unequal lengths, which would both leak the secret's
+ * length and turn a wrong guess into a 500. Comparing SHA-256 digests makes
+ * both inputs 32 bytes whatever the caller sends, so the length check never
+ * fires and the compare stays constant time.
+ */
+function secretMatches(candidate: string, expected: string): boolean {
+  const digest = (value: string) => createHash('sha256').update(value, 'utf8').digest();
+  return timingSafeEqual(digest(candidate), digest(expected));
+}
 
 @Injectable()
 export class RegisterAdminHandler {
@@ -17,10 +62,33 @@ export class RegisterAdminHandler {
   ) {}
 
   async execute(command: RegisterAdminCommand): Promise<AuthResponseDto> {
-    // 1. Verify Secret Key
+    // 0. Off unless someone deliberately turned it on.
+    //
+    // Nothing calls this route. First-admin bootstrap is done by
+    // prisma/seeds/seed-admins.ts at container start (docker-entrypoint.sh),
+    // and day-to-day admin creation is POST /v1/admins, which is behind
+    // JwtAuthGuard + RolesGuard and is what the dashboard uses. This is kept
+    // only as a break-glass path for a fresh local/staging database, so it
+    // stays dark until ADMIN_REGISTRATION_ENABLED is explicitly 'true'.
+    // NotFound rather than Forbidden so a probe learns nothing about whether a
+    // secret exists to be guessed. It is not a perfect impersonation of a
+    // missing route — the global ValidationPipe runs first, so a malformed
+    // body still 400s, and a genuine 404 names the /v1 prefix — and it is not
+    // worth contorting the code to make it one.
+    if (this.configService.get<string>('ADMIN_REGISTRATION_ENABLED') !== 'true') {
+      throw new NotFoundException('Cannot POST /auth/register-admin');
+    }
+
+    // 1. Verify Secret Key (constant time)
     const validSecret = this.configService.get<string>('ADMIN_REGISTRATION_SECRET');
-    if (!validSecret || command.secretKey !== validSecret) {
+    if (!validSecret || !secretMatches(command.secretKey ?? '', validSecret)) {
       throw new ForbiddenException('Invalid admin registration secret');
+    }
+
+    // 1b. Reject any role outside the catalog BEFORE touching the database.
+    const catalogEntry = ADMIN_ROLE_CATALOG.get(command.role);
+    if (!catalogEntry) {
+      throw new BadRequestException('Invalid admin role');
     }
 
     // 2. Check if program category exists
@@ -46,27 +114,22 @@ export class RegisterAdminHandler {
       throw new ConflictException('User already exists for this brand');
     }
 
-    // 4. Resolve or Create Admin Role
-    let role = await this.prisma.adminRole.findUnique({
-      where: { name: command.role },
+    // 4. Resolve the seeded AdminRole this slug maps to.
+    //
+    // No create branch: if the row is missing the database has not been
+    // seeded, and inventing a permission-less role here would silently hand
+    // the new admin an account that 403s on every role-guarded route.
+    const role = await this.prisma.adminRole.findUnique({
+      where: { name: catalogEntry.roleName },
     });
 
     if (!role) {
-      // Create role if it doesn't exist (Auto-provisioning for simplicity)
-      role = await this.prisma.adminRole.create({
-        data: {
-          name: command.role,
-          description: `Auto-generated role for ${command.role}`,
-          isActive: true,
-        },
-      });
+      throw new BadRequestException(
+        `Admin role "${catalogEntry.roleName}" does not exist. Run prisma/seeds/seed-auth.ts first.`,
+      );
     }
 
-    // Determine Access Level based on role
-    let accessLevel = 1;
-    if (['super_admin', 'super-admin', 'owner'].includes(command.role)) accessLevel = 10;
-    else if (['program_coordinator', 'manager'].includes(command.role)) accessLevel = 5;
-    else if (['news_writer', 'editor'].includes(command.role)) accessLevel = 3;
+    const accessLevel = catalogEntry.accessLevel;
 
     // 5. Create User and Admin in transaction
     const { user, admin } = await this.unitOfWork.execute(
@@ -92,10 +155,17 @@ export class RegisterAdminHandler {
           phoneNumber: undefined,
         });
 
-        // Update access level and permissions separately if needed
+        // Update access level and permissions, and LINK THE ROLE.
+        //
+        // roleId was never written here, so admins.role_id stayed NULL. That is
+        // not cosmetic: admin-login.handler rebuilds `roles` from the DB on the
+        // next login, and with a NULL role it emits only ['admin'] plus
+        // brand-scoped strings, so every @Roles(SUPER_ADMIN) route 403s from
+        // then on even though the token this handler returned worked fine.
         await repos.tx.admin.update({
           where: { id: newAdmin.id },
           data: {
+            roleId: role.id,
             accessLevel: accessLevel,
             canManageAdmins: accessLevel >= 10,
             canAssignRoles: accessLevel >= 10,
@@ -127,22 +197,43 @@ export class RegisterAdminHandler {
       { name: 'register-admin', timeout: 5000 }
     );
 
-    // 6. Generate Tokens
-    const payload = {
+    // 6. Generate Tokens.
+    //
+    // These used to be signed from ONE payload object with no jti at all, so
+    // the two tokens were byte-identical apart from exp, the logout blacklist
+    // could not track them, and the refresh token was accepted as a bearer.
+    const basePayload = {
       sub: user.id,
       email: user.email,
       brandId: user.brandId,
-      roles: ['admin', command.role],
       adminId: admin.id,
     };
 
-    const accessToken = this.jwtService.sign(payload, {
-      expiresIn: this.configService.get<string>('JWT_ADMIN_EXPIRES_IN', '8h'),
-    });
+    // Roles are derived exactly the way admin-login.handler rebuilds them on
+    // the next sign-in, so the token this route hands back grants the same
+    // thing that logging in does. It used to emit the request's SLUG
+    // ('owner', 'manager'), which matches no @Roles() value and none of the
+    // linked row's names, so a freshly registered admin 403'd on every
+    // role-guarded route until they logged out and back in.
+    const roleSlug = role.name.toLowerCase().replace(/\s+/g, '_');
+    const roles = [
+      'admin',
+      role.name,
+      ...(roleSlug === role.name ? [] : [roleSlug]),
+      ...[command.brandId, ...(command.additionalCategoryIds ?? [])].map(
+        (brandId) => `brand:${brandId}:${command.role}`,
+      ),
+    ];
 
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d'),
-    });
+    const accessToken = this.jwtService.sign(
+      { ...basePayload, jti: randomUUID(), roles, type: 'access' },
+      { expiresIn: this.configService.get<string>('JWT_ADMIN_EXPIRES_IN', '8h') },
+    );
+
+    const refreshToken = this.jwtService.sign(
+      { ...basePayload, jti: randomUUID(), type: 'refresh' },
+      { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') },
+    );
 
     return {
       accessToken,

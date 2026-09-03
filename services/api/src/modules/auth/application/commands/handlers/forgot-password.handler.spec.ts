@@ -42,7 +42,10 @@ describe('ForgotPasswordHandler - account enumeration hardening', () => {
     id: 'user-id-123',
     email: 'existing@example.com',
     brandId: 'brand-id-123',
+    isActive: true,
   };
+
+  const deactivatedUser = { ...existingUser, isActive: false };
 
   const fullBrand = {
     id: 'brand-id-123',
@@ -142,6 +145,40 @@ describe('ForgotPasswordHandler - account enumeration hardening', () => {
     expect(mockRabbitmqProducer.emit).not.toHaveBeenCalledWith(
       'user.forgot-password',
       expect.anything(),
+    );
+  });
+
+  it('sends no reset mail to a deactivated account, and says so in the log', async () => {
+    // isActive: false is only ever set deliberately — admin deactivate, admin
+    // delete, or an APPROVED account-deletion request. ResetPasswordHandler
+    // refuses those tokens, so mailing one would only send a dead link.
+    //
+    // The account still EXISTS, so the server-side log has to say that.
+    // Filtering isActive into the query instead would route this down the
+    // "non-existent account" branch and log the opposite of what happened.
+    mockPrismaService.user.findFirst.mockResolvedValue(deactivatedUser);
+    const warnSpy = jest.spyOn((handler as any).logger, 'warn');
+    const command = new ForgotPasswordCommand('deactivated@example.com', 'brand-id-123');
+
+    const result = await handler.execute(command);
+
+    expect(mockRabbitmqProducer.emit).not.toHaveBeenCalled();
+    expect(mockPrismaService.user.update).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('deactivated'));
+    expect(result).toEqual({
+      message: 'A password reset link has been sent to your email.',
+    });
+  });
+
+  it('emits the security log on the miss path too, so an enumeration sweep is still visible', async () => {
+    mockPrismaService.user.findFirst.mockResolvedValue(null);
+
+    await handler.execute(new ForgotPasswordCommand('nobody@example.com', 'brand-id-123'));
+
+    expect(mockAuthLoggingService.logForgotPasswordRequest).toHaveBeenCalledWith(
+      'nobody@example.com',
+      '0.0.0.0',
+      'unknown',
     );
   });
 

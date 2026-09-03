@@ -104,13 +104,17 @@ export class AmbassadorLoginHandler {
       data: { failedLoginAttempts: 0, lastLoginAt: new Date() },
     });
 
+    // Session id is minted BEFORE the token so the access token can carry it
+    // as `sid`. Without it logout has no session to name (see LogoutHandler).
+    const sessionToken = randomUUID();
+
     // Generate JWT tokens
     const accessToken = this.jwtService.sign(
-      { sub: user.id, email: user.email, brandId: user.brandId, jti: randomUUID(), roles: [] },
+      { sub: user.id, email: user.email, brandId: user.brandId, jti: randomUUID(), roles: [], sid: sessionToken, type: 'access' },
       { expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h') },
     );
     const refreshToken = this.jwtService.sign(
-      { sub: user.id, email: user.email, brandId: user.brandId, jti: randomUUID() },
+      { sub: user.id, email: user.email, brandId: user.brandId, jti: randomUUID(), type: 'refresh' },
       { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') },
     );
 
@@ -123,7 +127,7 @@ export class AmbassadorLoginHandler {
     await this.prisma.userSession.create({
       data: {
         userId: user.id,
-        sessionToken: randomUUID(),
+        sessionToken,
         refreshToken,
         deviceType: agentInfo.deviceType,
         deviceName: `${agentInfo.browser} on ${agentInfo.os}`,

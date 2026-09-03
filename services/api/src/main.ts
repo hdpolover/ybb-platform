@@ -54,6 +54,33 @@ async function createConsumerApp(
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // DELIBERATELY NOT SET: app.set('trust proxy', ...).
+  //
+  // The audit backlog suggests it as the fix for `req.ip` being the load
+  // balancer. It is the wrong fix here, but NOT because it would be forgeable:
+  // scoped to the one Traefik hop, `proxy-addr` stops at the address Traefik
+  // itself appended — the caller's real IP — and a prepended value never wins.
+  // (An earlier version of this comment claimed log forgery. That is only true
+  // for `trust proxy: true` or an over-broad hop count, which is not what
+  // anyone would configure. The claim was wrong; the decision was not.)
+  //
+  // The actual reason: trust proxy cannot see PAST the Cloudflare edge. The
+  // chain is client -> Cloudflare -> Traefik -> API, so the address Traefik
+  // appends is a CF edge, and Cloudflare rotates edges between connections.
+  // Trust proxy would faithfully hand us a different load balancer per request
+  // and call it the client — the same defect as `req.ip`, one hop further out.
+  // Seeing the real caller requires reading cf-connecting-ip, which trust proxy
+  // knows nothing about, and reading it CONDITIONALLY, because the origin is
+  // also reachable directly (confirmed) and on that path the header is just
+  // something the caller typed.
+  //
+  // So: `@ClientIp()` / `resolveClientIp()` (src/shared/utils/client-ip.ts).
+  // Those read the RIGHTMOST forwarded entry — the one our own edge appended —
+  // and only prefer cf-connecting-ip when the hop that reached us is inside a
+  // published Cloudflare range. Leaving trust proxy off also keeps `req.ips`
+  // empty, so nobody can start reading a value that would need the same
+  // conditional treatment to be meaningful.
   const rabbitMqUrl =
     process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/';
   const retryDelayMs = parsePositiveInt(process.env.RABBITMQ_RETRY_DELAY_MS, 15000);

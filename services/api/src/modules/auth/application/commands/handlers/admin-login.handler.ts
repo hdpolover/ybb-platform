@@ -202,6 +202,7 @@ export class AdminLoginHandler {
             isAdmin: true, // Explicit flag
             adminId: user.admin.id,
             sid: sessionId,
+            type: 'access' as const,
         };
 
         const refreshTokenPayload = {
@@ -212,6 +213,7 @@ export class AdminLoginHandler {
             adminId: user.admin.id,
             isAdmin: true,
             sid: sessionId,
+            type: 'refresh' as const,
         };
 
         const accessToken = this.jwtService.sign(accessTokenPayload, {

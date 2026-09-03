@@ -20,17 +20,33 @@ export class LogoutHandler {
             await this.tokenBlacklistService.blacklistToken(command.jti, remainingTimeMs);
         }
 
-        await this.prisma.userSession.updateMany({
-            where: {
-                userId: command.userId,
-                sessionToken: command.sessionId,
-                revokedAt: null,
-            },
-            data: {
-                isActive: false,
-                revokedAt: new Date(),
-            },
-        });
+        // Revoke ONLY the session this token names.
+        //
+        // sessionId comes from the token's `sid`. When it is undefined Prisma
+        // drops the key from the where clause entirely, so this updateMany
+        // degenerated to { userId, revokedAt: null } and logging out of one
+        // device silently revoked every session the user had everywhere. Until
+        // recently only admin tokens carried a sid, so that was the behaviour
+        // for every participant, ambassador, firebase and impersonated logout.
+        //
+        // Tokens minted before `sid` shipped still have none. For those we
+        // revoke nothing rather than everything: an under-revoke that expires
+        // on its own within the access-token TTL is strictly better than an
+        // over-revoke that kicks the user off all their devices. The access
+        // token is still blacklisted above either way.
+        if (command.sessionId) {
+            await this.prisma.userSession.updateMany({
+                where: {
+                    userId: command.userId,
+                    sessionToken: command.sessionId,
+                    revokedAt: null,
+                },
+                data: {
+                    isActive: false,
+                    revokedAt: new Date(),
+                },
+            });
+        }
 
         return {
             success: true,

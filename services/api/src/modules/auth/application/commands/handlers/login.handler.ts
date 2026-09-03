@@ -311,6 +311,10 @@ export class LoginHandler {
       }
     }
 
+    // Session id is minted BEFORE the token so the access token can carry it
+    // as `sid`. Without it logout has no session to name (see LogoutHandler).
+    const sessionToken = randomUUID();
+
     // Generate JWT tokens with unique JTI for blacklisting support
     const accessTokenPayload = {
       sub: user.id,
@@ -318,6 +322,8 @@ export class LoginHandler {
       brandId: user.brandId,
       jti: randomUUID(), // Unique token ID for blacklisting
       roles: roles,
+      sid: sessionToken,
+      type: 'access' as const,
     };
 
     const refreshTokenPayload = {
@@ -325,6 +331,7 @@ export class LoginHandler {
       email: user.email,
       brandId: user.brandId,
       jti: randomUUID(), // Different JTI for refresh token
+      type: 'refresh' as const,
     };
 
     const accessToken = this.jwtService.sign(accessTokenPayload, {
@@ -337,7 +344,6 @@ export class LoginHandler {
 
     // Create User Session
     const agentInfo = this.parseUserAgent(command.userAgent);
-    const sessionToken = randomUUID();
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiration
 
