@@ -20,6 +20,7 @@ import {
 } from '../../presentation/dto/create-update-program-content.dto';
 import { UpdateProgramContactDto } from '../../presentation/dto/update-program-contact.dto';
 import { UpdateProgramLandingContentDto } from '../../presentation/dto/update-program-landing-content.dto';
+import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 
 // Timeline
 export class CreateProgramTimelineCommand {
@@ -68,6 +69,9 @@ export class CreateProgramGalleryCommand {
     constructor(
         public readonly dto: CreateProgramGalleryDto, 
         public readonly userId: string,
+        // The caller, so the handler can refuse a program their scope does not
+        // cover. userId alone is not enough: the scope lives on the Admin row.
+        public readonly actor: CurrentUserData,
         public readonly image?: Express.Multer.File
     ) { }
 }
@@ -76,11 +80,16 @@ export class UpdateProgramGalleryCommand {
         public readonly id: string, 
         public readonly dto: UpdateProgramGalleryDto, 
         public readonly userId: string,
+        public readonly actor: CurrentUserData,
         public readonly image?: Express.Multer.File
     ) { }
 }
 export class DeleteProgramGalleryCommand {
-    constructor(public readonly id: string, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 
 // Testimonial

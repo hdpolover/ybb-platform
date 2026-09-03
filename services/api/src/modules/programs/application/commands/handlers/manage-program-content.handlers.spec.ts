@@ -1,6 +1,7 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import {
     CreateProgramEssayHandler,
     CreateProgramSpeakerHandler,
@@ -11,6 +12,8 @@ import {
     UpdateValidityPeriodHandler,
     invalidateLandingCacheByProgramId,
     CreateProgramGalleryHandler,
+    DeleteProgramGalleryHandler,
+    UpdateProgramGalleryHandler,
     CreateProgramTestimonialHandler,
     UpdateProgramTestimonialHandler,
     DeleteProgramTestimonialHandler,
@@ -48,6 +51,8 @@ import {
     CreateValidityPeriodCommand,
     UpdateValidityPeriodCommand,
     CreateProgramGalleryCommand,
+    DeleteProgramGalleryCommand,
+    UpdateProgramGalleryCommand,
     CreateProgramTestimonialCommand,
     UpdateProgramTestimonialCommand,
     DeleteProgramTestimonialCommand,
@@ -703,6 +708,7 @@ describe('ManageProgramContentHandlers', () => {
         let prisma: any;
         let cache: any;
         let landingCacheInvalidation: any;
+        let prismaRead: any;
 
         beforeEach(() => {
             repo = {
@@ -716,6 +722,27 @@ describe('ManageProgramContentHandlers', () => {
             prisma = { program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-x' }) } };
             cache = { invalidateByPattern: jest.fn().mockResolvedValue(undefined) };
             landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+            // The gallery handlers now assert the caller's programme scope before
+            // writing. A platform-scope admin passes every programme, which keeps
+            // these cache-invalidation tests about cache invalidation.
+            prismaRead = {
+                admin: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        accessLevel: 5,
+                        canManageAdmins: true,
+                        canAssignRoles: true,
+                        customPermissions: [],
+                        role: { name: 'super_admin', permissions: ['platform_access'] },
+                        adminBrands: [],
+                        adminPrograms: [],
+                    }),
+                },
+                program: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        id: 'prog-1', brandId: 'brand-x', name: 'P', deletedAt: null,
+                    }),
+                },
+            };
         });
 
         async function build<T>(HandlerCtor: new (...args: any[]) => T): Promise<T> {
@@ -727,10 +754,82 @@ describe('ManageProgramContentHandlers', () => {
                     { provide: PrismaService, useValue: prisma },
                     { provide: CacheService, useValue: cache },
                     { provide: LandingCacheInvalidationService, useValue: landingCacheInvalidation },
+                    { provide: PrismaReadService, useValue: prismaRead },
                 ],
             }).compile();
             return module.get(HandlerCtor);
         }
+
+        // ADOPTION, not just the abstraction. program-content-access.util.spec.ts
+        // proves the rule is correct; nothing there proves these handlers call
+        // it. That exact gap is why #154 was needed - a shared rule was unit
+        // tested while three call sites quietly kept their own.
+        describe('programme scope enforcement', () => {
+            const outOfScope = () => ({
+                admin: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        accessLevel: 1,
+                        canManageAdmins: false,
+                        canAssignRoles: false,
+                        customPermissions: [],
+                        role: { name: 'reviewer', permissions: [] },
+                        adminBrands: [],
+                        adminPrograms: [{ programId: 'someone-elses-program', permissions: [] }],
+                    }),
+                },
+                program: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        id: 'prog-1', brandId: 'brand-x', name: 'P', deletedAt: null,
+                    }),
+                },
+            });
+            const actor = { userId: 'u', email: 'a@b.c', brandId: 'brand-x', adminId: 'adm-1' } as never;
+
+            it('CreateProgramGalleryHandler refuses a programme outside the caller scope', async () => {
+                prismaRead = outOfScope();
+                const handler = await build(CreateProgramGalleryHandler);
+
+                await expect(
+                    handler.execute(new CreateProgramGalleryCommand(
+                        { programId: 'prog-1', imageUrl: 'https://x.example/i.png' } as never,
+                        'user-1',
+                        actor,
+                    )),
+                ).rejects.toThrow();
+
+                expect(repo.createGallery).not.toHaveBeenCalled();
+            });
+
+            it('UpdateProgramGalleryHandler refuses, resolving the programme from the target row', async () => {
+                prismaRead = outOfScope();
+                repo.findGalleryById = jest.fn().mockResolvedValue({ id: 'gal-1', programId: 'prog-1' });
+                repo.updateGallery = jest.fn();
+                const handler = await build(UpdateProgramGalleryHandler);
+
+                await expect(
+                    handler.execute(new UpdateProgramGalleryCommand('gal-1', {} as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.updateGallery).not.toHaveBeenCalled();
+            });
+
+            // The sharp one. This handler used to call deleteGallery FIRST and
+            // read programId only afterwards for cache invalidation, so the row
+            // was already gone before anything knew whose it was - there was no
+            // point at which a check could have refused it.
+            it('DeleteProgramGalleryHandler refuses BEFORE deleting, not after', async () => {
+                prismaRead = outOfScope();
+                repo.findGalleryById = jest.fn().mockResolvedValue({ id: 'gal-1', programId: 'prog-1' });
+                repo.deleteGallery = jest.fn();
+                const handler = await build(DeleteProgramGalleryHandler);
+
+                await expect(
+                    handler.execute(new DeleteProgramGalleryCommand('gal-1', 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.deleteGallery).not.toHaveBeenCalled();
+            });
+        });
 
         it('CreateProgramGalleryHandler invalidates via the shared service after creating', async () => {
             const handler = await build(CreateProgramGalleryHandler);
@@ -739,6 +838,7 @@ describe('ManageProgramContentHandlers', () => {
             await handler.execute(new CreateProgramGalleryCommand(
                 { programId: 'prog-1', imageUrl: 'https://x.example/img.png' } as any,
                 'user-1',
+                { userId: 'user-1', email: 'a@b.c', brandId: 'brand-1', adminId: 'adm-1' } as any,
             ));
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-x', homeAndSettingsOptions);

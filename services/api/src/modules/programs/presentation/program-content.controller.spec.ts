@@ -129,7 +129,9 @@ describe('ProgramContentController', () => {
             const req = { user: { id: 'admin-1' } } as any;
             const file = { originalname: 'image.jpg' } as unknown as Express.Multer.File;
 
-            await controller.addGallery('prog-1', dto, file, req);
+            const actor = { userId: 'admin-1', email: 'a@b.c', brandId: 'brand-1', adminId: 'adm-1' } as any;
+
+            await controller.addGallery('prog-1', dto, file, req, actor);
 
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(CreateProgramGalleryCommand));
             const cmd = mockExecute.execute.mock.calls[0][0];
