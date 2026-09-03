@@ -1,4 +1,5 @@
 // src/modules/auth/application/services/account-lockout.util.ts
+import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
 import { MAX_FAILED_LOGIN_ATTEMPTS, LOCKOUT_DURATION_MINUTES } from './account-lockout.constants';
 
 /**
@@ -20,20 +21,48 @@ export function isLockedOut(user: { lockedUntil?: Date | null }): boolean {
 export const LOCKED_OUT_MESSAGE = 'Too many failed attempts. Try again later.';
 
 /**
- * The `data` for the user row after ONE failed credential attempt.
+ * Record ONE failed credential attempt against a user, and lock the account
+ * when that attempt reaches the threshold.
  *
- * The lock is stamped on the attempt that REACHES the threshold, so the caller
- * gets MAX_FAILED_LOGIN_ATTEMPTS tries and the next request is refused before
- * the credential is even compared.
+ * THE COUNTER IS INCREMENTED IN THE DATABASE, not read into JS and written
+ * back. Every caller has already loaded the user for other reasons, so the
+ * obvious `failedLoginAttempts: user.failedLoginAttempts + 1` reads a value
+ * that N concurrent guesses all share: N attempts all write the same n+1, the
+ * counter advances by one for the whole burst and lockedUntil never trips.
+ * That is the entire lockout defeated by opening N connections — and on
+ * /auth/ambassador-login the whole credential is a short digit code.
+ *
+ * The lock is stamped as a SECOND write, driven by the value the increment
+ * actually returned, so it fires on whichever request genuinely crossed the
+ * threshold rather than on whatever each request happened to have read. The
+ * gap between the two writes lets a burst that crosses the line together
+ * spend its in-flight guesses before the lock lands; the next attempt is
+ * refused, and the counter is exact either way.
+ *
+ * A below-threshold failure deliberately does NOT write `lockedUntil: null`.
+ * Clearing the lock on a failure is how a request holding a stale read
+ * un-locks an account another request just locked. Locks are cleared on
+ * SUCCESSFUL login (all three handlers do) and expire on their own via
+ * isLockedOut.
+ *
+ * Returns the new attempt count.
  */
-export function failedAttemptUpdate(user: { failedLoginAttempts: number }) {
-  const failedLoginAttempts = user.failedLoginAttempts + 1;
-  return {
-    failedLoginAttempts,
-    lastFailedLogin: new Date(),
-    lockedUntil:
-      failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS
-        ? new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60_000)
-        : null,
-  };
+export async function recordFailedAttempt(
+  prisma: PrismaService,
+  userId: string,
+): Promise<number> {
+  const { failedLoginAttempts } = await prisma.user.update({
+    where: { id: userId },
+    data: { failedLoginAttempts: { increment: 1 }, lastFailedLogin: new Date() },
+    select: { failedLoginAttempts: true },
+  });
+
+  if (failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lockedUntil: new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60_000) },
+    });
+  }
+
+  return failedLoginAttempts;
 }

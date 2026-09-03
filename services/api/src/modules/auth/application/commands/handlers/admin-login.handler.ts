@@ -16,7 +16,7 @@ import {
     mapAdminProgramAssignment,
     normalizePermissions,
 } from '../../../../../shared/admin-access-response';
-import { failedAttemptUpdate, isLockedOut, LOCKED_OUT_MESSAGE } from '../../services/account-lockout.util';
+import { recordFailedAttempt, isLockedOut, LOCKED_OUT_MESSAGE } from '../../services/account-lockout.util';
 
 @Injectable()
 export class AdminLoginHandler {
@@ -135,10 +135,7 @@ export class AdminLoginHandler {
         );
 
         if (!isPasswordValid) {
-            await this.prisma.user.update({
-                where: { id: user.id },
-                data: failedAttemptUpdate(user),
-            });
+            await recordFailedAttempt(this.prisma, user.id);
 
             await this.authLoggingService.logFailedLogin(user.email, command.ipAddress, command.userAgent, 'Invalid Admin Password');
             this.metricsService.loginTotal.inc({ method: 'admin_email', result: 'failure' });

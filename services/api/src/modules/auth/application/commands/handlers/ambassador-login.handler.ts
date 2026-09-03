@@ -10,7 +10,7 @@ import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { normalizeReferralCode } from '@modules/participants/application/utils/referral-code.util';
 import {
-  failedAttemptUpdate,
+  recordFailedAttempt,
   isLockedOut,
   LOCKED_OUT_MESSAGE,
 } from '../../services/account-lockout.util';
@@ -100,10 +100,7 @@ export class AmbassadorLoginHandler {
       // The referral code IS the credential on this route, so a wrong one is a
       // wrong password and has to cost the same. Without this the code was
       // guessable at whatever rate the throttle tiers allowed, forever.
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: failedAttemptUpdate(user),
-      });
+      await recordFailedAttempt(this.prisma, user.id);
 
       await this.authLoggingService.logFailedLogin(
         user.email,

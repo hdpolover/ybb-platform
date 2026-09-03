@@ -14,7 +14,7 @@ import {
   ensureProgramApplication,
   toProgramRegistrationInfo,
 } from '../../services/auth-program-linking.util';
-import { failedAttemptUpdate, isLockedOut, LOCKED_OUT_MESSAGE } from '../../services/account-lockout.util';
+import { recordFailedAttempt, isLockedOut, LOCKED_OUT_MESSAGE } from '../../services/account-lockout.util';
 
 @Injectable()
 export class LoginHandler {
@@ -240,10 +240,7 @@ export class LoginHandler {
 
     if (!isPasswordValid) {
       // Update failed login attempts
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: failedAttemptUpdate(user),
-      });
+      await recordFailedAttempt(this.prisma, user.id);
 
       await this.authLoggingService.logFailedLogin(user.email, command.ipAddress, command.userAgent, 'Invalid Password');
 

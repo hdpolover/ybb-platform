@@ -55,6 +55,10 @@ describe('AmbassadorLoginHandler', () => {
         handler = module.get<AmbassadorLoginHandler>(AmbassadorLoginHandler);
         jest.clearAllMocks();
 
+        // recordFailedAttempt reads the counter back from the write, the way
+        // Prisma returns it, instead of trusting the value it read earlier.
+        mockPrismaService.user.update.mockResolvedValue({ failedLoginAttempts: 1 });
+
         mockPrismaService.user.findFirst.mockResolvedValue({
             id: USER_ID,
             email: 'ambassador@example.com',
@@ -124,13 +128,21 @@ describe('AmbassadorLoginHandler', () => {
     describe('account lockout', () => {
         it('counts a wrong referral code as a failed attempt', async () => {
             mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
+            mockPrismaService.user.update.mockResolvedValue({ failedLoginAttempts: 1 });
 
             await expect(handler.execute(command)).rejects.toThrow(UnauthorizedException);
 
+            // The DATABASE increments. Reading the counter into JS and writing
+            // back n+1 let N concurrent guesses all write the same value.
             expect(mockPrismaService.user.update).toHaveBeenCalledWith({
                 where: { id: USER_ID },
-                data: expect.objectContaining({ failedLoginAttempts: 1, lockedUntil: null }),
+                data: { failedLoginAttempts: { increment: 1 }, lastFailedLogin: expect.any(Date) },
+                select: { failedLoginAttempts: true },
             });
+            // Below the threshold nothing else is written — notably no
+            // `lockedUntil: null`, which is how a stale request un-locks an
+            // account another request just locked.
+            expect(mockPrismaService.user.update).toHaveBeenCalledTimes(1);
         });
 
         it('locks the account once failed attempts reach the threshold', async () => {
@@ -143,15 +155,15 @@ describe('AmbassadorLoginHandler', () => {
                 failedLoginAttempts: 4,
                 lockedUntil: null,
             });
+            // The threshold is decided by what the increment RETURNED, not by
+            // what this stale read said.
+            mockPrismaService.user.update.mockResolvedValue({ failedLoginAttempts: 5 });
 
             await expect(handler.execute(command)).rejects.toThrow(UnauthorizedException);
 
-            expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+            expect(mockPrismaService.user.update).toHaveBeenLastCalledWith({
                 where: { id: USER_ID },
-                data: expect.objectContaining({
-                    failedLoginAttempts: 5,
-                    lockedUntil: expect.any(Date),
-                }),
+                data: { lockedUntil: expect.any(Date) },
             });
         });
 

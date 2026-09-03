@@ -437,6 +437,11 @@ describe('LoginHandler', () => {
       ...brandOneUser,
       failedLoginAttempts: 4,
     });
+    // The counter is incremented BY THE DATABASE and the lock is decided from
+    // what that increment returned, so this stale read no longer picks the
+    // written value — which is the point: N concurrent failures used to all
+    // write the same n+1 and the lock never tripped.
+    mockPrismaService.user.update.mockResolvedValue({ failedLoginAttempts: 5 });
 
     const command = new LoginCommand(
       'same@example.com',
@@ -448,14 +453,14 @@ describe('LoginHandler', () => {
 
     await expect(handler.execute(command)).rejects.toThrow(UnauthorizedException);
 
-    expect(mockPrismaService.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'user-brand-1' },
-        data: expect.objectContaining({
-          failedLoginAttempts: 5,
-          lockedUntil: expect.any(Date),
-        }),
-      }),
-    );
+    expect(mockPrismaService.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-brand-1' },
+      data: { failedLoginAttempts: { increment: 1 }, lastFailedLogin: expect.any(Date) },
+      select: { failedLoginAttempts: true },
+    });
+    expect(mockPrismaService.user.update).toHaveBeenLastCalledWith({
+      where: { id: 'user-brand-1' },
+      data: { lockedUntil: expect.any(Date) },
+    });
   });
 });
