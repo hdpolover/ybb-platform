@@ -144,7 +144,7 @@ describe('CreateLoaBatchHandler', () => {
       handler.execute(
         new CreateLoaBatchCommand('prog-1', 'Wave 1', new Date('2026-01-01'), new Date('2026-03-31'), 'admin-1', actor),
       ),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toThrow(NotFoundException);
     expect(mockRepo.create).not.toHaveBeenCalled();
   });
 
@@ -238,7 +238,7 @@ describe('UpdateLoaBatchHandler', () => {
     const { UpdateLoaBatchCommand } = await import('../commands/loa-batch.commands');
     await expect(
       handler.execute(new UpdateLoaBatchCommand('batch-1', 'prog-1', actor, 'New Name')),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toThrow(NotFoundException);
     expect(mockRepo.findById).not.toHaveBeenCalled();
     expect(mockRepo.update).not.toHaveBeenCalled();
   });
@@ -333,7 +333,7 @@ describe('ReleaseLoaBatchHandler', () => {
   it('refuses a programme-scoped admin outside their assigned programmes, BEFORE releasing', async () => {
     mockReadPrisma.admin.findUnique.mockResolvedValue(assignedAdminFor(['someone-elses-program']));
     const { ReleaseLoaBatchCommand } = await import('../commands/loa-batch.commands');
-    await expect(handler.execute(new ReleaseLoaBatchCommand('batch-1', 'prog-1', actor))).rejects.toThrow(ForbiddenException);
+    await expect(handler.execute(new ReleaseLoaBatchCommand('batch-1', 'prog-1', actor))).rejects.toThrow(NotFoundException);
     expect(mockRepo.findById).not.toHaveBeenCalled();
     expect(mockRepo.release).not.toHaveBeenCalled();
   });
@@ -518,7 +518,7 @@ describe('UnreleaseLoaBatchHandler', () => {
   it('refuses a programme-scoped admin outside their assigned programmes', async () => {
     mockReadPrisma.admin.findUnique.mockResolvedValue(assignedAdminFor(['someone-elses-program']));
     const { UnreleaseLoaBatchCommand } = await import('../commands/loa-batch.commands');
-    await expect(handler.execute(new UnreleaseLoaBatchCommand('batch-1', 'prog-1', actor))).rejects.toThrow(ForbiddenException);
+    await expect(handler.execute(new UnreleaseLoaBatchCommand('batch-1', 'prog-1', actor))).rejects.toThrow(NotFoundException);
     expect(mockRepo.unrelease).not.toHaveBeenCalled();
   });
 });
@@ -566,7 +566,7 @@ describe('DeleteLoaBatchHandler', () => {
   it('refuses a programme-scoped admin outside their assigned programmes, BEFORE deleting', async () => {
     mockReadPrisma.admin.findUnique.mockResolvedValue(assignedAdminFor(['someone-elses-program']));
     const { DeleteLoaBatchCommand } = await import('../commands/loa-batch.commands');
-    await expect(handler.execute(new DeleteLoaBatchCommand('batch-1', 'prog-1', actor))).rejects.toThrow(ForbiddenException);
+    await expect(handler.execute(new DeleteLoaBatchCommand('batch-1', 'prog-1', actor))).rejects.toThrow(NotFoundException);
     expect(mockRepo.findById).not.toHaveBeenCalled();
     expect(mockRepo.softDelete).not.toHaveBeenCalled();
   });
@@ -629,7 +629,7 @@ describe('GetLoaBatchesHandler', () => {
   it('refuses a programme-scoped admin listing batches outside their assigned programmes', async () => {
     mockReadPrisma.admin.findUnique.mockResolvedValue(assignedAdminFor(['someone-elses-program']));
     const { GetLoaBatchesQuery } = await import('../queries/loa-batch.queries');
-    await expect(handler.execute(new GetLoaBatchesQuery('prog-1', actor))).rejects.toThrow(ForbiddenException);
+    await expect(handler.execute(new GetLoaBatchesQuery('prog-1', actor))).rejects.toThrow(NotFoundException);
     expect(mockRepo.findByProgram).not.toHaveBeenCalled();
   });
 
@@ -753,7 +753,7 @@ describe('GetLoaDownloadsHandler', () => {
   it('refuses a programme-scoped admin listing downloads outside their assigned programmes', async () => {
     mockReadPrisma.admin.findUnique.mockResolvedValue(assignedAdminFor(['someone-elses-program']));
     const { GetLoaDownloadsQuery } = await import('../queries/loa-batch.queries');
-    await expect(handler.execute(new GetLoaDownloadsQuery('prog-1', actor))).rejects.toThrow(ForbiddenException);
+    await expect(handler.execute(new GetLoaDownloadsQuery('prog-1', actor))).rejects.toThrow(NotFoundException);
     expect(mockPrisma.participantDocument.findMany).not.toHaveBeenCalled();
   });
 });
