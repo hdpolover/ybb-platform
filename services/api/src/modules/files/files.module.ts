@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { existsSync } from 'fs';
 import { join } from 'path';
 import { AuthModule } from '@modules/auth/auth.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
@@ -13,6 +14,18 @@ import { FileServiceClient } from './infrastructure/clients/file-service.client'
 import { FileGrpcClient } from './infrastructure/clients/file-grpc-client.service';
 import { StorageService } from './application/storage.service';
 import { PrivateFileUrlResolver } from './application/private-file-url-resolver.service';
+
+// `__dirname` is dist/modules/files after a build and src/modules/files under
+// ts-jest, so the same relative hop finds the proto either way. Without this the
+// module can only be instantiated after `nest build` has copied assets into dist.
+function resolveFileProtoPath(): string {
+  const candidates = [
+    join(__dirname, '../../protos/file_service.proto'),
+    join(process.cwd(), 'dist/protos/file_service.proto'),
+    join(process.cwd(), 'src/protos/file_service.proto'),
+  ];
+  return candidates.find(candidate => existsSync(candidate)) ?? candidates[0];
+}
 
 @Module({
   imports: [
@@ -28,7 +41,7 @@ import { PrivateFileUrlResolver } from './application/private-file-url-resolver.
           transport: Transport.GRPC,
           options: {
             package: 'file',
-            protoPath: join(process.cwd(), 'dist/protos/file_service.proto'),
+            protoPath: resolveFileProtoPath(),
             url: configService.get('FILE_GRPC_URL') || 'host.docker.internal:50052',
             loader: {
               keepCase: true,
