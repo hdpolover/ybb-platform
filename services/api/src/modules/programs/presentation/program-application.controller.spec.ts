@@ -52,6 +52,11 @@ describe('ProgramApplicationConfigController', () => {
         program: { findUnique: jest.fn() },
         programPricingTier: { findUnique: jest.fn() },
         pricingTierValidityPeriod: { findUnique: jest.fn() },
+        programEssay: { findUnique: jest.fn() },
+        programRequirement: { findUnique: jest.fn() },
+        programParticipationCategory: { findUnique: jest.fn() },
+        programSubtheme: { findUnique: jest.fn() },
+        applicationFormField: { findUnique: jest.fn() },
     };
 
     // Function to create providers list
@@ -161,6 +166,80 @@ describe('ProgramApplicationConfigController', () => {
             });
 
             await expect(controller.updatePricingTier('tier-1', {} as any, newReq())).rejects.toThrow(NotFoundException);
+            expect(mockExecute.execute).not.toHaveBeenCalled();
+        });
+    });
+
+    // Ten child-entity mutation routes - requirements, essays, participation
+    // categories, subthemes and form fields, PUT and DELETE each - shipped with
+    // NO scope check at any layer, so any admin could rewrite any programme's
+    // content by child id. They all now route through assertChildEntityScope.
+    describe('child-entity scoping', () => {
+        const newReq = () => ({ user: { id: 'admin-1', adminId: 'admin-1' } }) as any;
+
+        const scopedToOtherProgram = () =>
+            mockReadPrisma.admin.findUnique.mockResolvedValue({
+                accessLevel: 1,
+                canManageAdmins: false,
+                canAssignRoles: false,
+                customPermissions: [],
+                role: { name: 'admin', permissions: [] },
+                adminBrands: [],
+                adminPrograms: [{ programId: 'prog-mine', permissions: [] }],
+            });
+
+        it('refuses an essay whose programme is outside the caller’s assignments', async () => {
+            scopedToOtherProgram();
+            mockReadPrisma.programEssay.findUnique.mockResolvedValue({ programId: 'prog-theirs' });
+            mockReadPrisma.program.findUnique.mockResolvedValue({
+                id: 'prog-theirs', brandId: 'brand-1', name: 'Theirs', deletedAt: null,
+            });
+
+            await expect(controller.updateEssay('essay-1', {} as any, newReq())).rejects.toThrow(NotFoundException);
+            expect(mockExecute.execute).not.toHaveBeenCalled();
+        });
+
+        it('resolves the programme from the child row, never from the caller', async () => {
+            mockReadPrisma.programEssay.findUnique.mockResolvedValue({ programId: 'prog-owner' });
+            mockReadPrisma.program.findUnique.mockResolvedValue({
+                id: 'prog-owner', brandId: 'brand-1', name: 'Owner', deletedAt: null,
+            });
+
+            await controller.updateEssay('essay-1', { programId: 'prog-i-can-reach' } as any, newReq());
+
+            expect(mockReadPrisma.programEssay.findUnique).toHaveBeenCalledWith({
+                where: { id: 'essay-1' },
+                select: { programId: true },
+            });
+        });
+
+        // Otherwise the oracle simply moves one level down: an admin scoped to
+        // brand A could probe child ids and learn which exist in brand B.
+        it('gives the SAME error for a missing child and one that is not yours', async () => {
+            scopedToOtherProgram();
+
+            mockReadPrisma.programEssay.findUnique.mockResolvedValue(null);
+            const whenMissing = await controller.updateEssay('essay-1', {} as any, newReq()).catch((e) => e);
+
+            mockReadPrisma.programEssay.findUnique.mockResolvedValue({ programId: 'prog-theirs' });
+            mockReadPrisma.program.findUnique.mockResolvedValue({
+                id: 'prog-theirs', brandId: 'brand-1', name: 'Theirs', deletedAt: null,
+            });
+            const whenOutOfScope = await controller.updateEssay('essay-1', {} as any, newReq()).catch((e) => e);
+
+            expect(whenMissing.constructor).toBe(whenOutOfScope.constructor);
+            expect(whenMissing.getStatus()).toBe(whenOutOfScope.getStatus());
+            expect(whenMissing.message).toBe(whenOutOfScope.message);
+        });
+
+        it('refuses a delete on a form field outside the caller’s assignments', async () => {
+            scopedToOtherProgram();
+            mockReadPrisma.applicationFormField.findUnique.mockResolvedValue({ programId: 'prog-theirs' });
+            mockReadPrisma.program.findUnique.mockResolvedValue({
+                id: 'prog-theirs', brandId: 'brand-1', name: 'Theirs', deletedAt: null,
+            });
+
+            await expect(controller.deleteFormField('field-1', newReq())).rejects.toThrow(NotFoundException);
             expect(mockExecute.execute).not.toHaveBeenCalled();
         });
     });
