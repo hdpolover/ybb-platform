@@ -1,3 +1,5 @@
+import { CurrentUserData } from '@shared/decorators/current-user.decorator';
+
 export class ListProgramTimelineQuery {
     constructor(public readonly programId: string) { }
 }
@@ -74,6 +76,10 @@ export class ListProgramParticipationCategoriesQuery {
 export class ListDocumentTemplatesQuery {
     constructor(
         public readonly programId: string,
+        // Admin-only route (@Roles), unscoped otherwise: any admin could list any
+        // programme's document templates by id. actor lets the handler assert
+        // the caller's programme scope once programId is resolved.
+        public readonly actor: CurrentUserData,
         public readonly type?: string,
     ) {}
 }

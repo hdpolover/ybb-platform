@@ -1,5 +1,5 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
@@ -42,6 +42,9 @@ import {
 import { PROGRAM_LANDING_CONTENT_KEYS, isProgramLandingContentKey } from '../../copy/program-landing-content.constants';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { assertProgramContentAccess } from '../../utils/program-content-access.util';
+import { resolveRevenueAccessScope } from '@modules/stats/revenue/utils/revenue-access.util';
+import { assertBrandAccess } from '@shared/guards/admin-scope.guard';
+import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 
 // ─── Shared cache-invalidation helpers ───────────────────────────────────────
 // Used by ~9 call sites (gallery, faq, document-template x3 each) plus the
@@ -68,6 +71,33 @@ export async function invalidateLandingCacheByProgramId(
             });
         }
     } catch { /* non-critical */ }
+}
+
+/**
+ * Testimonials are the one family that can be either program-scoped or a
+ * general brand testimonial with no program at all (see the ProgramTestimonial
+ * schema: both programId and brandId are nullable). Used for update/delete,
+ * where the target row - not the request body - decides which check applies.
+ */
+async function assertProgramOrBrandContentAccess(
+    prismaRead: PrismaReadService,
+    actor: CurrentUserData,
+    programId: string | null,
+    brandId: string | null,
+): Promise<void> {
+    if (programId) {
+        await assertProgramContentAccess(prismaRead, actor, programId);
+        return;
+    }
+    if (brandId) {
+        const scope = await resolveRevenueAccessScope(prismaRead, actor);
+        assertBrandAccess(scope, brandId);
+        return;
+    }
+    const scope = await resolveRevenueAccessScope(prismaRead, actor);
+    if (scope.kind !== 'platform') {
+        throw new ForbiddenException('You do not have access to this testimonial.');
+    }
 }
 
 /**
@@ -647,6 +677,7 @@ export class CreateProgramTestimonialHandler implements ICommandHandler<CreatePr
     constructor(
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramTestimonialCommand) {
         const { brandId, ...rest } = command.dto;
@@ -654,6 +685,28 @@ export class CreateProgramTestimonialHandler implements ICommandHandler<CreatePr
             ...rest,
             brandId: brandId,
         };
+
+        // Testimonials can be program-scoped (dto.programId) or a general
+        // brand testimonial with no program at all (dto.brandId only, see
+        // ProgramTestimonial.programId being nullable). Assert on whichever id
+        // the row is actually going to carry - not assertBrandAccess for the
+        // program case, for the same reason gallery avoids it (see
+        // program-content-access.util.ts): 'assigned' scope never passes it,
+        // which would lock out every program-scoped admin. For the brand-only
+        // case there IS no program in play, so a brand-level grant is the
+        // correct (and only meaningful) thing to require.
+        if (dto.programId) {
+            await assertProgramContentAccess(this.prismaRead, command.actor, dto.programId);
+        } else if (brandId) {
+            const scope = await resolveRevenueAccessScope(this.prismaRead, command.actor);
+            assertBrandAccess(scope, brandId);
+        } else {
+            const scope = await resolveRevenueAccessScope(this.prismaRead, command.actor);
+            if (scope.kind !== 'platform') {
+                throw new ForbiddenException('You do not have access to create this testimonial.');
+            }
+        }
+
         const result = await this.repository.createTestimonial(dto);
         if (brandId) await invalidateLandingCacheByBrandId(brandId, this.landingCacheInvalidation);
         return result;
@@ -665,8 +718,19 @@ export class UpdateProgramTestimonialHandler implements ICommandHandler<UpdatePr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: UpdateProgramTestimonialCommand) {
+        // The route param carries no program id at all (PUT testimonials/:itemId),
+        // so the target's scope must be resolved from the row BEFORE mutating -
+        // asserting on the row read after the write would refuse nothing, since
+        // the write already happened.
+        const existing = await this.repository.findTestimonialById(command.id);
+        if (!existing) {
+            throw new NotFoundException('Testimonial not found');
+        }
+        await assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId);
+
         const result = await this.repository.updateTestimonial(command.id, command.dto);
         try {
             const testimonial = await this.prisma.programTestimonial.findUnique({
@@ -684,8 +748,16 @@ export class DeleteProgramTestimonialHandler implements ICommandHandler<DeletePr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: DeleteProgramTestimonialCommand) {
+        const existing = await this.repository.findTestimonialById(command.id);
+        if (!existing) {
+            throw new NotFoundException('Testimonial not found');
+        }
+        // Assert BEFORE deleting - see UpdateProgramTestimonialHandler above.
+        await assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId);
+
         const testimonial = await this.prisma.programTestimonial.findUnique({
             where: { id: command.id },
             select: { brandId: true },
@@ -703,8 +775,14 @@ export class CreateProgramFaqHandler implements ICommandHandler<CreateProgramFaq
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramFaqCommand) {
+        // Asserted on dto.programId because that is the id createFaq writes -
+        // see addGallery's note in the controller for why the route param is
+        // not used instead.
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
         const result = await this.repository.createFaq(command.dto);
         await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
         return result;
@@ -716,14 +794,19 @@ export class UpdateProgramFaqHandler implements ICommandHandler<UpdateProgramFaq
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: UpdateProgramFaqCommand) {
         const existing = await this.repository.findFaqById(command.id);
-        const result = await this.repository.updateFaq(command.id, command.dto);
-        const programId = existing?.programId ?? result.programId;
-        if (programId) {
-            await invalidateLandingCacheByProgramId(programId, this.prisma, this.landingCacheInvalidation);
+        if (!existing) {
+            throw new NotFoundException('FAQ not found');
         }
+        // The parent program is resolved from the target row, so this costs no
+        // extra query. The route carries only the item id (PUT faqs/:itemId).
+        await assertProgramContentAccess(this.prismaRead, command.actor, existing.programId);
+
+        const result = await this.repository.updateFaq(command.id, command.dto);
+        await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
         return result;
     }
 }
@@ -733,13 +816,18 @@ export class DeleteProgramFaqHandler implements ICommandHandler<DeleteProgramFaq
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: DeleteProgramFaqCommand) {
         const existing = await this.repository.findFaqById(command.id);
-        const result = await this.repository.deleteFaq(command.id);
-        if (existing?.programId) {
-            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
+        if (!existing) {
+            throw new NotFoundException('FAQ not found');
         }
+        // Assert BEFORE deleting - same ordering fix as gallery's delete.
+        await assertProgramContentAccess(this.prismaRead, command.actor, existing.programId);
+
+        const result = await this.repository.deleteFaq(command.id);
+        await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
         return result;
     }
 }
@@ -953,8 +1041,13 @@ export class CreateProgramResourceHandler implements ICommandHandler<CreateProgr
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramResourceCommand) {
+        // Asserted on dto.programId - the id createResource writes - before any
+        // upload happens, same reasoning as addGallery in the controller.
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
         const sourceType = command.dto.sourceType ?? 'upload';
         let fileUrl = command.dto.fileUrl;
         let fileSize: number | undefined = command.dto.fileSize;
@@ -1013,6 +1106,7 @@ export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgr
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
 
     async execute(command: UpdateProgramResourceCommand) {
@@ -1023,6 +1117,9 @@ export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgr
         if (!resource.programId) {
             throw new NotFoundException('Program ID missing on resource');
         }
+        // Resolved from the target row - the route (PUT resources/:itemId)
+        // carries only the item id.
+        await assertProgramContentAccess(this.prismaRead, command.actor, resource.programId);
 
         const sourceType = command.dto.sourceType ?? resource.sourceType ?? 'upload';
         let fileUrl = command.dto.fileUrl;
@@ -1093,13 +1190,22 @@ export class DeleteProgramResourceHandler implements ICommandHandler<DeleteProgr
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: DeleteProgramResourceCommand) {
         // deleteResource is a hard delete returning void — the row (and its
         // programId) would be unrecoverable after the fact, so read it first.
+        // Also lets the scope check run BEFORE the delete, not after.
         const existing = await this.repository.findResourceById(command.id);
+        if (!existing) {
+            throw new NotFoundException('Resource not found');
+        }
+        if (existing.programId) {
+            await assertProgramContentAccess(this.prismaRead, command.actor, existing.programId);
+        }
+
         const result = await this.repository.deleteResource(command.id);
-        if (existing?.programId) {
+        if (existing.programId) {
             await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
             await invalidatePortalResourceCaches(this.cacheService);
         }
@@ -1615,9 +1721,16 @@ export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocu
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
 
     async execute(command: CreateDocumentTemplateCommand) {
+        // Asserted on dto.programId - the controller stamps this from the route
+        // param before building the command (dto.programId = programId), so the
+        // two never diverge here, but the assert still belongs on the id the
+        // handler actually writes, per the gallery pattern.
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
         const sourceType = command.dto.sourceType ?? 'upload';
         let templateUrl = command.dto.templateUrl;
         let fileSize: number | undefined = command.dto.fileSize;
@@ -1679,11 +1792,15 @@ export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocu
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
 
     async execute(command: UpdateDocumentTemplateCommand) {
         const template = await this.repository.findDocumentTemplateById(command.id);
         if (!template) throw new NotFoundException('Document template not found');
+        // Resolved from the target row - the route (PUT document-templates/:itemId)
+        // carries only the item id.
+        await assertProgramContentAccess(this.prismaRead, command.actor, template.programId);
 
         const sourceType = command.dto.sourceType ?? template.sourceType ?? 'upload';
         let templateUrl = command.dto.templateUrl;
@@ -1741,11 +1858,15 @@ export class DeleteDocumentTemplateHandler implements ICommandHandler<DeleteDocu
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
 
     async execute(command: DeleteDocumentTemplateCommand) {
         const template = await this.repository.findDocumentTemplateById(command.id);
         if (!template) throw new NotFoundException('Document template not found');
+        // Assert BEFORE deleting.
+        await assertProgramContentAccess(this.prismaRead, command.actor, template.programId);
+
         await this.repository.deleteDocumentTemplate(command.id);
         await invalidateLandingCacheByProgramId(template.programId, this.prisma, this.landingCacheInvalidation);
         await invalidatePortalDocumentCaches(this.cacheService);
