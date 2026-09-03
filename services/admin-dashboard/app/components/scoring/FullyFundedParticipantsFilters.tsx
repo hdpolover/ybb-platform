@@ -102,6 +102,32 @@ export const SCORE_STATUS_VALUES = [
 
 export type FullyFundedScoreStatusFilter = (typeof SCORE_STATUS_VALUES)[number];
 
+// Registration payment statuses — mirrors registrationPaymentStatus on
+// GET /applications. Payment is what entitles an applicant to be scored, so
+// the reviewer queue defaults this to "paid" (see fullyFundedFilterParsers).
+// "all" is UI-only — it means "send no registrationPaymentStatus filter".
+export const REGISTRATION_PAYMENT_STATUS_OPTIONS = [
+  { value: "all", label: "All Payment Statuses" },
+  { value: "paid", label: "Paid" },
+  { value: "unpaid", label: "Unpaid" },
+  { value: "processing", label: "Processing" },
+  { value: "failed", label: "Failed" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "refunded", label: "Refunded" },
+] as const;
+
+export const REGISTRATION_PAYMENT_STATUS_VALUES = [
+  "all",
+  "paid",
+  "unpaid",
+  "processing",
+  "failed",
+  "cancelled",
+  "refunded",
+] as const;
+
+export type FullyFundedRegistrationPaymentStatusFilter = (typeof REGISTRATION_PAYMENT_STATUS_VALUES)[number];
+
 interface FullyFundedParticipantsFiltersProps {
   onSearch?: (value: string) => void;
   onExport?: () => void;
@@ -112,6 +138,8 @@ interface FullyFundedParticipantsFiltersProps {
   onStatusChange: (value: FullyFundedStatusFilter) => void;
   scoreStatus: FullyFundedScoreStatusFilter;
   onScoreStatusChange: (value: FullyFundedScoreStatusFilter) => void;
+  registrationPaymentStatus: FullyFundedRegistrationPaymentStatusFilter;
+  onRegistrationPaymentStatusChange: (value: FullyFundedRegistrationPaymentStatusFilter) => void;
   sortBy: FullyFundedSortBy;
   sortOrder: FullyFundedSortOrder;
   onSortByChange: (value: FullyFundedSortBy) => void;
@@ -129,6 +157,8 @@ export function FullyFundedParticipantsFilters({
   onStatusChange,
   scoreStatus,
   onScoreStatusChange,
+  registrationPaymentStatus,
+  onRegistrationPaymentStatusChange,
   sortBy,
   sortOrder,
   onSortByChange,
@@ -215,6 +245,23 @@ export function FullyFundedParticipantsFilters({
             onChange={(e) => onScoreStatusChange(e.target.value as FullyFundedScoreStatusFilter)}
           >
             {SCORE_STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </FilterSelect>
+        </div>
+
+        <div className="w-full md:w-44">
+          <label className="mb-1.5 block text-xs font-medium text-zinc-500">Reg. Payment</label>
+          <FilterSelect
+            aria-label="Registration Payment Status"
+            value={registrationPaymentStatus}
+            onChange={(e) =>
+              onRegistrationPaymentStatusChange(e.target.value as FullyFundedRegistrationPaymentStatusFilter)
+            }
+          >
+            {REGISTRATION_PAYMENT_STATUS_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>

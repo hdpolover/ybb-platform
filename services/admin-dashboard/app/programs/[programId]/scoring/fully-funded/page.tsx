@@ -2,6 +2,7 @@
 
 import { use } from "react";
 import { FullyFundedParticipantsAll } from "@/app/components/scoring/FullyFundedParticipantsAll";
+import { ScoringCategoryTabs } from "@/app/components/scoring/ScoringCategoryTabs";
 
 export default function FullyFundedScoringPage({
   params,
@@ -19,7 +20,8 @@ export default function FullyFundedScoringPage({
         </p>
       </div>
 
-      <FullyFundedParticipantsAll programId={programId} />
+      <ScoringCategoryTabs programId={programId} active="fully_funded" />
+      <FullyFundedParticipantsAll programId={programId} category="fully_funded" />
     </div>
   );
 }
