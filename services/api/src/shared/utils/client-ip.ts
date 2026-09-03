@@ -25,11 +25,15 @@ import { BlockList, isIP, isIPv6, SocketAddress } from 'net';
  *    by a Cloudflare Transform Rule and required alongside the range check.
  *    Neither is implemented; both are infra work, not code work here.
  *
- * Also worth knowing: not every brand is behind the CDN. ybbfoundation.com
- * resolves straight to the origin and is NOT Cloudflare-proxied, so on that
- * brand the whole cf-connecting-ip branch is dead and the x-forwarded-for
- * fallback is what actually runs. Any change here has to stay correct on both
- * paths, because both are live today.
+ * Also worth knowing: not every brand is behind the CDN. ybbfoundation.com is
+ * NOT Cloudflare-proxied (194.163.42.126, LiteSpeed, Niagahoster nameservers) —
+ * though note that is the legacy PHP stack on separate infrastructure, not this
+ * platform's origin, so that brand does not reach this API at all. The live
+ * example of a non-CDN path into THIS service is a direct hit on the origin
+ * address, which is reachable (see the audit's N1). On that path the
+ * cf-connecting-ip branch is dead and the x-forwarded-for fallback is what
+ * runs. Any change here has to stay correct on both paths, because both are
+ * live today.
  */
 
 /**

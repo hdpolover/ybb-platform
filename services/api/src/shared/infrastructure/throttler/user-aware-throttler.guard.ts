@@ -115,9 +115,16 @@ export const emailTracker = (req: Record<string, unknown>): string => {
  * But be honest about how far the replacement reaches. This guard is GLOBAL,
  * and there are TWO cases:
  *
- *   - The 9 auth routes that call forwardedForHeader (lib/server/forwardedFor.ts,
- *     plus cf-connecting-ip since 96f0f83). There the address here really is
- *     the caller, and the per-IP tiers mean what they say.
+ *   - The 9 auth routes that call forwardedForHeader (lib/server/forwardedFor.ts).
+ *     Those forward x-forwarded-for, which is merged and deployed.
+ *     DEPLOY ORDER MATTERS HERE: they only forward cf-connecting-ip once
+ *     ybb-program-next's fix/forward-cf-connecting-ip ships. Until it does,
+ *     the last forwarded hop is a Cloudflare EDGE and there is no
+ *     cf-connecting-ip to read, so resolveClientIp returns that edge — which
+ *     Cloudflare rotates between connections. The per-IP tiers below are then
+ *     coarser than they look: several participants share an edge bucket and
+ *     one attacker gets a fresh one per rotation. Ship that branch with or
+ *     before this one, and only then do these tiers mean what they say.
  *   - The other ~52 route.ts handlers under ybb-program-next/app/api, which
  *     forward nothing. resolveClientIp finds no trustworthy header and falls
  *     through to req.ip — the Next container. Every one of those routes keys
