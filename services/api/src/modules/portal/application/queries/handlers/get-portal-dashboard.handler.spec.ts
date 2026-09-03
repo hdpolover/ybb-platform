@@ -382,6 +382,46 @@ describe('GetPortalDashboardHandler', () => {
         expect(result.activeApplication?.fullyFundedRegistrationClosed).toBe(false);
     });
 
+    const buildAppWithBothWindows = (ffEnd: Date, sfEnd: Date) => {
+        const app = buildAppWithFfTier([{ startDate: new Date(Date.now() - 10 * 86400000), endDate: ffEnd }]);
+        app.program.pricingTiers[0].validityPeriods = [
+            { startDate: new Date(Date.now() - 10 * 86400000), endDate: sfEnd },
+        ];
+        return app;
+    };
+
+    const primeCaches = () => {
+        mockCacheService.get.mockResolvedValue(null);
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({ id: 'p-1', userId: 'u-1', fullName: 'Test User' });
+        mockPortalCacheService.getParticipantStats.mockResolvedValue({
+            applicationsCount: 1,
+            completedProgramsCount: 0,
+            certificatesCount: 0,
+        });
+    };
+
+    it('uses the FF window end as submissionDeadline while FF is still open', async () => {
+        primeCaches();
+        const ffEnd = new Date(Date.now() + 86400000);
+        const sfEnd = new Date(Date.now() + 10 * 86400000);
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(buildAppWithBothWindows(ffEnd, sfEnd));
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.submissionDeadline).toBe(ffEnd.toISOString());
+    });
+
+    it('falls back to the SF window end once FF has closed', async () => {
+        primeCaches();
+        const ffEnd = new Date(Date.now() - 86400000);
+        const sfEnd = new Date(Date.now() + 10 * 86400000);
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(buildAppWithBothWindows(ffEnd, sfEnd));
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.submissionDeadline).toBe(sfEnd.toISOString());
+    });
+
     it('sets fullyFundedRegistrationClosed=false when the FF tier has no validity windows', async () => {
         mockCacheService.get.mockResolvedValue(null);
         mockPortalCacheService.getParticipantProfile.mockResolvedValue({
