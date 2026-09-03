@@ -17,7 +17,11 @@ import {
     CreateProgramTestimonialHandler,
     UpdateProgramTestimonialHandler,
     DeleteProgramTestimonialHandler,
+    CreateProgramFaqHandler,
     UpdateProgramFaqHandler,
+    DeleteProgramFaqHandler,
+    CreateDocumentTemplateHandler,
+    UpdateDocumentTemplateHandler,
     DeleteDocumentTemplateHandler,
     DeleteProgramTimelineHandler,
     CreateProgramTimelineHandler,
@@ -56,7 +60,11 @@ import {
     CreateProgramTestimonialCommand,
     UpdateProgramTestimonialCommand,
     DeleteProgramTestimonialCommand,
+    CreateProgramFaqCommand,
     UpdateProgramFaqCommand,
+    DeleteProgramFaqCommand,
+    CreateDocumentTemplateCommand,
+    UpdateDocumentTemplateCommand,
     DeleteDocumentTemplateCommand,
     DeleteProgramTimelineCommand,
     CreateProgramTimelineCommand,
@@ -829,6 +837,210 @@ describe('ManageProgramContentHandlers', () => {
 
                 expect(repo.deleteGallery).not.toHaveBeenCalled();
             });
+
+            // Same shape, same fix, applied to the four families that shared the
+            // identical gap (M215 backlog): testimonials, faqs, resources and
+            // document templates.
+
+            it('CreateProgramTestimonialHandler refuses a programme outside the caller scope', async () => {
+                prismaRead = outOfScope();
+                repo.createTestimonial = jest.fn();
+                const handler = await build(CreateProgramTestimonialHandler);
+
+                await expect(
+                    handler.execute(new CreateProgramTestimonialCommand(
+                        { programId: 'prog-1', name: 'Alum', testimonial: 'Great' } as never,
+                        'user-1',
+                        actor,
+                    )),
+                ).rejects.toThrow();
+
+                expect(repo.createTestimonial).not.toHaveBeenCalled();
+            });
+
+            it('UpdateProgramTestimonialHandler refuses, resolving the programme from the target row', async () => {
+                prismaRead = outOfScope();
+                repo.findTestimonialById = jest.fn().mockResolvedValue({ id: 'test-1', programId: 'prog-1', brandId: null });
+                repo.updateTestimonial = jest.fn();
+                const handler = await build(UpdateProgramTestimonialHandler);
+
+                await expect(
+                    handler.execute(new UpdateProgramTestimonialCommand('test-1', {} as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.updateTestimonial).not.toHaveBeenCalled();
+            });
+
+            it('DeleteProgramTestimonialHandler refuses BEFORE deleting, not after', async () => {
+                prismaRead = outOfScope();
+                repo.findTestimonialById = jest.fn().mockResolvedValue({ id: 'test-1', programId: 'prog-1', brandId: null });
+                repo.deleteTestimonial = jest.fn();
+                const handler = await build(DeleteProgramTestimonialHandler);
+
+                await expect(
+                    handler.execute(new DeleteProgramTestimonialCommand('test-1', 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.deleteTestimonial).not.toHaveBeenCalled();
+            });
+
+            it('CreateProgramFaqHandler refuses a programme outside the caller scope', async () => {
+                prismaRead = outOfScope();
+                repo.createFaq = jest.fn();
+                const handler = await build(CreateProgramFaqHandler);
+
+                await expect(
+                    handler.execute(new CreateProgramFaqCommand(
+                        { programId: 'prog-1', question: 'Q?', answer: 'A.' } as never,
+                        'user-1',
+                        actor,
+                    )),
+                ).rejects.toThrow();
+
+                expect(repo.createFaq).not.toHaveBeenCalled();
+            });
+
+            // A refusal-only test would pass against the pre-fix code too (which
+            // never checked scope at all, so it never refused a well-formed
+            // request for an unrelated reason). This proves the in-scope path
+            // still works.
+            it('CreateProgramFaqHandler creates when the programme IS in scope', async () => {
+                repo.createFaq = jest.fn().mockResolvedValue({ id: 'faq-1', programId: 'prog-1' });
+                const handler = await build(CreateProgramFaqHandler);
+
+                await handler.execute(new CreateProgramFaqCommand(
+                    { programId: 'prog-1', question: 'Q?', answer: 'A.' } as never,
+                    'user-1',
+                    actor,
+                ));
+
+                expect(repo.createFaq).toHaveBeenCalled();
+            });
+
+            it('UpdateProgramFaqHandler refuses, resolving the programme from the target row', async () => {
+                prismaRead = outOfScope();
+                repo.findFaqById.mockResolvedValue({ id: 'faq-1', programId: 'prog-1' });
+                repo.updateFaq = jest.fn();
+                const handler = await build(UpdateProgramFaqHandler);
+
+                await expect(
+                    handler.execute(new UpdateProgramFaqCommand('faq-1', {} as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.updateFaq).not.toHaveBeenCalled();
+            });
+
+            it('DeleteProgramFaqHandler refuses BEFORE deleting, not after', async () => {
+                prismaRead = outOfScope();
+                repo.findFaqById.mockResolvedValue({ id: 'faq-1', programId: 'prog-1' });
+                repo.deleteFaq = jest.fn();
+                const handler = await build(DeleteProgramFaqHandler);
+
+                await expect(
+                    handler.execute(new DeleteProgramFaqCommand('faq-1', 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.deleteFaq).not.toHaveBeenCalled();
+            });
+
+            it('CreateProgramResourceHandler refuses a programme outside the caller scope', async () => {
+                prismaRead = outOfScope();
+                repo.createResource = jest.fn();
+                const handler = await build(CreateProgramResourceHandler);
+
+                await expect(
+                    handler.execute(new CreateProgramResourceCommand(
+                        { programId: 'prog-1', title: 'Guide', sourceType: 'link', linkUrl: 'https://x.example/g.pdf' } as never,
+                        'user-1',
+                        actor,
+                    )),
+                ).rejects.toThrow();
+
+                expect(repo.createResource).not.toHaveBeenCalled();
+            });
+
+            it('UpdateProgramResourceHandler refuses, resolving the programme from the target row', async () => {
+                prismaRead = outOfScope();
+                repo.findResourceById = jest.fn().mockResolvedValue({
+                    id: 'res-1', programId: 'prog-1', sourceType: 'link', linkUrl: 'https://x.example/g.pdf',
+                });
+                repo.updateResource = jest.fn();
+                const handler = await build(UpdateProgramResourceHandler);
+
+                await expect(
+                    handler.execute(new UpdateProgramResourceCommand('res-1', {} as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.updateResource).not.toHaveBeenCalled();
+            });
+
+            it('DeleteProgramResourceHandler refuses BEFORE deleting, not after', async () => {
+                prismaRead = outOfScope();
+                repo.findResourceById = jest.fn().mockResolvedValue({ id: 'res-1', programId: 'prog-1' });
+                repo.deleteResource = jest.fn();
+                const handler = await build(DeleteProgramResourceHandler);
+
+                await expect(
+                    handler.execute(new DeleteProgramResourceCommand('res-1', 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.deleteResource).not.toHaveBeenCalled();
+            });
+
+            it('CreateDocumentTemplateHandler refuses a programme outside the caller scope', async () => {
+                prismaRead = outOfScope();
+                repo.createDocumentTemplate = jest.fn();
+                const handler = await build(CreateDocumentTemplateHandler);
+
+                await expect(
+                    handler.execute(new CreateDocumentTemplateCommand(
+                        { programId: 'prog-1', name: 'Agreement', type: 'agreement_letter' } as never,
+                        'user-1',
+                        actor,
+                    )),
+                ).rejects.toThrow();
+
+                expect(repo.createDocumentTemplate).not.toHaveBeenCalled();
+            });
+
+            it('CreateDocumentTemplateHandler creates when the programme IS in scope', async () => {
+                repo.createDocumentTemplate = jest.fn().mockResolvedValue({ id: 'doc-1', programId: 'prog-1' });
+                const handler = await build(CreateDocumentTemplateHandler);
+
+                await handler.execute(new CreateDocumentTemplateCommand(
+                    { programId: 'prog-1', name: 'Agreement', type: 'agreement_letter' } as never,
+                    'user-1',
+                    actor,
+                ));
+
+                expect(repo.createDocumentTemplate).toHaveBeenCalled();
+            });
+
+            it('UpdateDocumentTemplateHandler refuses, resolving the programme from the target row', async () => {
+                prismaRead = outOfScope();
+                repo.findDocumentTemplateById.mockResolvedValue({ id: 'doc-1', programId: 'prog-1' });
+                repo.updateDocumentTemplate = jest.fn();
+                const handler = await build(UpdateDocumentTemplateHandler);
+
+                await expect(
+                    handler.execute(new UpdateDocumentTemplateCommand('doc-1', {} as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.updateDocumentTemplate).not.toHaveBeenCalled();
+            });
+
+            it('DeleteDocumentTemplateHandler refuses BEFORE deleting, not after', async () => {
+                prismaRead = outOfScope();
+                repo.findDocumentTemplateById.mockResolvedValue({ id: 'doc-1', programId: 'prog-1' });
+                repo.deleteDocumentTemplate.mockClear();
+                const handler = await build(DeleteDocumentTemplateHandler);
+
+                await expect(
+                    handler.execute(new DeleteDocumentTemplateCommand('doc-1', 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.deleteDocumentTemplate).not.toHaveBeenCalled();
+            });
         });
 
         it('CreateProgramGalleryHandler invalidates via the shared service after creating', async () => {
@@ -849,7 +1061,12 @@ describe('ManageProgramContentHandlers', () => {
             repo.findFaqById.mockResolvedValue({ id: 'faq-1', programId: 'prog-1' });
             repo.updateFaq.mockResolvedValue({ id: 'faq-1', programId: 'prog-1' });
 
-            await handler.execute(new UpdateProgramFaqCommand('faq-1', { question: 'Updated?' } as any, 'user-1'));
+            await handler.execute(new UpdateProgramFaqCommand(
+                'faq-1',
+                { question: 'Updated?' } as any,
+                'user-1',
+                { userId: 'user-1', email: 'a@b.c', brandId: 'brand-x', adminId: 'adm-1' } as any,
+            ));
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-x', homeAndSettingsOptions);
         });
@@ -859,7 +1076,11 @@ describe('ManageProgramContentHandlers', () => {
             repo.findDocumentTemplateById.mockResolvedValue({ id: 'doc-1', programId: 'prog-1' });
             repo.deleteDocumentTemplate.mockResolvedValue(undefined);
 
-            await handler.execute(new DeleteDocumentTemplateCommand('doc-1', 'user-1'));
+            await handler.execute(new DeleteDocumentTemplateCommand(
+                'doc-1',
+                'user-1',
+                { userId: 'user-1', email: 'a@b.c', brandId: 'brand-x', adminId: 'adm-1' } as any,
+            ));
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-x', homeAndSettingsOptions);
             expect(cache.invalidateByPattern).toHaveBeenCalledWith('portal:documents:*');
@@ -873,17 +1094,39 @@ describe('ManageProgramContentHandlers', () => {
         let repo: any;
         let prisma: any;
         let landingCacheInvalidation: any;
+        let prismaRead: any;
+        const actor = { userId: 'user-1', email: 'a@b.c', brandId: 'brand-kys', adminId: 'adm-1' } as any;
 
         beforeEach(() => {
             repo = {
                 createTestimonial: jest.fn().mockResolvedValue({ id: 't-1' }),
                 updateTestimonial: jest.fn().mockResolvedValue({ id: 't-1' }),
                 deleteTestimonial: jest.fn().mockResolvedValue(undefined),
+                // Testimonials can be program- or brand-scoped (see
+                // program-content-access.util.ts); these fixtures are brand-only
+                // (no programId), matching the brandId-only create below.
+                findTestimonialById: jest.fn().mockResolvedValue({ id: 't-1', programId: null, brandId: 'brand-kys' }),
             };
             prisma = {
                 programTestimonial: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-kys' }) },
             };
             landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+            // Platform-scope admin passes every brand/programme, keeping these
+            // tests about cache invalidation rather than the scope check itself.
+            prismaRead = {
+                admin: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        accessLevel: 5,
+                        canManageAdmins: true,
+                        canAssignRoles: true,
+                        customPermissions: [],
+                        role: { name: 'super_admin', permissions: ['platform_access'] },
+                        adminBrands: [],
+                        adminPrograms: [],
+                    }),
+                },
+                program: { findUnique: jest.fn() },
+            };
         });
 
         async function build<T>(HandlerCtor: new (...args: any[]) => T): Promise<T> {
@@ -894,6 +1137,7 @@ describe('ManageProgramContentHandlers', () => {
                     { provide: PrismaService, useValue: prisma },
                     { provide: CacheService, useValue: { invalidateByPattern: jest.fn(), invalidateBrandLandingCaches: jest.fn() } },
                     { provide: LandingCacheInvalidationService, useValue: landingCacheInvalidation },
+                    { provide: PrismaReadService, useValue: prismaRead },
                 ],
             }).compile();
             return module.get(HandlerCtor);
@@ -905,6 +1149,7 @@ describe('ManageProgramContentHandlers', () => {
             await handler.execute(new CreateProgramTestimonialCommand(
                 { brandId: 'brand-kys', name: 'Alum', testimonial: 'Great', type: 'video' } as any,
                 'user-1',
+                actor,
             ));
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-kys', homeAndSettingsOptions);
@@ -913,7 +1158,7 @@ describe('ManageProgramContentHandlers', () => {
         it('UpdateProgramTestimonialHandler revalidates after updating', async () => {
             const handler = await build(UpdateProgramTestimonialHandler);
 
-            await handler.execute(new UpdateProgramTestimonialCommand('t-1', { name: 'Renamed' } as any, 'user-1'));
+            await handler.execute(new UpdateProgramTestimonialCommand('t-1', { name: 'Renamed' } as any, 'user-1', actor));
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-kys', homeAndSettingsOptions);
         });
@@ -921,7 +1166,7 @@ describe('ManageProgramContentHandlers', () => {
         it('DeleteProgramTestimonialHandler revalidates after deleting', async () => {
             const handler = await build(DeleteProgramTestimonialHandler);
 
-            await handler.execute(new DeleteProgramTestimonialCommand('t-1', 'user-1'));
+            await handler.execute(new DeleteProgramTestimonialCommand('t-1', 'user-1', actor));
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-kys', homeAndSettingsOptions);
         });
@@ -1150,6 +1395,8 @@ describe('ManageProgramContentHandlers', () => {
         let prisma: any;
         let cache: any;
         let landingCacheInvalidation: any;
+        let prismaRead: any;
+        const actor = { userId: 'user-1', email: 'a@b.c', brandId: 'brand-d', adminId: 'adm-1' } as any;
 
         beforeEach(() => {
             repo = {
@@ -1162,6 +1409,26 @@ describe('ManageProgramContentHandlers', () => {
             prisma = { program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-d' }) } };
             cache = { invalidateByPatterns: jest.fn().mockResolvedValue(undefined) };
             landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+            // Platform-scope admin passes every programme - keeps these tests
+            // about cache invalidation, not the scope check itself.
+            prismaRead = {
+                admin: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        accessLevel: 5,
+                        canManageAdmins: true,
+                        canAssignRoles: true,
+                        customPermissions: [],
+                        role: { name: 'super_admin', permissions: ['platform_access'] },
+                        adminBrands: [],
+                        adminPrograms: [],
+                    }),
+                },
+                program: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        id: 'prog-1', brandId: 'brand-d', name: 'P', deletedAt: null,
+                    }),
+                },
+            };
         });
 
         async function build<T>(HandlerCtor: new (...args: any[]) => T): Promise<T> {
@@ -1173,6 +1440,7 @@ describe('ManageProgramContentHandlers', () => {
                     { provide: PrismaService, useValue: prisma },
                     { provide: CacheService, useValue: cache },
                     { provide: LandingCacheInvalidationService, useValue: landingCacheInvalidation },
+                    { provide: PrismaReadService, useValue: prismaRead },
                 ],
             }).compile();
             return module.get(HandlerCtor);
@@ -1185,6 +1453,7 @@ describe('ManageProgramContentHandlers', () => {
             await handler.execute(new CreateProgramResourceCommand(
                 { programId: 'prog-1', title: 'Guidebook', sourceType: 'link', linkUrl: 'https://x.example/guide.pdf' } as any,
                 'user-1',
+                actor,
             ));
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-d', homeAndSettingsOptions);
@@ -1204,7 +1473,7 @@ describe('ManageProgramContentHandlers', () => {
             });
             repo.updateResource.mockResolvedValue({ id: 'res-1', programId: 'prog-1', title: 'Updated' });
 
-            await handler.execute(new UpdateProgramResourceCommand('res-1', { title: 'Updated' } as any, 'user-1'));
+            await handler.execute(new UpdateProgramResourceCommand('res-1', { title: 'Updated' } as any, 'user-1', actor));
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-d', homeAndSettingsOptions);
             expect(cache.invalidateByPatterns).toHaveBeenCalledWith([
@@ -1218,7 +1487,7 @@ describe('ManageProgramContentHandlers', () => {
             repo.findResourceById.mockResolvedValue({ id: 'res-1', programId: 'prog-1' });
             repo.deleteResource.mockResolvedValue(undefined);
 
-            await handler.execute(new DeleteProgramResourceCommand('res-1', 'user-1'));
+            await handler.execute(new DeleteProgramResourceCommand('res-1', 'user-1', actor));
 
             expect(repo.findResourceById).toHaveBeenCalledWith('res-1');
             const findOrder = repo.findResourceById.mock.invocationCallOrder[0];
@@ -1231,13 +1500,16 @@ describe('ManageProgramContentHandlers', () => {
             ]);
         });
 
-        it('DeleteProgramResourceHandler skips invalidation when the row is already gone', async () => {
+        it('DeleteProgramResourceHandler 404s instead of deleting when the row is already gone', async () => {
             const handler = await build(DeleteProgramResourceHandler);
             repo.findResourceById.mockResolvedValue(null);
             repo.deleteResource.mockResolvedValue(undefined);
 
-            await handler.execute(new DeleteProgramResourceCommand('res-missing', 'user-1'));
+            await expect(
+                handler.execute(new DeleteProgramResourceCommand('res-missing', 'user-1', actor)),
+            ).rejects.toThrow(NotFoundException);
 
+            expect(repo.deleteResource).not.toHaveBeenCalled();
             expect(landingCacheInvalidation.invalidate).not.toHaveBeenCalled();
             expect(cache.invalidateByPatterns).not.toHaveBeenCalled();
         });

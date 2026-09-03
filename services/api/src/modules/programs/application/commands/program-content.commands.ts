@@ -94,24 +94,53 @@ export class DeleteProgramGalleryCommand {
 
 // Testimonial
 export class CreateProgramTestimonialCommand {
-    constructor(public readonly dto: CreateProgramTestimonialDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramTestimonialDto,
+        public readonly userId: string,
+        // See program-content-access.util.ts. Testimonials can be program- or
+        // brand-scoped (both dto.programId and dto.brandId are optional), so the
+        // handler picks which check applies rather than a single fixed id.
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 export class UpdateProgramTestimonialCommand {
-    constructor(public readonly id: string, public readonly dto: UpdateProgramTestimonialDto, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly dto: UpdateProgramTestimonialDto,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 export class DeleteProgramTestimonialCommand {
-    constructor(public readonly id: string, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 
 // FAQ
 export class CreateProgramFaqCommand {
-    constructor(public readonly dto: CreateProgramFaqDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramFaqDto,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 export class UpdateProgramFaqCommand {
-    constructor(public readonly id: string, public readonly dto: UpdateProgramFaqDto, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly dto: UpdateProgramFaqDto,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 export class DeleteProgramFaqCommand {
-    constructor(public readonly id: string, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 
 // Team
@@ -157,21 +186,27 @@ export class DeleteProgramPartnerCommand {
 // Resource
 export class CreateProgramResourceCommand {
     constructor(
-        public readonly dto: CreateProgramResourceDto, 
+        public readonly dto: CreateProgramResourceDto,
         public readonly userId: string,
+        public readonly actor: CurrentUserData,
         public readonly file?: Express.Multer.File
     ) { }
 }
 export class UpdateProgramResourceCommand {
     constructor(
-        public readonly id: string, 
-        public readonly dto: UpdateProgramResourceDto, 
+        public readonly id: string,
+        public readonly dto: UpdateProgramResourceDto,
         public readonly userId: string,
+        public readonly actor: CurrentUserData,
         public readonly file?: Express.Multer.File
     ) { }
 }
 export class DeleteProgramResourceCommand {
-    constructor(public readonly id: string, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 
 // Pricing Tier
@@ -260,6 +295,7 @@ export class CreateDocumentTemplateCommand {
     constructor(
         public readonly dto: CreateDocumentTemplateDto,
         public readonly userId: string,
+        public readonly actor: CurrentUserData,
         public readonly file?: Express.Multer.File,
     ) {}
 }
@@ -268,6 +304,7 @@ export class UpdateDocumentTemplateCommand {
         public readonly id: string,
         public readonly dto: UpdateDocumentTemplateDto,
         public readonly userId: string,
+        public readonly actor: CurrentUserData,
         public readonly file?: Express.Multer.File,
     ) {}
 }
@@ -275,6 +312,7 @@ export class DeleteDocumentTemplateCommand {
     constructor(
         public readonly id: string,
         public readonly userId: string,
+        public readonly actor: CurrentUserData,
     ) {}
 }
 // Program-level payment info

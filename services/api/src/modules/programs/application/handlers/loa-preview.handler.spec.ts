@@ -1,10 +1,31 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PreviewLoaTemplateHandler, PreviewLoaTemplateQuery } from './loa-preview.handler';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { LoaRenderDataService } from '@modules/portal/application/services/loa-render-data.service';
 import { LoaPreviewParticipantService } from '../services/loa-preview-participant.service';
+
+const platformAdmin = {
+  accessLevel: 5,
+  canManageAdmins: true,
+  canAssignRoles: true,
+  customPermissions: [],
+  role: { name: 'super_admin', permissions: ['platform_access'] },
+  adminBrands: [],
+  adminPrograms: [],
+};
+const assignedAdminFor = (programIds: string[]) => ({
+  accessLevel: 1,
+  canManageAdmins: false,
+  canAssignRoles: false,
+  customPermissions: [],
+  role: { name: 'reviewer', permissions: [] },
+  adminBrands: [],
+  adminPrograms: programIds.map((programId) => ({ programId, permissions: [] })),
+});
+const actor = { userId: 'admin-1', email: 'a@b.c', brandId: 'brand-x', adminId: 'adm-1' } as any;
 
 describe('PreviewLoaTemplateHandler', () => {
   let handler: PreviewLoaTemplateHandler;
@@ -12,6 +33,8 @@ describe('PreviewLoaTemplateHandler', () => {
   let fileServiceClient: jest.Mocked<FileServiceClient>;
   let loaRenderDataService: jest.Mocked<LoaRenderDataService>;
   let loaPreviewParticipantService: jest.Mocked<LoaPreviewParticipantService>;
+  let mockProgramRepository: any;
+  let mockReadPrisma: any;
 
   const mockProgram = {
     id: 'program-1',
@@ -36,6 +59,18 @@ describe('PreviewLoaTemplateHandler', () => {
   const mockPdfBuffer = Buffer.from('PDF content');
 
   beforeEach(async () => {
+    // 'program-1' is not UUID-shaped, so resolveProgramId() in
+    // loa-preview.handler.ts routes it through programRepository.findBySlug()
+    // - mocked to resolve to itself, so the pre-existing assertions below
+    // (keyed on the literal 'program-1') stay valid unchanged.
+    mockProgramRepository = { findBySlug: jest.fn().mockResolvedValue({ id: 'program-1' }) };
+    mockReadPrisma = {
+      admin: { findUnique: jest.fn().mockResolvedValue(platformAdmin) },
+      program: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'program-1', brandId: 'brand-x', name: 'P', deletedAt: null }),
+      },
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PreviewLoaTemplateHandler,
@@ -53,6 +88,8 @@ describe('PreviewLoaTemplateHandler', () => {
           provide: LoaPreviewParticipantService,
           useValue: { resolveApplicationId: jest.fn(), resolveDocumentNumber: jest.fn() },
         },
+        { provide: 'IProgramRepository', useValue: mockProgramRepository },
+        { provide: PrismaReadService, useValue: mockReadPrisma },
       ],
     }).compile();
 
@@ -70,15 +107,86 @@ describe('PreviewLoaTemplateHandler', () => {
     (prisma.program.findUnique as jest.Mock).mockResolvedValue(null);
 
     await expect(
-      handler.execute(new PreviewLoaTemplateQuery('missing-program', '<p>draft</p>', {}, [])),
+      handler.execute(new PreviewLoaTemplateQuery('missing-program', '<p>draft</p>', {}, [], actor)),
     ).rejects.toThrow(NotFoundException);
+  });
+
+  // Was @Roles-gated but otherwise fully unscoped: any admin/super_admin-role
+  // caller could preview any programme's Invitation Letter with a REAL
+  // applicant's name, institution, nationality, birthdate, gender, email and
+  // phone by passing an arbitrary programId. The assertion must run BEFORE
+  // any participant data is loaded, not merely surface an error at the end -
+  // asserted here by proving resolveApplicationId (where participant
+  // selection happens) and generateLoa (which renders the PII) never fire.
+  describe('programme scope enforcement', () => {
+    it('refuses an admin outside their assigned programmes, BEFORE any participant data is read', async () => {
+      mockReadPrisma.admin.findUnique.mockResolvedValue(assignedAdminFor(['someone-elses-program']));
+
+      await expect(
+        handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, [], actor)),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(prisma.program.findUnique).not.toHaveBeenCalled();
+      expect(loaPreviewParticipantService.resolveApplicationId).not.toHaveBeenCalled();
+      expect(fileServiceClient.generateLoa).not.toHaveBeenCalled();
+    });
+
+    it('lets a programme-assigned admin preview their own programme', async () => {
+      mockReadPrisma.admin.findUnique.mockResolvedValue(assignedAdminFor(['program-1']));
+      (loaPreviewParticipantService.resolveApplicationId as jest.Mock).mockResolvedValue({ isSample: true });
+
+      await expect(
+        handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, [], actor)),
+      ).resolves.toBeDefined();
+
+      expect(fileServiceClient.generateLoa).toHaveBeenCalled();
+    });
+
+    // Same M203-shaped bug as loa-batches: this route is reached from the
+    // same admin pages (LoaTemplateEditor via useResolvedProgramId), which
+    // falls back to the raw route value - a program SLUG - whenever the
+    // program isn't in the caller's accessiblePrograms. assertProgramAccess
+    // looks the program row up by id BEFORE its platform-scope short-circuit,
+    // so a raw slug would 404 even a super admin. The mock below only
+    // resolves for the id resolveProgramId() should produce - it returns null
+    // for the raw slug - so this test fails if the fix regresses to asserting
+    // on the unresolved identifier.
+    it('resolves a SLUG to the real programme id before asserting scope, so a super admin is NOT 404d', async () => {
+      const realProgramId = '123e4567-e89b-12d3-a456-426614174000';
+      const slug = 'china-youth-summit-2026';
+
+      mockProgramRepository.findBySlug.mockImplementation((identifier: string) =>
+        identifier === slug ? Promise.resolve({ id: realProgramId }) : Promise.resolve(null),
+      );
+      mockReadPrisma.program.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+        where.id === realProgramId
+          ? Promise.resolve({ id: realProgramId, brandId: 'brand-x', name: 'China Youth Summit', deletedAt: null })
+          : Promise.resolve(null),
+      );
+      (prisma.program.findUnique as jest.Mock).mockResolvedValue({ ...mockProgram, id: realProgramId });
+      (loaPreviewParticipantService.resolveApplicationId as jest.Mock).mockResolvedValue({ isSample: true });
+
+      await expect(
+        handler.execute(new PreviewLoaTemplateQuery(slug, '<p>draft</p>', {}, [], actor)),
+      ).resolves.toBeDefined();
+
+      expect(mockProgramRepository.findBySlug).toHaveBeenCalledWith(slug);
+      expect(mockReadPrisma.program.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: realProgramId } }),
+      );
+      // The rest of the handler must also use the RESOLVED id, not the slug.
+      expect(prisma.program.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: realProgramId } }),
+      );
+      expect(loaPreviewParticipantService.resolveApplicationId).toHaveBeenCalledWith(realProgramId, undefined);
+    });
   });
 
   describe('source: draft (default)', () => {
     it('renders the request-body draft content without touching the persisted template', async () => {
       (loaPreviewParticipantService.resolveApplicationId as jest.Mock).mockResolvedValue({ isSample: true });
 
-      await handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>unsaved draft</p>', {}, []));
+      await handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>unsaved draft</p>', {}, [], actor));
 
       expect(prisma.documentTemplate.findFirst).not.toHaveBeenCalled();
       expect(fileServiceClient.generateLoa).toHaveBeenCalledWith(
@@ -92,7 +200,9 @@ describe('PreviewLoaTemplateHandler', () => {
       (prisma.documentTemplate.findFirst as jest.Mock).mockResolvedValue(mockSavedTemplate);
       (loaPreviewParticipantService.resolveApplicationId as jest.Mock).mockResolvedValue({ isSample: true });
 
-      await handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>ignored</p>', {}, [], undefined, 'saved'));
+      await handler.execute(
+        new PreviewLoaTemplateQuery('program-1', '<p>ignored</p>', {}, [], actor, undefined, 'saved'),
+      );
 
       expect(prisma.documentTemplate.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -109,7 +219,7 @@ describe('PreviewLoaTemplateHandler', () => {
       (loaPreviewParticipantService.resolveApplicationId as jest.Mock).mockResolvedValue({ isSample: true });
 
       await expect(
-        handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>ignored</p>', {}, [], undefined, 'saved')),
+        handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>ignored</p>', {}, [], actor, undefined, 'saved')),
       ).rejects.toThrow(ConflictException);
       expect(fileServiceClient.generateLoa).not.toHaveBeenCalled();
     });
@@ -124,7 +234,7 @@ describe('PreviewLoaTemplateHandler', () => {
       (loaPreviewParticipantService.resolveDocumentNumber as jest.Mock).mockResolvedValue('LOA-2026-0007');
       (loaRenderDataService.buildSourceMapForApplication as jest.Mock).mockResolvedValue(mockRenderData);
 
-      await handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, [], 'app-42'));
+      await handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, [], actor, 'app-42'));
 
       expect(loaPreviewParticipantService.resolveApplicationId).toHaveBeenCalledWith('program-1', 'app-42');
       expect(loaRenderDataService.buildSourceMapForApplication).toHaveBeenCalledWith(
@@ -139,7 +249,7 @@ describe('PreviewLoaTemplateHandler', () => {
       );
 
       await expect(
-        handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, [], 'wrong-app-id')),
+        handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, [], actor, 'wrong-app-id')),
       ).rejects.toThrow(NotFoundException);
       expect(loaRenderDataService.buildSourceMapForApplication).not.toHaveBeenCalled();
       expect(fileServiceClient.generateLoa).not.toHaveBeenCalled();
@@ -148,7 +258,7 @@ describe('PreviewLoaTemplateHandler', () => {
     it('falls back to SAMPLE_PARTICIPANT and PREVIEW/000 when the pool is empty', async () => {
       (loaPreviewParticipantService.resolveApplicationId as jest.Mock).mockResolvedValue({ isSample: true });
 
-      const result = await handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, []));
+      const result = await handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, [], actor));
 
       expect(loaRenderDataService.buildSourceMapForApplication).not.toHaveBeenCalled();
       expect(result.isSample).toBe(true);
@@ -167,7 +277,9 @@ describe('PreviewLoaTemplateHandler', () => {
       (loaPreviewParticipantService.resolveDocumentNumber as jest.Mock).mockResolvedValue('LOA-2026-0007');
       (loaRenderDataService.buildSourceMapForApplication as jest.Mock).mockResolvedValue(mockRenderData);
 
-      const result = await handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, [], 'app-42'));
+      const result = await handler.execute(
+        new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, [], actor, 'app-42'),
+      );
 
       expect(result.isSample).toBe(false);
       expect(result.participantName).toBe('Real Participant');
@@ -183,7 +295,7 @@ describe('PreviewLoaTemplateHandler', () => {
     (fileServiceClient.generateLoa as jest.Mock).mockRejectedValue(new Error('file service unreachable'));
 
     await expect(
-      handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, [])),
+      handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, [], actor)),
     ).rejects.toThrow('file service unreachable');
   });
 });
