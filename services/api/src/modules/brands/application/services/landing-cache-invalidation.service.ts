@@ -4,6 +4,9 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { LandingRevalidationService } from './landing-revalidation.service';
 
+/** Cache scope used by the landing strategies when no brand resolves. */
+const DEFAULT_BRAND_CACHE_SCOPE = 'default';
+
 /**
  * Which LandingRevalidationService call (if any) to fire once the Redis and
  * Postgres cache layers are cleared. A discriminated union so a caller can't
@@ -120,13 +123,31 @@ export class LandingCacheInvalidationService {
             select: { id: true },
         });
 
-        const outcomes = await Promise.allSettled(
-            brands.map((brand) => this.invalidate(brand.id, { ...options, swallowErrors: false })),
-        );
+        // The brandless payload (LandingService falls back to it when a request
+        // resolves no brand) is cached under a literal 'default' key that no
+        // per-brandId purge above can reach, so a platform-wide setting would
+        // stay stale there for the full TTL. Cleared alongside the fan-out.
+        const outcomes = await Promise.allSettled([
+            this.cacheService.invalidateKeys([
+                CACHE_KEYS.LANDING_PARTNERS(DEFAULT_BRAND_CACHE_SCOPE),
+                CACHE_KEYS.LANDING_HOME(DEFAULT_BRAND_CACHE_SCOPE),
+            ]),
+            ...brands.map((brand) => this.invalidate(brand.id, { ...options, swallowErrors: false })),
+        ]);
 
         const succeeded: string[] = [];
         const failed: Array<{ brandId: string; error: string }> = [];
-        outcomes.forEach((outcome, index) => {
+        // outcomes[0] is the brandless purge above; the rest line up with `brands`.
+        const [defaultScopeOutcome, ...brandOutcomes] = outcomes;
+        if (defaultScopeOutcome.status === 'rejected') {
+            const message =
+                defaultScopeOutcome.reason instanceof Error
+                    ? defaultScopeOutcome.reason.message
+                    : String(defaultScopeOutcome.reason);
+            console.error('Failed to invalidate the brandless landing caches:', defaultScopeOutcome.reason);
+            failed.push({ brandId: DEFAULT_BRAND_CACHE_SCOPE, error: message });
+        }
+        brandOutcomes.forEach((outcome, index) => {
             const brandId = brands[index].id;
             if (outcome.status === 'fulfilled') {
                 succeeded.push(brandId);

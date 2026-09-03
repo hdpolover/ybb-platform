@@ -18,6 +18,7 @@ const makeCacheService = () => ({
     invalidateBrandLandingCaches: jest.fn().mockResolvedValue(undefined),
     invalidateByPattern: jest.fn().mockResolvedValue(undefined),
     invalidateKey: jest.fn().mockResolvedValue(undefined),
+    invalidateKeys: jest.fn().mockResolvedValue(undefined),
 });
 
 const makeLandingRevalidation = () => ({
@@ -349,6 +350,42 @@ describe('LandingCacheInvalidationService', () => {
             expect(landingRevalidation.revalidateHomeAndSettingsForBrand).toHaveBeenCalledWith('brand-1');
             expect(landingRevalidation.revalidateHomeAndSettingsForBrand).toHaveBeenCalledWith('brand-2');
             expect(result).toEqual({ succeeded: ['brand-1', 'brand-2'], failed: [] });
+        });
+
+        it('also clears the brandless "default" landing keys, which no per-brandId purge can reach', async () => {
+            // Arrange
+            const prisma = makePrismaService();
+            prisma.brand.findMany.mockResolvedValue([{ id: 'brand-1' }]);
+            const cache = makeCacheService();
+            const service = await buildService(prisma, cache, makeLandingRevalidation());
+
+            // Act
+            const result = await service.invalidateForAllBrands({ revalidate: { kind: 'homeAndSettings' } });
+
+            // Assert: a platform-wide setting (impact_stats) is served on the
+            // brandless payload too, and that entry is keyed 'default'.
+            expect(cache.invalidateKeys).toHaveBeenCalledWith([
+                'landing:partners:default',
+                'landing:home:default',
+            ]);
+            // The extra purge must not be miscounted as an extra brand.
+            expect(result).toEqual({ succeeded: ['brand-1'], failed: [] });
+        });
+
+        it('reports a failed brandless purge instead of silently claiming full success', async () => {
+            // Arrange
+            const prisma = makePrismaService();
+            prisma.brand.findMany.mockResolvedValue([{ id: 'brand-1' }]);
+            const cache = makeCacheService();
+            cache.invalidateKeys.mockRejectedValue(new Error('redis down for default scope'));
+            const service = await buildService(prisma, cache, makeLandingRevalidation());
+
+            // Act
+            const result = await service.invalidateForAllBrands({ revalidate: { kind: 'homeAndSettings' } });
+
+            // Assert
+            expect(result.succeeded).toEqual(['brand-1']);
+            expect(result.failed).toEqual([{ brandId: 'default', error: 'redis down for default scope' }]);
         });
 
         it('isolates one failing brand: the rest still get purged, and the failure is reported, not swallowed as success', async () => {
