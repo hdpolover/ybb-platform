@@ -15,7 +15,7 @@ import { PaymentEventsConsumerModule } from './bootstrap/payment-events-consumer
 import { LoaEventsConsumerModule } from './bootstrap/loa-events-consumer.module';
 import { ReminderEventsConsumerModule } from './bootstrap/reminder-events-consumer.module';
 import { AppModule } from './app.module';
-import { setupSwagger } from './config/swagger.config';
+import { isSwaggerEnabled, setupSwagger } from './config/swagger.config';
 import { TransformInterceptor } from './shared/interceptors/transform.interceptor';
 import { CdnMaskInterceptor } from './shared/interceptors/cdn-mask.interceptor';
 import { CacheService } from './shared/infrastructure/cache/cache.service';
@@ -201,14 +201,18 @@ async function bootstrap() {
   // Global prefix removed in favor of versioning
   // app.setGlobalPrefix('v1');
 
-  // Swagger documentation
-  setupSwagger(app);
+  // Swagger documentation and the `/` -> `/docs` redirect are development
+  // conveniences; production does not serve them. See isSwaggerEnabled for why
+  // and for the deliberate break-glass.
+  if (isSwaggerEnabled()) {
+    setupSwagger(app);
 
-  // Redirect root URL to documentation
-  const expressApp = app.getHttpAdapter().getInstance();
-  expressApp.get('/', (_req, res) => {
-    res.redirect('/docs');
-  });
+    // Redirect root URL to documentation
+    const expressApp = app.getHttpAdapter().getInstance();
+    expressApp.get('/', (_req, res) => {
+      res.redirect('/docs');
+    });
+  }
 
   const port = process.env.PORT || 3000;
 
