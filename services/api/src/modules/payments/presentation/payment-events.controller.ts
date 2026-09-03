@@ -975,7 +975,9 @@ export class PaymentEventsController {
                 `portal:submission-detail:${userId}:*`,
                 // PORTAL_PAYMENTS keyed by (userId, programId?) → portal:payments:${userId}:${programId|'latest'}
                 `portal:payments:${userId}:*`,
-                CACHE_KEYS.PORTAL_DOCUMENTS(userId),
+                // PORTAL_DOCUMENTS is keyed by (userId, programId?) too, so this must
+                // be a wildcard - the bare key only clears the `:latest` variant.
+                CACHE_KEYS.PORTAL_DOCUMENTS(userId, '*'),
             ];
 
             if (invoiceId) {

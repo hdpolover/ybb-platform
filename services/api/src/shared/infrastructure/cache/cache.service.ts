@@ -254,6 +254,7 @@ export class CacheService implements OnModuleInit {
           CACHE_KEYS.PORTAL_SUBMISSIONS(userId, '*'),
           CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId, '*'),
           CACHE_KEYS.PORTAL_PAYMENTS(userId, '*'),
+          CACHE_KEYS.PORTAL_DOCUMENTS(userId, '*'),
         ]),
       ]);
     } catch (err) {

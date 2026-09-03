@@ -17,6 +17,7 @@ import {
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 import { buildRichTextPreview } from '@shared/utils/rich-text';
 import { calculatePortalTotalRequired } from '../../utils/calculate-portal-total-required';
+import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 
 @Injectable()
 @QueryHandler(GetPortalDashboardQuery)
@@ -46,8 +47,8 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         }
 
         const latestApplication = await this.prisma.participantApplication.findFirst({
-            where: { participantId: participant.id },
-            orderBy: { updatedAt: 'desc' },
+            where: currentApplicationWhere(participant.id),
+            orderBy: currentApplicationOrderBy,
             select: {
                 id: true,
                 status: true,

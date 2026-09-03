@@ -109,6 +109,49 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
         handler = module.get(GetPortalDocumentsHandler);
     });
 
+    // ─── programId scoping ────────────────────────────────────────────────────
+    //
+    // The portal and the Next proxy both already sent programId; the API used to
+    // drop it, so a multi-program participant could be shown another program's
+    // documents. Nothing pinned that, which is why it survived.
+
+    describe('programId scoping', () => {
+        it('scopes the application lookup to the programId the caller sent', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApplication());
+            mockPrisma.documentTemplate.findMany.mockResolvedValue([]);
+
+            await handler.execute(new GetPortalDocumentsQuery(USER_ID, PROGRAM_ID));
+
+            const args = mockPrisma.participantApplication.findFirst.mock.calls[0][0];
+            expect(args.where).toMatchObject({ participantId: PARTICIPANT_ID, programId: PROGRAM_ID });
+        });
+
+        it('reads and writes a program-scoped cache key, so one program cannot serve another\'s documents', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApplication());
+            mockPrisma.documentTemplate.findMany.mockResolvedValue([]);
+
+            await handler.execute(new GetPortalDocumentsQuery(USER_ID, PROGRAM_ID));
+
+            expect(mockCacheService.get).toHaveBeenCalledWith(expect.stringContaining(PROGRAM_ID));
+            expect(mockCacheService.set).toHaveBeenCalledWith(
+                expect.stringContaining(PROGRAM_ID),
+                expect.anything(),
+                expect.anything(),
+            );
+        });
+
+        it('never returns a soft-deleted application, and orders withdrawn ones last', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApplication());
+            mockPrisma.documentTemplate.findMany.mockResolvedValue([]);
+
+            await handler.execute(new GetPortalDocumentsQuery(USER_ID));
+
+            const args = mockPrisma.participantApplication.findFirst.mock.calls[0][0];
+            expect(args.where).toMatchObject({ deletedAt: null });
+            expect(args.orderBy[0]).toEqual({ withdrawnAt: { sort: 'asc', nulls: 'first' } });
+        });
+    });
+
     // ─── LOA: eligible participant ─────────────────────────────────────────────
 
     it('returns downloadable=true for LOA when participant is eligible', async () => {

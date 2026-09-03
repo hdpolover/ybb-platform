@@ -13,6 +13,7 @@ import {
 } from '../../../presentation/dto/portal-payment.dto';
 import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
 import { resolveTierPeriod } from '@shared/utils/tier-period.util';
+import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 
 function getFeeTypePriority(feeType?: string | null): number {
     const normalized = String(feeType ?? '').toLowerCase();
@@ -72,7 +73,8 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
 
         // Get latest application (filter by programId if provided)
         const application = await this.prisma.participantApplication.findFirst({
-            where: { participantId: participant.id, ...(programId ? { programId } : {}) },
+            where: currentApplicationWhere(participant.id, programId),
+            orderBy: currentApplicationOrderBy,
             select: {
                 id: true,
                 applicationCategory: true,

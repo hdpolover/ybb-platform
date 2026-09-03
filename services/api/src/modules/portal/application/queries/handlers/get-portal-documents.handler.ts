@@ -18,6 +18,7 @@ import {
     getMaskedDownloadUrl,
 } from '@shared/utils/masked-file-url';
 import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '@modules/files/application/private-file-url-resolver.service';
+import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 
 @Injectable()
 @QueryHandler(GetPortalDocumentsQuery)
@@ -60,9 +61,9 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
     }
 
     async execute(query: GetPortalDocumentsQuery): Promise<PortalDocumentResponseDto> {
-        const { userId } = query;
+        const { userId, programId } = query;
 
-        const cacheKey = CACHE_KEYS.PORTAL_DOCUMENTS(userId);
+        const cacheKey = CACHE_KEYS.PORTAL_DOCUMENTS(userId, programId);
         const cached = await this.cacheService.get<PortalDocumentResponseDto>(cacheKey);
         if (cached) return cached;
 
@@ -70,7 +71,8 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
         if (!participant) throw new NotFoundException('Participant not found');
 
         const application = await this.prisma.participantApplication.findFirst({
-            where: { participantId: participant.id },
+            where: currentApplicationWhere(participant.id, programId),
+            orderBy: currentApplicationOrderBy,
             select: {
                 id: true,
                 programId: true,

@@ -13,6 +13,7 @@ import {
     PortalSubmissionResponseDto, 
     SubmissionSectionDto 
 } from '../../../presentation/dto/portal-submission.dto';
+import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 
 @Injectable()
 @QueryHandler(GetPortalSubmissionsQuery)
@@ -38,11 +39,8 @@ export class GetPortalSubmissionsHandler implements IQueryHandler<GetPortalSubmi
         if (!participant) throw new NotFoundException('Participant not found');
 
         const application = await this.prisma.participantApplication.findFirst({
-            where: {
-                participantId: participant.id,
-                ...(programId ? { programId } : {}),
-            },
-            orderBy: { updatedAt: 'desc' },
+            where: currentApplicationWhere(participant.id, programId),
+            orderBy: currentApplicationOrderBy,
             select: {
                 id: true,
                 status: true,

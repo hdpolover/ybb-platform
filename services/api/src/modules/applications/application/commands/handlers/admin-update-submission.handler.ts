@@ -258,21 +258,14 @@ export class AdminUpdateSubmissionHandler {
   ): Promise<void> {
     try {
       const keys = [
-        CACHE_KEYS.PORTAL_DASHBOARD(userId),
-        CACHE_KEYS.PORTAL_DOCUMENTS(userId),
         CACHE_KEYS.PARTICIPANT_PROFILE(userId),
         CACHE_KEYS.PARTICIPANT_STATS(participantId),
         CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId),
       ];
-      const patterns = [
-        `portal:submissions:${userId}:*`,
-        `portal:submission-detail:${userId}:*`,
-        `portal:payments:${userId}:*`,
-      ];
 
       await Promise.all([
+        this.cacheService.invalidatePortalCache(userId),
         ...keys.map((key) => this.cacheService.invalidateKey(key)),
-        ...patterns.map((p) => this.cacheService.invalidateByPattern(p)),
       ]);
     } catch (error) {
       // Cache invalidation failures must not roll back the write.
