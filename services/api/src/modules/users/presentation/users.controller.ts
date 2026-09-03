@@ -263,7 +263,7 @@ export class UsersController {
     @Query('brandId') brandId?: string,
   ): Promise<UserResponseDto> {
     const scopedBrandId = await resolveUsersBrandFilter(this.prismaRead, actor, brandId);
-    await assertCanChangeUserStatus(this.prismaRead, actor, id);
+    await assertCanChangeUserStatus(this.prismaRead, actor, id, scopedBrandId);
     return this.activateUserHandler.execute(new ActivateUserCommand(id, scopedBrandId ?? undefined));
   }
 
@@ -279,7 +279,7 @@ export class UsersController {
     @Query('brandId') brandId?: string,
   ): Promise<UserResponseDto> {
     const scopedBrandId = await resolveUsersBrandFilter(this.prismaRead, actor, brandId);
-    await assertCanChangeUserStatus(this.prismaRead, actor, id);
+    await assertCanChangeUserStatus(this.prismaRead, actor, id, scopedBrandId);
     return this.deactivateUserHandler.execute(new DeactivateUserCommand(id, scopedBrandId ?? undefined));
   }
 }
