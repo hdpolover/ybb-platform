@@ -7,6 +7,7 @@ import { PortalSubmitApplicationCommand } from '../../queries/portal-queries';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { formatSubmissionDeadlineMessage, isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
+import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 
 /**
  * Portal Submit Application Handler
@@ -36,13 +37,9 @@ export class PortalSubmitApplicationHandler {
         const participant = await this.portalCacheService.getParticipantProfile(userId);
         if (!participant) throw new NotFoundException('Participant not found');
 
-        const whereClause = programId
-            ? { participantId: participant.id, programId }
-            : { participantId: participant.id };
-
         const application = await this.prisma.participantApplication.findFirst({
-            where: whereClause,
-            orderBy: { updatedAt: 'desc' },
+            where: currentApplicationWhere(participant.id, programId),
+            orderBy: currentApplicationOrderBy,
             select: {
                 id: true,
                 status: true,

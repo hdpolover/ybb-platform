@@ -136,9 +136,14 @@ describe('PortalSubmitApplicationHandler', () => {
 
             await handler.execute(command);
 
+            // Reads and writes now share one rule, so the write clause also
+            // excludes soft-deleted rows and orders withdrawn ones last. Before
+            // this the write path could resolve a different application than the
+            // read path had just shown.
             expect(mockPrisma.participantApplication.findFirst).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    where: { participantId: 'participant-1' },
+                    where: { participantId: 'participant-1', deletedAt: null },
+                    orderBy: expect.arrayContaining([{ withdrawnAt: { sort: 'asc', nulls: 'first' } }]),
                 }),
             );
         });
@@ -152,7 +157,7 @@ describe('PortalSubmitApplicationHandler', () => {
 
             expect(mockPrisma.participantApplication.findFirst).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    where: { participantId: 'participant-1', programId: 'prog-42' },
+                    where: { participantId: 'participant-1', programId: 'prog-42', deletedAt: null },
                 }),
             );
         });
