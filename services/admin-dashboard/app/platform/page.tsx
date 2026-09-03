@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { listPlatformBrands, type PlatformBrand } from "./api";
 import { getAdminAnalytics, type AdminAnalytics } from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useAccessibleBrands } from "../hooks/useAccessibleBrands";
 
 const quickActions = [
   {
@@ -58,7 +59,9 @@ type StatCard = {
 
 export default function PlatformDashboard() {
   const { adminProfile } = useAuth();
-  const brandId = adminProfile?.assignedBrands?.[0]?.brandId;
+  // See platform/users: shared derivation, so a programme-scoped admin
+  // (no admin_brands rows) still resolves a brand.
+  const brandId = useAccessibleBrands()[0]?.brandId;
 
   const [brands, setBrands] = useState<PlatformBrand[] | null>(null);
   const [analytics, setAnalytics] = useState<AdminAnalytics | null>(null);
