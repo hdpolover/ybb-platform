@@ -412,6 +412,7 @@ export class ProgramContentController {
     @Param('id') programId: string,
     @Body() dto: PreviewDocumentTemplateDto,
     @Response({ passthrough: true }) res: ExpressResponse,
+    @CurrentUser() actor: CurrentUserData,
   ) {
     const result = await this.previewLoaTemplateHandler.execute(
       new PreviewLoaTemplateQuery(
@@ -419,6 +420,7 @@ export class ProgramContentController {
         dto.htmlContent,
         dto.layoutConfig ?? {},
         dto.placeholders ?? [],
+        actor,
         dto.applicationId,
         dto.source ?? 'draft',
       ),
