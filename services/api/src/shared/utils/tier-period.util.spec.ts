@@ -1,5 +1,5 @@
 // src/shared/utils/tier-period.util.spec.ts
-import { hasTierPeriodEnded, resolveTierPeriod, TierValidityPeriod } from './tier-period.util';
+import { effectiveStart, hasTierPeriodEnded, resolveTierPeriod, TierValidityPeriod } from './tier-period.util';
 
 describe('tier-period.util', () => {
     const period = (startDate: string, endDate: string): TierValidityPeriod => ({
@@ -120,4 +120,58 @@ describe('tier-period.util', () => {
             expect(hasTierPeriodEnded(p, new Date('2026-07-16T01:00:00Z'))).toBe(true);
         });
     });
+
+// The rule changed from "widen only the chronologically-earliest start" to
+// "widen unless a preceding period is still open then". These pin both halves:
+// the new coverage, and the overlap invariant the old rule existed to protect.
+describe('start-boundary widening', () => {
+    const wib = (iso: string) => new Date(iso);
+    // WIB is UTC+7, so WIB calendar day D runs D-1T17:00:00Z .. DT16:59:59.999Z.
+    const WIB_MIDNIGHT_8_SEP = wib('2026-09-07T17:00:00Z');
+
+    // Asserted on effectiveStart directly, not through resolveTierPeriod: that
+    // function's activeOrUpcoming fallback returns the same period either way,
+    // so it cannot distinguish this rule from the earliest-only one it replaced.
+    it('widens an UNCHAINED later period, which the earliest-only rule missed', () => {
+        const batch1 = { startDate: wib('2026-08-31T17:00:00Z'), endDate: wib('2026-09-04T00:00:00Z') };
+        // Stored at 23:59 WIB on 8 Sep, so it read as closed all opening day.
+        const batch2 = { startDate: wib('2026-09-08T16:59:00Z'), endDate: wib('2026-09-20T00:00:00Z') };
+
+        expect(effectiveStart(batch2, [batch1, batch2])).toEqual(WIB_MIDNIGHT_8_SEP);
+    });
+
+    it('does NOT widen an exactly-chained handover, so two installments never overlap', () => {
+        // Installment 2 starts exactly when installment 1 ends, 23:59 WIB 4 Sep.
+        const handover = wib('2026-09-04T16:59:00Z');
+        const inst1 = { startDate: wib('2026-08-31T17:00:00Z'), endDate: handover };
+        const inst2 = { startDate: handover, endDate: wib('2026-09-30T00:00:00Z') };
+
+        // Widening this would make both installments valid at once - the
+        // ~280-overlapping-pairs regression the earlier rule existed to avoid.
+        expect(effectiveStart(inst2, [inst1, inst2])).toEqual(handover);
+    });
+
+    it('does NOT widen a same-day handover that is not exactly chained', () => {
+        const inst1 = { startDate: wib('2026-08-31T17:00:00Z'), endDate: wib('2026-09-04T00:00:00Z') };
+        const rawStart = wib('2026-09-03T20:00:00Z'); // mid-day 4 Sep WIB
+        const inst2 = { startDate: rawStart, endDate: wib('2026-09-30T00:00:00Z') };
+
+        expect(effectiveStart(inst2, [inst1, inst2])).toEqual(rawStart);
+    });
+
+    it('still widens the earliest period, the case the old rule was written for', () => {
+        // MEYS 7th shape: single period stored at 23:59 WIB on its opening day.
+        const only = { startDate: wib('2026-09-08T16:59:00Z'), endDate: wib('2026-09-20T00:00:00Z') };
+
+        expect(effectiveStart(only, [only])).toEqual(WIB_MIDNIGHT_8_SEP);
+    });
+
+    it('makes an unchained period resolvable on its opening morning', () => {
+        const batch1 = { startDate: wib('2026-08-31T17:00:00Z'), endDate: wib('2026-09-04T00:00:00Z') };
+        const batch2 = { startDate: wib('2026-09-08T16:59:00Z'), endDate: wib('2026-09-20T00:00:00Z') };
+        const openingMorning = wib('2026-09-08T02:00:00Z'); // 09:00 WIB
+
+        expect(resolveTierPeriod([batch1, batch2], openingMorning, openingMorning)).toBe(batch2);
+    });
+});
 });
