@@ -568,7 +568,17 @@ export class ApplicationsController {
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Switching category for application ${id} to ${dto.targetCategory}`);
 
-    const command = new SwitchApplicationCategoryCommand(id, dto.targetCategory, user.userId);
+    // user.adminId is only set for admin principals, so participants keep the
+    // ownership check while the reviewer queue can fix a miscategorised
+    // applicant. resolveActingAdminId is deliberately NOT used here: it throws
+    // for participants, and this endpoint serves both.
+    const command = new SwitchApplicationCategoryCommand(
+      id,
+      dto.targetCategory,
+      user.userId,
+      user.adminId,
+      dto.overrideReason,
+    );
     return this.switchApplicationCategoryHandler.execute(command);
   }
 

@@ -54,7 +54,11 @@ export class SwitchApplicationCategoryHandler {
     // Ownership: a participant may only switch the category of their OWN
     // application. Without this, any authenticated user could switch another
     // participant's category by guessing the application id (IDOR).
-    if (!command.userId || application.participant?.userId !== command.userId) {
+    // An admin acting from the reviewer queue is not the applicant, so the
+    // ownership rule cannot apply to them; without this branch the endpoint
+    // 403s for every admin, which is what it did before.
+    const actingAdminId = command.actingAdminId?.trim() || undefined;
+    if (!actingAdminId && (!command.userId || application.participant?.userId !== command.userId)) {
       throw new ForbiddenException('You can only switch the category of your own application.');
     }
 
@@ -75,9 +79,18 @@ export class SwitchApplicationCategoryHandler {
       String(application.registrationPaymentStatus ?? '').toLowerCase(),
     );
 
-    if (hasLockedRegistrationInvoice || hasLockedRegistrationPayment) {
+    // The applicants who most often need a category fix are exactly the ones
+    // who already paid, so an admin may override this lock with a stated
+    // reason. The paid invoice itself is deliberately left untouched: any
+    // price difference between the two categories is a finance reconciliation,
+    // not something this handler should silently resolve.
+    const overrideReason = command.overrideReason?.trim() || undefined;
+    const canOverridePaymentLock = Boolean(actingAdminId && overrideReason);
+    if ((hasLockedRegistrationInvoice || hasLockedRegistrationPayment) && !canOverridePaymentLock) {
       throw new BadRequestException(
-        'Cannot switch category while a registration fee payment is processing or already paid.',
+        actingAdminId
+          ? 'Cannot switch category while a registration fee payment is processing or already paid. Provide an overrideReason to switch anyway.'
+          : 'Cannot switch category while a registration fee payment is processing or already paid.',
       );
     }
 

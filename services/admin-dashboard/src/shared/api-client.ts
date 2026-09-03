@@ -2028,6 +2028,23 @@ export function reviewApplication(
   });
 }
 
+/**
+ * Moves an application between fully_funded and self_funded. Admin-only in
+ * practice: participants switch from their own portal. `overrideReason` is
+ * required by the API when the registration fee is already paid or
+ * processing, which is the usual case in the reviewer queue.
+ */
+export function switchApplicationCategory(
+  applicationId: string,
+  targetCategory: "fully_funded" | "self_funded",
+  overrideReason?: string,
+): Promise<Application> {
+  return request<Application>(`/applications/${encodeURIComponent(applicationId)}/switch-category`, {
+    method: "POST",
+    body: JSON.stringify({ targetCategory, overrideReason }),
+  });
+}
+
 export function submitApplication(applicationId: string, participantId: string): Promise<Application> {
   return request<Application>(`/applications/${encodeURIComponent(applicationId)}/submit`, {
     method: "POST",

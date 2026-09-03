@@ -45,6 +45,12 @@ interface FullyFundedParticipantsTableProps {
   onForceSubmit: (row: FullyFundedParticipantRow) => Promise<void>;
   /** accountId of the row currently being submitted, if any. */
   submittingId: string | null;
+  /** Moves the row to the other category, for applicants who registered wrong. */
+  onSwitchCategory: (row: FullyFundedParticipantRow, reason: string) => Promise<void>;
+  /** The category this queue lists — the switch always targets the other one. */
+  category: "fully_funded" | "self_funded";
+  /** accountId of the row currently being switched, if any. */
+  switchingId: string | null;
 }
 
 export function FullyFundedParticipantsTable({
@@ -55,11 +61,18 @@ export function FullyFundedParticipantsTable({
   onPageChange,
   onForceSubmit,
   submittingId,
+  onSwitchCategory,
+  category,
+  switchingId,
 }: FullyFundedParticipantsTableProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const [confirmRow, setConfirmRow] = useState<FullyFundedParticipantRow | null>(null);
+  const [switchRow, setSwitchRow] = useState<FullyFundedParticipantRow | null>(null);
+  const [switchReason, setSwitchReason] = useState("");
+  const switchTarget = category === "fully_funded" ? "self_funded" : "fully_funded";
+  const switchTargetLabel = switchTarget === "fully_funded" ? "Fully Funded" : "Self Funded";
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const startIndex = (page - 1) * pageSize;
@@ -163,6 +176,20 @@ export function FullyFundedParticipantsTable({
                             {submittingId === row.accountId ? "Submitting…" : "Force Submit"}
                           </button>
                         )}
+                        {row.status === "draft" && (
+                          <button
+                            type="button"
+                            title={`Move this applicant to ${switchTargetLabel}`}
+                            disabled={switchingId === row.accountId}
+                            className="rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-600 shadow-sm transition-colors hover:bg-zinc-50 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => {
+                              setSwitchReason("");
+                              setSwitchRow(row);
+                            }}
+                          >
+                            {switchingId === row.accountId ? "Moving…" : `Move to ${switchTargetLabel}`}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -197,6 +224,60 @@ export function FullyFundedParticipantsTable({
           </button>
         </div>
       </div>
+
+      <Dialog
+        open={switchRow !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSwitchRow(null);
+            setSwitchReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move to {switchTargetLabel}?</DialogTitle>
+            <DialogDescription>
+              {switchRow &&
+                `This changes ${switchRow.name}'s registration category. Any unpaid invoices on the current category are cancelled automatically. A registration fee that is already paid is NOT refunded or re-issued — finance has to reconcile any price difference.`}
+            </DialogDescription>
+          </DialogHeader>
+          <label className="block text-xs font-semibold text-zinc-600">
+            Reason
+            <textarea
+              className="mt-1 w-full rounded-md border border-zinc-200 p-2 text-sm font-normal text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-200"
+              rows={3}
+              value={switchReason}
+              onChange={(event) => setSwitchReason(event.target.value)}
+              placeholder="e.g. Applicant registered Self Funded by mistake, confirmed over email"
+            />
+          </label>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSwitchRow(null);
+                setSwitchReason("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={switchReason.trim().length === 0}
+              onClick={async () => {
+                if (!switchRow) return;
+                const row = switchRow;
+                const reason = switchReason.trim();
+                setSwitchRow(null);
+                setSwitchReason("");
+                await onSwitchCategory(row, reason);
+              }}
+            >
+              Move to {switchTargetLabel}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmRow !== null} onOpenChange={(open) => !open && setConfirmRow(null)}>
         <DialogContent>
