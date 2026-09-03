@@ -80,7 +80,19 @@ describe('PortalController', () => {
   describe('getDocuments', () => {
     it('should execute GetPortalDocumentsQuery', async () => {
       await controller.getDocuments(mockUser);
-      expect(queryBus.execute).toHaveBeenCalledWith(new GetPortalDocumentsQuery(mockUser.userId));
+      expect(queryBus.execute).toHaveBeenCalledWith(
+        new GetPortalDocumentsQuery(mockUser.userId, undefined, mockUser.brandId),
+      );
+    });
+
+    // The programme the portal is showing, and the caller's brand, both have to
+    // reach the handler: the brand is what makes `downloadable` agree with what
+    // the download endpoint will actually do.
+    it('forwards the caller-supplied programId and the caller\'s brand', async () => {
+      await controller.getDocuments(mockUser, 'program-9');
+      expect(queryBus.execute).toHaveBeenCalledWith(
+        new GetPortalDocumentsQuery(mockUser.userId, 'program-9', mockUser.brandId),
+      );
     });
   });
 });

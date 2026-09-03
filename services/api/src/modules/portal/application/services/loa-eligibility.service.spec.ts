@@ -5,13 +5,13 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 describe('LoaEligibilityService', () => {
   let service: LoaEligibilityService;
   let mockPrisma: {
-    participantApplication: { findFirst: jest.Mock };
+    participantApplication: { findFirst: jest.Mock; findMany: jest.Mock };
     loaReleaseBatch: { findFirst: jest.Mock };
   };
 
   beforeEach(async () => {
     mockPrisma = {
-      participantApplication: { findFirst: jest.fn() },
+      participantApplication: { findFirst: jest.fn(), findMany: jest.fn() },
       loaReleaseBatch: { findFirst: jest.fn() },
     };
 
@@ -103,5 +103,77 @@ describe('LoaEligibilityService', () => {
     const result = await service.checkEligibility('app-1', 'prog-1');
 
     expect(result).toEqual({ eligible: true, batchId: 'batch-1' });
+  });
+
+  // These assertions used to live on LoaDownloadService. They belong here now:
+  // the candidate query is shared so the documents list and the download
+  // endpoint cannot disagree about what is downloadable.
+  describe('resolveEligibleApplications', () => {
+    const eligible = { eligible: true, batchId: 'batch-1' };
+
+    it('scopes candidates by brand, which the download path used to ignore entirely', async () => {
+      mockPrisma.participantApplication.findMany.mockResolvedValue([]);
+
+      await service.resolveEligibleApplications('participant-1', 'brand-1');
+
+      expect(mockPrisma.participantApplication.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ program: { brandId: 'brand-1' } }) }),
+      );
+    });
+
+    it('never offers a withdrawn or soft-deleted application as a letter candidate', async () => {
+      mockPrisma.participantApplication.findMany.mockResolvedValue([]);
+
+      await service.resolveEligibleApplications('participant-1', 'brand-1');
+
+      const where = mockPrisma.participantApplication.findMany.mock.calls[0][0].where;
+      expect(where).toMatchObject({ deletedAt: null, withdrawnAt: null });
+    });
+
+    it('narrows to the caller-supplied programme when given one', async () => {
+      mockPrisma.participantApplication.findMany.mockResolvedValue([]);
+
+      await service.resolveEligibleApplications('participant-1', 'brand-1', 'program-9');
+
+      const where = mockPrisma.participantApplication.findMany.mock.calls[0][0].where;
+      expect(where).toMatchObject({ programId: 'program-9' });
+    });
+
+    it('returns only the applications that pass the eligibility gate', async () => {
+      mockPrisma.participantApplication.findMany.mockResolvedValue([
+        { id: 'app-1', programId: 'prog-1' },
+        { id: 'app-2', programId: 'prog-2' },
+      ]);
+      jest.spyOn(service, 'checkEligibility').mockImplementation(async (applicationId: string) =>
+        applicationId === 'app-2' ? eligible : { eligible: false },
+      );
+
+      const result = await service.resolveEligibleApplications('participant-1', 'brand-1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].application.id).toBe('app-2');
+      expect(result[0].batchId).toBe('batch-1');
+    });
+
+    it('checks candidates concurrently rather than one after another', async () => {
+      mockPrisma.participantApplication.findMany.mockResolvedValue([
+        { id: 'app-1', programId: 'prog-1' },
+        { id: 'app-2', programId: 'prog-2' },
+        { id: 'app-3', programId: 'prog-3' },
+      ]);
+      let inFlight = 0;
+      let peak = 0;
+      jest.spyOn(service, 'checkEligibility').mockImplementation(async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await Promise.resolve();
+        inFlight -= 1;
+        return eligible;
+      });
+
+      await service.resolveEligibleApplications('participant-1', 'brand-1');
+
+      expect(peak).toBeGreaterThan(1);
+    });
   });
 });

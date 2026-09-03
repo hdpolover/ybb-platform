@@ -61,7 +61,7 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
     }
 
     async execute(query: GetPortalDocumentsQuery): Promise<PortalDocumentResponseDto> {
-        const { userId, programId } = query;
+        const { userId, programId, brandId } = query;
 
         const cacheKey = CACHE_KEYS.PORTAL_DOCUMENTS(userId, programId);
         const cached = await this.cacheService.get<PortalDocumentResponseDto>(cacheKey);
@@ -176,13 +176,29 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                         updatedAt: tmpl.updatedAt,
                     });
                 } else if (tmpl.type === 'letter_of_acceptance') {
-                    // Task 9: Surface LOA based on eligibility, not on a stored fileUrl.
-                    // Eligible → downloadable=true (on-demand PDF via GET /v1/portal/loa/download).
-                    // Ineligible → downloadable=false (locked; no released batch covers them yet).
-                    const eligibility = await this.loaEligibilityService.checkEligibility(
-                        application.id,
-                        application.programId,
+                    // Surface the LOA based on eligibility, not on a stored fileUrl.
+                    //
+                    // Computed from the SAME candidate set the download endpoint
+                    // resolves, via the shared resolver. This used to call
+                    // checkEligibility on the one application this handler had
+                    // picked, brand-blind and without excluding withdrawn rows -
+                    // so it could advertise downloadable=true for a letter the
+                    // download would then refuse. Because the link is a plain
+                    // `<a download>` with no error handling, that surfaced as the
+                    // browser saving a JSON error body as a file.
+                    //
+                    // Exactly one eligible candidate means the download will
+                    // succeed. Zero means it will not. Two or more means the
+                    // download returns 409 asking which programme, so the link
+                    // would fail - and when the caller sent a programId the
+                    // candidate set is narrowed to that programme anyway, so this
+                    // only reads false in the genuinely ambiguous case.
+                    const eligibleCandidates = await this.loaEligibilityService.resolveEligibleApplications(
+                        participant.id,
+                        brandId ?? '',
+                        programId,
                     );
+                    const eligibility = { eligible: eligibleCandidates.length === 1 };
                     myDocuments.push({
                         id: participantDoc?.id ?? tmpl.id,
                         title: tmpl.name,

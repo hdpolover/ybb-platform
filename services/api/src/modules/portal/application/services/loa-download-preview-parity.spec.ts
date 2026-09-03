@@ -87,8 +87,6 @@ describe('LOA preview/download parity', () => {
     return {
       participantApplication: {
         findFirst: jest.fn().mockResolvedValue(fixtureApplication),
-        // downloadLoa now SELECTS by eligibility rather than picking one row and
-        // gating it, so it reads the candidate set with findMany.
         findMany: jest.fn().mockResolvedValue([fixtureApplication]),
       },
       program: { findUnique: jest.fn().mockResolvedValue(fixtureProgram) },
@@ -119,7 +117,15 @@ describe('LOA preview/download parity', () => {
         LoaRenderDataService,
         { provide: PrismaService, useValue: downloadPrisma },
         { provide: PortalCacheService, useValue: { getParticipantProfile: jest.fn().mockResolvedValue({ id: 'participant-parity-1' }) } },
-        { provide: LoaEligibilityService, useValue: { checkEligibility: jest.fn().mockResolvedValue({ eligible: true, batchId: 'batch-1' }) } },
+        {
+          provide: LoaEligibilityService,
+          useValue: {
+            checkEligibility: jest.fn().mockResolvedValue({ eligible: true, batchId: 'batch-1' }),
+            resolveEligibleApplications: jest
+              .fn()
+              .mockResolvedValue([{ application: fixtureApplication, batchId: 'batch-1' }]),
+          },
+        },
         {
           provide: LoaDocumentNumberService,
           useValue: {

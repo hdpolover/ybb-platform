@@ -440,7 +440,7 @@ export class PortalController {
     ): Promise<PortalDocumentResponseDto> {
         const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
-        return this.queryBus.execute(new GetPortalDocumentsQuery(userId, programId));
+        return this.queryBus.execute(new GetPortalDocumentsQuery(userId, programId, user.brandId));
     }
 
     @Throttle({ default: { limit: 5, ttl: 60000 } })

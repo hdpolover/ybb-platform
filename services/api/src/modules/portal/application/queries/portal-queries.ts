@@ -76,6 +76,10 @@ export class GetPortalDocumentsQuery {
     // the API used to drop it on the floor, which is what made a multi-program
     // participant see another program's documents.
     public readonly programId?: string,
+    // The caller's brand, so `downloadable` is computed from the same candidate
+    // set the download endpoint uses. Without it the list could advertise a
+    // letter the download would refuse.
+    public readonly brandId?: string,
   ) { }
 }
 
