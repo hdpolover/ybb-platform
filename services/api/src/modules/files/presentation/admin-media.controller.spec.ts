@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { AdminMediaController } from './admin-media.controller';
 import { FileServiceClient } from '../infrastructure/clients/file-service.client';
 import { StorageService } from '../application/storage.service';
@@ -103,7 +103,7 @@ describe('AdminMediaController — listMedia', () => {
             mockAdmin({ adminBrands: [{ brandId: 'some-other-brand', permissions: null }] }),
         );
 
-        await expect(controller.listMedia(PROGRAM_ID, brandScopedAdminUser)).rejects.toThrow(ForbiddenException);
+        await expect(controller.listMedia(PROGRAM_ID, brandScopedAdminUser)).rejects.toThrow(NotFoundException);
         expect(mockFileServiceClient.listProgramMedia).not.toHaveBeenCalled();
     });
 
@@ -251,7 +251,7 @@ describe('AdminMediaController — uploadMedia / deleteMedia brand+identity deri
 
         await expect(
             controller.uploadMedia(PROGRAM_ID, file, foreignBrandAdmin, 'banner', 'gallery'),
-        ).rejects.toBeInstanceOf(ForbiddenException);
+        ).rejects.toBeInstanceOf(NotFoundException);
         expect(mockStorageService.uploadFile).not.toHaveBeenCalled();
     });
 
@@ -270,7 +270,7 @@ describe('AdminMediaController — uploadMedia / deleteMedia brand+identity deri
 
         await expect(
             controller.deleteMedia(PROGRAM_ID, 'file-9', foreignBrandAdmin),
-        ).rejects.toBeInstanceOf(ForbiddenException);
+        ).rejects.toBeInstanceOf(NotFoundException);
         expect(mockFileServiceClient.deleteMediaFile).not.toHaveBeenCalled();
     });
 });

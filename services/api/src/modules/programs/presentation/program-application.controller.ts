@@ -153,6 +153,42 @@ export class ProgramApplicationConfigController {
     return tier.programId;
   }
 
+  /**
+   * Resolve a child entity's programme server-side and assert the caller may act
+   * on it.
+   *
+   * These routes carry only the child's own id - there is no programme id in the
+   * URL for @ScopedBy to check, and nothing the caller sends is trusted. Ten of
+   * them shipped with no scope check at all, so any admin could rewrite any
+   * programme's essays, requirements, subthemes, form fields or participation
+   * categories by id.
+   *
+   * Missing and out-of-scope deliberately raise the SAME error, message
+   * included. Reporting them differently would put the existence oracle back one
+   * level down: an admin scoped to brand A could probe child ids and learn which
+   * exist in brand B, which is precisely what answering 404 from
+   * assertProgramAccess was meant to stop.
+   */
+  private async assertChildEntityScope(
+    req: AuthenticatedRequest,
+    delegate: { findUnique(args: unknown): Promise<{ programId: string } | null> },
+    id: string,
+    label: string,
+  ): Promise<string> {
+    const notFound = () => new NotFoundException(`${label} ${id} not found`);
+
+    const row = await delegate.findUnique({ where: { id }, select: { programId: true } });
+    if (!row) throw notFound();
+
+    const scope = await getRequestAdminScope(this.readPrisma, req);
+    try {
+      await assertProgramAccess(this.readPrisma, scope, row.programId);
+    } catch {
+      throw notFound();
+    }
+    return row.programId;
+  }
+
   /** Same, one level deeper: validity period -> pricing tier -> program. */
   private async assertValidityPeriodScope(req: AuthenticatedRequest, periodId: string): Promise<string> {
     const period = await this.readPrisma.pricingTierValidityPeriod.findUnique({
@@ -307,6 +343,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Update requirement' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateRequirement(@Param('itemId') itemId: string, @Body() dto: UpdateProgramRequirementDto, @Request() req: AuthenticatedRequest) {
+    await this.assertChildEntityScope(req, this.readPrisma.programRequirement, itemId, 'Requirement');
     return this.updateProgramRequirementHandler.execute(new UpdateProgramRequirementCommand(itemId, dto, req.user.id));
   }
 
@@ -317,6 +354,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Delete requirement' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteRequirement(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
+    await this.assertChildEntityScope(req, this.readPrisma.programRequirement, itemId, 'Requirement');
     return this.deleteProgramRequirementHandler.execute(new DeleteProgramRequirementCommand(itemId, req.user.id));
   }
 
@@ -369,6 +407,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Update essay' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateEssay(@Param('itemId') itemId: string, @Body() dto: UpdateProgramEssayDto, @Request() req: AuthenticatedRequest) {
+    await this.assertChildEntityScope(req, this.readPrisma.programEssay, itemId, 'Essay');
     return this.updateProgramEssayHandler.execute(new UpdateProgramEssayCommand(itemId, dto, req.user.id));
   }
 
@@ -379,6 +418,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Delete essay' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteEssay(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
+    await this.assertChildEntityScope(req, this.readPrisma.programEssay, itemId, 'Essay');
     return this.deleteProgramEssayHandler.execute(new DeleteProgramEssayCommand(itemId, req.user.id));
   }
 
@@ -431,6 +471,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Update participation category' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateParticipationCategory(@Param('itemId') itemId: string, @Body() dto: UpdateProgramParticipationCategoryDto, @Request() req: AuthenticatedRequest) {
+    await this.assertChildEntityScope(req, this.readPrisma.programParticipationCategory, itemId, 'Participation category');
     return this.updateProgramParticipationCategoryHandler.execute(new UpdateProgramParticipationCategoryCommand(itemId, dto, req.user.id));
   }
 
@@ -441,6 +482,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Delete participation category' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteParticipationCategory(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
+    await this.assertChildEntityScope(req, this.readPrisma.programParticipationCategory, itemId, 'Participation category');
     return this.deleteProgramParticipationCategoryHandler.execute(new DeleteProgramParticipationCategoryCommand(itemId, req.user.id));
   }
 
@@ -476,6 +518,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Update subtheme' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateSubtheme(@Param('itemId') itemId: string, @Body() dto: UpdateProgramSubthemeDto, @Request() req: AuthenticatedRequest) {
+    await this.assertChildEntityScope(req, this.readPrisma.programSubtheme, itemId, 'Subtheme');
     return this.updateProgramSubthemeHandler.execute(new UpdateProgramSubthemeCommand(itemId, dto, req.user.id));
   }
 
@@ -486,6 +529,7 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Delete subtheme (soft)' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteSubtheme(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
+    await this.assertChildEntityScope(req, this.readPrisma.programSubtheme, itemId, 'Subtheme');
     return this.deleteProgramSubthemeHandler.execute(new DeleteProgramSubthemeCommand(itemId, req.user.id));
   }
 
@@ -518,6 +562,7 @@ export class ProgramApplicationConfigController {
   @ApiResponse({ status: 200, type: ApplicationFormFieldResponseDto })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateFormField(@Param('itemId') itemId: string, @Body() dto: UpdateApplicationFormFieldDto, @Request() req: AuthenticatedRequest) {
+    await this.assertChildEntityScope(req, this.readPrisma.applicationFormField, itemId, 'Form field');
     return this.updateApplicationFormFieldHandler.execute(new UpdateApplicationFormFieldCommand(itemId, dto, req.user.id));
   }
 
@@ -529,6 +574,7 @@ export class ProgramApplicationConfigController {
   @ApiResponse({ status: 200, description: 'Application form field deleted successfully' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteFormField(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
+    await this.assertChildEntityScope(req, this.readPrisma.applicationFormField, itemId, 'Form field');
     return this.deleteApplicationFormFieldHandler.execute(new DeleteApplicationFormFieldCommand(itemId, req.user.id));
   }
 }

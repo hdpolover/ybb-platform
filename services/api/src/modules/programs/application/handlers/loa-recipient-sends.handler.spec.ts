@@ -117,7 +117,7 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
 
   it('refuses a programme-scoped admin outside their assigned programmes', async () => {
     mockReadPrisma.admin.findUnique.mockResolvedValue(assignedAdminFor(['someone-elses-program']));
-    await expect(run()).rejects.toThrow(ForbiddenException);
+    await expect(run()).rejects.toThrow(NotFoundException);
     expect(mockBatchRepo.findById).not.toHaveBeenCalled();
   });
 

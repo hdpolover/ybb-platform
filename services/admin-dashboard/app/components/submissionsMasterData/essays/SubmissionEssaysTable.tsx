@@ -516,40 +516,29 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
         },
       );
 
-      if (!response.ok && response.status === 404) {
-        if (data.length === 0) {
-          throw new Error(
-            "This API deployment does not support section-level essay guidelines yet. Add at least one essay first, or deploy the latest API version.",
-          );
-        }
-
-        const fallbackResponses = await Promise.all(
-          data.map((essay) =>
-            fetch(buildApiUrl(`/programs/essays/${encodeURIComponent(essay.id)}`), {
-              method: "PUT",
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                question: essay.question,
-                description: essay.description || undefined,
-                wordLimit: essay.wordLimit,
-                isRequired: essay.isRequired,
-                order: essay.order,
-                isActive: essay.isActive,
-                guidelineText: guidelineText,
-                guidelineUrl: guidelineUrl || undefined,
-              }),
-            }),
-          ),
-        );
-
-        const failedFallback = fallbackResponses.find((item) => !item.ok);
-        if (failedFallback) {
-          throw new Error(await readErrorMessage(failedFallback));
-        }
-      } else if (!response.ok) {
+      // The 404 compatibility branch that used to live here has been removed.
+      //
+      // It existed for API deployments that kept guidelines on each essay item
+      // rather than on the programme, and it fell back to one
+      // PUT /programs/essays/:essayId per essay. The guarded
+      // /programs/:id/essay-guidelines route has long since shipped, so the
+      // branch was dead weight - and it had become dangerous.
+      //
+      // assertProgramAccess now answers 404 rather than 403 for a programme
+      // outside the caller's scope, so that a scoped admin cannot tell "does not
+      // exist" from "not yours". That made this branch fire on a REFUSAL. Its
+      // only guard was `data.length === 0`, which is false because
+      // GET /programs/:id/essays is @Public() and had already filled the table.
+      // So a denied edit of another brand's guidelines turned into a completed
+      // per-essay overwrite of that brand's entire essay set - question,
+      // description, word limit, required flag, order and active flag, not just
+      // the guideline text.
+      //
+      // Every non-ok response now takes the generic error path. Do not
+      // reintroduce a status-sniffing fallback here: the API is the only place
+      // that can tell a real 404 from a refusal, and it deliberately no longer
+      // does.
+      if (!response.ok) {
         throw new Error(await readErrorMessage(response));
       }
 

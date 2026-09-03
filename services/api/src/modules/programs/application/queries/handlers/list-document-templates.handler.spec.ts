@@ -1,5 +1,5 @@
 import { DocumentTemplate } from '@prisma/client';
-import { ForbiddenException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { ListDocumentTemplatesHandler } from './list-program-content.handlers';
 import { ListDocumentTemplatesQuery } from '../list-program-content.queries';
 import { IProgramContentRepository } from '../../../../../core/interfaces/repositories/program-content.repository.interface';
@@ -117,7 +117,7 @@ describe('ListDocumentTemplatesHandler — private file presigning', () => {
 
         await expect(
             handler.execute(new ListDocumentTemplatesQuery(PROGRAM_ID, actor)),
-        ).rejects.toThrow(ForbiddenException);
+        ).rejects.toThrow(NotFoundException);
 
         expect(mockRepository.findDocumentTemplatesByProgramId).not.toHaveBeenCalled();
     });

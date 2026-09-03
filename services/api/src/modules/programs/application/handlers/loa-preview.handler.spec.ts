@@ -124,7 +124,7 @@ describe('PreviewLoaTemplateHandler', () => {
 
       await expect(
         handler.execute(new PreviewLoaTemplateQuery('program-1', '<p>draft</p>', {}, [], actor)),
-      ).rejects.toThrow(ForbiddenException);
+      ).rejects.toThrow(NotFoundException);
 
       expect(prisma.program.findUnique).not.toHaveBeenCalled();
       expect(loaPreviewParticipantService.resolveApplicationId).not.toHaveBeenCalled();

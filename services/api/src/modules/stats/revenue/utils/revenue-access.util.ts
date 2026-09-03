@@ -150,23 +150,33 @@ export async function assertProgramAccess(
     select: { id: true, brandId: true, name: true, deletedAt: true },
   });
 
-  if (!program || program.deletedAt) {
-    throw new NotFoundException(`Program ${programId} not found`);
-  }
+  const missing = !program || program.deletedAt;
 
+  // A platform admin may be told the truth: they can see every programme, so
+  // "not found" from them means the programme really does not exist, and there
+  // is nothing for the answer to leak.
   if (scope.kind === 'platform') {
-    return program;
-  }
-
-  if (scope.kind === 'brand_scope') {
-    if (!scope.allowedBrandIds?.includes(program.brandId)) {
-      throw new ForbiddenException('You do not have access to this program.');
+    if (missing) {
+      throw new NotFoundException(`Program ${programId} not found`);
     }
     return program;
   }
 
-  if (!scope.allowedProgramIds?.includes(program.id)) {
-    throw new ForbiddenException('You do not have access to this program.');
+  const inScope =
+    !missing &&
+    (scope.kind === 'brand_scope'
+      ? !!scope.allowedBrandIds?.includes(program!.brandId)
+      : !!scope.allowedProgramIds?.includes(program!.id));
+
+  // Everyone else gets the SAME answer for "does not exist" and "exists but is
+  // not yours". Distinguishing them let an admin scoped to brand A probe ids and
+  // learn from the status code alone which programmes exist in brand B - no data
+  // disclosed, but exactly the existence oracle the id-keyed routes were built to
+  // avoid. assertAmbassadorAccess already answers 404 for both for this reason;
+  // this brings the shared helper in line.
+  if (!inScope) {
+    throw new NotFoundException(`Program ${programId} not found`);
   }
-  return program;
+
+  return program!;
 }
