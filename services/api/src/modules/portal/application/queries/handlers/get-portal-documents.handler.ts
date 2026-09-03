@@ -178,25 +178,30 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                 } else if (tmpl.type === 'letter_of_acceptance') {
                     // Surface the LOA based on eligibility, not on a stored fileUrl.
                     //
-                    // Computed from the SAME candidate set the download endpoint
-                    // resolves, via the shared resolver. This used to call
-                    // checkEligibility on the one application this handler had
-                    // picked, brand-blind and without excluding withdrawn rows -
-                    // so it could advertise downloadable=true for a letter the
-                    // download would then refuse. Because the link is a plain
-                    // `<a download>` with no error handling, that surfaced as the
-                    // browser saving a JSON error body as a file.
+                    // Scoped to `application.programId`, NOT to the request's
+                    // `programId`. This tile belongs to one specific application -
+                    // the templates above are already selected for
+                    // application.programId - so the only question that matters is
+                    // whether THAT application can produce a letter.
                     //
-                    // Exactly one eligible candidate means the download will
-                    // succeed. Zero means it will not. Two or more means the
-                    // download returns 409 asking which programme, so the link
-                    // would fail - and when the caller sent a programId the
-                    // candidate set is narrowed to that programme anyway, so this
-                    // only reads false in the genuinely ambiguous case.
+                    // Passing the request's programId through was wrong when the
+                    // caller omitted it: the resolver then scanned every live
+                    // application in the brand, so a participant whose OTHER
+                    // programme was eligible saw downloadable=true on the tile for
+                    // the programme actually on screen - and clicking it served
+                    // the other programme's letter under this programme's heading,
+                    // with no error. That is the inverse of the mismatch this
+                    // handler was changed to fix, and worse: a silent success
+                    // returning the wrong document rather than a visible failure.
+                    //
+                    // Because the set is now scoped to a single programme, at most
+                    // one candidate can come back, so `length === 1` reads as "this
+                    // application is eligible" rather than "something in this brand
+                    // is".
                     const eligibleCandidates = await this.loaEligibilityService.resolveEligibleApplications(
                         participant.id,
                         brandId ?? '',
-                        programId,
+                        application.programId,
                     );
                     const eligibility = { eligible: eligibleCandidates.length === 1 };
                     myDocuments.push({
