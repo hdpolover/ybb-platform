@@ -260,6 +260,50 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
       expect(mockPrismaService.$transaction).toHaveBeenCalledTimes(1);
     });
 
+    // Audit M134. Codes are stored uppercase and the column is a plain VarChar
+    // with no citext, so Postgres compares case-sensitively. register.handler.ts
+    // has always normalised the lookup; the OAuth path never did, so a
+    // participant who typed their code in lower case matched zero rows and the
+    // referral was silently dropped - credited to nobody, not misattributed.
+    it('normalises a lower-case referral code so the lookup still finds the ambassador', async () => {
+      mockPrismaService.ambassadorReferral.findFirst.mockResolvedValue(null);
+      mockPrismaService.ambassador.findUnique.mockResolvedValue(existingAmbassador);
+      mockPrismaService.ambassadorReferral.create.mockResolvedValue({ id: 'new-ref-id' });
+      mockPrismaService.ambassador.update.mockResolvedValue(existingAmbassador);
+      mockPrismaService.participant.update.mockResolvedValue(existingParticipant);
+
+      const command = new FirebaseLoginCommand(
+        'firebase-id-token',
+        'provider-id-123',
+        '127.0.0.1',
+        'Mozilla/5.0 Chrome/120',
+        'brand-id-123',
+        undefined,
+        undefined,
+        '  refcode  ',
+      );
+
+      await handler.execute(command);
+
+      // The lookup must use the canonical form, not what was typed.
+      expect(mockPrismaService.ambassador.findUnique).toHaveBeenCalledWith({
+        where: { referralCode: 'REFCODE', isActive: true },
+      });
+      expect(mockPrismaService.ambassadorReferral.create).toHaveBeenCalledWith({
+        data: {
+          ambassadorId: existingAmbassador.id,
+          participantId: existingParticipant.id,
+          status: 'referred',
+        },
+      });
+      // And the code stored on the participant is the ambassador's own, so the
+      // column always names the ambassador actually credited.
+      expect(mockPrismaService.participant.update).toHaveBeenCalledWith({
+        where: { id: existingParticipant.id },
+        data: { referralCode: 'REFCODE' },
+      });
+    });
+
     it('is idempotent: does NOT create or increment when the participant already has a referral', async () => {
       // Participant already has an ambassador referral
       mockPrismaService.ambassadorReferral.findFirst.mockResolvedValue({

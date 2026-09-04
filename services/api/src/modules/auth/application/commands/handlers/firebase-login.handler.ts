@@ -17,6 +17,7 @@ import {
   resolveAuthTargetProgram,
   toProgramRegistrationInfo,
 } from '../../services/auth-program-linking.util';
+import { normalizeReferralCode } from '@modules/participants/application/utils/referral-code.util';
 
 @Injectable()
 export class FirebaseLoginHandler {
@@ -121,8 +122,13 @@ export class FirebaseLoginHandler {
       return;
     }
 
+    // Codes are STORED uppercase and the column is a plain VarChar with no
+    // citext, so Postgres compares them case-sensitively: a participant who
+    // types their code in lower case matches zero rows and the referral is
+    // silently dropped. register.handler.ts has always normalised here; the
+    // OAuth path never did.
     const ambassador = await this.prisma.ambassador.findUnique({
-      where: { referralCode, isActive: true },
+      where: { referralCode: normalizeReferralCode(referralCode), isActive: true },
     });
     if (!ambassador) {
       return;
@@ -145,7 +151,9 @@ export class FirebaseLoginHandler {
       }),
       this.prisma.participant.update({
         where: { id: participantId },
-        data: { referralCode },
+        // The ambassador's own code, not the raw typed one, so the stored value
+        // matches the ambassador actually credited.
+        data: { referralCode: ambassador.referralCode },
       }),
     ]);
   }
@@ -303,7 +311,7 @@ export class FirebaseLoginHandler {
             let ambassador: Ambassador | null = null;
             if (command.referralCode) {
                 const foundAmbassador = await this.prisma.ambassador.findUnique({
-                    where: { referralCode: command.referralCode }
+                    where: { referralCode: normalizeReferralCode(command.referralCode) }
                 });
                 
                 if (foundAmbassador && foundAmbassador.isActive) {
@@ -327,7 +335,10 @@ export class FirebaseLoginHandler {
                     data: {
                         userId: user.id,
                         fullName: fullName,
-                        referralCode: command.referralCode,
+                        // Normalised, not raw: keeps the record of what was typed
+                        // (so an unmatched code is still visible to support) while
+                        // making the column joinable against ambassadors.
+                        referralCode: normalizeReferralCode(command.referralCode) || null,
                         profileCompletionPercentage: 0,
                         knowledgeSource: 'Other',
                     }
