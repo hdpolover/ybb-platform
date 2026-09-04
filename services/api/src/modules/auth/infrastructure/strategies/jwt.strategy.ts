@@ -34,6 +34,31 @@ const DEFAULT_ADMIN_ACCESS_TTL = '8h'; // JWT_ADMIN_EXPIRES_IN
 const DEFAULT_REFRESH_TTL = '7d'; // JWT_REFRESH_EXPIRES_IN
 
 /**
+ * Hard ceiling on an ACCESS token's lifetime, enforced at boot.
+ *
+ * An access token cannot be revoked before it expires. Logout blacklists the
+ * jti of the one token it is handed, and nothing in the auth path consults a
+ * session row per request — so a token's TTL IS its revocation window. A
+ * long-lived access token is a long-lived unrevocable credential.
+ *
+ * This exists because the value it guards is not in the repo. JWT_EXPIRES_IN
+ * lives only in gitignored .env files and the Dokploy panel, so nothing under
+ * review can record it: it was 7d in dev and staging, was corrected by hand,
+ * and could silently go back tomorrow with no diff to catch it. A boot refusal
+ * is the only gate that survives a value the repo cannot see.
+ *
+ * 8h, not tighter, because JWT_ADMIN_EXPIRES_IN is legitimately 8h in
+ * production. The comparison is `>` so that exact value boots. Note there is
+ * no headroom: raising DEFAULT_ADMIN_ACCESS_TTL without raising this refuses
+ * boot in every environment that does not set the variable.
+ *
+ * If you genuinely need a longer session, raise JWT_REFRESH_EXPIRES_IN. That
+ * is what the refresh token is for, and unlike an access token it can be
+ * revoked.
+ */
+const MAX_ACCESS_TTL_SECONDS = 8 * 60 * 60;
+
+/**
  * Parse a TTL the way the SIGNER parses it.
  *
  * `ms` is jsonwebtoken's own duration parser — it is literally what an
@@ -115,6 +140,40 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           '(e.g. "1h", "8h", "7d") to switch it back on.',
       );
       return undefined;
+    }
+
+    // Refuse to boot on an access TTL above the ceiling. This runs inside
+    // NestFactory.create, and main.ts calls bootstrap() with no .catch(), so a
+    // throw here exits the process before any port is bound — a failed deploy,
+    // not a container half-serving requests with the wrong credential lifetime.
+    //
+    // Placed AFTER the unreadable filter so `ttl.seconds!` is sound. One
+    // consequence worth knowing: an env var set to an EMPTY STRING is not
+    // undefined, so ConfigService returns "" rather than the default,
+    // parseTtlSeconds("") is undefined, and the unreadable branch returns
+    // above — this ceiling is inert for a blank value.
+    //
+    // That is not a silent hole, because the SIGNER does not fall back either:
+    // every sign site reads the same "" and jsonwebtoken throws
+    // '"expiresIn" should be a number of seconds or string representing a
+    // timespan', so a blank TTL takes login down loudly on the first attempt
+    // rather than quietly minting an unbounded credential. Verified by running
+    // it, not by reading it. Still worth knowing that a CLEARED panel field
+    // and an ABSENT one behave differently: absent uses the default and boots,
+    // blank breaks token issuance.
+    const tooLong = [access, adminAccess].filter(
+      (ttl) => ttl.seconds! > MAX_ACCESS_TTL_SECONDS,
+    );
+    if (tooLong.length > 0) {
+      throw new Error(
+        `${tooLong
+          .map((ttl) => `${ttl.key}="${ttl.raw}"`)
+          .join(' and ')} exceeds the ${MAX_ACCESS_TTL_SECONDS}s ceiling on access-token ` +
+          'lifetime. An access token cannot be revoked before it expires — logout only ' +
+          'blacklists the jti of the token it is handed — so this value is the window an ' +
+          'attacker keeps a stolen credential. Raise JWT_REFRESH_EXPIRES_IN instead; a ' +
+          'refresh token can be revoked.',
+      );
     }
 
     const maxAccess = Math.max(access.seconds!, adminAccess.seconds!);

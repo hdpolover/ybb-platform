@@ -161,9 +161,10 @@ describe('AmbassadorLoginHandler', () => {
 
             await expect(handler.execute(command)).rejects.toThrow(UnauthorizedException);
 
+            // The lock also ZEROES the streak; see account-lockout.util.ts.
             expect(mockPrismaService.user.update).toHaveBeenLastCalledWith({
                 where: { id: USER_ID },
-                data: { lockedUntil: expect.any(Date) },
+                data: { lockedUntil: expect.any(Date), failedLoginAttempts: 0 },
             });
         });
 

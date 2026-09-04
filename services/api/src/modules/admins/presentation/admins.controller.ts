@@ -147,6 +147,13 @@ export class AdminsController {
             data: {
                 passwordHash: await bcrypt.hash(dto.password, 10),
                 failedLoginAttempts: 0,
+                // Clear the lock too, matching the self-service path in
+                // reset-password.handler.ts. An authorised operator resetting
+                // an admin's password intends to restore access; clearing the
+                // streak but leaving lockedUntil set means they hand back a
+                // working password that still cannot log in, with nothing to
+                // say why. The two credential-reset paths must not disagree.
+                lockedUntil: null,
             },
         });
 

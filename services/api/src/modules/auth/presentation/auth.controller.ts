@@ -55,7 +55,11 @@ import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current
 import { BrandDomain } from '../../../shared/decorators/brand-domain.decorator';
 import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
 import { ClientIp } from '../../../shared/decorators/client-ip.decorator';
-import { clientIpTracker, emailTracker } from '../../../shared/infrastructure/throttler/user-aware-throttler.guard';
+import {
+  clientIpTracker,
+  emailTracker,
+  recoveryMailboxBucket,
+} from '../../../shared/infrastructure/throttler/user-aware-throttler.guard';
 
 const FIFTEEN_MINUTES = 900000;
 const ONE_HOUR = 3600000;
@@ -70,9 +74,33 @@ const ONE_HOUR = 3600000;
  * reports on 2026-08-31: the Nth person through the door got locked out for the
  * rest of the window for doing nothing wrong.
  *
- * The IP tier does not have to bound per-account guessing, because the
- * per-MAILBOX tier below does (5 login attempts / 15 min for one address),
- * and an attacker cannot dodge that by changing hosts.
+ * The IP tier does not have to bound per-account guessing, because ACCOUNT
+ * LOCKOUT does (MAX_FAILED_LOGIN_ATTEMPTS, keyed on user.id), and an attacker
+ * cannot dodge that by changing hosts either.
+ *
+ * THERE USED TO BE A PER-MAILBOX TIER HERE. It was 5 per 15 min keyed on
+ * emailTracker, and it is gone on purpose — do not put it back:
+ *
+ *   - It counted REQUESTS, not failures. The guard increments in canActivate,
+ *     before the handler, so it cannot know whether the credential was right.
+ *     Six SUCCESSFUL logins in 15 minutes locked a legitimate user out of
+ *     their own account. Nothing else in the system punishes success.
+ *   - It keyed on the caller-written body, so it was a remote lockout
+ *     primitive: anyone who knew an admin's address could deny them the
+ *     dashboard for 15 minutes with six unauthenticated requests from any
+ *     host, repeatable forever.
+ *   - It capped at 6, not 5 — the storage blocks on totalHits > limit — while
+ *     account lockout caps at 5. It was looser than the control it duplicated.
+ *   - emailTracker folds +tags and gmail dots, which is right for a MAILBOX
+ *     and wrong for an ACCOUNT: admin@ and admin+ops@ are two distinct user
+ *     rows (email is brand-scoped and never plus-stripped at registration)
+ *     and shared one login budget.
+ *   - It did not even aggregate: the library hashes the handler name into the
+ *     key, so the advertised 5 was really 5 per route across the three login
+ *     endpoints.
+ *
+ * The per-account budget belongs on user.id, counting only failures, shared
+ * across all three routes — which is exactly what account-lockout.util.ts is.
  *
  * There is a SECOND backstop, and it now covers all three routes here:
  *
@@ -93,22 +121,40 @@ const ONE_HOUR = 3600000;
  * So the IP tier only has to stop a single-host SPRAY — one attacker walking
  * many accounts from one address — not bound a building. At 600 per 15 minutes
  * that attacker gets ~40 login attempts a minute and every account they touch
- * still hits the 5-per-mailbox wall first. That is the trade the user chose:
+ * still hits the 5-failure account-lockout wall first (MAX_FAILED_LOGIN_ATTEMPTS,
+ * keyed on user.id and shared across all three login routes). That is the
+ * trade the user chose:
  * loose enough that no legitimate building is ever locked out, tight enough
  * that one host cannot run a sweep at machine speed.
  */
+/**
+ * 600 per 15 minutes per client IP — a BUILDING, not a person. See the block
+ * above for why that number is loose on purpose.
+ */
+const BUILDING_IP_TIER = { limit: 600, ttl: FIFTEEN_MINUTES, getTracker: clientIpTracker };
+
 const CREDENTIAL_THROTTLE = {
-  // 600 per 15 min per client IP (a building), ANDed with
-  // 5 per 15 min per mailbox (the per-account guessing budget).
-  // The guard evaluates every configured throttler and requires all to pass.
-  default: { limit: 600, ttl: FIFTEEN_MINUTES, getTracker: clientIpTracker },
-  long: { limit: 5, ttl: FIFTEEN_MINUTES, getTracker: emailTracker },
+  default: BUILDING_IP_TIER,
+  // `long` IS DELIBERATELY A DUPLICATE OF `default`, AND MUST NOT BE DELETED.
+  // A route-level @Throttle only displaces the global tier of the same NAME.
+  // Drop this key and these three routes inherit the global `long` tier
+  // instead (throttler.module.ts: 300 per 60s, per IP, blockDuration falling
+  // through to a 60-second hard block) — a tighter, lockout-shaped ceiling
+  // that does not exist today, on exactly the axis of the 2026-08-31 incident.
+  // Occupying the name with the same building-sized limit is what keeps that
+  // from happening.
+  long: BUILDING_IP_TIER,
 };
 
 /**
  * Mail-sending routes: the MAILBOX is the resource being protected, so that is
  * the tight tier. One address gets one mail allowance whoever asks, which is
  * safe to key on the caller-written body HERE and only here.
+ *
+ * SCOPE OF "one allowance": per route, unless the tier pins a generateKey.
+ * The library hashes the handler name into the storage key, so this tier
+ * applied to N routes is N budgets for one inbox. The two RECOVERY routes
+ * share one bucket via RECOVERY_MAIL_THROTTLE below; /register keeps its own.
  *
  * The IP tier beside it exists so one host cannot mint unlimited buckets by
  * varying the address it sends, and is sized for a building for the reasons
@@ -128,6 +174,35 @@ const MAILBOX_THROTTLE = {
   // hour. The 10/hour mailbox tier above is what protects a victim's inbox;
   // this tier only has to stop one host minting buckets by varying the address.
   long: { limit: 600, ttl: FIFTEEN_MINUTES, getTracker: clientIpTracker },
+};
+
+/**
+ * The two ACCOUNT-RECOVERY mail routes, sharing ONE per-inbox budget.
+ *
+ * /auth/forgot-password and /auth/resend-verification each held their own
+ * 10-per-hour allowance for the same address, so one inbox could be sent 20
+ * mails an hour against a comment advertising 10. recoveryMailboxBucket
+ * collapses them onto a single key; the numbers below are unchanged, only the
+ * bucket is shared, so no legitimate user loses allowance they were promised.
+ *
+ * /auth/register IS DELIBERATELY EXCLUDED, and this is the important half.
+ * The guard runs before the ValidationPipe, so every signup 400 (weak
+ * password, missing consent) and every 409 (duplicate email) spends mailbox
+ * budget without sending anything, and blockDuration falls through to the
+ * one-hour ttl. Folding register into this bucket would let eleven junk POSTs
+ * carrying nothing but {email} — or one user fumbling the signup form —
+ * block that inbox's password reset and verification resend for a full hour.
+ * Password reset is the only self-service escape from an account lockout
+ * (see reset-password.handler.ts), so that would hand an attacker a way to
+ * lock the door and confiscate the key. Registration keeps its own budget.
+ *
+ * Only the mailbox tier is shared. The clientIpTracker tier stays per-route on
+ * purpose: converging it would cut a school lab's ceiling threefold, which is
+ * the 2026-08-31 lockout shape.
+ */
+const RECOVERY_MAIL_THROTTLE = {
+  default: { ...MAILBOX_THROTTLE.default, generateKey: recoveryMailboxBucket },
+  long: MAILBOX_THROTTLE.long,
 };
 
 /**
@@ -288,7 +363,9 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  // 10/hour per mailbox AND 600/15min per IP; see MAILBOX_THROTTLE.
+  // 10/hour per mailbox AND 600/15min per IP, both on their OWN buckets; see
+  // MAILBOX_THROTTLE, and RECOVERY_MAIL_THROTTLE for why register is not in
+  // the shared recovery bucket.
   @Throttle(MAILBOX_THROTTLE)
   @ApiOperation({
     summary: 'Register User',
@@ -354,8 +431,9 @@ export class AuthController {
 
   @Public()
   @Post('forgot-password')
-  // 10/hour per mailbox AND 600/15min per IP; see MAILBOX_THROTTLE.
-  @Throttle(MAILBOX_THROTTLE)
+  // 10/hour per mailbox, SHARED with resend-verification, AND 600/15min per
+  // IP (that one per-route); see RECOVERY_MAIL_THROTTLE.
+  @Throttle(RECOVERY_MAIL_THROTTLE)
   @ApiOperation({ summary: 'Request Password Reset' })
   @ApiResponse({ status: 201, description: 'Password reset email sent' })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
@@ -404,8 +482,9 @@ export class AuthController {
 
   @Public()
   @Post('resend-verification')
-  // 10/hour per mailbox AND 600/15min per IP; see MAILBOX_THROTTLE.
-  @Throttle(MAILBOX_THROTTLE)
+  // 10/hour per mailbox, SHARED with forgot-password, AND 600/15min per IP
+  // (that one per-route); see RECOVERY_MAIL_THROTTLE.
+  @Throttle(RECOVERY_MAIL_THROTTLE)
   @ApiOperation({ summary: 'Resend Verification Email' })
   @ApiResponse({ status: 200, description: 'Verification email sent if user exists and is unverified' })
   @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
