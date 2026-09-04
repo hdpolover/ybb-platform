@@ -89,7 +89,10 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
     let prisma: jest.Mocked<PrismaService>;
     // Exposed so a test can assert on the write that happens INSIDE the unit of
     // work, which is where the application payment column is set.
-    let tx: { participantApplication: { update: jest.Mock } };
+    let tx: {
+        participantApplication: { update: jest.Mock };
+        applicationInvoice: { findFirst: jest.Mock; update: jest.Mock; create: jest.Mock };
+    };
     let unitOfWork: jest.Mocked<UnitOfWork>;
     let paymentOutbox: jest.Mocked<PaymentOutboxService>;
 
@@ -102,6 +105,7 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
                 update: jest.fn().mockResolvedValue({ id: 'app-1' }),
             },
             applicationInvoice: {
+                findFirst: jest.fn().mockResolvedValue(null),
                 update: jest.fn().mockResolvedValue({ id: 'invoice-1' }),
                 create: jest.fn().mockResolvedValue({ id: 'invoice-1' }),
             },
@@ -250,6 +254,31 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
                     }),
                 }),
             );
+        });
+
+        // The self-supersession case, found in review. This is the ONLY guard site
+        // that runs before the invoice it acts on is identified: without
+        // metadata.invoice_id the guard cannot exclude the invoice by id, and the
+        // transaction then resolves that same invoice by transaction reference on
+        // an idempotent replay of an already-settled event. The guard's "sibling"
+        // and the acted-on invoice are then the same row, and a legitimate single
+        // payment would be stamped as superseded by itself.
+        it('does not flag an invoice as superseded by ITSELF on an idempotent replay', async () => {
+            // No invoice_id in metadata, so the guard runs without a self-exclusion.
+            const payloadWithoutInvoiceId = {
+                ...basePayload,
+                metadata: { ...basePayload.metadata, invoice_id: undefined },
+            };
+            // The guard finds the already-paid invoice...
+            (prisma.applicationInvoice.findFirst as jest.Mock).mockResolvedValue({ id: 'invoice-1' });
+            // ...and the in-transaction reference lookup resolves the SAME row.
+            tx.applicationInvoice.findFirst.mockResolvedValue({ id: 'invoice-1', status: 'paid' });
+
+            const context = makeRmqContext();
+
+            await controller.handlePaymentSucceeded(payloadWithoutInvoiceId as any, context);
+
+            expect(prisma.applicationInvoice.updateMany).not.toHaveBeenCalled();
         });
 
         it('does not flag anything for refund review when there is no paid sibling', async () => {

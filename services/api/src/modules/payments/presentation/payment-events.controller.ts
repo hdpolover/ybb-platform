@@ -661,13 +661,37 @@ export class PaymentEventsController {
         // webhook path where the vast majority of payments actually settle.
         // Done after the transaction because the invoice id is only resolved
         // inside it, across three different branches.
-        if (paidSibling && createdInvoiceId) {
-            await this.prisma.applicationInvoice.updateMany({
-                // updateMany + a rejectionReason: null filter makes this a no-op
-                // when a reason is already recorded, without a read-back first.
-                where: { id: createdInvoiceId, rejectionReason: null },
-                data: { rejectionReason: supersededByPaidInvoiceReason(paidSibling.id) },
-            });
+        //
+        // The identity check is load-bearing, not defensive. This is the only one
+        // of the nine guard sites that runs BEFORE the invoice it acts on is
+        // known: excludeInvoiceId above is metadata.invoice_id, which is absent
+        // on non-portal flows, and the invoice is then resolved inside the
+        // transaction by transaction/intent reference. On an idempotent replay of
+        // an already-settled event that lookup returns the very invoice the guard
+        // just found as a "sibling", and without this check a legitimate single
+        // payment would be stamped as superseded BY ITSELF and sent for refund
+        // review.
+        if (paidSibling && createdInvoiceId && paidSibling.id !== createdInvoiceId) {
+            try {
+                await this.prisma.applicationInvoice.updateMany({
+                    // updateMany + a rejectionReason: null filter makes this a no-op
+                    // when a reason is already recorded, without a read-back first.
+                    where: { id: createdInvoiceId, rejectionReason: null },
+                    data: { rejectionReason: supersededByPaidInvoiceReason(paidSibling.id) },
+                });
+            } catch (error) {
+                // Best-effort, and caught locally on purpose. The payment itself is
+                // already committed; letting this escape would abort the rest of
+                // handlePaymentSucceeded and silently cost the portal cache
+                // invalidation, the referral funnel advance and the receipt email
+                // for a payment that succeeded. Matches how the notification emit
+                // below is handled.
+                this.logger.error(
+                    `Duplicate settlement on application ${applicationId}: invoice ${createdInvoiceId} ` +
+                    `is superseded by paid invoice ${paidSibling.id} and NEEDS REFUND REVIEW, but the ` +
+                    `flag could not be written: ${error instanceof Error ? error.message : String(error)}`,
+                );
+            }
         }
 
         // Return context for cache invalidation and referral funnel
