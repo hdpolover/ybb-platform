@@ -44,6 +44,8 @@ function buildMockPrisma(invoice: unknown) {
         $queryRaw: jest.fn().mockResolvedValue([]),
         applicationInvoice: {
             findUnique: jest.fn().mockResolvedValue(invoice),
+            // No paid sibling by default - see the supersede guard in updateInvoiceStatus.
+            findFirst: jest.fn().mockResolvedValue(null),
             update: jest.fn().mockResolvedValue(invoice),
             findMany: jest.fn().mockResolvedValue([]),
         },

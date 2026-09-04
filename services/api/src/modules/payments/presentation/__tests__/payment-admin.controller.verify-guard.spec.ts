@@ -49,7 +49,7 @@ describe('PaymentAdminController.verifyInvoice — reject guards', () => {
     let controller: PaymentAdminController;
     let rabbitmqProducer: { emit: jest.Mock };
     let prisma: {
-        applicationInvoice: { findUnique: jest.Mock; update: jest.Mock };
+        applicationInvoice: { findUnique: jest.Mock; findFirst: jest.Mock; update: jest.Mock };
         participantApplication: { update: jest.Mock };
         $transaction: jest.Mock;
     };
@@ -60,6 +60,8 @@ describe('PaymentAdminController.verifyInvoice — reject guards', () => {
         const mockPrisma = {
             applicationInvoice: {
                 findUnique: jest.fn(),
+                // No paid sibling by default - see the supersede guard in verifyInvoice.
+                findFirst: jest.fn().mockResolvedValue(null),
                 update: jest.fn().mockResolvedValue({}),
             },
             participantApplication: {

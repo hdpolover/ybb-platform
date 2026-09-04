@@ -1,14 +1,17 @@
-import { Injectable, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { PaymentGatewayClient } from '@modules/payments/infrastructure/services/payment-gateway.client';
+import { findPaidSiblingInvoice } from '@shared/utils/paid-sibling-invoice.util';
 import { CancelPortalPaymentCommand } from '../../queries/portal-queries';
 import { CancelPortalPaymentResponseDto } from '../../../presentation/dto/portal-payment.dto';
 
 @Injectable()
 export class CancelPortalPaymentHandler {
+    private readonly logger = new Logger(CancelPortalPaymentHandler.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
@@ -78,6 +81,23 @@ export class CancelPortalPaymentHandler {
                 ? { registrationPaymentStatus: 'cancelled' as const }
                 : { programPaymentStatus: 'cancelled' as const };
 
+        // Supersede guard (non-paid direction): a different invoice already paid
+        // this application's column, so the cancel is real for THIS invoice but
+        // must not overwrite it. No notification fires on self-cancel, so there's
+        // nothing else to suppress here.
+        const paidSibling = await findPaidSiblingInvoice(
+            this.prisma,
+            invoice.application.id,
+            invoice.pricingTier?.feeType,
+            invoice.id,
+        );
+        if (paidSibling) {
+            this.logger.warn(
+                `cancel-portal-payment: invoice ${invoice.id} superseded by paid invoice ${paidSibling.id} - ` +
+                `cancelling invoice but skipping application column overwrite`,
+            );
+        }
+
         await this.prisma.$transaction([
             this.prisma.applicationInvoice.update({
                 where: { id: command.invoiceId },
@@ -86,10 +106,14 @@ export class CancelPortalPaymentHandler {
                     rejectionReason: cancellationReason,
                 },
             }),
-            this.prisma.participantApplication.update({
-                where: { id: invoice.application.id },
-                data: paymentStatusPatch,
-            }),
+            ...(paidSibling
+                ? []
+                : [
+                      this.prisma.participantApplication.update({
+                          where: { id: invoice.application.id },
+                          data: paymentStatusPatch,
+                      }),
+                  ]),
         ]);
 
         await Promise.all([

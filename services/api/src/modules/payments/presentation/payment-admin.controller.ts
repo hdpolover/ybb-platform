@@ -52,6 +52,7 @@ import {
     INVOICE_ID_RE,
 } from '@modules/payments/application/services/invoice-where.builder';
 import { extractDownstreamMessage } from './downstream-error.util';
+import { findPaidSiblingInvoice, supersededByPaidInvoiceReason } from '@shared/utils/paid-sibling-invoice.util';
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -761,6 +762,7 @@ export class PaymentAdminController {
                 currency: true,
                 status: true,
                 externalTransactionId: true,
+                rejectionReason: true,
                 application: {
                     select: {
                         id: true,
@@ -824,6 +826,22 @@ export class PaymentAdminController {
             // Persist verifier audit trail on the local invoice. Source of truth for
             // who/when/why; the payment service stores the same in PaymentTransaction.
             const now = new Date();
+
+            // Supersede guard: a different invoice already paid this application's
+            // column. Shared between the reject and approve branches below since
+            // only one of them runs per call.
+            const paidSibling = await findPaidSiblingInvoice(
+                this.prisma,
+                invoice.applicationId,
+                invoice.pricingTier?.feeType,
+                invoice.id,
+            );
+            if (paidSibling) {
+                this.logger.warn(
+                    `verifyInvoice: invoice ${id} superseded by paid invoice ${paidSibling.id} - skipping application column overwrite`,
+                );
+            }
+
             if (body.action === 'reject') {
                 const paymentStatusPatch =
                     invoice.pricingTier?.feeType === 'registration_fee'
@@ -841,10 +859,14 @@ export class PaymentAdminController {
                             rejectionReason: body.reason ?? null,
                         },
                     }),
-                    this.prisma.participantApplication.update({
-                        where: { id: invoice.application.id },
-                        data: paymentStatusPatch,
-                    }),
+                    ...(paidSibling
+                        ? []
+                        : [
+                              this.prisma.participantApplication.update({
+                                  where: { id: invoice.application.id },
+                                  data: paymentStatusPatch,
+                              }),
+                          ]),
                 ]);
             } else {
                 // Manual approval settles the transaction at the gateway synchronously
@@ -862,6 +884,12 @@ export class PaymentAdminController {
                         invoice.pricingTier?.feeType === 'registration_fee'
                             ? { registrationPaymentStatus: PaymentStatus.paid }
                             : { programPaymentStatus: PaymentStatus.paid };
+                    // Paid direction: a paid sibling means this invoice genuinely
+                    // settled at the gateway, so it still gets marked paid here -
+                    // but the application column is already correctly covered by
+                    // the sibling, so skip that write and flag this invoice for
+                    // refund review instead (only if it doesn't already carry a
+                    // reason).
                     await this.prisma.$transaction([
                         this.prisma.applicationInvoice.update({
                             where: { id },
@@ -870,13 +898,19 @@ export class PaymentAdminController {
                                 paidAt: now,
                                 verifiedBy: user.userId,
                                 verifiedAt: now,
-                                rejectionReason: null,
+                                rejectionReason: paidSibling
+                                    ? (invoice.rejectionReason ?? supersededByPaidInvoiceReason(paidSibling.id))
+                                    : null,
                             },
                         }),
-                        this.prisma.participantApplication.update({
-                            where: { id: invoice.application.id },
-                            data: appPaymentPatch,
-                        }),
+                        ...(paidSibling
+                            ? []
+                            : [
+                                  this.prisma.participantApplication.update({
+                                      where: { id: invoice.application.id },
+                                      data: appPaymentPatch,
+                                  }),
+                              ]),
                     ]);
                 } else {
                     await this.prisma.applicationInvoice.update({
@@ -896,8 +930,11 @@ export class PaymentAdminController {
             }
 
             // Notify participant when admin rejects the payment so they know to
-            // resubmit with the admin-provided reason.
-            if (body.action === 'reject') {
+            // resubmit with the admin-provided reason. Suppressed when superseded -
+            // the application's payment status was left untouched (a paid sibling
+            // already covers it), so telling the participant their payment was
+            // rejected would be misleading.
+            if (body.action === 'reject' && !paidSibling) {
                 const email = invoice.application?.participant?.user?.email;
                 if (email) {
                     const rawBrand = invoice.application?.program?.brand ?? null;
@@ -1371,6 +1408,26 @@ export class PaymentAdminController {
 
         const trimmedReason = body.reason?.trim() ?? '';
         const now = new Date();
+
+        // Supersede guard: a different invoice already paid this application's
+        // column. Applies regardless of the target status - paid direction
+        // (body.status === paid) still writes this invoice's own status but skips
+        // the application column and flags this invoice for refund review; every
+        // other target status is the non-paid direction, which also skips the
+        // application column but leaves this invoice's own status/reason exactly
+        // as the admin requested.
+        const paidSibling = await findPaidSiblingInvoice(
+            this.prisma,
+            invoice.applicationId,
+            invoice.pricingTier?.feeType,
+            invoice.id,
+        );
+        if (paidSibling) {
+            this.logger.warn(
+                `updateInvoiceStatus: invoice ${id} superseded by paid invoice ${paidSibling.id} - skipping application column overwrite`,
+            );
+        }
+
         // Audit fields: capture who/when on every admin-driven status change, plus
         // the rejection reason when failing/cancelling so the participant gets context.
         const isVerifierAuditableStatus =
@@ -1385,7 +1442,7 @@ export class PaymentAdminController {
                     verifiedAt: now,
                     rejectionReason:
                         body.status === PaymentStatus.paid
-                            ? null
+                            ? (paidSibling ? (invoice.rejectionReason ?? supersededByPaidInvoiceReason(paidSibling.id)) : null)
                             : (trimmedReason.length > 0 ? trimmedReason : null),
                 }
                 : {};
@@ -1428,10 +1485,14 @@ export class PaymentAdminController {
                     pricingTier: { select: { id: true, name: true, feeType: true, usdPrice: true, idrPrice: true } },
                 },
             }),
-            this.prisma.participantApplication.update({
-                where: { id: invoice.application.id },
-                data: appPaymentPatch,
-            }),
+            ...(paidSibling
+                ? []
+                : [
+                      this.prisma.participantApplication.update({
+                          where: { id: invoice.application.id },
+                          data: appPaymentPatch,
+                      }),
+                  ]),
         ]);
 
         const participantUserId = invoice.application?.participant?.userId;
@@ -1445,7 +1506,7 @@ export class PaymentAdminController {
         // transitions, and paid->non-paid (the Change 2 reversal path, which
         // never reaches PaymentStatus.paid here).
         const priorStatus = invoice.status;
-        if (priorStatus !== PaymentStatus.paid && body.status === PaymentStatus.paid) {
+        if (priorStatus !== PaymentStatus.paid && body.status === PaymentStatus.paid && !paidSibling) {
             try {
                 const email = updatedInvoice.application?.participant?.user?.email;
                 if (!email) {

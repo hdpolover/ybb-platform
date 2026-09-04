@@ -87,6 +87,12 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
     let controller: PaymentEventsController;
     let producer: jest.Mocked<RabbitMQProducerService>;
     let prisma: jest.Mocked<PrismaService>;
+    // Exposed so a test can assert on the write that happens INSIDE the unit of
+    // work, which is where the application payment column is set.
+    let tx: {
+        participantApplication: { update: jest.Mock };
+        applicationInvoice: { findFirst: jest.Mock; update: jest.Mock; create: jest.Mock };
+    };
     let unitOfWork: jest.Mocked<UnitOfWork>;
     let paymentOutbox: jest.Mocked<PaymentOutboxService>;
 
@@ -99,6 +105,7 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
                 update: jest.fn().mockResolvedValue({ id: 'app-1' }),
             },
             applicationInvoice: {
+                findFirst: jest.fn().mockResolvedValue(null),
                 update: jest.fn().mockResolvedValue({ id: 'invoice-1' }),
                 create: jest.fn().mockResolvedValue({ id: 'invoice-1' }),
             },
@@ -125,8 +132,14 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
             },
             applicationInvoice: {
                 findUnique: jest.fn().mockResolvedValue(MOCK_INVOICE_WITH_BRAND),
-                findFirst: jest.fn().mockResolvedValue(MOCK_INVOICE_WITH_BRAND),
+                // Default to NO paid sibling. This mock is consulted by the
+                // supersede guard as well as by resolveFailureInvoice's fallback,
+                // and MOCK_INVOICE_WITH_BRAND is not a paid invoice, so a real DB
+                // would never return it as a paid sibling. Returning it here made
+                // every succeeded event look like a duplicate settlement.
+                findFirst: jest.fn().mockResolvedValue(null),
                 update: jest.fn().mockResolvedValue({ id: 'invoice-1' }),
+                updateMany: jest.fn().mockResolvedValue({ count: 0 }),
             },
             // $transaction receives an array of promises (from prisma.model.update calls), resolve them all
             $transaction: jest.fn().mockImplementation((ops: Promise<unknown>[]) =>
@@ -166,6 +179,7 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
         controller = module.get<PaymentEventsController>(PaymentEventsController);
         producer = module.get(RabbitMQProducerService);
         prisma = module.get(PrismaService);
+        tx = fakeTx;
         unitOfWork = module.get(UnitOfWork);
         paymentOutbox = module.get(PaymentOutboxService);
     });
@@ -207,6 +221,72 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
                     }),
                 }),
             );
+        });
+
+        // Audit M158/M65, paid direction. A paid sibling does NOT mean "suppress
+        // the write" here: both invoices settle the same column to 'paid', so the
+        // write is idempotent, and it is also the only thing that repairs a column
+        // an earlier cancel wrongly left at 'cancelled'. Gating it would delete
+        // that self-heal. What a paid sibling means is that the column was paid
+        // twice - real money - so the duplicate invoice is flagged for refund
+        // review instead.
+        it('still writes paid and flags the duplicate for refund review when a paid sibling exists', async () => {
+            (prisma.applicationInvoice.findFirst as jest.Mock).mockResolvedValue({ id: 'inv-already-paid' });
+
+            const context = makeRmqContext();
+
+            await controller.handlePaymentSucceeded(basePayload as any, context);
+
+            // The self-heal: the application column is still written to paid.
+            expect(tx.participantApplication.update).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: { id: 'app-1' },
+                    data: expect.objectContaining({ registrationPaymentStatus: 'paid' }),
+                }),
+            );
+
+            // The duplicate is flagged, and only when no reason is recorded yet.
+            expect(prisma.applicationInvoice.updateMany).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: expect.objectContaining({ rejectionReason: null }),
+                    data: expect.objectContaining({
+                        rejectionReason: expect.stringContaining('inv-already-paid'),
+                    }),
+                }),
+            );
+        });
+
+        // The self-supersession case, found in review. This is the ONLY guard site
+        // that runs before the invoice it acts on is identified: without
+        // metadata.invoice_id the guard cannot exclude the invoice by id, and the
+        // transaction then resolves that same invoice by transaction reference on
+        // an idempotent replay of an already-settled event. The guard's "sibling"
+        // and the acted-on invoice are then the same row, and a legitimate single
+        // payment would be stamped as superseded by itself.
+        it('does not flag an invoice as superseded by ITSELF on an idempotent replay', async () => {
+            // No invoice_id in metadata, so the guard runs without a self-exclusion.
+            const payloadWithoutInvoiceId = {
+                ...basePayload,
+                metadata: { ...basePayload.metadata, invoice_id: undefined },
+            };
+            // The guard finds the already-paid invoice...
+            (prisma.applicationInvoice.findFirst as jest.Mock).mockResolvedValue({ id: 'invoice-1' });
+            // ...and the in-transaction reference lookup resolves the SAME row.
+            tx.applicationInvoice.findFirst.mockResolvedValue({ id: 'invoice-1', status: 'paid' });
+
+            const context = makeRmqContext();
+
+            await controller.handlePaymentSucceeded(payloadWithoutInvoiceId as any, context);
+
+            expect(prisma.applicationInvoice.updateMany).not.toHaveBeenCalled();
+        });
+
+        it('does not flag anything for refund review when there is no paid sibling', async () => {
+            const context = makeRmqContext();
+
+            await controller.handlePaymentSucceeded(basePayload as any, context);
+
+            expect(prisma.applicationInvoice.updateMany).not.toHaveBeenCalled();
         });
 
         it('should emit notification.payment_succeeded with brand: null when invoice has no brand', async () => {
@@ -256,7 +336,12 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
                 },
             };
             (prisma.applicationInvoice.findUnique as jest.Mock).mockResolvedValue(failureInvoice);
-            (prisma.applicationInvoice.findFirst as jest.Mock).mockResolvedValue(failureInvoice);
+            // findFirst here is the supersede guard's paid-sibling lookup, not
+            // resolveFailureInvoice (invoiceId is always set in this describe
+            // block's payloads, so that always resolves via findUnique above).
+            // failureInvoice.status is 'pending', not 'paid', so a real DB would
+            // never return it as a paid sibling - default to null accordingly.
+            (prisma.applicationInvoice.findFirst as jest.Mock).mockResolvedValue(null);
             (prisma.$transaction as jest.Mock).mockResolvedValue([{}, {}]);
         });
 
@@ -318,6 +403,35 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
             expect(producer.emit).toHaveBeenCalledWith(
                 'notification.payment_failed',
                 expect.objectContaining({ brand: null }),
+            );
+        });
+
+        // Regression for the audit-M158/M65 fix: markInvoiceFailed must still
+        // record the invoice's own failure, but not let it overwrite the
+        // application column a different paid invoice already covers, and must
+        // not tell the participant their payment failed when it didn't.
+        it('skips the application column write and the payment_failed email when a paid sibling exists, but still marks the invoice failed', async () => {
+            // The supersede guard's findFirst call resolves a paid sibling invoice.
+            (prisma.applicationInvoice.findFirst as jest.Mock).mockResolvedValue({ id: 'inv-paid-sibling' });
+
+            const context = makeRmqContext({ getPattern: () => 'payment.failed' });
+
+            await controller.handlePaymentFailed(basePayload as any, context);
+
+            // The invoice itself is still marked failed - it really did fail.
+            expect(prisma.applicationInvoice.update).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: { id: 'invoice-1' },
+                    data: expect.objectContaining({ status: 'failed' }),
+                }),
+            );
+            // But the application-level column must not be dragged to failed out
+            // from under the already-paid sibling invoice.
+            expect(prisma.participantApplication.update).not.toHaveBeenCalled();
+            // And the participant must not get a "payment failed" email.
+            expect(producer.emit).not.toHaveBeenCalledWith(
+                'notification.payment_failed',
+                expect.anything(),
             );
         });
     });
