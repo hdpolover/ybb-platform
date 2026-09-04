@@ -1,6 +1,9 @@
 // Dashboard
 export class GetPortalDashboardQuery {
-  constructor(public readonly userId: string) { }
+  constructor(
+    public readonly userId: string,
+    public readonly programId?: string,
+  ) { }
 }
 
 // Submissions

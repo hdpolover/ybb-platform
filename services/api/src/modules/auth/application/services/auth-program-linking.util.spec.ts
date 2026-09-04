@@ -5,6 +5,7 @@ import {
   ensureProgramApplication,
   isProgramRegistrationOpen,
   resolveAuthTargetProgram,
+  toProgramRegistrationInfo,
 } from './auth-program-linking.util';
 
 describe('auth-program-linking.util', () => {
@@ -282,6 +283,36 @@ describe('auth-program-linking.util', () => {
           applicationCategory: ApplicationCategory.fully_funded,
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('toProgramRegistrationInfo', () => {
+    // Regression for the MEYS 6th/7th default-selection bug: the frontend's
+    // active-program selector (ybb_active_program_id) is only synced off this
+    // field, so 'created' and 'existing' - the outcomes of a NORMAL successful
+    // signup/login - have to carry a programId too, not just 'closed'.
+    it.each([
+      ['created', baseProgram],
+      ['existing', baseProgram],
+      ['closed', { ...baseProgram, allowRegistration: false }],
+    ] as const)('surfaces programId and programName for status %s', (status, program) => {
+      const result = toProgramRegistrationInfo(
+        { status, program } as unknown as Parameters<typeof toProgramRegistrationInfo>[0],
+      );
+
+      expect(result).toEqual({
+        status,
+        programId: program.id,
+        programName: program.name,
+      });
+    });
+
+    it('returns undefined for missing_target, which names no program', () => {
+      const result = toProgramRegistrationInfo(
+        { status: 'missing_target' } as unknown as Parameters<typeof toProgramRegistrationInfo>[0],
+      );
+
+      expect(result).toBeUndefined();
     });
   });
 });

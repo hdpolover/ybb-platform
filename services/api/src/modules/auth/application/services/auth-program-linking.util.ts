@@ -47,13 +47,18 @@ type EnsureProgramApplicationResult =
 
 /**
  * Auth-response-facing view of a program-linking outcome that the client needs
- * to surface to the user (e.g. "registration for X has closed"). Only the
- * 'closed' outcome carries an actionable program to name; 'missing_target'
- * covers both "no program was requested" (the common case) and "fallback
- * found nothing open", which are indistinguishable and not worth surfacing.
+ * to surface to the user (e.g. "registration for X has closed") AND to sync its
+ * client-side active-program selector to (see ybb_active_program_id in
+ * ybb-program-next/lib/dashboard/activeProgram.ts). 'created' and 'existing'
+ * both carry a real programId a participant just authenticated against, so the
+ * frontend can pin its selector to it before the stale localStorage value
+ * (from an earlier session on a different program) wins by default.
+ * 'missing_target' covers both "no program was requested" (the common case)
+ * and "fallback found nothing open", which are indistinguishable and not
+ * worth surfacing.
  */
 export type ProgramRegistrationInfo = {
-  status: 'closed';
+  status: 'closed' | 'existing' | 'created';
   programId: string;
   programName: string;
 };
@@ -61,12 +66,12 @@ export type ProgramRegistrationInfo = {
 export function toProgramRegistrationInfo(
   result: EnsureProgramApplicationResult,
 ): ProgramRegistrationInfo | undefined {
-  if (result.status !== 'closed') {
+  if (result.status === 'missing_target') {
     return undefined;
   }
 
   return {
-    status: 'closed',
+    status: result.status,
     programId: result.program.id,
     programName: result.program.name,
   };

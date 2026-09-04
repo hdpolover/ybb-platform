@@ -93,12 +93,18 @@ export class CancelPortalPaymentHandler {
         ]);
 
         await Promise.all([
+            // Covers portal:dashboard:${userId}:* by pattern (Redis-dependent) - the
+            // explicit keys below are the precise, store-agnostic fallback since the
+            // program is already known here.
             this.cacheService.invalidateInvoiceCache(command.invoiceId, command.userId),
             this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENTS(command.userId)),
             this.cacheService.invalidateKey(
                 CACHE_KEYS.PORTAL_PAYMENTS(command.userId, invoice.application.programId),
             ),
             this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(command.userId)),
+            this.cacheService.invalidateKey(
+                CACHE_KEYS.PORTAL_DASHBOARD(command.userId, invoice.application.programId),
+            ),
         ]);
 
         return {

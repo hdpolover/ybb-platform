@@ -29,7 +29,12 @@ export class GetUserProfileHandler {
               },
               include: {
                 program: true
-              }
+              },
+              // Deterministic pick for availableIds[0] on the frontend's
+              // program selector: without an order, Postgres returns rows in
+              // whatever order it pleases, which can flip which program a
+              // multi-program participant lands on between requests.
+              orderBy: { createdAt: 'desc' }
             }
           }
         }

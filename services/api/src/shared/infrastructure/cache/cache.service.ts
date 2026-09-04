@@ -202,7 +202,8 @@ export class CacheService implements OnModuleInit {
    * - portal:submission-detail:${userId}:* (the submit gate reads preview.payment.paid
    *   from here; without busting it, a paid registration fee stays invisible to the
    *   submit button for up to the cache TTL and the participant cannot submit)
-   * - portal:dashboard:${userId}
+   * - portal:dashboard:${userId}:* (PORTAL_DASHBOARD is keyed by (userId, programId?) same as
+   *   the caches above; the caller here doesn't know which program the invoice belongs to)
    *
    * Pass invoiceId=undefined when no specific invoice is known (e.g. payment-failed events
    * may not have an invoiceId yet).
@@ -215,6 +216,7 @@ export class CacheService implements OnModuleInit {
         this.invalidateKeys(keys),
         this.invalidateByPattern(`portal:payments:${userId}:*`),
         this.invalidateByPattern(`portal:submission-detail:${userId}:*`),
+        this.invalidateByPattern(`portal:dashboard:${userId}:*`),
       ]);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -255,6 +257,7 @@ export class CacheService implements OnModuleInit {
           CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId, '*'),
           CACHE_KEYS.PORTAL_PAYMENTS(userId, '*'),
           CACHE_KEYS.PORTAL_DOCUMENTS(userId, '*'),
+          CACHE_KEYS.PORTAL_DASHBOARD(userId, '*'),
         ]),
       ]);
     } catch (err) {

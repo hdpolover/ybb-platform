@@ -225,6 +225,9 @@ export class SwitchApplicationCategoryHandler {
           `portal:submissions:${userId}:*`,
           `portal:submission-detail:${userId}:*`,
           `portal:payments:${userId}:*`,
+          // PORTAL_DASHBOARD is keyed by (userId, programId?) too; the bare
+          // key above only clears the `:latest` variant.
+          `portal:dashboard:${userId}:*`,
         ]),
       ]);
     } catch {

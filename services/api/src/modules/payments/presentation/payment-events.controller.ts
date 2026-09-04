@@ -965,7 +965,9 @@ export class PaymentEventsController {
     private async invalidateUserPortalCache(userId: string, reason: string, invoiceId?: string): Promise<void> {
         try {
             const patterns = [
-                CACHE_KEYS.PORTAL_DASHBOARD(userId),
+                // PORTAL_DASHBOARD is keyed by (userId, programId?) too, so this must
+                // be a wildcard - the bare key only clears the `:latest` variant.
+                CACHE_KEYS.PORTAL_DASHBOARD(userId, '*'),
                 // Use wildcards so all program-specific variants are busted:
                 // PORTAL_SUBMISSIONS keyed by (userId, programId?) → portal:submissions:${userId}:${programId|'latest'}
                 `portal:submissions:${userId}:*`,

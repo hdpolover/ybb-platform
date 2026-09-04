@@ -58,6 +58,17 @@ describe('PortalController', () => {
       expect(queryBus.execute).toHaveBeenCalledWith(new GetPortalDashboardQuery(mockUser.userId));
     });
 
+    // The MEYS 6th/7th bug: the overview card used a DIFFERENT selection rule
+    // than the top-bar program selector because this route never accepted the
+    // caller's chosen program at all. Without this, two published programs on
+    // one brand contradict each other on the same screen.
+    it('forwards the caller-supplied programId', async () => {
+      await controller.getDashboard(mockUser, 'program-9');
+      expect(queryBus.execute).toHaveBeenCalledWith(
+        new GetPortalDashboardQuery(mockUser.userId, 'program-9'),
+      );
+    });
+
     it('should throw UnauthorizedException if no user', async () => {
       await expect(controller.getDashboard({} as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData)).rejects.toThrow(UnauthorizedException);
     });
