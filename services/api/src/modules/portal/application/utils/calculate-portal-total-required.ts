@@ -20,7 +20,7 @@
  * `get-portal-payments.handler.ts` and is left out here to keep the blast radius small.
  */
 
-import { resolveTierPeriod } from '@shared/utils/tier-period.util';
+import { effectiveStart, resolveTierPeriod } from '@shared/utils/tier-period.util';
 
 type TotalRequiredInvoice = {
     status: string;
@@ -56,8 +56,14 @@ function hasWindowStarted(periods: ValidityPeriod[] | null | undefined, now: Dat
         return true;
     }
     const period = resolveTierPeriod(list, now, now);
-    const startDate = period?.startDate;
-    return !startDate || startDate <= now;
+    if (!period) return true;
+    // effectiveStart, not period.startDate. resolveTierPeriod already matched
+    // this period through the widened start, so asking the raw one here can
+    // contradict the selection that produced it: a window stored at 23:59 WIB
+    // on its opening day is selected as current and then reported as not yet
+    // started, zeroing totalRequired on the same dashboard payload that says
+    // the window is open. Audit M66.
+    return effectiveStart(period, list) <= now;
 }
 
 function resolveTierAmount(tier: RegistrationTier, currency: string): number {

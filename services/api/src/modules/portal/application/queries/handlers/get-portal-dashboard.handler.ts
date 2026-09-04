@@ -233,7 +233,8 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
             // would publish the whole extension ladder months in advance and
             // contradict the date the public site advertises for the main
             // window. Show only the window that is CURRENTLY ACTIVE for the
-            // application's own category (start <= now < end) - the shown
+            // application's own category (effectiveStart <= now, and not past
+            // WIB end-of-day of the window's end) - the shown
             // date only moves forward when an extension actually takes
             // effect. If two active windows overlap, the later end is the
             // real operative close.
