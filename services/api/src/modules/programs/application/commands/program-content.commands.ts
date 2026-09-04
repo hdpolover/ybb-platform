@@ -260,7 +260,13 @@ export class DeleteProgramResourceCommand {
 
 // Pricing Tier
 export class CreateProgramPricingTierCommand {
-    constructor(public readonly dto: CreateProgramPricingTierDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramPricingTierDto,
+        public readonly userId: string,
+        // The caller, so the handler can refuse a program their scope does not
+        // cover. userId alone is not enough: the scope lives on the Admin row.
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 export class UpdateProgramPricingTierCommand {
     constructor(public readonly id: string, public readonly dto: UpdateProgramPricingTierDto, public readonly userId: string) { }
@@ -282,7 +288,11 @@ export class DeleteValidityPeriodCommand {
 
 // Requirement
 export class CreateProgramRequirementCommand {
-    constructor(public readonly dto: CreateProgramRequirementDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramRequirementDto,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 export class UpdateProgramRequirementCommand {
     constructor(public readonly id: string, public readonly dto: UpdateProgramRequirementDto, public readonly userId: string) { }
@@ -293,7 +303,11 @@ export class DeleteProgramRequirementCommand {
 
 // Essay
 export class CreateProgramEssayCommand {
-    constructor(public readonly dto: CreateProgramEssayDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramEssayDto,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 export class UpdateProgramEssayCommand {
     constructor(public readonly id: string, public readonly dto: UpdateProgramEssayDto, public readonly userId: string) { }
@@ -310,6 +324,7 @@ export class CreateProgramParticipationCategoryCommand {
     constructor(
         public readonly dto: CreateProgramParticipationCategoryDto,
         public readonly userId: string,
+        public readonly actor: CurrentUserData,
     ) { }
 }
 
@@ -330,7 +345,11 @@ export class DeleteProgramParticipationCategoryCommand {
 
 // Subtheme
 export class CreateProgramSubthemeCommand {
-    constructor(public readonly dto: CreateProgramSubthemeDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramSubthemeDto,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 export class UpdateProgramSubthemeCommand {
     constructor(public readonly id: string, public readonly dto: UpdateProgramSubthemeDto, public readonly userId: string) { }

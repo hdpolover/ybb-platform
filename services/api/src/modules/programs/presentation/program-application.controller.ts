@@ -259,14 +259,22 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/pricing-tiers')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add pricing tier' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async addPricingTier(@Param('id') programId: string, @Body() dto: CreateProgramPricingTierDto, @Request() req: AuthenticatedRequest) {
-    return this.createProgramPricingTierHandler.execute(new CreateProgramPricingTierCommand(dto, req.user.id));
+  async addPricingTier(
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramPricingTierDto,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    // @ScopedBy('program', 'id') deliberately NOT used here: the handler acts
+    // on dto.programId, not this route param - see addGallery in
+    // program-content.controller.ts for why a guard on the path would
+    // authorise one program while the row lands on another.
+    return this.createProgramPricingTierHandler.execute(new CreateProgramPricingTierCommand(dto, req.user.id, actor));
   }
 
   @Put('pricing-tiers/:itemId')
@@ -335,14 +343,20 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/requirements')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add requirement' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async addRequirement(@Param('id') programId: string, @Body() dto: CreateProgramRequirementDto, @Request() req: AuthenticatedRequest) {
-    return this.createProgramRequirementHandler.execute(new CreateProgramRequirementCommand(dto, req.user.id));
+  async addRequirement(
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramRequirementDto,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    // @ScopedBy('program', 'id') deliberately NOT used here - see addPricingTier
+    // above / addGallery in program-content.controller.ts.
+    return this.createProgramRequirementHandler.execute(new CreateProgramRequirementCommand(dto, req.user.id, actor));
   }
 
   @Put('requirements/:itemId')
@@ -399,14 +413,20 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/essays')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add essay' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async addEssay(@Param('id') programId: string, @Body() dto: CreateProgramEssayDto, @Request() req: AuthenticatedRequest) {
-    return this.createProgramEssayHandler.execute(new CreateProgramEssayCommand(dto, req.user.id));
+  async addEssay(
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramEssayDto,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    // @ScopedBy('program', 'id') deliberately NOT used here - see addPricingTier
+    // above / addGallery in program-content.controller.ts.
+    return this.createProgramEssayHandler.execute(new CreateProgramEssayCommand(dto, req.user.id, actor));
   }
 
   @Put('essays/:itemId')
@@ -463,14 +483,20 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/participation-categories')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add participation category' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async addParticipationCategory(@Param('id') programId: string, @Body() dto: CreateProgramParticipationCategoryDto, @Request() req: AuthenticatedRequest) {
-    return this.createProgramParticipationCategoryHandler.execute(new CreateProgramParticipationCategoryCommand(dto, req.user.id));
+  async addParticipationCategory(
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramParticipationCategoryDto,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    // @ScopedBy('program', 'id') deliberately NOT used here - see addPricingTier
+    // above / addGallery in program-content.controller.ts.
+    return this.createProgramParticipationCategoryHandler.execute(new CreateProgramParticipationCategoryCommand(dto, req.user.id, actor));
   }
 
   @Put('participation-categories/:itemId')
@@ -510,14 +536,20 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/subthemes')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add subtheme' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async addSubtheme(@Param('id') programId: string, @Body() dto: CreateProgramSubthemeDto, @Request() req: AuthenticatedRequest) {
-    return this.createProgramSubthemeHandler.execute(new CreateProgramSubthemeCommand(dto, req.user.id));
+  async addSubtheme(
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramSubthemeDto,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    // @ScopedBy('program', 'id') deliberately NOT used here - see addPricingTier
+    // above / addGallery in program-content.controller.ts.
+    return this.createProgramSubthemeHandler.execute(new CreateProgramSubthemeCommand(dto, req.user.id, actor));
   }
 
   @Put('subthemes/:itemId')

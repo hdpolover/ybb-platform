@@ -358,13 +358,15 @@ describe('ProgramApplicationConfigController', () => {
                 validUntil: new Date().toISOString()
             };
             const req = { user: { id: 'admin-1' } } as any;
+            const actor = { userId: 'admin-1', email: 'a@b.c', brandId: 'brand-1', adminId: 'admin-1' } as any;
 
-            await controller.addPricingTier('prog-1', dto, req);
+            await controller.addPricingTier('prog-1', dto, req, actor);
 
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(CreateProgramPricingTierCommand));
             const cmd = mockExecute.execute.mock.calls[0][0];
             expect(cmd.dto).toBe(dto);
             expect(cmd.userId).toBe('admin-1');
+            expect(cmd.actor).toBe(actor);
         });
     });
 });

@@ -1439,8 +1439,15 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramPricingTierCommand) {
+        // Asserted on dto.programId - the id this handler writes. The route
+        // also carries a program id, but the handler ignores it - see
+        // addGallery in program-content.controller.ts for why the route param
+        // is not a valid substitute.
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
         // Validation: Ensure uniqueness of active registration fee tier per category
         if (command.dto.feeType === 'registration_fee' && command.dto.allowedCategories && command.dto.allowedCategories.length > 0) {
             const existingTiers = await this.repository.findPricingTiersByProgramId(command.dto.programId);
@@ -1738,8 +1745,13 @@ export class CreateProgramRequirementHandler implements ICommandHandler<CreatePr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramRequirementCommand) {
+        // Asserted on dto.programId - the id this handler writes - see
+        // addTimeline's note above.
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
         const result = await this.repository.createRequirement(command.dto as Partial<ProgramRequirement>);
         await invalidateRequirementCaches(command.dto.programId, this.prisma, this.cacheService);
         return result;
@@ -1784,8 +1796,13 @@ export class CreateProgramEssayHandler implements ICommandHandler<CreateProgramE
     constructor(
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly cacheService: CacheService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramEssayCommand) {
+        // Asserted on dto.programId - the id this handler writes - see
+        // addTimeline's note above.
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
         const result = await this.repository.createEssay({
             ...command.dto,
             question: assertValidEssayQuestion(command.dto.question),
@@ -1861,8 +1878,15 @@ export class UpdateProgramEssayGuidelinesHandler implements ICommandHandler<Upda
 // --- Participation Category Handlers ---
 @CommandHandler(CreateProgramParticipationCategoryCommand)
 export class CreateProgramParticipationCategoryHandler implements ICommandHandler<CreateProgramParticipationCategoryCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prismaRead: PrismaReadService,
+    ) {}
     async execute(command: CreateProgramParticipationCategoryCommand) {
+        // Asserted on dto.programId - the id this handler writes - see
+        // addTimeline's note above.
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
         return this.repository.createParticipationCategory(command.dto);
     }
 }
@@ -1888,8 +1912,13 @@ export class CreateProgramSubthemeHandler implements ICommandHandler<CreateProgr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramSubthemeCommand) {
+        // Asserted on dto.programId - the id this handler writes - see
+        // addTimeline's note above.
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
         const result = await this.repository.createSubtheme(command.dto);
         await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
         return result;

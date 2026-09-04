@@ -45,6 +45,8 @@ import {
     CreateProgramPricingTierHandler,
     UpdateProgramPricingTierHandler,
     DeleteProgramPricingTierHandler,
+    CreateProgramRequirementHandler,
+    CreateProgramParticipationCategoryHandler,
     DeleteValidityPeriodHandler,
     UpdateProgramPaymentInfoHandler,
     UpdateProgramContactHandler,
@@ -92,6 +94,8 @@ import {
     CreateProgramPricingTierCommand,
     UpdateProgramPricingTierCommand,
     DeleteProgramPricingTierCommand,
+    CreateProgramRequirementCommand,
+    CreateProgramParticipationCategoryCommand,
     DeleteValidityPeriodCommand,
     UpdateProgramPaymentInfoCommand,
     UpdateProgramContactCommand,
@@ -289,6 +293,7 @@ describe('ManageProgramContentHandlers', () => {
             const handler = new CreateProgramEssayHandler(
                 mockRepository as unknown as IProgramContentRepository,
                 mockCacheService as unknown as CacheService,
+                mockPrismaRead as unknown as PrismaReadService,
             );
             const command = new CreateProgramEssayCommand(
                 {
@@ -296,6 +301,7 @@ describe('ManageProgramContentHandlers', () => {
                     question: 'Why should we pick you?',
                 },
                 'user-1',
+                speakerActor,
             );
 
             mockRepository.createEssay.mockResolvedValue({ id: 'essay-1', ...command.dto });
@@ -317,6 +323,7 @@ describe('ManageProgramContentHandlers', () => {
             const handler = new CreateProgramEssayHandler(
                 mockRepository as unknown as IProgramContentRepository,
                 mockCacheService as unknown as CacheService,
+                mockPrismaRead as unknown as PrismaReadService,
             );
             const command = new CreateProgramEssayCommand(
                 {
@@ -324,6 +331,7 @@ describe('ManageProgramContentHandlers', () => {
                     question: '-',
                 },
                 'user-1',
+                speakerActor,
             );
 
             await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
@@ -1608,6 +1616,7 @@ describe('ManageProgramContentHandlers', () => {
                 await handler.execute(new CreateProgramSubthemeCommand(
                     { programId: 'prog-1', name: 'Sustainability' } as any,
                     'user-1',
+                    actor,
                 ));
 
                 expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
@@ -2343,6 +2352,8 @@ describe('ManageProgramContentHandlers', () => {
         let prisma: any;
         let cache: any;
         let landingCacheInvalidation: any;
+        let prismaRead: any;
+        const actor = { userId: 'user-1', email: 'a@b.c', brandId: 'brand-p', adminId: 'adm-1' } as any;
 
         const revalidateOptions = {
             clearSnapshot: false,
@@ -2368,15 +2379,37 @@ describe('ManageProgramContentHandlers', () => {
                 invalidateByPattern: jest.fn().mockResolvedValue(undefined),
             };
             landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+            // Platform-scope admin passes every programme - keeps these tests
+            // about cache invalidation, not the scope check itself (see "Group F"
+            // below for the dedicated scope-enforcement tests).
+            prismaRead = {
+                admin: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        accessLevel: 5,
+                        canManageAdmins: true,
+                        canAssignRoles: true,
+                        customPermissions: [],
+                        role: { name: 'super_admin', permissions: ['platform_access'] },
+                        adminBrands: [],
+                        adminPrograms: [],
+                    }),
+                },
+                program: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        id: 'prog-1', brandId: 'brand-p', name: 'P', deletedAt: null,
+                    }),
+                },
+            };
         });
 
         it('CreateProgramPricingTierHandler fires revalidation after creating', async () => {
-            const handler = new CreateProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation);
+            const handler = new CreateProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation, prismaRead);
             repo.createPricingTier.mockResolvedValue({ id: 'tier-1', programId: 'prog-1' });
 
             await handler.execute(new CreateProgramPricingTierCommand(
                 { programId: 'prog-1', name: 'Tier 1', usdPrice: 100, idrPrice: 1500000 } as any,
                 'user-1',
+                actor,
             ));
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-p', revalidateOptions);
@@ -2418,6 +2451,189 @@ describe('ManageProgramContentHandlers', () => {
             await handler.execute(new UpdateProgramPaymentInfoCommand('prog-1', { paymentInfoHtml: '<p>Pay here</p>' } as any, 'user-1'));
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-p', revalidateOptions);
+        });
+    });
+
+    // M30: these five CREATE routes carried @ScopedBy('program', 'id'), which
+    // authorises the programme named in the URL - but the handler writes
+    // dto.programId, the programme named in the BODY. An admin scoped to
+    // programme A could POST to /programs/A/pricing-tiers (etc.) with
+    // { programId: B } in the body and the row would land on B while the
+    // audit trail recorded a clean check against A. Fixed the same way as
+    // Gallery/Timeline/Requirement's siblings above: drop the route guard,
+    // assert on dto.programId inside the handler instead. These tests fail
+    // against the pre-fix handlers (no assertProgramContentAccess call, no
+    // `actor`/`prismaRead` dependency at all) with a TypeScript arity error,
+    // and would fail at runtime pre-fix by NOT throwing here.
+    describe('Group F: PricingTier/Requirement/Essay/ParticipationCategory/Subtheme scope enforcement', () => {
+        let repo: any;
+        let prisma: any;
+        let cache: any;
+        let landingCacheInvalidation: any;
+        let prismaRead: any;
+        const actor = { userId: 'user-1', email: 'a@b.c', brandId: 'brand-f', adminId: 'adm-1' } as any;
+
+        const platformScope = () => ({
+            admin: {
+                findUnique: jest.fn().mockResolvedValue({
+                    accessLevel: 5,
+                    canManageAdmins: true,
+                    canAssignRoles: true,
+                    customPermissions: [],
+                    role: { name: 'super_admin', permissions: ['platform_access'] },
+                    adminBrands: [],
+                    adminPrograms: [],
+                }),
+            },
+            program: {
+                findUnique: jest.fn().mockResolvedValue({
+                    id: 'prog-1', brandId: 'brand-f', name: 'P', deletedAt: null,
+                }),
+            },
+        });
+        // 'assigned' scope, granted a DIFFERENT programme than the one named in
+        // dto.programId below - the caller IS scoped to a real programme, just
+        // not this one.
+        const outOfScope = () => ({
+            admin: {
+                findUnique: jest.fn().mockResolvedValue({
+                    accessLevel: 1,
+                    canManageAdmins: false,
+                    canAssignRoles: false,
+                    customPermissions: [],
+                    role: { name: 'reviewer', permissions: [] },
+                    adminBrands: [],
+                    adminPrograms: [{ programId: 'someone-elses-program', permissions: [] }],
+                }),
+            },
+            program: {
+                findUnique: jest.fn().mockResolvedValue({
+                    id: 'prog-1', brandId: 'brand-f', name: 'P', deletedAt: null,
+                }),
+            },
+        });
+
+        beforeEach(() => {
+            repo = {
+                createPricingTier: jest.fn(),
+                findPricingTiersByProgramId: jest.fn().mockResolvedValue([]),
+                createRequirement: jest.fn(),
+                createEssay: jest.fn(),
+                createParticipationCategory: jest.fn(),
+                createSubtheme: jest.fn(),
+            };
+            prisma = { program: { findUnique: jest.fn().mockResolvedValue({ id: 'prog-1', brandId: 'brand-f' }) } };
+            cache = { invalidateBrandLandingCaches: jest.fn().mockResolvedValue(undefined), invalidateByPattern: jest.fn().mockResolvedValue(undefined), invalidateKey: jest.fn().mockResolvedValue(undefined), invalidateByPatterns: jest.fn().mockResolvedValue(undefined) };
+            landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+            prismaRead = platformScope();
+        });
+
+        it('CreateProgramPricingTierHandler refuses a dto.programId outside the caller scope, even though the route param may differ', async () => {
+            prismaRead = outOfScope();
+            const handler = new CreateProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation, prismaRead);
+
+            await expect(
+                handler.execute(new CreateProgramPricingTierCommand(
+                    { programId: 'prog-1', name: 'Tier 1', usdPrice: 100, idrPrice: 1500000 } as any,
+                    'user-1',
+                    actor,
+                )),
+            ).rejects.toThrow();
+
+            expect(repo.createPricingTier).not.toHaveBeenCalled();
+        });
+
+        it('CreateProgramPricingTierHandler creates when dto.programId IS in scope', async () => {
+            const handler = new CreateProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation, prismaRead);
+            repo.createPricingTier.mockResolvedValue({ id: 'tier-1', programId: 'prog-1' });
+
+            await handler.execute(new CreateProgramPricingTierCommand(
+                { programId: 'prog-1', name: 'Tier 1', usdPrice: 100, idrPrice: 1500000 } as any,
+                'user-1',
+                actor,
+            ));
+
+            expect(repo.createPricingTier).toHaveBeenCalled();
+        });
+
+        it('CreateProgramRequirementHandler refuses a dto.programId outside the caller scope', async () => {
+            prismaRead = outOfScope();
+            const handler = new CreateProgramRequirementHandler(repo, prisma, cache, prismaRead);
+
+            await expect(
+                handler.execute(new CreateProgramRequirementCommand({ programId: 'prog-1', title: 'Passport' } as any, 'user-1', actor)),
+            ).rejects.toThrow();
+
+            expect(repo.createRequirement).not.toHaveBeenCalled();
+        });
+
+        it('CreateProgramRequirementHandler creates when dto.programId IS in scope', async () => {
+            const handler = new CreateProgramRequirementHandler(repo, prisma, cache, prismaRead);
+            repo.createRequirement.mockResolvedValue({ id: 'req-1', programId: 'prog-1' });
+
+            await handler.execute(new CreateProgramRequirementCommand({ programId: 'prog-1', title: 'Passport' } as any, 'user-1', actor));
+
+            expect(repo.createRequirement).toHaveBeenCalled();
+        });
+
+        it('CreateProgramEssayHandler refuses a dto.programId outside the caller scope', async () => {
+            prismaRead = outOfScope();
+            const handler = new CreateProgramEssayHandler(repo, cache, prismaRead);
+
+            await expect(
+                handler.execute(new CreateProgramEssayCommand({ programId: 'prog-1', question: 'Why should we pick you?' } as any, 'user-1', actor)),
+            ).rejects.toThrow();
+
+            expect(repo.createEssay).not.toHaveBeenCalled();
+        });
+
+        it('CreateProgramEssayHandler creates when dto.programId IS in scope', async () => {
+            const handler = new CreateProgramEssayHandler(repo, cache, prismaRead);
+            repo.createEssay.mockResolvedValue({ id: 'essay-1', programId: 'prog-1' });
+
+            await handler.execute(new CreateProgramEssayCommand({ programId: 'prog-1', question: 'Why should we pick you?' } as any, 'user-1', actor));
+
+            expect(repo.createEssay).toHaveBeenCalled();
+        });
+
+        it('CreateProgramParticipationCategoryHandler refuses a dto.programId outside the caller scope', async () => {
+            prismaRead = outOfScope();
+            const handler = new CreateProgramParticipationCategoryHandler(repo, prismaRead);
+
+            await expect(
+                handler.execute(new CreateProgramParticipationCategoryCommand({ programId: 'prog-1', name: 'Category A' } as any, 'user-1', actor)),
+            ).rejects.toThrow();
+
+            expect(repo.createParticipationCategory).not.toHaveBeenCalled();
+        });
+
+        it('CreateProgramParticipationCategoryHandler creates when dto.programId IS in scope', async () => {
+            const handler = new CreateProgramParticipationCategoryHandler(repo, prismaRead);
+            repo.createParticipationCategory.mockResolvedValue({ id: 'cat-1', programId: 'prog-1' });
+
+            await handler.execute(new CreateProgramParticipationCategoryCommand({ programId: 'prog-1', name: 'Category A' } as any, 'user-1', actor));
+
+            expect(repo.createParticipationCategory).toHaveBeenCalled();
+        });
+
+        it('CreateProgramSubthemeHandler refuses a dto.programId outside the caller scope', async () => {
+            prismaRead = outOfScope();
+            const handler = new CreateProgramSubthemeHandler(repo, prisma, landingCacheInvalidation, prismaRead);
+
+            await expect(
+                handler.execute(new CreateProgramSubthemeCommand({ programId: 'prog-1', name: 'Sustainability' } as any, 'user-1', actor)),
+            ).rejects.toThrow();
+
+            expect(repo.createSubtheme).not.toHaveBeenCalled();
+        });
+
+        it('CreateProgramSubthemeHandler creates when dto.programId IS in scope', async () => {
+            const handler = new CreateProgramSubthemeHandler(repo, prisma, landingCacheInvalidation, prismaRead);
+            repo.createSubtheme.mockResolvedValue({ id: 'sub-1', programId: 'prog-1' });
+
+            await handler.execute(new CreateProgramSubthemeCommand({ programId: 'prog-1', name: 'Sustainability' } as any, 'user-1', actor));
+
+            expect(repo.createSubtheme).toHaveBeenCalled();
         });
     });
 
