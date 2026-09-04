@@ -890,11 +890,14 @@ export class ApplicationsController {
   @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.status_change })
   async withdraw(
     @Param('id') id: string,
-    @Body('userId') userId: string,
+    @CurrentUser() user: CurrentUserData,
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Withdrawing application ${id}`);
 
-    const command = new WithdrawApplicationCommand(id, userId);
+    // The actor comes from the JWT, never the body. withdrawn_by is a real FK to
+    // users(id) and status_history.changedBy is the audit trail for this action -
+    // a client-supplied id would let any admin attribute a withdrawal to anyone.
+    const command = new WithdrawApplicationCommand(id, user.userId);
     return this.withdrawApplicationHandler.execute(command);
   }
 }
