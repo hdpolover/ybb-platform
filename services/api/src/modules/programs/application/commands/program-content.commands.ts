@@ -24,44 +24,78 @@ import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 
 // Timeline
 export class CreateProgramTimelineCommand {
-    constructor(public readonly dto: CreateProgramTimelineDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramTimelineDto,
+        public readonly userId: string,
+        // The caller, so the handler can refuse a program their scope does not
+        // cover. userId alone is not enough: the scope lives on the Admin row.
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 export class UpdateProgramTimelineCommand {
-    constructor(public readonly id: string, public readonly dto: UpdateProgramTimelineDto, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly dto: UpdateProgramTimelineDto,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 export class DeleteProgramTimelineCommand {
-    constructor(public readonly id: string, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 
 // Schedule
 export class CreateProgramScheduleCommand {
-    constructor(public readonly dto: CreateProgramScheduleDto, public readonly userId: string) { }
+    constructor(
+        public readonly dto: CreateProgramScheduleDto,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 export class UpdateProgramScheduleCommand {
-    constructor(public readonly id: string, public readonly dto: UpdateProgramScheduleDto, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly dto: UpdateProgramScheduleDto,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 export class DeleteProgramScheduleCommand {
-    constructor(public readonly id: string, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 
 // Speaker
 export class CreateProgramSpeakerCommand {
     constructor(
-        public readonly dto: CreateProgramSpeakerDto, 
+        public readonly dto: CreateProgramSpeakerDto,
         public readonly userId: string,
+        public readonly actor: CurrentUserData,
         public readonly image?: Express.Multer.File
     ) { }
 }
 export class UpdateProgramSpeakerCommand {
     constructor(
-        public readonly id: string, 
-        public readonly dto: UpdateProgramSpeakerDto, 
+        public readonly id: string,
+        public readonly dto: UpdateProgramSpeakerDto,
         public readonly userId: string,
+        public readonly actor: CurrentUserData,
         public readonly image?: Express.Multer.File
     ) { }
 }
 export class DeleteProgramSpeakerCommand {
-    constructor(public readonly id: string, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 
 // Gallery
@@ -146,41 +180,56 @@ export class DeleteProgramFaqCommand {
 // Team
 export class CreateProgramTeamCommand {
     constructor(
-        public readonly dto: CreateProgramTeamDto, 
+        public readonly dto: CreateProgramTeamDto,
         public readonly userId: string,
+        // See program-content-access.util.ts. Team members can be program- or
+        // brand-scoped (both dto.programId and dto.brandId are optional), so the
+        // handler picks which check applies rather than a single fixed id.
+        public readonly actor: CurrentUserData,
         public readonly image?: Express.Multer.File
     ) { }
 }
 export class UpdateProgramTeamCommand {
     constructor(
-        public readonly id: string, 
-        public readonly dto: UpdateProgramTeamDto, 
+        public readonly id: string,
+        public readonly dto: UpdateProgramTeamDto,
         public readonly userId: string,
+        public readonly actor: CurrentUserData,
         public readonly image?: Express.Multer.File
     ) { }
 }
 export class DeleteProgramTeamCommand {
-    constructor(public readonly id: string, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 
 // Partner
 export class CreateProgramPartnerCommand {
     constructor(
-        public readonly dto: CreateProgramPartnerDto, 
+        public readonly dto: CreateProgramPartnerDto,
         public readonly userId: string,
+        public readonly actor: CurrentUserData,
         public readonly logo?: Express.Multer.File
     ) { }
 }
 export class UpdateProgramPartnerCommand {
     constructor(
-        public readonly id: string, 
-        public readonly dto: UpdateProgramPartnerDto, 
+        public readonly id: string,
+        public readonly dto: UpdateProgramPartnerDto,
         public readonly userId: string,
+        public readonly actor: CurrentUserData,
         public readonly logo?: Express.Multer.File
     ) { }
 }
 export class DeleteProgramPartnerCommand {
-    constructor(public readonly id: string, public readonly userId: string) { }
+    constructor(
+        public readonly id: string,
+        public readonly userId: string,
+        public readonly actor: CurrentUserData,
+    ) { }
 }
 
 // Resource
