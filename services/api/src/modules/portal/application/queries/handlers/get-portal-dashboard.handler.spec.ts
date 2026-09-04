@@ -450,19 +450,129 @@ describe('GetPortalDashboardHandler', () => {
         expect(result.activeApplication?.submissionDeadline).toBe(sfEnd.toISOString());
     });
 
-    it('omits submissionDeadline when the application own category window has already ended', async () => {
+    it('falls back to the program applicationDeadline (not the still-open SF window) when the FF window has ended', async () => {
         primeCaches();
         const ffEnd = new Date(Date.now() - 86400000);
         const sfEnd = new Date(Date.now() + 10 * 86400000);
+        const app = buildAppWithBothWindows(ffEnd, sfEnd, 'fully_funded');
+        const programDeadline = new Date(Date.now() + 20 * 86400000);
+        app.program.applicationDeadline = programDeadline;
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(app);
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        // Fallback is always the program's own applicationDeadline, never
+        // another category's window - a Fully Funded applicant whose window
+        // closed must not inherit the Self Funded date.
+        expect(result.activeApplication?.submissionDeadline).toBe(programDeadline.toISOString());
+    });
+
+    // ---- submissionDeadline: staged ("bertahap") main + extension windows ----
+    // The owner runs a MAIN registration window followed by short extension
+    // windows on purpose, to create urgency at each step. Showing the MAX
+    // end across all of them (the pre-fix behaviour) would publish the whole
+    // extension ladder months in advance. The fix: show only the window that
+    // is currently ACTIVE (start <= now < end) for the application's own
+    // category.
+
+    const buildAppWithStagedWindows = (
+        periods: { startDate: Date; endDate: Date }[],
+        category: string | null = 'self_funded',
+        programDeadline: Date = new Date(Date.now() + 86400000),
+    ) => {
+        const app = buildAppWithFfTier([]);
+        if (category === 'fully_funded') {
+            app.program.pricingTiers[1].validityPeriods = periods;
+        } else {
+            app.program.pricingTiers[0].validityPeriods = periods;
+        }
+        (app as { applicationCategory: string | null }).applicationCategory = category;
+        app.program.applicationDeadline = programDeadline;
+        return app;
+    };
+
+    it('shows the active main window end, not the max across future extension windows', async () => {
+        primeCaches();
+        const mainEnd = new Date(Date.now() + 5 * 86400000);
+        const periods = [
+            { startDate: new Date(Date.now() - 2 * 86400000), endDate: mainEnd }, // active main window
+            { startDate: mainEnd, endDate: new Date(Date.now() + 6 * 86400000) }, // future extension 1
+            { startDate: new Date(Date.now() + 6 * 86400000), endDate: new Date(Date.now() + 7 * 86400000) }, // future extension 2 - the old MAX
+        ];
         mockPrisma.participantApplication.findFirst.mockResolvedValue(
-            buildAppWithBothWindows(ffEnd, sfEnd, 'fully_funded'),
+            buildAppWithStagedWindows(periods, 'self_funded'),
         );
 
         const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
 
-        // Never falls through to the still-open SF window, and never shows a
-        // past date under "submit before X" - the popup stays shut instead.
-        expect(result.activeApplication?.submissionDeadline).toBeUndefined();
+        expect(result.activeApplication?.submissionDeadline).toBe(mainEnd.toISOString());
+    });
+
+    it('moves the shown deadline to the extension end once that extension window becomes active', async () => {
+        primeCaches();
+        const extEnd = new Date(Date.now() + 86400000);
+        const periods = [
+            { startDate: new Date(Date.now() - 10 * 86400000), endDate: new Date(Date.now() - 5 * 86400000) }, // main window, already elapsed
+            { startDate: new Date(Date.now() - 5 * 86400000), endDate: extEnd }, // extension now in effect
+            { startDate: extEnd, endDate: new Date(Date.now() + 8 * 86400000) }, // next extension, not yet active
+        ];
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithStagedWindows(periods, 'fully_funded'),
+        );
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.submissionDeadline).toBe(extEnd.toISOString());
+    });
+
+    it('takes the later end when two active windows for the category overlap', async () => {
+        primeCaches();
+        const laterEnd = new Date(Date.now() + 5 * 86400000);
+        const periods = [
+            { startDate: new Date(Date.now() - 5 * 86400000), endDate: laterEnd },
+            { startDate: new Date(Date.now() - 86400000), endDate: new Date(Date.now() + 2 * 86400000) },
+        ];
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithStagedWindows(periods, 'self_funded'),
+        );
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.submissionDeadline).toBe(laterEnd.toISOString());
+    });
+
+    it('falls back to the program applicationDeadline once every staged window for the category has expired', async () => {
+        primeCaches();
+        const programDeadline = new Date(Date.now() + 30 * 86400000);
+        const periods = [
+            { startDate: new Date(Date.now() - 20 * 86400000), endDate: new Date(Date.now() - 10 * 86400000) },
+            { startDate: new Date(Date.now() - 10 * 86400000), endDate: new Date(Date.now() - 86400000) },
+        ];
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithStagedWindows(periods, 'fully_funded', programDeadline),
+        );
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        // Extension ladder exhausted -> revert to the default guideline
+        // timing, don't go silent and don't keep implying more extensions.
+        expect(result.activeApplication?.submissionDeadline).toBe(programDeadline.toISOString());
+    });
+
+    it('falls back to the program applicationDeadline when now sits in a gap between two staged windows', async () => {
+        primeCaches();
+        const programDeadline = new Date(Date.now() + 30 * 86400000);
+        const periods = [
+            { startDate: new Date(Date.now() - 10 * 86400000), endDate: new Date(Date.now() - 3 * 86400000) }, // ended
+            { startDate: new Date(Date.now() + 3 * 86400000), endDate: new Date(Date.now() + 4 * 86400000) }, // not yet started
+        ];
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithStagedWindows(periods, 'self_funded', programDeadline),
+        );
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.submissionDeadline).toBe(programDeadline.toISOString());
     });
 
     it('falls back to the program applicationDeadline when the application has no category', async () => {
