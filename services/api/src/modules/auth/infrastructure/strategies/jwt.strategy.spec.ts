@@ -96,8 +96,12 @@ describe('JwtStrategy - refresh tokens must not work as bearer tokens', () => {
     // on every request and can never reject anything. The previous version of
     // this spec asserted that shape was CORRECT, which documented the hole
     // instead of reporting it.
+    // Reached from the REFRESH side now. Setting JWT_EXPIRES_IN=7d — the shape
+    // that actually shipped in dev and staging — no longer merely warns, it
+    // refuses to boot (see the ceiling test below), so the only way left to
+    // close the gap is a refresh ttl at or below the longest access ttl.
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-    config.JWT_EXPIRES_IN = '7d';
+    config.JWT_REFRESH_EXPIRES_IN = '4h';
     strategy = build();
 
     expect(warn).toHaveBeenCalledWith(
@@ -106,8 +110,36 @@ describe('JwtStrategy - refresh tokens must not work as bearer tokens', () => {
 
     // ...and it does indeed wave the legacy refresh token through, which is
     // why the warning has to exist.
-    const result = await strategy.validate(legacyTokenLasting(7 * 24 * HOUR));
+    const result = await strategy.validate(legacyTokenLasting(4 * HOUR));
     expect(result).toEqual(expect.objectContaining({ userId: 'user-1' }));
+  });
+
+  it('REFUSES TO BOOT on an access ttl above the ceiling', async () => {
+    // THE DEFECT: JWT_EXPIRES_IN=7d shipped in .env and .env.staging. An access
+    // token cannot be revoked before it expires — logout blacklists only the
+    // jti of the token it is handed — so that was a 7-day unrevocable
+    // credential. The value lives in gitignored .env files and the Dokploy
+    // panel, so no diff can catch a regression; a boot refusal is the only gate
+    // that survives a value the repo cannot see.
+    //
+    // Against the OLD code this fails: 7d access against a 30d refresh is
+    // 604800 < 2592000, so the existing refresh-relative check does not even
+    // warn, let alone throw. It was completely silent.
+    config.JWT_EXPIRES_IN = '7d';
+    config.JWT_REFRESH_EXPIRES_IN = '30d';
+
+    expect(() => build()).toThrow(/JWT_EXPIRES_IN/);
+  });
+
+  it('boots on the production shape, which sits exactly on the ceiling', () => {
+    // 8h admin access is the real production value. The comparison is `>` and
+    // not `>=` precisely so this boots — if this test goes red, someone
+    // tightened the ceiling below a value production actually runs.
+    config.JWT_EXPIRES_IN = '1h';
+    config.JWT_ADMIN_EXPIRES_IN = '8h';
+    config.JWT_REFRESH_EXPIRES_IN = '7d';
+
+    expect(() => build()).not.toThrow();
   });
 
   it('does not warn on prod-shaped config, where the check can actually discriminate', async () => {
@@ -125,10 +157,13 @@ describe('JwtStrategy - refresh tokens must not work as bearer tokens', () => {
     // TTL. The hand-rolled parser this replaces returned undefined for all of
     // these and fell back to a threshold far below the real one, which 401'd
     // every admin token for its entire life.
-    config.JWT_ADMIN_EXPIRES_IN = '12 hours';
+    // Kept under the 8h access ceiling: the parser does not care about
+    // magnitude, so '6 hours' exercises the ms() grammar exactly as '12 hours'
+    // did, without colliding with a different control.
+    config.JWT_ADMIN_EXPIRES_IN = '6 hours';
     strategy = build();
 
-    const result = await strategy.validate(legacyTokenLasting(12 * HOUR));
+    const result = await strategy.validate(legacyTokenLasting(6 * HOUR));
 
     expect(result).toEqual(expect.objectContaining({ userId: 'user-1' }));
   });
