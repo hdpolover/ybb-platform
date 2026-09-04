@@ -202,8 +202,12 @@ export class FirebaseLoginHandler {
     let user = userIdentity?.user;
 
     // 5. If no identity linked, check if user exists by email (Auto-link)
+    // existingUser is resolved but NOT yet assigned into `user` / auto-linked
+    // here - see the guard immediately below, which must run before the
+    // auto-link side effect (userIdentity.create), not after it.
+    let existingUser: typeof user | null = null;
     if (!user) {
-        const existingUser = await this.prisma.user.findFirst({
+        existingUser = await this.prisma.user.findFirst({
             where: {
                 email: { equals: email, mode: 'insensitive' },
                 brandId: brandId,
@@ -211,22 +215,45 @@ export class FirebaseLoginHandler {
             },
             orderBy: { createdAt: 'asc' },
         });
+    }
 
-        if (existingUser) {
-            user = existingUser;
-            // Auto-link existing user
-            userIdentity = await this.prisma.userIdentity.create({
-                data: {
-                    userId: user.id,
-                    brandId,
-                    providerId: authProvider.id,
-                    providerUserId: uid,
-                    providerEmail: email,
-                    isPrimary: false,
-                },
-                include: { user: true }
-            });
-        }
+    // A soft-deleted or deactivated account must not be able to complete a
+    // login at all - checked before either resolved-user side effect below
+    // (auto-link identity creation, or new-user registration never running
+    // because a real account was found). Two lookups can produce a `user`
+    // here:
+    //  - the identity lookup above (userIdentity.findFirst with
+    //    include: { user: true }), which bypasses the soft-delete extension
+    //    entirely - Prisma rejects a `where` on a to-one relation include, so
+    //    PrismaService deliberately skips injecting deletedAt there (see
+    //    prisma.service.ts) - a deleted user's identity still resolves to
+    //    their real user row.
+    //  - the by-email fallback just above, which filters deletedAt but not
+    //    isActive (an admin-deactivated or approved-for-deletion account is
+    //    not soft-deleted yet, only isActive:false, until the purge job runs).
+    // Without this check either path would mint a fully valid JWT below and
+    // only get rejected on the NEXT request, by JwtStrategy.validate. Mirrors
+    // reset-password.handler.ts, which folds the same check into its lookup
+    // rather than as an afterthought.
+    const resolvedUser = user ?? existingUser;
+    if (resolvedUser && (resolvedUser.deletedAt || !resolvedUser.isActive)) {
+        throw new UnauthorizedException('Account is not active');
+    }
+
+    if (existingUser) {
+        user = existingUser;
+        // Auto-link existing user
+        userIdentity = await this.prisma.userIdentity.create({
+            data: {
+                userId: user.id,
+                brandId,
+                providerId: authProvider.id,
+                providerUserId: uid,
+                providerEmail: email,
+                isPrimary: false,
+            },
+            include: { user: true }
+        });
     }
 
     // 6. If still no user, REGISTER new user

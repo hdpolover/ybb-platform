@@ -53,4 +53,30 @@ export class FirebaseAuthService implements OnModuleInit {
       throw new Error('Invalid Firebase token');
     }
   }
+
+  /**
+   * Deletes a Firebase Auth user by uid. Used by the account-deletion purge
+   * job - without this, a deleted account's Google/OAuth credential still
+   * lives in Firebase forever, so the person can sign in again and (via
+   * firebase-login.handler's auto-register path) get a brand-new account,
+   * making the whole deletion feature cosmetic.
+   *
+   * `auth/user-not-found` is treated as success, not failure: the purge job
+   * calls this before touching the database and retries the whole user on
+   * any other error, so a retry after a prior run already deleted this uid
+   * must be able to converge instead of failing forever.
+   */
+  async deleteUser(uid: string): Promise<void> {
+    try {
+      await admin.auth().deleteUser(uid);
+    } catch (error: unknown) {
+      const code = (error as { code?: string } | undefined)?.code;
+      if (code === 'auth/user-not-found') {
+        this.logger.warn(`Firebase user ${uid} already deleted or not found; treating as success`);
+        return;
+      }
+      this.logger.error(`Failed to delete Firebase user ${uid}: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+  }
 }

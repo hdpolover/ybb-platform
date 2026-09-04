@@ -76,7 +76,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
     FirebaseAuthService,
     AuthLoggingService,
   ],
-  exports: [JwtAuthGuard, JwtStrategy, TokenBlacklistService, PassportModule],
+  exports: [JwtAuthGuard, JwtStrategy, TokenBlacklistService, PassportModule, FirebaseAuthService],
 })
 export class AuthModule { }
 

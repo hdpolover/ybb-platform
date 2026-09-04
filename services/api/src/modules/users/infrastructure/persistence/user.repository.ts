@@ -113,18 +113,6 @@ export class UserRepository implements IUserRepository {
     return UserMapper.toDomain(updatedUser);
   }
 
-  async delete(id: string, brandId: string): Promise<boolean> {
-    const result = await this.prisma.user.updateMany({
-      where: { 
-        id, 
-        brandId: brandId,
-      },
-      data: { deletedAt: new Date() },
-    });
-
-    return result.count > 0;
-  }
-
   async exists(email: string, brandId: string): Promise<boolean> {
     const count = await this.prisma.user.count({
       where: { 
