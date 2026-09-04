@@ -12,6 +12,7 @@ import {
 } from '@shared/utils/country-groups';
 import { resolveActiveProgram } from '@shared/utils/active-program-resolver';
 import { PlatformSettingRepository } from '@modules/platform-settings/infrastructure/persistence/platform-setting.repository';
+import { buildImpactStatsSection } from './impact-stats-section.util';
 import {
   buildRegistrationEditions,
   fetchOpenRegistrationPrograms,
@@ -664,24 +665,13 @@ export class HomeStrategy implements ILandingPageStrategy {
             })),
           },
         },
-        {
-          type: 'program_impact',
-          content: {
-            eyebrow: 'Global Reach',
-            title: 'Global Program Impact',
-            // Platform-wide, not brand-scoped — see Task 3/12. Was
-            // brandMeta.impact_stats (byte-identical across three brands,
-            // i.e. already a de-facto platform value that had merely been
-            // triplicated); now a single PlatformSetting row every brand reads.
-            stats: platformImpactStatsRow?.value
-              ? [
-                  { id: 'participants', label: 'Total Participants', value: (platformImpactStatsRow.value as { total_participants?: unknown; total_countries?: unknown; total_alumni?: unknown }).total_participants, icon: 'participants' },
-                  { id: 'countries', label: 'Total Countries', value: (platformImpactStatsRow.value as { total_participants?: unknown; total_countries?: unknown; total_alumni?: unknown }).total_countries, icon: 'countries' },
-                  { id: 'alumni', label: 'Total Alumni', value: (platformImpactStatsRow.value as { total_participants?: unknown; total_countries?: unknown; total_alumni?: unknown }).total_alumni, icon: 'alumni' },
-                ]
-              : [],
-          },
-        },
+        // Platform-wide, not brand-scoped — see Task 3/12. Was
+        // brandMeta.impact_stats (byte-identical across three brands, i.e.
+        // already a de-facto platform value that had merely been triplicated);
+        // now a single PlatformSetting row every brand reads. Spread, not a
+        // fixed element: an absent/blank figure is dropped and an entirely
+        // missing row emits no section at all rather than empty cards.
+        ...buildImpactStatsSection(platformImpactStatsRow),
         {
           type: 'program_features',
           content: {

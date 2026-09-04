@@ -266,8 +266,36 @@ describe('HomeStrategy', () => {
             { id: 'participants', label: 'Total Participants', value: '1700+', icon: 'participants' },
             { id: 'countries', label: 'Total Countries', value: '50+', icon: 'countries' },
             { id: 'alumni', label: 'Total Alumni', value: '1700+', icon: 'alumni' },
+            { id: 'editions', label: 'Editions Held', value: '15+', icon: 'editions' },
         ]);
         expect(mockPlatformSettingRepository.get).toHaveBeenCalledWith('impact_stats');
+    });
+
+    it('omits the program_impact section entirely when the impact_stats row is missing, rather than shipping empty cards', async () => {
+        const category = {
+            id: 'cat-1', name: 'Test Brand', bannerUrl: 'http://banner.jpg', websiteUrl: 'http://brand.com',
+            vision: 'Vision', mission: 'Mission',
+            // Brand metadata still carries the old triplicated copy; it must
+            // NOT resurface as a fallback now that the row is the only source.
+            metadata: { impact_stats: { total_alumni: 'BRAND-STALE-999' } },
+        };
+
+        mockPrismaService.program.findFirst.mockResolvedValueOnce({
+            id: 'prog-1', name: 'Main Program',
+            gallery: [], pricingTiers: [], resources: [], objectives: [], awards: [], landingContent: {},
+        });
+        mockPrismaService.programGallery.findMany.mockResolvedValue([]);
+        mockPrismaService.sponsor.findMany.mockResolvedValue([]);
+        mockPrismaService.brandSocialFeed.findMany.mockResolvedValue([]);
+        mockPrismaService.program.findMany.mockResolvedValue([]);
+        mockPrismaService.programTestimonial.findMany.mockResolvedValue([]);
+        mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
+        mockPlatformSettingRepository.get.mockResolvedValue(null);
+
+        const result: any = await strategy.getData(category as any);
+
+        expect(result.sections.find((s: any) => s.type === 'program_impact')).toBeUndefined();
+        expect(JSON.stringify(result.sections)).not.toContain('BRAND-STALE-999');
     });
 
     it('program_objectives renders from the real ProgramObjective relation even when Brand.metadata.program_objectives is set — the override is removed, not merely deprioritized', async () => {

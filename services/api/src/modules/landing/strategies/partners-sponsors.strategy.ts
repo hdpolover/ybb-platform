@@ -6,6 +6,8 @@ import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
 import { LandingSnapshotService } from '../services/landing-snapshot.service';
 import { LandingPageResponseDto } from '../dto/landing-page.dto';
+import { PlatformSettingRepository } from '@modules/platform-settings/infrastructure/persistence/platform-setting.repository';
+import { buildImpactStatsSection } from './impact-stats-section.util';
 
 @Injectable()
 export class PartnersSponsorsStrategy implements ILandingPageStrategy {
@@ -13,6 +15,7 @@ export class PartnersSponsorsStrategy implements ILandingPageStrategy {
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService,
     private readonly landingSnapshotService: LandingSnapshotService,
+    private readonly platformSettingRepository: PlatformSettingRepository,
   ) { }
 
   async getData(category: Brand | null) {
@@ -77,6 +80,12 @@ export class PartnersSponsorsStrategy implements ILandingPageStrategy {
       })
       : [];
 
+    // Same single platform-wide `impact_stats` row the home page reads (see
+    // home.strategy.ts) — /partners renders one of these figures in its
+    // "Proven Results" block, so it rides this payload rather than fetching
+    // on its own. Purged for every brand by ImpactStatsService.update().
+    const platformImpactStatsRow = await this.platformSettingRepository.get('impact_stats');
+
     const metadata = (category?.metadata ?? {}) as Record<string, unknown>;
     // Legacy brand-level fallback: only rendered when no active program has
     // set its own partnersCanvaUrl yet, so brands mid-migration to the
@@ -130,6 +139,7 @@ export class PartnersSponsorsStrategy implements ILandingPageStrategy {
     }
 
     sections.push(
+      ...buildImpactStatsSection(platformImpactStatsRow),
       {
         type: 'sponsors_grid',
         data: sponsors.map(s => ({
