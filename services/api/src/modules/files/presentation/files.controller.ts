@@ -13,6 +13,7 @@ import {
   Res,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -405,6 +406,12 @@ export class FilesController {
     @Param('fileId') fileId: string,
     @CurrentUser() user: CurrentUserData,
   ): Promise<{ success: boolean; data: FileResponse }> {
+    // File ids are uuids. Validate the shape before the value is used to build an
+    // outbound URL to the file service - the same guard resolvePublicDownloadUrl
+    // below has always applied, which was simply never called from here.
+    if (!FilesController.UUID_PATTERN.test(fileId)) {
+      throw new BadRequestException('Invalid file id');
+    }
     try {
       const userId = user.userId;
       const brandId = user.brandId;
@@ -484,6 +491,11 @@ export class FilesController {
     @CurrentUser() user: CurrentUserData,
     @Query('actual_size') actualSize?: string,
   ): Promise<FileResponse> {
+    // Same shape check as getFile above: this id is interpolated into a
+    // file-service URL.
+    if (!FilesController.UUID_PATTERN.test(fileId)) {
+      throw new BadRequestException('Invalid file id');
+    }
     this.logger.log(`Marking file ready: ${fileId} (brand ${user.brandId}, user ${user.userId})`);
     const parsed = actualSize ? Number(actualSize) : NaN;
     const size = !isNaN(parsed) ? parsed : undefined;
