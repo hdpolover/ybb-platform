@@ -5,9 +5,13 @@ import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.ser
 import {
     CreateProgramEssayHandler,
     CreateProgramSpeakerHandler,
+    UpdateProgramSpeakerHandler,
+    DeleteProgramSpeakerHandler,
+    CreateProgramTeamHandler,
+    UpdateProgramTeamHandler,
+    DeleteProgramTeamHandler,
     DeleteProgramEssayHandler,
     UpdateProgramEssayHandler,
-    UpdateProgramSpeakerHandler,
     CreateValidityPeriodHandler,
     UpdateValidityPeriodHandler,
     invalidateLandingCacheByProgramId,
@@ -49,9 +53,13 @@ import {
 import {
     CreateProgramEssayCommand,
     CreateProgramSpeakerCommand,
+    UpdateProgramSpeakerCommand,
+    DeleteProgramSpeakerCommand,
+    CreateProgramTeamCommand,
+    UpdateProgramTeamCommand,
+    DeleteProgramTeamCommand,
     DeleteProgramEssayCommand,
     UpdateProgramEssayCommand,
-    UpdateProgramSpeakerCommand,
     CreateValidityPeriodCommand,
     UpdateValidityPeriodCommand,
     CreateProgramGalleryCommand,
@@ -149,6 +157,30 @@ describe('ManageProgramContentHandlers', () => {
         invalidateByPatterns: jest.fn(),
     };
 
+    // Platform-scope admin passes every programme, so these two describe
+    // blocks stay about upload/photo behaviour, not the scope check itself
+    // (see "Handlers wired through invalidateLandingCacheByProgramId" below
+    // for the dedicated scope-enforcement tests).
+    const mockPrismaRead = {
+        admin: {
+            findUnique: jest.fn().mockResolvedValue({
+                accessLevel: 5,
+                canManageAdmins: true,
+                canAssignRoles: true,
+                customPermissions: [],
+                role: { name: 'super_admin', permissions: ['platform_access'] },
+                adminBrands: [],
+                adminPrograms: [],
+            }),
+        },
+        program: {
+            findUnique: jest.fn().mockResolvedValue({
+                id: 'prog-1', brandId: 'brand-1', name: 'P', deletedAt: null,
+            }),
+        },
+    };
+    const speakerActor = { userId: 'user-1', email: 'a@b.c', brandId: 'brand-1', adminId: 'adm-1' } as any;
+
     beforeEach(async () => {
          // Reset mocks
          jest.clearAllMocks();
@@ -164,6 +196,7 @@ describe('ManageProgramContentHandlers', () => {
                     { provide: 'IProgramContentRepository', useValue: mockRepository },
                     { provide: StorageService, useValue: mockStorageService },
                     { provide: PrismaService, useValue: mockPrismaService },
+                    { provide: PrismaReadService, useValue: mockPrismaRead },
                 ],
             }).compile();
             handler = module.get<CreateProgramSpeakerHandler>(CreateProgramSpeakerHandler);
@@ -172,11 +205,11 @@ describe('ManageProgramContentHandlers', () => {
         it('should create speaker with uploaded photo', async () => {
             const dto = { programId: 'prog-1', name: 'Speaker 1' };
             const file = { originalname: 'photo.jpg' } as unknown as Express.Multer.File;
-            const command = new CreateProgramSpeakerCommand(dto, 'user-1', file);
+            const command = new CreateProgramSpeakerCommand(dto, 'user-1', speakerActor, file);
 
             // Mock Program existence for Brand ID lookup
             mockPrismaService.program.findUnique.mockResolvedValue({ id: 'prog-1', brandId: 'brand-1' });
-            
+
             // Mock Upload
             mockStorageService.uploadFile.mockResolvedValue({ url: 'http://cdn/photo.jpg' });
 
@@ -195,7 +228,7 @@ describe('ManageProgramContentHandlers', () => {
 
         it('should throw NotFoundException if program not found during upload', async () => {
             const dto = { programId: 'prog-1', name: 'Speaker' };
-            const command = new CreateProgramSpeakerCommand(dto, 'user-1', {} as unknown as Express.Multer.File);
+            const command = new CreateProgramSpeakerCommand(dto, 'user-1', speakerActor, {} as unknown as Express.Multer.File);
 
             mockPrismaService.program.findUnique.mockResolvedValue(null);
 
@@ -214,6 +247,7 @@ describe('ManageProgramContentHandlers', () => {
                     { provide: 'IProgramContentRepository', useValue: mockRepository },
                     { provide: StorageService, useValue: mockStorageService },
                     { provide: PrismaService, useValue: mockPrismaService },
+                    { provide: PrismaReadService, useValue: mockPrismaRead },
                 ],
             }).compile();
             handler = module.get<UpdateProgramSpeakerHandler>(UpdateProgramSpeakerHandler);
@@ -222,7 +256,7 @@ describe('ManageProgramContentHandlers', () => {
         it('should update speaker photo if new file provided', async () => {
             const dto = { name: 'Updated Name' };
             const file = { originalname: 'new.jpg' } as unknown as Express.Multer.File;
-            const command = new UpdateProgramSpeakerCommand('spk-1', dto, 'user-1', file);
+            const command = new UpdateProgramSpeakerCommand('spk-1', dto, 'user-1', speakerActor, file);
 
             // Mock Speaker Lookup
             mockRepository.findSpeakerById.mockResolvedValue({ id: 'spk-1', programId: 'prog-1' });
@@ -1401,6 +1435,12 @@ describe('ManageProgramContentHandlers', () => {
         let storage: any;
         let prisma: any;
         let landingCacheInvalidation: any;
+        let prismaRead: any;
+        // Platform-scope admin passes every programme - keeps these tests about
+        // cache invalidation, not the scope check itself (Timeline/Schedule/
+        // Partner are now scoped - see "Group E" below for the dedicated
+        // scope-enforcement tests).
+        const actor = { userId: 'user-1', email: 'a@b.c', brandId: 'brand-c', adminId: 'adm-1' } as any;
 
         beforeEach(() => {
             repo = {
@@ -1424,6 +1464,24 @@ describe('ManageProgramContentHandlers', () => {
             storage = { uploadFile: jest.fn() };
             prisma = { program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-c' }) } };
             landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+            prismaRead = {
+                admin: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        accessLevel: 5,
+                        canManageAdmins: true,
+                        canAssignRoles: true,
+                        customPermissions: [],
+                        role: { name: 'super_admin', permissions: ['platform_access'] },
+                        adminBrands: [],
+                        adminPrograms: [],
+                    }),
+                },
+                program: {
+                    findUnique: jest.fn().mockResolvedValue({
+                        id: 'prog-1', brandId: 'brand-c', name: 'P', deletedAt: null,
+                    }),
+                },
+            };
         });
 
         async function build<T>(HandlerCtor: new (...args: any[]) => T): Promise<T> {
@@ -1435,6 +1493,7 @@ describe('ManageProgramContentHandlers', () => {
                     { provide: PrismaService, useValue: prisma },
                     { provide: LandingCacheInvalidationService, useValue: landingCacheInvalidation },
                     { provide: IUserActivityLogRepository, useValue: { create: jest.fn() } },
+                    { provide: PrismaReadService, useValue: prismaRead },
                 ],
             }).compile();
             return module.get(HandlerCtor);
@@ -1448,6 +1507,7 @@ describe('ManageProgramContentHandlers', () => {
                 await handler.execute(new CreateProgramTimelineCommand(
                     { programId: 'prog-1', date: '2026-09-01' } as any,
                     'user-1',
+                    actor,
                 ));
 
                 expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
@@ -1457,9 +1517,10 @@ describe('ManageProgramContentHandlers', () => {
         describe('UpdateProgramTimelineHandler', () => {
             it('invalidates using the updated row programId', async () => {
                 const handler = await build(UpdateProgramTimelineHandler);
+                repo.findTimelineById.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
                 repo.updateTimeline.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
 
-                await handler.execute(new UpdateProgramTimelineCommand('tl-1', { date: '2026-09-02' } as any, 'user-1'));
+                await handler.execute(new UpdateProgramTimelineCommand('tl-1', { date: '2026-09-02' } as any, 'user-1', actor));
 
                 expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
             });
@@ -1471,7 +1532,7 @@ describe('ManageProgramContentHandlers', () => {
                 repo.findTimelineById.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
                 repo.deleteTimeline.mockResolvedValue(undefined);
 
-                await handler.execute(new DeleteProgramTimelineCommand('tl-1', 'user-1'));
+                await handler.execute(new DeleteProgramTimelineCommand('tl-1', 'user-1', actor));
 
                 expect(repo.findTimelineById).toHaveBeenCalledWith('tl-1');
                 expect(repo.deleteTimeline).toHaveBeenCalledWith('tl-1');
@@ -1481,13 +1542,21 @@ describe('ManageProgramContentHandlers', () => {
                 expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
             });
 
-            it('skips invalidation when the row is already gone', async () => {
+            // Was "skips invalidation when the row is already gone": the
+            // pre-fix handler deleted unconditionally even when the lookup
+            // came back null, silently no-oping. Every sibling family 404s on
+            // a missing row instead (see gallery/testimonial/faq/resource) -
+            // Timeline now matches.
+            it('404s instead of deleting when the row is already gone', async () => {
                 const handler = await build(DeleteProgramTimelineHandler);
                 repo.findTimelineById.mockResolvedValue(null);
                 repo.deleteTimeline.mockResolvedValue(undefined);
 
-                await handler.execute(new DeleteProgramTimelineCommand('tl-missing', 'user-1'));
+                await expect(
+                    handler.execute(new DeleteProgramTimelineCommand('tl-missing', 'user-1', actor)),
+                ).rejects.toThrow(NotFoundException);
 
+                expect(repo.deleteTimeline).not.toHaveBeenCalled();
                 expect(landingCacheInvalidation.invalidate).not.toHaveBeenCalled();
             });
         });
@@ -1500,6 +1569,7 @@ describe('ManageProgramContentHandlers', () => {
                 await handler.execute(new CreateProgramScheduleCommand(
                     { programId: 'prog-1', day: 'Day 1', activity: 'Arrival' } as any,
                     'user-1',
+                    actor,
                 ));
 
                 expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
@@ -1507,9 +1577,10 @@ describe('ManageProgramContentHandlers', () => {
 
             it('UpdateProgramScheduleHandler invalidates using the updated row programId', async () => {
                 const handler = await build(UpdateProgramScheduleHandler);
+                repo.findScheduleById.mockResolvedValue({ id: 'sch-1', programId: 'prog-1' });
                 repo.updateSchedule.mockResolvedValue({ id: 'sch-1', programId: 'prog-1', activity: 'Updated' });
 
-                await handler.execute(new UpdateProgramScheduleCommand('sch-1', { activity: 'Updated' } as any, 'user-1'));
+                await handler.execute(new UpdateProgramScheduleCommand('sch-1', { activity: 'Updated' } as any, 'user-1', actor));
 
                 expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
             });
@@ -1519,7 +1590,7 @@ describe('ManageProgramContentHandlers', () => {
                 repo.findScheduleById.mockResolvedValue({ id: 'sch-1', programId: 'prog-1' });
                 repo.deleteSchedule.mockResolvedValue(undefined);
 
-                await handler.execute(new DeleteProgramScheduleCommand('sch-1', 'user-1'));
+                await handler.execute(new DeleteProgramScheduleCommand('sch-1', 'user-1', actor));
 
                 expect(repo.findScheduleById).toHaveBeenCalledWith('sch-1');
                 const findOrder = repo.findScheduleById.mock.invocationCallOrder[0];
@@ -1571,6 +1642,7 @@ describe('ManageProgramContentHandlers', () => {
                 await handler.execute(new CreateProgramPartnerCommand(
                     { programId: 'prog-1', name: 'Acme Co' } as any,
                     'user-1',
+                    actor,
                 ));
 
                 expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
@@ -1578,9 +1650,10 @@ describe('ManageProgramContentHandlers', () => {
 
             it('UpdateProgramPartnerHandler invalidates using the updated row programId', async () => {
                 const handler = await build(UpdateProgramPartnerHandler);
+                repo.findPartnerById.mockResolvedValue({ id: 'partner-1', programId: 'prog-1' });
                 repo.updatePartner.mockResolvedValue({ id: 'partner-1', programId: 'prog-1', name: 'Renamed' });
 
-                await handler.execute(new UpdateProgramPartnerCommand('partner-1', { name: 'Renamed' } as any, 'user-1'));
+                await handler.execute(new UpdateProgramPartnerCommand('partner-1', { name: 'Renamed' } as any, 'user-1', actor));
 
                 expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-c', homeAndSettingsOptions);
             });
@@ -1590,7 +1663,7 @@ describe('ManageProgramContentHandlers', () => {
                 repo.findPartnerById.mockResolvedValue({ id: 'partner-1', programId: 'prog-1' });
                 repo.deletePartner.mockResolvedValue(undefined);
 
-                await handler.execute(new DeleteProgramPartnerCommand('partner-1', 'user-1'));
+                await handler.execute(new DeleteProgramPartnerCommand('partner-1', 'user-1', actor));
 
                 expect(repo.findPartnerById).toHaveBeenCalledWith('partner-1');
                 const findOrder = repo.findPartnerById.mock.invocationCallOrder[0];
@@ -1731,6 +1804,530 @@ describe('ManageProgramContentHandlers', () => {
             expect(repo.deleteResource).not.toHaveBeenCalled();
             expect(landingCacheInvalidation.invalidate).not.toHaveBeenCalled();
             expect(cache.invalidateByPatterns).not.toHaveBeenCalled();
+        });
+    });
+
+    // M215, final family. The gallery/testimonial/faq/resource/document-template
+    // families (Group C/D above, plus the gallery/testimonial/faq block earlier
+    // in this file) got the write-scope fix already; timeline, schedules,
+    // speakers, team and partners in program-schedule.controller.ts /
+    // program-people.controller.ts carried the identical gap - RolesGuard only
+    // checks the coarse JWT role, so any admin could create/update/delete any
+    // programme's timeline, schedule, speaker, team member or partner by id.
+    //
+    // Same rules as every other family: CREATE asserts on dto.programId (the id
+    // the handler actually writes, not the route param the handler ignores);
+    // UPDATE/DELETE (keyed only by :itemId, no programme id in the URL) load the
+    // row, resolve its programId, and assert BEFORE mutating; missing-row and
+    // out-of-scope raise the byte-identical error (orNotFound). Team is the one
+    // family here that mirrors testimonials - program- OR brand-scoped, both
+    // columns nullable - so it gets the three-branch check too.
+    describe('Group E: Timeline/Schedule/Speaker/Team/Partner scope enforcement', () => {
+        let repo: any;
+        let storage: any;
+        let prisma: any;
+        let landingCacheInvalidation: any;
+        let prismaRead: any;
+        const actor = { userId: 'user-1', email: 'a@b.c', brandId: 'brand-e', adminId: 'adm-1' } as any;
+
+        const platformScope = () => ({
+            admin: {
+                findUnique: jest.fn().mockResolvedValue({
+                    accessLevel: 5,
+                    canManageAdmins: true,
+                    canAssignRoles: true,
+                    customPermissions: [],
+                    role: { name: 'super_admin', permissions: ['platform_access'] },
+                    adminBrands: [],
+                    adminPrograms: [],
+                }),
+            },
+            program: {
+                findUnique: jest.fn().mockResolvedValue({
+                    id: 'prog-1', brandId: 'brand-e', name: 'P', deletedAt: null,
+                }),
+            },
+        });
+        // 'assigned' scope, granted a DIFFERENT programme - the permanent
+        // out-of-scope case, not a transient empty-accessiblePrograms race.
+        const outOfScope = () => ({
+            admin: {
+                findUnique: jest.fn().mockResolvedValue({
+                    accessLevel: 1,
+                    canManageAdmins: false,
+                    canAssignRoles: false,
+                    customPermissions: [],
+                    role: { name: 'reviewer', permissions: [] },
+                    adminBrands: [],
+                    adminPrograms: [{ programId: 'someone-elses-program', permissions: [] }],
+                }),
+            },
+            program: {
+                findUnique: jest.fn().mockResolvedValue({
+                    id: 'prog-1', brandId: 'brand-e', name: 'P', deletedAt: null,
+                }),
+            },
+        });
+        // 'brand_scope' - granted brand-x only. Used by Team's brand-only branch.
+        const brandScope = (grantedBrandId: string) => ({
+            admin: {
+                findUnique: jest.fn().mockResolvedValue({
+                    accessLevel: 1,
+                    canManageAdmins: false,
+                    canAssignRoles: false,
+                    customPermissions: [],
+                    role: { name: 'brand_admin', permissions: [] },
+                    adminBrands: [{ brandId: grantedBrandId, permissions: [] }],
+                    adminPrograms: [],
+                }),
+            },
+            program: { findUnique: jest.fn() },
+        });
+
+        beforeEach(() => {
+            repo = {
+                createTimeline: jest.fn(), findTimelineById: jest.fn(), updateTimeline: jest.fn(), deleteTimeline: jest.fn(),
+                createSchedule: jest.fn(), findScheduleById: jest.fn(), updateSchedule: jest.fn(), deleteSchedule: jest.fn(),
+                createSpeaker: jest.fn(), findSpeakerById: jest.fn(), updateSpeaker: jest.fn(), deleteSpeaker: jest.fn(),
+                createTeam: jest.fn(), findTeamById: jest.fn(), updateTeam: jest.fn(), deleteTeam: jest.fn(),
+                createPartner: jest.fn(), findPartnerById: jest.fn(), updatePartner: jest.fn(), deletePartner: jest.fn(),
+            };
+            storage = { uploadFile: jest.fn() };
+            prisma = { program: { findUnique: jest.fn().mockResolvedValue({ id: 'prog-1', brandId: 'brand-e' }) } };
+            landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+            prismaRead = platformScope();
+        });
+
+        async function build<T>(HandlerCtor: new (...args: any[]) => T): Promise<T> {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    HandlerCtor,
+                    { provide: 'IProgramContentRepository', useValue: repo },
+                    { provide: StorageService, useValue: storage },
+                    { provide: PrismaService, useValue: prisma },
+                    { provide: LandingCacheInvalidationService, useValue: landingCacheInvalidation },
+                    { provide: IUserActivityLogRepository, useValue: { create: jest.fn() } },
+                    { provide: PrismaReadService, useValue: prismaRead },
+                ],
+            }).compile();
+            return module.get(HandlerCtor);
+        }
+
+        // Asserts the missing-row and out-of-scope paths raise the SAME
+        // exception: constructor, HTTP status AND message. A test that only
+        // checks both-are-404 passes against the pre-orNotFound code too, since
+        // assertProgramAccess's own NotFoundException is also a 404 - it just
+        // names the OWNING programme's id, which is exactly the leak this
+        // proves is closed.
+        function expectSameNotFoundError(whenMissing: unknown, whenOutOfScope: unknown) {
+            expect((whenMissing as Error).constructor).toBe((whenOutOfScope as Error).constructor);
+            expect((whenMissing as { getStatus(): number }).getStatus()).toBe(
+                (whenOutOfScope as { getStatus(): number }).getStatus(),
+            );
+            expect((whenMissing as Error).message).toBe((whenOutOfScope as Error).message);
+        }
+
+        describe('Timeline', () => {
+            it('CreateProgramTimelineHandler refuses a programme outside the caller scope', async () => {
+                prismaRead = outOfScope();
+                const handler = await build(CreateProgramTimelineHandler);
+
+                await expect(
+                    handler.execute(new CreateProgramTimelineCommand({ programId: 'prog-1', date: '2026-09-01' } as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.createTimeline).not.toHaveBeenCalled();
+            });
+
+            it('CreateProgramTimelineHandler creates when the programme IS in scope', async () => {
+                const handler = await build(CreateProgramTimelineHandler);
+                repo.createTimeline.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
+
+                await handler.execute(new CreateProgramTimelineCommand({ programId: 'prog-1', date: '2026-09-01' } as never, 'user-1', actor));
+
+                expect(repo.createTimeline).toHaveBeenCalled();
+            });
+
+            it('UpdateProgramTimelineHandler refuses, resolving the programme from the target row', async () => {
+                prismaRead = outOfScope();
+                repo.findTimelineById.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
+                const handler = await build(UpdateProgramTimelineHandler);
+
+                await expect(
+                    handler.execute(new UpdateProgramTimelineCommand('tl-1', {} as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.updateTimeline).not.toHaveBeenCalled();
+            });
+
+            it('UpdateProgramTimelineHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findTimelineById.mockResolvedValue(null);
+                const whenMissing = await (await build(UpdateProgramTimelineHandler))
+                    .execute(new UpdateProgramTimelineCommand('tl-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findTimelineById.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
+                const whenOutOfScope = await (await build(UpdateProgramTimelineHandler))
+                    .execute(new UpdateProgramTimelineCommand('tl-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expectSameNotFoundError(whenMissing, whenOutOfScope);
+            });
+
+            it('DeleteProgramTimelineHandler refuses BEFORE deleting, not after', async () => {
+                prismaRead = outOfScope();
+                repo.findTimelineById.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
+                const handler = await build(DeleteProgramTimelineHandler);
+
+                await expect(
+                    handler.execute(new DeleteProgramTimelineCommand('tl-1', 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.deleteTimeline).not.toHaveBeenCalled();
+            });
+
+            it('DeleteProgramTimelineHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findTimelineById.mockResolvedValue(null);
+                const whenMissing = await (await build(DeleteProgramTimelineHandler))
+                    .execute(new DeleteProgramTimelineCommand('tl-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findTimelineById.mockResolvedValue({ id: 'tl-1', programId: 'prog-1' });
+                const whenOutOfScope = await (await build(DeleteProgramTimelineHandler))
+                    .execute(new DeleteProgramTimelineCommand('tl-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expectSameNotFoundError(whenMissing, whenOutOfScope);
+            });
+        });
+
+        describe('Schedule', () => {
+            it('CreateProgramScheduleHandler refuses a programme outside the caller scope', async () => {
+                prismaRead = outOfScope();
+                const handler = await build(CreateProgramScheduleHandler);
+
+                await expect(
+                    handler.execute(new CreateProgramScheduleCommand({ programId: 'prog-1', day: 'Day 1', activity: 'Arrival' } as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.createSchedule).not.toHaveBeenCalled();
+            });
+
+            it('CreateProgramScheduleHandler creates when the programme IS in scope', async () => {
+                const handler = await build(CreateProgramScheduleHandler);
+                repo.createSchedule.mockResolvedValue({ id: 'sch-1', programId: 'prog-1' });
+
+                await handler.execute(new CreateProgramScheduleCommand({ programId: 'prog-1', day: 'Day 1', activity: 'Arrival' } as never, 'user-1', actor));
+
+                expect(repo.createSchedule).toHaveBeenCalled();
+            });
+
+            it('UpdateProgramScheduleHandler refuses, resolving the programme from the target row', async () => {
+                prismaRead = outOfScope();
+                repo.findScheduleById.mockResolvedValue({ id: 'sch-1', programId: 'prog-1' });
+                const handler = await build(UpdateProgramScheduleHandler);
+
+                await expect(
+                    handler.execute(new UpdateProgramScheduleCommand('sch-1', {} as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.updateSchedule).not.toHaveBeenCalled();
+            });
+
+            it('UpdateProgramScheduleHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findScheduleById.mockResolvedValue(null);
+                const whenMissing = await (await build(UpdateProgramScheduleHandler))
+                    .execute(new UpdateProgramScheduleCommand('sch-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findScheduleById.mockResolvedValue({ id: 'sch-1', programId: 'prog-1' });
+                const whenOutOfScope = await (await build(UpdateProgramScheduleHandler))
+                    .execute(new UpdateProgramScheduleCommand('sch-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expectSameNotFoundError(whenMissing, whenOutOfScope);
+            });
+
+            it('DeleteProgramScheduleHandler refuses BEFORE deleting, not after', async () => {
+                prismaRead = outOfScope();
+                repo.findScheduleById.mockResolvedValue({ id: 'sch-1', programId: 'prog-1' });
+                const handler = await build(DeleteProgramScheduleHandler);
+
+                await expect(
+                    handler.execute(new DeleteProgramScheduleCommand('sch-1', 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.deleteSchedule).not.toHaveBeenCalled();
+            });
+
+            it('DeleteProgramScheduleHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findScheduleById.mockResolvedValue(null);
+                const whenMissing = await (await build(DeleteProgramScheduleHandler))
+                    .execute(new DeleteProgramScheduleCommand('sch-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findScheduleById.mockResolvedValue({ id: 'sch-1', programId: 'prog-1' });
+                const whenOutOfScope = await (await build(DeleteProgramScheduleHandler))
+                    .execute(new DeleteProgramScheduleCommand('sch-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expectSameNotFoundError(whenMissing, whenOutOfScope);
+            });
+        });
+
+        describe('Speaker', () => {
+            it('CreateProgramSpeakerHandler refuses a programme outside the caller scope', async () => {
+                prismaRead = outOfScope();
+                const handler = await build(CreateProgramSpeakerHandler);
+
+                await expect(
+                    handler.execute(new CreateProgramSpeakerCommand({ programId: 'prog-1', name: 'Speaker' } as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.createSpeaker).not.toHaveBeenCalled();
+            });
+
+            it('CreateProgramSpeakerHandler creates when the programme IS in scope', async () => {
+                const handler = await build(CreateProgramSpeakerHandler);
+                repo.createSpeaker.mockResolvedValue({ id: 'spk-1', programId: 'prog-1' });
+
+                await handler.execute(new CreateProgramSpeakerCommand({ programId: 'prog-1', name: 'Speaker' } as never, 'user-1', actor));
+
+                expect(repo.createSpeaker).toHaveBeenCalled();
+            });
+
+            it('UpdateProgramSpeakerHandler refuses, resolving the programme from the target row', async () => {
+                prismaRead = outOfScope();
+                repo.findSpeakerById.mockResolvedValue({ id: 'spk-1', programId: 'prog-1' });
+                const handler = await build(UpdateProgramSpeakerHandler);
+
+                await expect(
+                    handler.execute(new UpdateProgramSpeakerCommand('spk-1', {} as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.updateSpeaker).not.toHaveBeenCalled();
+            });
+
+            it('UpdateProgramSpeakerHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findSpeakerById.mockResolvedValue(null);
+                const whenMissing = await (await build(UpdateProgramSpeakerHandler))
+                    .execute(new UpdateProgramSpeakerCommand('spk-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findSpeakerById.mockResolvedValue({ id: 'spk-1', programId: 'prog-1' });
+                const whenOutOfScope = await (await build(UpdateProgramSpeakerHandler))
+                    .execute(new UpdateProgramSpeakerCommand('spk-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expectSameNotFoundError(whenMissing, whenOutOfScope);
+            });
+
+            it('DeleteProgramSpeakerHandler refuses BEFORE deleting, not after', async () => {
+                prismaRead = outOfScope();
+                repo.findSpeakerById.mockResolvedValue({ id: 'spk-1', programId: 'prog-1' });
+                const handler = await build(DeleteProgramSpeakerHandler);
+
+                await expect(
+                    handler.execute(new DeleteProgramSpeakerCommand('spk-1', 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.deleteSpeaker).not.toHaveBeenCalled();
+            });
+
+            it('DeleteProgramSpeakerHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findSpeakerById.mockResolvedValue(null);
+                const whenMissing = await (await build(DeleteProgramSpeakerHandler))
+                    .execute(new DeleteProgramSpeakerCommand('spk-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findSpeakerById.mockResolvedValue({ id: 'spk-1', programId: 'prog-1' });
+                const whenOutOfScope = await (await build(DeleteProgramSpeakerHandler))
+                    .execute(new DeleteProgramSpeakerCommand('spk-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expectSameNotFoundError(whenMissing, whenOutOfScope);
+            });
+        });
+
+        describe('Team', () => {
+            it('CreateProgramTeamHandler refuses a programme outside the caller scope', async () => {
+                prismaRead = outOfScope();
+                const handler = await build(CreateProgramTeamHandler);
+
+                await expect(
+                    handler.execute(new CreateProgramTeamCommand({ programId: 'prog-1', name: 'Jo', role: 'Coordinator' } as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.createTeam).not.toHaveBeenCalled();
+            });
+
+            it('CreateProgramTeamHandler creates when the programme IS in scope', async () => {
+                const handler = await build(CreateProgramTeamHandler);
+                repo.createTeam.mockResolvedValue({ id: 'team-1', programId: 'prog-1' });
+
+                await handler.execute(new CreateProgramTeamCommand({ programId: 'prog-1', name: 'Jo', role: 'Coordinator' } as never, 'user-1', actor));
+
+                expect(repo.createTeam).toHaveBeenCalled();
+            });
+
+            // The dual-scope branch, same shape as testimonials: a team member
+            // with no programId at all, only a brandId.
+            it('CreateProgramTeamHandler refuses a brand-only member outside the caller brand grant', async () => {
+                prismaRead = brandScope('brand-other');
+                const handler = await build(CreateProgramTeamHandler);
+
+                await expect(
+                    handler.execute(new CreateProgramTeamCommand({ brandId: 'brand-e', name: 'Jo', role: 'Coordinator' } as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.createTeam).not.toHaveBeenCalled();
+            });
+
+            it('CreateProgramTeamHandler creates a brand-only member when the caller HAS that brand grant', async () => {
+                prismaRead = brandScope('brand-e');
+                const handler = await build(CreateProgramTeamHandler);
+                repo.createTeam.mockResolvedValue({ id: 'team-1', brandId: 'brand-e' });
+
+                await handler.execute(new CreateProgramTeamCommand({ brandId: 'brand-e', name: 'Jo', role: 'Coordinator' } as never, 'user-1', actor));
+
+                expect(repo.createTeam).toHaveBeenCalled();
+            });
+
+            it('UpdateProgramTeamHandler refuses, resolving the programme from the target row', async () => {
+                prismaRead = outOfScope();
+                repo.findTeamById.mockResolvedValue({ id: 'team-1', programId: 'prog-1', brandId: null });
+                const handler = await build(UpdateProgramTeamHandler);
+
+                await expect(
+                    handler.execute(new UpdateProgramTeamCommand('team-1', {} as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.updateTeam).not.toHaveBeenCalled();
+            });
+
+            it('UpdateProgramTeamHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findTeamById.mockResolvedValue(null);
+                const whenMissing = await (await build(UpdateProgramTeamHandler))
+                    .execute(new UpdateProgramTeamCommand('team-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findTeamById.mockResolvedValue({ id: 'team-1', programId: 'prog-1', brandId: null });
+                const whenOutOfScope = await (await build(UpdateProgramTeamHandler))
+                    .execute(new UpdateProgramTeamCommand('team-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expectSameNotFoundError(whenMissing, whenOutOfScope);
+            });
+
+            it('DeleteProgramTeamHandler refuses BEFORE deleting, not after', async () => {
+                prismaRead = outOfScope();
+                repo.findTeamById.mockResolvedValue({ id: 'team-1', programId: 'prog-1', brandId: null });
+                const handler = await build(DeleteProgramTeamHandler);
+
+                await expect(
+                    handler.execute(new DeleteProgramTeamCommand('team-1', 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.deleteTeam).not.toHaveBeenCalled();
+            });
+
+            it('DeleteProgramTeamHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findTeamById.mockResolvedValue(null);
+                const whenMissing = await (await build(DeleteProgramTeamHandler))
+                    .execute(new DeleteProgramTeamCommand('team-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findTeamById.mockResolvedValue({ id: 'team-1', programId: 'prog-1', brandId: null });
+                const whenOutOfScope = await (await build(DeleteProgramTeamHandler))
+                    .execute(new DeleteProgramTeamCommand('team-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expectSameNotFoundError(whenMissing, whenOutOfScope);
+            });
+        });
+
+        describe('Partner', () => {
+            it('CreateProgramPartnerHandler refuses a programme outside the caller scope', async () => {
+                prismaRead = outOfScope();
+                const handler = await build(CreateProgramPartnerHandler);
+
+                await expect(
+                    handler.execute(new CreateProgramPartnerCommand({ programId: 'prog-1', name: 'Acme Co' } as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.createPartner).not.toHaveBeenCalled();
+            });
+
+            it('CreateProgramPartnerHandler creates when the programme IS in scope', async () => {
+                const handler = await build(CreateProgramPartnerHandler);
+                repo.createPartner.mockResolvedValue({ id: 'partner-1', programId: 'prog-1' });
+
+                await handler.execute(new CreateProgramPartnerCommand({ programId: 'prog-1', name: 'Acme Co' } as never, 'user-1', actor));
+
+                expect(repo.createPartner).toHaveBeenCalled();
+            });
+
+            it('UpdateProgramPartnerHandler refuses, resolving the programme from the target row', async () => {
+                prismaRead = outOfScope();
+                repo.findPartnerById.mockResolvedValue({ id: 'partner-1', programId: 'prog-1' });
+                const handler = await build(UpdateProgramPartnerHandler);
+
+                await expect(
+                    handler.execute(new UpdateProgramPartnerCommand('partner-1', {} as never, 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.updatePartner).not.toHaveBeenCalled();
+            });
+
+            it('UpdateProgramPartnerHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findPartnerById.mockResolvedValue(null);
+                const whenMissing = await (await build(UpdateProgramPartnerHandler))
+                    .execute(new UpdateProgramPartnerCommand('partner-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findPartnerById.mockResolvedValue({ id: 'partner-1', programId: 'prog-1' });
+                const whenOutOfScope = await (await build(UpdateProgramPartnerHandler))
+                    .execute(new UpdateProgramPartnerCommand('partner-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expectSameNotFoundError(whenMissing, whenOutOfScope);
+            });
+
+            it('DeleteProgramPartnerHandler refuses BEFORE deleting, not after', async () => {
+                prismaRead = outOfScope();
+                repo.findPartnerById.mockResolvedValue({ id: 'partner-1', programId: 'prog-1' });
+                const handler = await build(DeleteProgramPartnerHandler);
+
+                await expect(
+                    handler.execute(new DeleteProgramPartnerCommand('partner-1', 'user-1', actor)),
+                ).rejects.toThrow();
+
+                expect(repo.deletePartner).not.toHaveBeenCalled();
+            });
+
+            it('DeleteProgramPartnerHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findPartnerById.mockResolvedValue(null);
+                const whenMissing = await (await build(DeleteProgramPartnerHandler))
+                    .execute(new DeleteProgramPartnerCommand('partner-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findPartnerById.mockResolvedValue({ id: 'partner-1', programId: 'prog-1' });
+                const whenOutOfScope = await (await build(DeleteProgramPartnerHandler))
+                    .execute(new DeleteProgramPartnerCommand('partner-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expectSameNotFoundError(whenMissing, whenOutOfScope);
+            });
         });
     });
 

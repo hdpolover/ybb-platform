@@ -8,6 +8,7 @@ import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 // Speakers, team and partners render on landing pages only. No portal read
 // selects them, so the per-user portal:* keys stay intact.
 import { PROGRAM_PUBLIC_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
@@ -89,12 +90,15 @@ export class ProgramPeopleController {
   @UseInterceptors(FileInterceptor('photo', multerLimits()))
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addSpeaker(
-    @Param('id') programId: string, 
-    @Body() dto: CreateProgramSpeakerDto, 
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramSpeakerDto,
     @UploadedFile() photo: Express.Multer.File,
-    @Request() req: AuthenticatedRequest
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.createProgramSpeakerHandler.execute(new CreateProgramSpeakerCommand(dto, req.user.id, photo));
+    // dto.programId, not this route param - see addGallery in
+    // program-content.controller.ts for why.
+    return this.createProgramSpeakerHandler.execute(new CreateProgramSpeakerCommand(dto, req.user.id, actor, photo));
   }
 
   @Put('speakers/:itemId')
@@ -106,12 +110,13 @@ export class ProgramPeopleController {
   @UseInterceptors(FileInterceptor('photo', multerLimits()))
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateSpeaker(
-    @Param('itemId') itemId: string, 
-    @Body() dto: UpdateProgramSpeakerDto, 
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateProgramSpeakerDto,
     @UploadedFile() photo: Express.Multer.File,
-    @Request() req: AuthenticatedRequest
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.updateProgramSpeakerHandler.execute(new UpdateProgramSpeakerCommand(itemId, dto, req.user.id, photo));
+    return this.updateProgramSpeakerHandler.execute(new UpdateProgramSpeakerCommand(itemId, dto, req.user.id, actor, photo));
   }
 
   @Delete('speakers/:itemId')
@@ -120,8 +125,12 @@ export class ProgramPeopleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete speaker' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async deleteSpeaker(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
-    return this.deleteProgramSpeakerHandler.execute(new DeleteProgramSpeakerCommand(itemId, req.user.id));
+  async deleteSpeaker(
+    @Param('itemId') itemId: string,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.deleteProgramSpeakerHandler.execute(new DeleteProgramSpeakerCommand(itemId, req.user.id, actor));
   }
 
   // --- Team Endpoints ---
@@ -142,12 +151,15 @@ export class ProgramPeopleController {
   @UseInterceptors(FileInterceptor('photo', multerLimits()))
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addTeam(
-    @Param('id') programId: string, 
-    @Body() dto: CreateProgramTeamDto, 
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramTeamDto,
     @UploadedFile() photo: Express.Multer.File,
-    @Request() req: AuthenticatedRequest
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.createProgramTeamHandler.execute(new CreateProgramTeamCommand(dto, req.user.id, photo));
+    // dto.programId/dto.brandId, not this route param - see addGallery in
+    // program-content.controller.ts for why.
+    return this.createProgramTeamHandler.execute(new CreateProgramTeamCommand(dto, req.user.id, actor, photo));
   }
 
   @Put('team/:itemId')
@@ -159,12 +171,13 @@ export class ProgramPeopleController {
   @UseInterceptors(FileInterceptor('photo', multerLimits()))
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateTeam(
-    @Param('itemId') itemId: string, 
-    @Body() dto: UpdateProgramTeamDto, 
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateProgramTeamDto,
     @UploadedFile() photo: Express.Multer.File,
-    @Request() req: AuthenticatedRequest
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.updateProgramTeamHandler.execute(new UpdateProgramTeamCommand(itemId, dto, req.user.id, photo));
+    return this.updateProgramTeamHandler.execute(new UpdateProgramTeamCommand(itemId, dto, req.user.id, actor, photo));
   }
 
   @Delete('team/:itemId')
@@ -173,8 +186,12 @@ export class ProgramPeopleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete team member' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async deleteTeam(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
-    return this.deleteProgramTeamHandler.execute(new DeleteProgramTeamCommand(itemId, req.user.id));
+  async deleteTeam(
+    @Param('itemId') itemId: string,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.deleteProgramTeamHandler.execute(new DeleteProgramTeamCommand(itemId, req.user.id, actor));
   }
 
   // --- Partner Endpoints ---
@@ -195,12 +212,15 @@ export class ProgramPeopleController {
   @UseInterceptors(FileInterceptor('logo', multerLimits()))
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addPartner(
-    @Param('id') programId: string, 
-    @Body() dto: CreateProgramPartnerDto, 
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramPartnerDto,
     @UploadedFile() logo: Express.Multer.File,
-    @Request() req: AuthenticatedRequest
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.createProgramPartnerHandler.execute(new CreateProgramPartnerCommand(dto, req.user.id, logo));
+    // dto.programId, not this route param - see addGallery in
+    // program-content.controller.ts for why.
+    return this.createProgramPartnerHandler.execute(new CreateProgramPartnerCommand(dto, req.user.id, actor, logo));
   }
 
   @Put('partners/:itemId')
@@ -212,12 +232,13 @@ export class ProgramPeopleController {
   @UseInterceptors(FileInterceptor('logo', multerLimits()))
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updatePartner(
-    @Param('itemId') itemId: string, 
-    @Body() dto: UpdateProgramPartnerDto, 
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateProgramPartnerDto,
     @UploadedFile() logo: Express.Multer.File,
-    @Request() req: AuthenticatedRequest
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
   ) {
-    return this.updateProgramPartnerHandler.execute(new UpdateProgramPartnerCommand(itemId, dto, req.user.id, logo));
+    return this.updateProgramPartnerHandler.execute(new UpdateProgramPartnerCommand(itemId, dto, req.user.id, actor, logo));
   }
 
   @Delete('partners/:itemId')
@@ -226,7 +247,11 @@ export class ProgramPeopleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete partner' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async deletePartner(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
-    return this.deleteProgramPartnerHandler.execute(new DeleteProgramPartnerCommand(itemId, req.user.id));
+  async deletePartner(
+    @Param('itemId') itemId: string,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.deleteProgramPartnerHandler.execute(new DeleteProgramPartnerCommand(itemId, req.user.id, actor));
   }
 }

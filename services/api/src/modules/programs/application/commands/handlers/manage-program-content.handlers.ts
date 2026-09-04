@@ -74,10 +74,11 @@ export async function invalidateLandingCacheByProgramId(
 }
 
 /**
- * Testimonials are the one family that can be either program-scoped or a
- * general brand testimonial with no program at all (see the ProgramTestimonial
- * schema: both programId and brandId are nullable). Used for update/delete,
- * where the target row - not the request body - decides which check applies.
+ * Testimonials and team members are the two families that can be either
+ * program-scoped or general brand content with no program at all (see the
+ * ProgramTestimonial/ProgramTeam schemas: both programId and brandId are
+ * nullable on each). Used for update/delete, where the target row - not the
+ * request body - decides which check applies.
  */
 async function assertProgramOrBrandContentAccess(
     prismaRead: PrismaReadService,
@@ -363,8 +364,15 @@ export class CreateProgramTimelineHandler implements ICommandHandler<CreateProgr
         @Inject(IUserActivityLogRepository) private readonly activityLog: IUserActivityLogRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramTimelineCommand) {
+        // Asserted on dto.programId - the id createTimeline writes. The route
+        // also carries a program id, but the handler ignores it - see
+        // addGallery in program-content.controller.ts for why the route param
+        // is not a valid substitute.
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
         const dto = {
             ...command.dto,
             date: new Date(command.dto.date),
@@ -384,8 +392,22 @@ export class UpdateProgramTimelineHandler implements ICommandHandler<UpdateProgr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: UpdateProgramTimelineCommand) {
+        const existing = await this.repository.findTimelineById(command.id);
+        if (!existing) {
+            throw new NotFoundException('Timeline item not found');
+        }
+
+        // Resolved from the target row - the route (PUT timeline/:itemId)
+        // carries only the item id. Wrapped: out-of-scope must raise the SAME
+        // error as missing - see UpdateProgramGalleryHandler above.
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
+            () => new NotFoundException('Timeline item not found'),
+        );
+
         const dto = {
             ...command.dto,
             date: command.dto.date ? new Date(command.dto.date) : undefined,
@@ -404,15 +426,24 @@ export class DeleteProgramTimelineHandler implements ICommandHandler<DeleteProgr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: DeleteProgramTimelineCommand) {
         // deleteTimeline is a hard delete returning void — the row (and its
         // programId) would be unrecoverable after the fact, so read it first.
+        // Also lets the scope check run BEFORE the delete, not after.
         const existing = await this.repository.findTimelineById(command.id);
-        const result = await this.repository.deleteTimeline(command.id);
-        if (existing?.programId) {
-            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
+        if (!existing) {
+            throw new NotFoundException('Timeline item not found');
         }
+
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
+            () => new NotFoundException('Timeline item not found'),
+        );
+
+        const result = await this.repository.deleteTimeline(command.id);
+        await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
         return result;
     }
 }
@@ -424,8 +455,13 @@ export class CreateProgramScheduleHandler implements ICommandHandler<CreateProgr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramScheduleCommand) {
+        // Asserted on dto.programId - the id createSchedule writes - see
+        // addTimeline's note above.
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
         const result = await this.repository.createSchedule(command.dto);
         await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
         return result;
@@ -437,8 +473,22 @@ export class UpdateProgramScheduleHandler implements ICommandHandler<UpdateProgr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: UpdateProgramScheduleCommand) {
+        const existing = await this.repository.findScheduleById(command.id);
+        if (!existing) {
+            throw new NotFoundException('Schedule item not found');
+        }
+
+        // Resolved from the target row - the route (PUT schedules/:itemId)
+        // carries only the item id. Wrapped: out-of-scope must raise the SAME
+        // error as missing - see UpdateProgramGalleryHandler above.
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
+            () => new NotFoundException('Schedule item not found'),
+        );
+
         const result = await this.repository.updateSchedule(command.id, command.dto);
         if (result.programId) {
             await invalidateLandingCacheByProgramId(result.programId, this.prisma, this.landingCacheInvalidation);
@@ -452,13 +502,24 @@ export class DeleteProgramScheduleHandler implements ICommandHandler<DeleteProgr
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: DeleteProgramScheduleCommand) {
         // deleteSchedule is a hard delete returning void — read the row first
-        // so its programId survives past the delete.
+        // so its programId survives past the delete. Also lets the scope check
+        // run BEFORE the delete, not after.
         const existing = await this.repository.findScheduleById(command.id);
+        if (!existing) {
+            throw new NotFoundException('Schedule item not found');
+        }
+
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
+            () => new NotFoundException('Schedule item not found'),
+        );
+
         const result = await this.repository.deleteSchedule(command.id);
-        if (existing?.programId) {
+        if (existing.programId) {
             await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
         }
         return result;
@@ -472,8 +533,13 @@ export class CreateProgramSpeakerHandler implements ICommandHandler<CreateProgra
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramSpeakerCommand) {
+        // Asserted on dto.programId - the id createSpeaker writes - see
+        // addTimeline's note above.
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
         let photoUrl = command.dto.photoUrl;
 
         if (command.image) {
@@ -506,26 +572,38 @@ export class UpdateProgramSpeakerHandler implements ICommandHandler<UpdateProgra
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
 
     async execute(command: UpdateProgramSpeakerCommand) {
+        // Looked up unconditionally now (used to run only inside the
+        // command.image branch) so the scope check below can run BEFORE any
+        // mutation, regardless of whether a new photo was uploaded.
+        const speaker = await this.repository.findSpeakerById(command.id);
+        if (!speaker) {
+            throw new NotFoundException('Speaker not found');
+        }
+
+        // Resolved from the target row - the route (PUT speakers/:itemId)
+        // carries only the item id. Wrapped: out-of-scope must raise the SAME
+        // error as missing - see UpdateProgramGalleryHandler above.
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, speaker.programId),
+            () => new NotFoundException('Speaker not found'),
+        );
+
         let photoUrl = command.dto.photoUrl;
 
         if (command.image) {
-            const speaker = await this.repository.findSpeakerById(command.id);
-            if (!speaker) {
-                throw new NotFoundException('Speaker not found');
-            }
-
             const program = await this.prisma.program.findUnique({ where: { id: speaker.programId } });
             if (!program) {
                 throw new NotFoundException('Program not found');
             }
-            
+
             const result = await this.storageService.uploadFile(
                 command.image,
                 command.userId,
-                program.brandId, 
+                program.brandId,
                 'speakers',
                 program.id
             );
@@ -542,8 +620,23 @@ export class UpdateProgramSpeakerHandler implements ICommandHandler<UpdateProgra
 }
 @CommandHandler(DeleteProgramSpeakerCommand)
 export class DeleteProgramSpeakerHandler implements ICommandHandler<DeleteProgramSpeakerCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prismaRead: PrismaReadService,
+    ) {}
     async execute(command: DeleteProgramSpeakerCommand) {
+        const existing = await this.repository.findSpeakerById(command.id);
+        if (!existing) {
+            throw new NotFoundException('Speaker not found');
+        }
+
+        // Assert BEFORE deleting - see UpdateProgramGalleryHandler above, and
+        // the same out-of-scope/missing wrap.
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
+            () => new NotFoundException('Speaker not found'),
+        );
+
         return this.repository.deleteSpeaker(command.id);
     }
 }
@@ -876,10 +969,29 @@ export class CreateProgramTeamHandler implements ICommandHandler<CreateProgramTe
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramTeamCommand) {
         let photoUrl = command.dto.photoUrl;
         const { brandId, ...restDto } = command.dto;
+
+        // Team members can be program-scoped (dto.programId) or a general
+        // brand team member with no program at all (dto.brandId only, see
+        // ProgramTeam.programId being nullable) - same shape as testimonials.
+        // Assert on whichever id the row is actually going to carry, not
+        // assertBrandAccess for the program case (see
+        // program-content-access.util.ts for why).
+        if (command.dto.programId) {
+            await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        } else if (brandId) {
+            const scope = await resolveRevenueAccessScope(this.prismaRead, command.actor);
+            assertBrandAccess(scope, brandId);
+        } else {
+            const scope = await resolveRevenueAccessScope(this.prismaRead, command.actor);
+            if (scope.kind !== 'platform') {
+                throw new ForbiddenException('You do not have access to create this team member.');
+            }
+        }
 
         if (command.image) {
             let activeBrandId;
@@ -918,17 +1030,29 @@ export class UpdateProgramTeamHandler implements ICommandHandler<UpdateProgramTe
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
 
     async execute(command: UpdateProgramTeamCommand) {
+        // Looked up unconditionally now (used to run only inside the
+        // command.image branch) so the scope check below can run BEFORE any
+        // mutation, regardless of whether a new photo was uploaded.
+        const teamMember = await this.repository.findTeamById(command.id);
+        if (!teamMember) {
+            throw new NotFoundException('Team member not found');
+        }
+
+        // Wrapped: out-of-scope must raise the SAME error as missing, whichever
+        // of assertProgramOrBrandContentAccess's three branches rejects it -
+        // see UpdateProgramTestimonialHandler above.
+        await orNotFound(
+            () => assertProgramOrBrandContentAccess(this.prismaRead, command.actor, teamMember.programId, teamMember.brandId),
+            () => new NotFoundException('Team member not found'),
+        );
+
         let photoUrl = command.dto.photoUrl;
 
         if (command.image) {
-            const teamMember = await this.repository.findTeamById(command.id);
-            if (!teamMember) {
-                throw new NotFoundException('Team member not found');
-            }
-            
             if (!teamMember.programId) {
                 throw new NotFoundException('Program ID missing on team member');
             }
@@ -937,11 +1061,11 @@ export class UpdateProgramTeamHandler implements ICommandHandler<UpdateProgramTe
              if (!program) {
                 throw new NotFoundException('Program not found');
             }
-            
+
             const result = await this.storageService.uploadFile(
                 command.image,
                 command.userId,
-                program.brandId, 
+                program.brandId,
                 'team',
                 program.id
             );
@@ -957,8 +1081,23 @@ export class UpdateProgramTeamHandler implements ICommandHandler<UpdateProgramTe
 }
 @CommandHandler(DeleteProgramTeamCommand)
 export class DeleteProgramTeamHandler implements ICommandHandler<DeleteProgramTeamCommand> {
-    constructor(@Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository) {}
+    constructor(
+        @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
+        private readonly prismaRead: PrismaReadService,
+    ) {}
     async execute(command: DeleteProgramTeamCommand) {
+        const existing = await this.repository.findTeamById(command.id);
+        if (!existing) {
+            throw new NotFoundException('Team member not found');
+        }
+
+        // Assert BEFORE deleting - see UpdateProgramTeamHandler above, including
+        // the wrap that keeps out-of-scope and missing identical.
+        await orNotFound(
+            () => assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId),
+            () => new NotFoundException('Team member not found'),
+        );
+
         return this.repository.deleteTeam(command.id);
     }
 }
@@ -971,8 +1110,13 @@ export class CreateProgramPartnerHandler implements ICommandHandler<CreateProgra
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramPartnerCommand) {
+         // Asserted on dto.programId - the id createPartner writes - see
+         // addTimeline's note above.
+         await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+
          let logoUrl = command.dto.logoUrl;
 
          if (command.logo) {
@@ -1009,21 +1153,33 @@ export class UpdateProgramPartnerHandler implements ICommandHandler<UpdateProgra
         private readonly storageService: StorageService,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
 
     async execute(command: UpdateProgramPartnerCommand) {
+        // Looked up unconditionally now (used to run only inside the
+        // command.logo branch) so the scope check below can run BEFORE any
+        // mutation, regardless of whether a new logo was uploaded.
+        const partner = await this.repository.findPartnerById(command.id);
+        if (!partner) {
+            throw new NotFoundException('Partner not found');
+        }
+
+        if (!partner.programId) {
+            throw new NotFoundException('Program ID missing on partner');
+        }
+
+        // Resolved from the target row - the route (PUT partners/:itemId)
+        // carries only the item id. Wrapped: out-of-scope must raise the SAME
+        // error as missing - see UpdateProgramGalleryHandler above.
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, partner.programId),
+            () => new NotFoundException('Partner not found'),
+        );
+
         let logoUrl = command.dto.logoUrl;
 
         if (command.logo) {
-            const partner = await this.repository.findPartnerById(command.id);
-            if (!partner) {
-                throw new NotFoundException('Partner not found');
-            }
-
-            if (!partner.programId) {
-                throw new NotFoundException('Program ID missing on partner');
-            }
-
             const program = await this.prisma.program.findUnique({ where: { id: partner.programId } });
             if (!program) {
                 throw new NotFoundException('Program not found');
@@ -1032,7 +1188,7 @@ export class UpdateProgramPartnerHandler implements ICommandHandler<UpdateProgra
              const result = await this.storageService.uploadFile(
                 command.logo,
                 command.userId,
-                program.brandId, 
+                program.brandId,
                 'partners',
                 program.id
             );
@@ -1056,15 +1212,27 @@ export class DeleteProgramPartnerHandler implements ICommandHandler<DeleteProgra
         @Inject('IProgramContentRepository') private readonly repository: IProgramContentRepository,
         private readonly prisma: PrismaService,
         private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+        private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: DeleteProgramPartnerCommand) {
         // deletePartner is a hard delete returning void — read the row first
-        // so its programId survives past the delete.
+        // so its programId survives past the delete. Also lets the scope check
+        // run BEFORE the delete, not after.
         const existing = await this.repository.findPartnerById(command.id);
-        const result = await this.repository.deletePartner(command.id);
-        if (existing?.programId) {
-            await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
+        if (!existing) {
+            throw new NotFoundException('Partner not found');
         }
+        if (!existing.programId) {
+            throw new NotFoundException('Program ID missing on partner');
+        }
+
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
+            () => new NotFoundException('Partner not found'),
+        );
+
+        const result = await this.repository.deletePartner(command.id);
+        await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
         return result;
     }
 }

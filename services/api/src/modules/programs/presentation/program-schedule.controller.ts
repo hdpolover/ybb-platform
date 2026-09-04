@@ -7,6 +7,7 @@ import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 // Timeline and schedules render on landing pages only. No portal read selects
 // them, so the per-user portal:* keys stay intact.
 import { PROGRAM_PUBLIC_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
@@ -74,8 +75,15 @@ export class ProgramScheduleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add timeline item' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async addTimeline(@Param('id') programId: string, @Body() dto: CreateProgramTimelineDto, @Request() req: AuthenticatedRequest) {
-    return this.createProgramTimelineHandler.execute(new CreateProgramTimelineCommand(dto, req.user.id));
+  async addTimeline(
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramTimelineDto,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    // dto.programId, not this route param - the handler acts on the body's id
+    // (see addGallery in program-content.controller.ts for why).
+    return this.createProgramTimelineHandler.execute(new CreateProgramTimelineCommand(dto, req.user.id, actor));
   }
 
   @Put('timeline/:itemId')
@@ -84,8 +92,13 @@ export class ProgramScheduleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update timeline item' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async updateTimeline(@Param('itemId') itemId: string, @Body() dto: UpdateProgramTimelineDto, @Request() req: AuthenticatedRequest) {
-    return this.updateProgramTimelineHandler.execute(new UpdateProgramTimelineCommand(itemId, dto, req.user.id));
+  async updateTimeline(
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateProgramTimelineDto,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.updateProgramTimelineHandler.execute(new UpdateProgramTimelineCommand(itemId, dto, req.user.id, actor));
   }
 
   @Delete('timeline/:itemId')
@@ -94,8 +107,12 @@ export class ProgramScheduleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete timeline item' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async deleteTimeline(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
-    return this.deleteProgramTimelineHandler.execute(new DeleteProgramTimelineCommand(itemId, req.user.id));
+  async deleteTimeline(
+    @Param('itemId') itemId: string,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.deleteProgramTimelineHandler.execute(new DeleteProgramTimelineCommand(itemId, req.user.id, actor));
   }
 
   // --- Schedule Endpoints ---
@@ -113,8 +130,14 @@ export class ProgramScheduleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add schedule item' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async addSchedule(@Param('id') programId: string, @Body() dto: CreateProgramScheduleDto, @Request() req: AuthenticatedRequest) {
-    return this.createProgramScheduleHandler.execute(new CreateProgramScheduleCommand(dto, req.user.id));
+  async addSchedule(
+    @Param('id') programId: string,
+    @Body() dto: CreateProgramScheduleDto,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    // dto.programId, not this route param - see addTimeline above for why.
+    return this.createProgramScheduleHandler.execute(new CreateProgramScheduleCommand(dto, req.user.id, actor));
   }
 
   @Put('schedules/:itemId')
@@ -123,8 +146,13 @@ export class ProgramScheduleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update schedule item' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async updateSchedule(@Param('itemId') itemId: string, @Body() dto: UpdateProgramScheduleDto, @Request() req: AuthenticatedRequest) {
-    return this.updateProgramScheduleHandler.execute(new UpdateProgramScheduleCommand(itemId, dto, req.user.id));
+  async updateSchedule(
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdateProgramScheduleDto,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.updateProgramScheduleHandler.execute(new UpdateProgramScheduleCommand(itemId, dto, req.user.id, actor));
   }
 
   @Delete('schedules/:itemId')
@@ -133,7 +161,11 @@ export class ProgramScheduleController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete schedule item' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
-  async deleteSchedule(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
-    return this.deleteProgramScheduleHandler.execute(new DeleteProgramScheduleCommand(itemId, req.user.id));
+  async deleteSchedule(
+    @Param('itemId') itemId: string,
+    @Request() req: AuthenticatedRequest,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.deleteProgramScheduleHandler.execute(new DeleteProgramScheduleCommand(itemId, req.user.id, actor));
   }
 }

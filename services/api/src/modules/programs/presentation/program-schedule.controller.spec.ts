@@ -64,20 +64,22 @@ describe('ProgramScheduleController', () => {
 
     describe('addTimeline', () => {
         it('should execute CreateProgramTimelineCommand', async () => {
-            const dto = { 
+            const dto = {
                 programId: 'prog-1',
                 title: 'Welcome',
                 description: 'Day 1',
                 date: new Date().toISOString()
             };
             const req = { user: { id: 'admin-1' } } as any;
-            
-            await controller.addTimeline('prog-1', dto, req);
+            const actor = { userId: 'admin-1', email: 'a@b.c', brandId: 'brand-1', adminId: 'adm-1' } as any;
+
+            await controller.addTimeline('prog-1', dto, req, actor);
 
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(CreateProgramTimelineCommand));
             const cmd = mockExecute.execute.mock.calls[0][0];
             expect(cmd.dto).toBe(dto);
             expect(cmd.userId).toBe('admin-1');
+            expect(cmd.actor).toBe(actor);
         });
     });
 });

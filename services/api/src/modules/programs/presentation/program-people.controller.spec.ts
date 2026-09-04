@@ -67,7 +67,7 @@ describe('ProgramPeopleController', () => {
 
     describe('addSpeaker', () => {
         it('should execute CreateProgramSpeakerCommand', async () => {
-            const dto = { 
+            const dto = {
                 programId: 'prog-1',
                 name: 'Speaker Name',
                 title: 'CEO',
@@ -75,13 +75,15 @@ describe('ProgramPeopleController', () => {
             };
             const req = { user: { id: 'admin-1' } } as any;
             const file = { originalname: 'photo.jpg' } as unknown as Express.Multer.File;
-            
-            await controller.addSpeaker('prog-1', dto, file, req);
+            const actor = { userId: 'admin-1', email: 'a@b.c', brandId: 'brand-1', adminId: 'adm-1' } as any;
+
+            await controller.addSpeaker('prog-1', dto, file, req, actor);
 
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(CreateProgramSpeakerCommand));
             const cmd = mockExecute.execute.mock.calls[0][0];
             expect(cmd.dto).toBe(dto);
             expect(cmd.userId).toBe('admin-1');
+            expect(cmd.actor).toBe(actor);
             expect(cmd.image).toBe(file);
         });
     });
