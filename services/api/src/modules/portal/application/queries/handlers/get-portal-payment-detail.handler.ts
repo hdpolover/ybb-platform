@@ -12,6 +12,7 @@ import {
     PaymentHistoryEntryDto,
 } from '../../../presentation/dto/portal-payment.dto';
 import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
+import { resolveTierPeriod } from '@shared/utils/tier-period.util';
 
 interface PendingTransactionContext {
     actionUrl?: string;
@@ -150,13 +151,14 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
             invoice.status === 'failed' ? 'failed' : 'unpaid';
 
         const now = new Date();
-        const periodByInvoiceDate = invoice.pricingTier.validityPeriods.find((period) => (
-            period.startDate <= invoice.createdAt && period.endDate >= invoice.createdAt
-        ));
-        const nearestActiveOrUpcomingPeriod = invoice.pricingTier.validityPeriods.find((period) => period.endDate >= now);
-        const periods = invoice.pricingTier.validityPeriods;
-        const fallbackLatestPeriod = periods.length > 0 ? periods[periods.length - 1] : undefined;
-        const dueDate = periodByInvoiceDate?.endDate ?? nearestActiveOrUpcomingPeriod?.endDate ?? fallbackLatestPeriod?.endDate;
+        // This hand-rolled byInvoiceDate / activeOrUpcoming / fallbackLatest
+        // ladder was a fourth copy of resolveTierPeriod with raw interval
+        // comparisons, so the due date shown on a payment's detail page could
+        // disagree with the one shown on the payments LIST for the same
+        // invoice - the list handler already resolves it through the shared
+        // helper (get-portal-payments.handler.ts).
+        const period = resolveTierPeriod(invoice.pricingTier.validityPeriods, invoice.createdAt, now);
+        const dueDate = period?.endDate;
         let exchangeRate = resolveUsdInIdrRate({
             snapshot: invoice.exchangeRateSnapshot,
             programRate: invoice.application.program?.usdInIdr,

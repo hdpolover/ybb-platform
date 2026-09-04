@@ -12,7 +12,7 @@ import {
     AvailablePaymentDto
 } from '../../../presentation/dto/portal-payment.dto';
 import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
-import { resolveTierPeriod } from '@shared/utils/tier-period.util';
+import { effectiveStart, resolveTierPeriod } from '@shared/utils/tier-period.util';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 
 function getFeeTypePriority(feeType?: string | null): number {
@@ -268,8 +268,12 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 }
 
                 const period = resolveTierPeriod(tier.validityPeriods, invoice?.createdAt ?? now, now);
-                const startDate = period?.startDate;
-                const hasStarted = !startDate || startDate <= now;
+                // effectiveStart, not period.startDate - see the note in
+                // calculate-portal-total-required.ts. Reading the raw start of a
+                // period that resolveTierPeriod selected through the widened one
+                // hides this tier, and `break` hides every later tier in fee-stage
+                // order with it, for the whole opening day. Audit M66.
+                const hasStarted = !period || effectiveStart(period, tier.validityPeriods) <= now;
 
                 if (!hasStarted) {
                     break;

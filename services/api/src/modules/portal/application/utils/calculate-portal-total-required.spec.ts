@@ -94,4 +94,44 @@ describe('calculatePortalTotalRequired', () => {
         const result = calculatePortalTotalRequired('self_funded', invoices, [regTier()], 'USD', now);
         expect(result.amount).toBe(15);
     });
+
+    // ---- M66: the window START edge must match the selection that produced it ----
+    // hasWindowStarted read `period.startDate` raw off a period that
+    // resolveTierPeriod had already MATCHED through the widened start, so the
+    // two could contradict each other. A window stored at 23:59 WIB on its
+    // opening day was selected as the current period and then reported as not
+    // yet started, zeroing totalRequired on the very same dashboard payload
+    // that reports the window as open.
+    it('counts the registration fee on a window stored at 23:59 WIB on its opening day', () => {
+        const openingDay = new Date('2026-09-05T05:00:00.000Z'); // 12:00 WIB, 5 Sep
+        const tier = regTier({
+            validityPeriods: [
+                {
+                    startDate: new Date('2026-09-05T16:59:00.000Z'), // 23:59 WIB, 5 Sep - today
+                    endDate: new Date('2026-09-20T00:00:00.000Z'),
+                },
+            ],
+        });
+
+        const result = calculatePortalTotalRequired('self_funded', [], [tier], 'USD', openingDay);
+
+        expect(result).toEqual({ amount: 15, currency: 'USD', hasOutstanding: true });
+    });
+
+    it('still does not count a fee for a window that has genuinely not opened yet', () => {
+        // Guard against over-widening: a window opening tomorrow stays unbilled.
+        const openingDay = new Date('2026-09-05T05:00:00.000Z');
+        const tier = regTier({
+            validityPeriods: [
+                {
+                    startDate: new Date('2026-09-06T16:59:00.000Z'), // 23:59 WIB, 6 Sep - tomorrow
+                    endDate: new Date('2026-09-20T00:00:00.000Z'),
+                },
+            ],
+        });
+
+        const result = calculatePortalTotalRequired('self_funded', [], [tier], 'USD', openingDay);
+
+        expect(result).toEqual({ amount: 0, currency: 'USD', hasOutstanding: false });
+    });
 });
