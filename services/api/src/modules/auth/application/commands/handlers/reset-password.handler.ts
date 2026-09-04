@@ -56,6 +56,17 @@ export class ResetPasswordHandler {
         passwordResetToken: null,
         passwordResetExpires: null,
         lastPasswordChange: new Date(),
+        // A completed reset clears account lockout. This is the ONLY
+        // self-service escape a password-only account has: isLockedOut() is
+        // checked before the credential compare on every login route, so a
+        // locked user cannot log in to clear it, and nothing else resets these
+        // fields except a successful login or an admin. Without this a remote
+        // attacker holding an account locked could not be shaken off by the
+        // owner at all. Proving control of the mailbox is a strictly stronger
+        // credential than the password the lockout was protecting, so honouring
+        // it here does not weaken the control.
+        failedLoginAttempts: 0,
+        lockedUntil: null,
       },
     });
 

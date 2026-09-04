@@ -458,9 +458,12 @@ describe('LoginHandler', () => {
       data: { failedLoginAttempts: { increment: 1 }, lastFailedLogin: expect.any(Date) },
       select: { failedLoginAttempts: true },
     });
+    // The lock also ZEROES the streak. Without that the counter is a one-way
+    // latch: lockedUntil expires, the count is still at the threshold, and the
+    // next single failure re-locks — forever, from any IP.
     expect(mockPrismaService.user.update).toHaveBeenLastCalledWith({
       where: { id: 'user-brand-1' },
-      data: { lockedUntil: expect.any(Date) },
+      data: { lockedUntil: expect.any(Date), failedLoginAttempts: 0 },
     });
   });
 });

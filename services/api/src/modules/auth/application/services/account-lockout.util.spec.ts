@@ -49,8 +49,40 @@ describe('recordFailedAttempt', () => {
     }
     await recordFailedAttempt(prisma, 'user-1');
 
-    expect(row.failedLoginAttempts).toBe(MAX_FAILED_LOGIN_ATTEMPTS);
     expect(isLockedOut(row)).toBe(true);
+    // ...and the lock CONSUMES the streak that earned it. See the latch
+    // regression below for why that matters.
+    expect(row.failedLoginAttempts).toBe(0);
+  });
+
+  it('REGRESSION: an expired lock does not leave the account one failure from re-locking', async () => {
+    // THE DEFECT: failedLoginAttempts only ever incremented. The single reset
+    // was a SUCCESSFUL login, and isLockedOut() is evaluated BEFORE the
+    // credential is compared on all three login routes, so a locked victim
+    // could never produce that success. When lockedUntil expired the count was
+    // still at the threshold, so the very next failure re-locked at once.
+    // One bad password every 15 minutes held any known address locked forever,
+    // unauthenticated, from any IP, with no self-service escape.
+    //
+    // Against the OLD code this test fails on the final assertion: the count
+    // would still read MAX_FAILED_LOGIN_ATTEMPTS, so one more failure takes it
+    // to MAX+1 and re-locks.
+    const { row, prisma } = fakeUserRow();
+
+    for (let i = 0; i < MAX_FAILED_LOGIN_ATTEMPTS; i++) {
+      await recordFailedAttempt(prisma, 'user-1');
+    }
+    expect(isLockedOut(row)).toBe(true);
+
+    // The lock runs out on its own.
+    row.lockedUntil = new Date(Date.now() - 1000);
+    expect(isLockedOut(row)).toBe(false);
+
+    // One more bad password must cost ONE attempt, not re-arm the whole lock.
+    await recordFailedAttempt(prisma, 'user-1');
+
+    expect(row.failedLoginAttempts).toBe(1);
+    expect(isLockedOut(row)).toBe(false);
   });
 
   it('REGRESSION: N simultaneous failures advance the counter by N, not by 1', async () => {
@@ -60,12 +92,22 @@ describe('recordFailedAttempt', () => {
     // threshold and lockedUntil never tripped — the whole lockout defeated by
     // opening ten connections. On /auth/ambassador-login the credential being
     // guessed is a short digit code.
-    const { row, prisma } = fakeUserRow();
+    const { row, prisma, update } = fakeUserRow();
     const N = 10;
 
     await Promise.all(Array.from({ length: N }, () => recordFailedAttempt(prisma, 'user-1')));
 
-    expect(row.failedLoginAttempts).toBe(N);
+    // The lock tripping IS the assertion. Under the read-modify-write defect
+    // all N callers wrote the same n+1, the counter never reached the
+    // threshold and lockedUntil stayed null — so a locked account here proves
+    // the increments were not lost. The final COUNT is deliberately not
+    // asserted: crossing the threshold now zeroes the streak, so its value
+    // depends on how the burst interleaves around that write, and pinning it
+    // would test the fake's scheduling rather than the behaviour.
     expect(isLockedOut(row)).toBe(true);
+    const increments = update.mock.calls.filter(
+      (c) => typeof c[0].data.failedLoginAttempts === 'object',
+    );
+    expect(increments).toHaveLength(N);
   });
 });

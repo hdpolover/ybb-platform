@@ -43,6 +43,28 @@ describe('ResetPasswordHandler - no reactivation, no surviving sessions', () => 
     expect(data).toEqual(expect.objectContaining({ passwordResetToken: null }));
   });
 
+  it('clears account lockout, the only self-service escape there is', async () => {
+    // THE DEFECT: failedLoginAttempts and lockedUntil were untouched here, and
+    // isLockedOut() is checked BEFORE the credential is compared on every login
+    // route — so a locked user could not log in to clear their own lock, and a
+    // password-only account had no way out at all while an attacker kept
+    // re-arming it.
+    //
+    // Against the OLD code this fails: the update wrote exactly four fields —
+    // passwordHash, passwordResetToken, passwordResetExpires, lastPasswordChange
+    // — and neither lockout field was among them.
+    //
+    // Honouring a completed reset here does not weaken the control: proving
+    // control of the mailbox is a stronger credential than the password the
+    // lockout was protecting.
+    await handler.execute(command());
+
+    const data = prisma.user.update.mock.calls[0][0].data;
+    expect(data).toEqual(
+      expect.objectContaining({ failedLoginAttempts: 0, lockedUntil: null }),
+    );
+  });
+
   it('will not even look up a deactivated or soft-deleted account', async () => {
     // Belt and braces on the same hole: a revoked account must not be able to
     // consume a reset token at all, so the state lives in the where clause
