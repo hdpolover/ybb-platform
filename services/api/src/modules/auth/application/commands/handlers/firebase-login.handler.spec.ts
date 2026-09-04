@@ -448,4 +448,71 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
       });
     });
   });
+
+  // A soft-deleted or deactivated account resolved via the userIdentity
+  // to-one include (which the soft-delete extension cannot filter — Prisma
+  // rejects `where` on singular relation includes) must not be able to
+  // complete a login at all, not just get rejected on the *next* request by
+  // JwtStrategy.
+  describe('a soft-deleted or deactivated account cannot complete login', () => {
+    const command = () =>
+      new FirebaseLoginCommand(
+        'firebase-id-token',
+        'provider-id-123',
+        '127.0.0.1',
+        'Mozilla/5.0 Chrome/120',
+        'brand-id-123',
+      );
+
+    it('rejects a soft-deleted user resolved via an existing identity', async () => {
+      mockPrismaService.userIdentity.findFirst.mockResolvedValue({
+        id: 'identity-id-123',
+        userId: existingUser.id,
+        user: { ...existingUser, deletedAt: new Date() },
+      });
+
+      await expect(handler.execute(command())).rejects.toThrow('Account is not active');
+
+      expect(mockPrismaService.userSession.create).not.toHaveBeenCalled();
+      expect(mockJwtService.sign).not.toHaveBeenCalled();
+      expect(mockPrismaService.user.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a deactivated (isActive: false) user resolved via an existing identity', async () => {
+      mockPrismaService.userIdentity.findFirst.mockResolvedValue({
+        id: 'identity-id-123',
+        userId: existingUser.id,
+        user: { ...existingUser, isActive: false },
+      });
+
+      await expect(handler.execute(command())).rejects.toThrow('Account is not active');
+
+      expect(mockPrismaService.userSession.create).not.toHaveBeenCalled();
+      expect(mockJwtService.sign).not.toHaveBeenCalled();
+    });
+
+    it('rejects a deactivated user resolved via the by-email auto-link fallback', async () => {
+      // No identity match — falls back to the by-email lookup path, which
+      // already filters deletedAt: null but not isActive.
+      mockPrismaService.userIdentity.findFirst.mockResolvedValue(null);
+      mockPrismaService.user.findFirst.mockResolvedValue({ ...existingUser, isActive: false });
+
+      await expect(handler.execute(command())).rejects.toThrow('Account is not active');
+
+      expect(mockPrismaService.userIdentity.create).not.toHaveBeenCalled();
+      expect(mockPrismaService.userSession.create).not.toHaveBeenCalled();
+    });
+
+    it('still allows a normal active user through (control case)', async () => {
+      mockPrismaService.userIdentity.findFirst.mockResolvedValue({
+        id: 'identity-id-123',
+        userId: existingUser.id,
+        user: existingUser,
+      });
+
+      const result = await handler.execute(command());
+
+      expect(result).toHaveProperty('accessToken', 'mock_token');
+    });
+  });
 });

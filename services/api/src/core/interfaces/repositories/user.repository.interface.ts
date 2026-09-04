@@ -17,9 +17,7 @@ export interface IUserRepository {
   create(user: User, passwordHash: string): Promise<User>;
   
   update(user: User): Promise<User>;
-  
-  delete(id: string, brandId: string): Promise<boolean>;
-  
+
   exists(email: string, brandId: string): Promise<boolean>;
   
   count(brandId: string): Promise<number>;

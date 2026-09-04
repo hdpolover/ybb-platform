@@ -1,0 +1,24 @@
+<div style="text-align: center;">
+    <h2 style="font-size: 24px; font-weight: 700; color: {{theme.primaryDark}}; margin: 0 0 16px;">
+        Your Account Has Been Deleted
+    </h2>
+
+    <p style="font-size: 16px; color: #4b5563; margin-bottom: 24px; line-height: 1.6;">
+        Hi {{name}},
+    </p>
+
+    <p style="font-size: 16px; color: #4b5563; margin-bottom: 16px; line-height: 1.6; max-width: 480px; margin-left: auto; margin-right: auto; text-align: left;">
+        As requested, your account{{#if brand.name}} on <strong>{{brand.name}}</strong>{{/if}} has been permanently
+        deleted. Your personal information has been erased and cannot be recovered.
+    </p>
+
+    <p style="font-size: 14px; color: #9ca3af; max-width: 480px; margin: 0 auto; text-align: left;">
+        Financial records tied to any payments you made are kept as required for accounting and legal purposes,
+        separate from your personal profile.
+    </p>
+
+    <p style="font-size: 14px; color: #9ca3af; margin-top: 24px;">
+        This is the last email we'll send about this account. Thank you for having been part of
+        {{#if brand.name}}{{brand.name}}{{else}}YBB{{/if}}.
+    </p>
+</div>
