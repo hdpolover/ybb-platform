@@ -20,6 +20,21 @@ type CancellationTokenSnapshot = {
 // explicit requirement here).
 const INVALID_LINK_MESSAGE = 'This cancellation link is invalid or has expired. If you requested account deletion more than once, check your most recent email for the current link.';
 
+// Machine-readable outcome codes. The cancel page has to render four visually
+// distinct states, and classifying them by matching this file's prose would
+// break silently the moment anyone reworded a message - the page would fall
+// through to "invalid link" for an account that was actually already restored.
+// Same contract the create handler already uses ({ code, message }).
+export const DELETION_CANCEL_CODES = {
+    restored: 'deletion_cancelled',
+    alreadyCancelled: 'deletion_already_cancelled',
+    alreadyDeleted: 'account_already_deleted',
+    invalidLink: 'invalid_cancellation_link',
+} as const;
+
+const invalidLink = () =>
+    new BadRequestException({ code: DELETION_CANCEL_CODES.invalidLink, message: INVALID_LINK_MESSAGE });
+
 @Injectable()
 export class CancelDeletionRequestHandler {
     constructor(
@@ -27,29 +42,35 @@ export class CancelDeletionRequestHandler {
         private readonly rabbitmqProducer: RabbitMQProducerService,
     ) { }
 
-    async execute(command: CancelDeletionRequestCommand): Promise<{ message: string }> {
+    async execute(command: CancelDeletionRequestCommand): Promise<{ code: string; message: string }> {
         const request = await this.prisma.accountDeletionRequest.findUnique({
             where: { id: command.requestId },
         });
 
         if (!request) {
-            throw new BadRequestException(INVALID_LINK_MESSAGE);
+            throw invalidLink();
         }
 
         // Purge already ran: there is nothing left to restore. This must
         // refuse plainly, not appear to succeed - the account's PII is gone.
         if (request.status === DeletionStatus.completed) {
-            throw new BadRequestException('This account has already been permanently deleted and cannot be restored.');
+            throw new BadRequestException({
+                code: DELETION_CANCEL_CODES.alreadyDeleted,
+                message: 'This account has already been permanently deleted and cannot be restored.',
+            });
         }
 
         // Idempotent: cancelling twice (e.g. a double click, or a retried
         // request) reports the same success instead of erroring.
         if (request.status === DeletionStatus.cancelled) {
-            return { message: 'Your account deletion was already cancelled - your account is active.' };
+            return {
+                code: DELETION_CANCEL_CODES.alreadyCancelled,
+                message: 'Your account deletion was already cancelled - your account is active.',
+            };
         }
 
         if (request.status === DeletionStatus.rejected) {
-            throw new BadRequestException(INVALID_LINK_MESSAGE);
+            throw invalidLink();
         }
 
         // Only 'pending' (legacy) or 'approved' (the normal self-service
@@ -64,7 +85,7 @@ export class CancelDeletionRequestHandler {
             new Date(snapshot.cancellationTokenExpiresAt) > new Date();
 
         if (!tokenValid) {
-            throw new BadRequestException(INVALID_LINK_MESSAGE);
+            throw invalidLink();
         }
 
         await this.prisma.$transaction((tx) => restoreAccountDeletionRequest(tx, request.id, request.userId));
@@ -84,6 +105,9 @@ export class CancelDeletionRequestHandler {
             });
         }
 
-        return { message: 'Your account has been reactivated. Welcome back!' };
+        return {
+            code: DELETION_CANCEL_CODES.restored,
+            message: 'Your account has been reactivated. Welcome back!',
+        };
     }
 }

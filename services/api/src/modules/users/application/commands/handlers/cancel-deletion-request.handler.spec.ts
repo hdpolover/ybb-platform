@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { DeletionStatus } from '@prisma/client';
-import { CancelDeletionRequestHandler } from './cancel-deletion-request.handler';
+import { CancelDeletionRequestHandler, DELETION_CANCEL_CODES } from './cancel-deletion-request.handler';
 import { CancelDeletionRequestCommand } from '../cancel-deletion-request.command';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
@@ -135,5 +135,31 @@ describe('CancelDeletionRequestHandler', () => {
 
     await expect(handler.execute(new CancelDeletionRequestCommand('req-1', RAW_TOKEN))).rejects.toThrow(BadRequestException);
     expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  // The cancel page renders four visually distinct states. It must classify them
+  // on these codes, never on the prose - a reworded message would otherwise send
+  // a successfully-restored account down the "invalid link" branch, silently.
+  describe('machine-readable outcome codes', () => {
+    const codeOf = async (fn: () => Promise<unknown>): Promise<string | undefined> => {
+      try {
+        const ok = (await fn()) as { code?: string };
+        return ok?.code;
+      } catch (error) {
+        const body = (error as BadRequestException).getResponse();
+        return typeof body === 'object' ? (body as { code?: string }).code : undefined;
+      }
+    };
+
+    it('returns a distinct code for every outcome the cancel page renders', async () => {
+      const restored = await codeOf(() => handler.execute(new CancelDeletionRequestCommand('req-1', RAW_TOKEN)));
+      expect(restored).toBe(DELETION_CANCEL_CODES.restored);
+
+      mockPrisma.accountDeletionRequest.findUnique.mockResolvedValue(null);
+      const invalid = await codeOf(() => handler.execute(new CancelDeletionRequestCommand('missing', RAW_TOKEN)));
+      expect(invalid).toBe(DELETION_CANCEL_CODES.invalidLink);
+
+      expect(new Set([restored, invalid]).size).toBe(2);
+    });
   });
 });
