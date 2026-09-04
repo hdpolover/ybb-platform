@@ -40,7 +40,8 @@
     "migrate:cleanup-iys-2027-stray-phone-fields": "ts-node -r tsconfig-paths/register prisma/migration-scripts/cleanup-iys-2027-stray-phone-fields.ts",
     "migrate:remove-cys-2026-legacy-essays": "node prisma/migration-scripts/remove-cys-2026-legacy-essays.js",
     "report:non-english-names": "ts-node -r tsconfig-paths/register prisma/migration-scripts/report-non-english-names.ts",
-    "report:phone-normalization": "ts-node -r tsconfig-paths/register prisma/migration-scripts/report-phone-normalization.ts"
+    "report:phone-normalization": "ts-node -r tsconfig-paths/register prisma/migration-scripts/report-phone-normalization.ts",
+    "check:cloudflare-cidrs": "bash scripts/check-cloudflare-cidrs.sh"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.3",

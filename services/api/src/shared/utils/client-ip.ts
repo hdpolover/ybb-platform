@@ -40,10 +40,21 @@ import { BlockList, isIP, isIPv6, SocketAddress } from 'net';
  * Cloudflare's published edge ranges.
  *
  * Source: https://www.cloudflare.com/ips-v4 and https://www.cloudflare.com/ips-v6
- * Fetched 2026-09-03. Cloudflare adds ranges from time to time, so this needs a
- * periodic re-check against those two URLs. A stale list is not a security
- * hole — an unrecognised edge address just falls back to the x-forwarded-for
- * behaviour below, which is safe everywhere, only coarser behind the CDN.
+ * Fetched 2026-09-03; re-verified byte-identical to the published list on
+ * 2026-09-04.
+ *
+ * DO NOT diff this by hand — run `npm run check:cloudflare-cidrs`. It fetches
+ * both lists and reports what drifted in each direction. Doing it by hand is
+ * how the first attempt produced a phantom difference: neither published file
+ * ends with a newline, so the last v4 range silently joins the first v6 one.
+ *
+ * Cloudflare adds ranges from time to time, so this wants an occasional
+ * re-check. It is not a security hole when it goes stale — an unrecognised
+ * edge address just falls back to the x-forwarded-for behaviour below, which
+ * is safe everywhere, only coarser behind the CDN. That is also why the check
+ * is a script you run rather than a test: a jest test hitting the public
+ * internet would fail whenever Cloudflare is unreachable, and would turn
+ * "Cloudflare published a new range" into a red build on an unrelated PR.
  */
 const CLOUDFLARE_CIDRS = [
   '173.245.48.0/20',
