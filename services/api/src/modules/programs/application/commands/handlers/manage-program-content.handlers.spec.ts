@@ -821,6 +821,34 @@ describe('ManageProgramContentHandlers', () => {
                 expect(repo.updateGallery).not.toHaveBeenCalled();
             });
 
+            // N25: assertProgramContentAccess (-> assertProgramAccess) already
+            // answers 404 identically for "programme missing" and "programme not
+            // yours". But this handler used to call it unwrapped after its OWN
+            // "Gallery item not found" check, so the out-of-scope branch leaked
+            // assertProgramAccess's own message - naming the OWNING programme's
+            // id - instead of reusing this handler's not-found error. Both
+            // branches must now be byte-identical.
+            it('UpdateProgramGalleryHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findGalleryById = jest.fn().mockResolvedValue(null);
+                const missingHandler = await build(UpdateProgramGalleryHandler);
+                const whenMissing = await missingHandler
+                    .execute(new UpdateProgramGalleryCommand('gal-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findGalleryById = jest.fn().mockResolvedValue({ id: 'gal-1', programId: 'prog-1' });
+                const outOfScopeHandler = await build(UpdateProgramGalleryHandler);
+                const whenOutOfScope = await outOfScopeHandler
+                    .execute(new UpdateProgramGalleryCommand('gal-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expect((whenMissing as Error).constructor).toBe((whenOutOfScope as Error).constructor);
+                expect((whenMissing as { getStatus(): number }).getStatus()).toBe(
+                    (whenOutOfScope as { getStatus(): number }).getStatus(),
+                );
+                expect((whenMissing as Error).message).toBe((whenOutOfScope as Error).message);
+            });
+
             // The sharp one. This handler used to call deleteGallery FIRST and
             // read programId only afterwards for cache invalidation, so the row
             // was already gone before anything knew whose it was - there was no
@@ -836,6 +864,27 @@ describe('ManageProgramContentHandlers', () => {
                 ).rejects.toThrow();
 
                 expect(repo.deleteGallery).not.toHaveBeenCalled();
+            });
+
+            it('DeleteProgramGalleryHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findGalleryById = jest.fn().mockResolvedValue(null);
+                const missingHandler = await build(DeleteProgramGalleryHandler);
+                const whenMissing = await missingHandler
+                    .execute(new DeleteProgramGalleryCommand('gal-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findGalleryById = jest.fn().mockResolvedValue({ id: 'gal-1', programId: 'prog-1' });
+                const outOfScopeHandler = await build(DeleteProgramGalleryHandler);
+                const whenOutOfScope = await outOfScopeHandler
+                    .execute(new DeleteProgramGalleryCommand('gal-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expect((whenMissing as Error).constructor).toBe((whenOutOfScope as Error).constructor);
+                expect((whenMissing as { getStatus(): number }).getStatus()).toBe(
+                    (whenOutOfScope as { getStatus(): number }).getStatus(),
+                );
+                expect((whenMissing as Error).message).toBe((whenOutOfScope as Error).message);
             });
 
             // Same shape, same fix, applied to the four families that shared the
@@ -871,6 +920,27 @@ describe('ManageProgramContentHandlers', () => {
                 expect(repo.updateTestimonial).not.toHaveBeenCalled();
             });
 
+            it('UpdateProgramTestimonialHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findTestimonialById = jest.fn().mockResolvedValue(null);
+                const missingHandler = await build(UpdateProgramTestimonialHandler);
+                const whenMissing = await missingHandler
+                    .execute(new UpdateProgramTestimonialCommand('test-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findTestimonialById = jest.fn().mockResolvedValue({ id: 'test-1', programId: 'prog-1', brandId: null });
+                const outOfScopeHandler = await build(UpdateProgramTestimonialHandler);
+                const whenOutOfScope = await outOfScopeHandler
+                    .execute(new UpdateProgramTestimonialCommand('test-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expect((whenMissing as Error).constructor).toBe((whenOutOfScope as Error).constructor);
+                expect((whenMissing as { getStatus(): number }).getStatus()).toBe(
+                    (whenOutOfScope as { getStatus(): number }).getStatus(),
+                );
+                expect((whenMissing as Error).message).toBe((whenOutOfScope as Error).message);
+            });
+
             it('DeleteProgramTestimonialHandler refuses BEFORE deleting, not after', async () => {
                 prismaRead = outOfScope();
                 repo.findTestimonialById = jest.fn().mockResolvedValue({ id: 'test-1', programId: 'prog-1', brandId: null });
@@ -882,6 +952,27 @@ describe('ManageProgramContentHandlers', () => {
                 ).rejects.toThrow();
 
                 expect(repo.deleteTestimonial).not.toHaveBeenCalled();
+            });
+
+            it('DeleteProgramTestimonialHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findTestimonialById = jest.fn().mockResolvedValue(null);
+                const missingHandler = await build(DeleteProgramTestimonialHandler);
+                const whenMissing = await missingHandler
+                    .execute(new DeleteProgramTestimonialCommand('test-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findTestimonialById = jest.fn().mockResolvedValue({ id: 'test-1', programId: 'prog-1', brandId: null });
+                const outOfScopeHandler = await build(DeleteProgramTestimonialHandler);
+                const whenOutOfScope = await outOfScopeHandler
+                    .execute(new DeleteProgramTestimonialCommand('test-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expect((whenMissing as Error).constructor).toBe((whenOutOfScope as Error).constructor);
+                expect((whenMissing as { getStatus(): number }).getStatus()).toBe(
+                    (whenOutOfScope as { getStatus(): number }).getStatus(),
+                );
+                expect((whenMissing as Error).message).toBe((whenOutOfScope as Error).message);
             });
 
             it('CreateProgramFaqHandler refuses a programme outside the caller scope', async () => {
@@ -930,6 +1021,27 @@ describe('ManageProgramContentHandlers', () => {
                 expect(repo.updateFaq).not.toHaveBeenCalled();
             });
 
+            it('UpdateProgramFaqHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findFaqById.mockResolvedValue(null);
+                const missingHandler = await build(UpdateProgramFaqHandler);
+                const whenMissing = await missingHandler
+                    .execute(new UpdateProgramFaqCommand('faq-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findFaqById.mockResolvedValue({ id: 'faq-1', programId: 'prog-1' });
+                const outOfScopeHandler = await build(UpdateProgramFaqHandler);
+                const whenOutOfScope = await outOfScopeHandler
+                    .execute(new UpdateProgramFaqCommand('faq-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expect((whenMissing as Error).constructor).toBe((whenOutOfScope as Error).constructor);
+                expect((whenMissing as { getStatus(): number }).getStatus()).toBe(
+                    (whenOutOfScope as { getStatus(): number }).getStatus(),
+                );
+                expect((whenMissing as Error).message).toBe((whenOutOfScope as Error).message);
+            });
+
             it('DeleteProgramFaqHandler refuses BEFORE deleting, not after', async () => {
                 prismaRead = outOfScope();
                 repo.findFaqById.mockResolvedValue({ id: 'faq-1', programId: 'prog-1' });
@@ -941,6 +1053,27 @@ describe('ManageProgramContentHandlers', () => {
                 ).rejects.toThrow();
 
                 expect(repo.deleteFaq).not.toHaveBeenCalled();
+            });
+
+            it('DeleteProgramFaqHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findFaqById.mockResolvedValue(null);
+                const missingHandler = await build(DeleteProgramFaqHandler);
+                const whenMissing = await missingHandler
+                    .execute(new DeleteProgramFaqCommand('faq-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findFaqById.mockResolvedValue({ id: 'faq-1', programId: 'prog-1' });
+                const outOfScopeHandler = await build(DeleteProgramFaqHandler);
+                const whenOutOfScope = await outOfScopeHandler
+                    .execute(new DeleteProgramFaqCommand('faq-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expect((whenMissing as Error).constructor).toBe((whenOutOfScope as Error).constructor);
+                expect((whenMissing as { getStatus(): number }).getStatus()).toBe(
+                    (whenOutOfScope as { getStatus(): number }).getStatus(),
+                );
+                expect((whenMissing as Error).message).toBe((whenOutOfScope as Error).message);
             });
 
             it('CreateProgramResourceHandler refuses a programme outside the caller scope', async () => {
@@ -974,6 +1107,29 @@ describe('ManageProgramContentHandlers', () => {
                 expect(repo.updateResource).not.toHaveBeenCalled();
             });
 
+            it('UpdateProgramResourceHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findResourceById = jest.fn().mockResolvedValue(null);
+                const missingHandler = await build(UpdateProgramResourceHandler);
+                const whenMissing = await missingHandler
+                    .execute(new UpdateProgramResourceCommand('res-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findResourceById = jest.fn().mockResolvedValue({
+                    id: 'res-1', programId: 'prog-1', sourceType: 'link', linkUrl: 'https://x.example/g.pdf',
+                });
+                const outOfScopeHandler = await build(UpdateProgramResourceHandler);
+                const whenOutOfScope = await outOfScopeHandler
+                    .execute(new UpdateProgramResourceCommand('res-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expect((whenMissing as Error).constructor).toBe((whenOutOfScope as Error).constructor);
+                expect((whenMissing as { getStatus(): number }).getStatus()).toBe(
+                    (whenOutOfScope as { getStatus(): number }).getStatus(),
+                );
+                expect((whenMissing as Error).message).toBe((whenOutOfScope as Error).message);
+            });
+
             it('DeleteProgramResourceHandler refuses BEFORE deleting, not after', async () => {
                 prismaRead = outOfScope();
                 repo.findResourceById = jest.fn().mockResolvedValue({ id: 'res-1', programId: 'prog-1' });
@@ -985,6 +1141,27 @@ describe('ManageProgramContentHandlers', () => {
                 ).rejects.toThrow();
 
                 expect(repo.deleteResource).not.toHaveBeenCalled();
+            });
+
+            it('DeleteProgramResourceHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findResourceById = jest.fn().mockResolvedValue(null);
+                const missingHandler = await build(DeleteProgramResourceHandler);
+                const whenMissing = await missingHandler
+                    .execute(new DeleteProgramResourceCommand('res-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findResourceById = jest.fn().mockResolvedValue({ id: 'res-1', programId: 'prog-1' });
+                const outOfScopeHandler = await build(DeleteProgramResourceHandler);
+                const whenOutOfScope = await outOfScopeHandler
+                    .execute(new DeleteProgramResourceCommand('res-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expect((whenMissing as Error).constructor).toBe((whenOutOfScope as Error).constructor);
+                expect((whenMissing as { getStatus(): number }).getStatus()).toBe(
+                    (whenOutOfScope as { getStatus(): number }).getStatus(),
+                );
+                expect((whenMissing as Error).message).toBe((whenOutOfScope as Error).message);
             });
 
             it('CreateDocumentTemplateHandler refuses a programme outside the caller scope', async () => {
@@ -1029,6 +1206,27 @@ describe('ManageProgramContentHandlers', () => {
                 expect(repo.updateDocumentTemplate).not.toHaveBeenCalled();
             });
 
+            it('UpdateDocumentTemplateHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findDocumentTemplateById.mockResolvedValue(null);
+                const missingHandler = await build(UpdateDocumentTemplateHandler);
+                const whenMissing = await missingHandler
+                    .execute(new UpdateDocumentTemplateCommand('doc-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findDocumentTemplateById.mockResolvedValue({ id: 'doc-1', programId: 'prog-1' });
+                const outOfScopeHandler = await build(UpdateDocumentTemplateHandler);
+                const whenOutOfScope = await outOfScopeHandler
+                    .execute(new UpdateDocumentTemplateCommand('doc-1', {} as never, 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expect((whenMissing as Error).constructor).toBe((whenOutOfScope as Error).constructor);
+                expect((whenMissing as { getStatus(): number }).getStatus()).toBe(
+                    (whenOutOfScope as { getStatus(): number }).getStatus(),
+                );
+                expect((whenMissing as Error).message).toBe((whenOutOfScope as Error).message);
+            });
+
             it('DeleteDocumentTemplateHandler refuses BEFORE deleting, not after', async () => {
                 prismaRead = outOfScope();
                 repo.findDocumentTemplateById.mockResolvedValue({ id: 'doc-1', programId: 'prog-1' });
@@ -1040,6 +1238,27 @@ describe('ManageProgramContentHandlers', () => {
                 ).rejects.toThrow();
 
                 expect(repo.deleteDocumentTemplate).not.toHaveBeenCalled();
+            });
+
+            it('DeleteDocumentTemplateHandler gives the SAME error for a missing item and one that is not yours', async () => {
+                repo.findDocumentTemplateById.mockResolvedValue(null);
+                const missingHandler = await build(DeleteDocumentTemplateHandler);
+                const whenMissing = await missingHandler
+                    .execute(new DeleteDocumentTemplateCommand('doc-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                prismaRead = outOfScope();
+                repo.findDocumentTemplateById.mockResolvedValue({ id: 'doc-1', programId: 'prog-1' });
+                const outOfScopeHandler = await build(DeleteDocumentTemplateHandler);
+                const whenOutOfScope = await outOfScopeHandler
+                    .execute(new DeleteDocumentTemplateCommand('doc-1', 'user-1', actor))
+                    .catch((e: unknown) => e);
+
+                expect((whenMissing as Error).constructor).toBe((whenOutOfScope as Error).constructor);
+                expect((whenMissing as { getStatus(): number }).getStatus()).toBe(
+                    (whenOutOfScope as { getStatus(): number }).getStatus(),
+                );
+                expect((whenMissing as Error).message).toBe((whenOutOfScope as Error).message);
             });
         });
 
