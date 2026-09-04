@@ -18,6 +18,7 @@ import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 import { buildRichTextPreview } from '@shared/utils/rich-text';
 import { calculatePortalTotalRequired } from '../../utils/calculate-portal-total-required';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
+import { isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
 
 @Injectable()
 @QueryHandler(GetPortalDashboardQuery)
@@ -218,10 +219,11 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 );
 
             // Deadline shown in the "submit your application form" reminder.
-            // Sourced from the Fully Funded registration window while it is
-            // still open, then from the Self Funded one once FF has ended.
-            // Falls back to the program's applicationDeadline when no tier
-            // window is configured.
+            // Scoped to the application's OWN category: a Self Funded
+            // applicant must never be shown the Fully Funded window (that
+            // bug told ~4,268 MEYS 6th self-funders their deadline was
+            // 5 Sep when theirs was 30 Nov), and once FF closed the old
+            // logic flipped and showed every FF applicant the SF date.
             const latestWindowEnd = (category: string): Date | null => {
                 const ends = tiers
                     .filter((tier) => Array.isArray(tier.allowedCategories) && tier.allowedCategories.includes(category))
@@ -229,12 +231,31 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                     .map((period) => period.endDate.getTime());
                 return ends.length > 0 ? new Date(Math.max(...ends)) : null;
             };
-            const ffWindowEnd = latestWindowEnd('fully_funded');
-            const sfWindowEnd = latestWindowEnd('self_funded');
-            const submissionDeadline =
-                (ffWindowEnd && ffWindowEnd >= now ? ffWindowEnd : sfWindowEnd ?? ffWindowEnd) ??
-                latestApplication.program.applicationDeadline ??
-                null;
+            // No category yet (application_category is nullable) is treated
+            // exactly like "this category has no configured window": fall
+            // back to the program's applicationDeadline rather than guessing
+            // a category. Guessing Self Funded would over-promise a later
+            // date to someone who turns out to be Fully Funded, and
+            // applicationDeadline is the only date that is true for every
+            // applicant - it is what the submit path actually enforces
+            // (portal-submit-application.handler.ts -> isPastSubmissionDeadline).
+            const categoryWindowEnd = latestApplication.applicationCategory
+                ? latestWindowEnd(String(latestApplication.applicationCategory))
+                : null;
+            const programDeadline = latestApplication.program.applicationDeadline ?? null;
+            // An already-ended deadline is reported as "no deadline" so the
+            // reminder popup stays shut - it reads "submit before X", and a
+            // past X under "applications not submitted by the deadline will
+            // not be reviewed" is its own bug. The frontend already renders
+            // nothing when submissionDeadline is absent, so no UI change is
+            // needed. An ended category window does NOT fall through to the
+            // program deadline either: that window closing IS the answer for
+            // that category.
+            const submissionDeadline = categoryWindowEnd
+                ? (categoryWindowEnd.getTime() >= now.getTime() ? categoryWindowEnd : null)
+                : isPastSubmissionDeadline(programDeadline, now)
+                    ? null
+                    : programDeadline;
 
             const switchLockedStatuses = new Set(['processing', 'paid']);
             const blockingRegistrationInvoice = latestApplication.invoices.find(

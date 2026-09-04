@@ -382,11 +382,21 @@ describe('GetPortalDashboardHandler', () => {
         expect(result.activeApplication?.fullyFundedRegistrationClosed).toBe(false);
     });
 
-    const buildAppWithBothWindows = (ffEnd: Date, sfEnd: Date) => {
+    // ---- submissionDeadline: scoped to the application's OWN category ----
+    // The old rule preferred the Fully Funded window globally while it was
+    // open, which showed self-funded applicants an FF deadline months early,
+    // and showed every FF applicant the SF date once FF closed.
+
+    const buildAppWithBothWindows = (
+        ffEnd: Date,
+        sfEnd: Date,
+        applicationCategory: string | null = 'self_funded',
+    ) => {
         const app = buildAppWithFfTier([{ startDate: new Date(Date.now() - 10 * 86400000), endDate: ffEnd }]);
         app.program.pricingTiers[0].validityPeriods = [
             { startDate: new Date(Date.now() - 10 * 86400000), endDate: sfEnd },
         ];
+        (app as { applicationCategory: string | null }).applicationCategory = applicationCategory;
         return app;
     };
 
@@ -400,26 +410,98 @@ describe('GetPortalDashboardHandler', () => {
         });
     };
 
-    it('uses the FF window end as submissionDeadline while FF is still open', async () => {
+    it('uses the self funded window for a self funded application even while the FF window is open', async () => {
         primeCaches();
         const ffEnd = new Date(Date.now() + 86400000);
         const sfEnd = new Date(Date.now() + 10 * 86400000);
-        mockPrisma.participantApplication.findFirst.mockResolvedValue(buildAppWithBothWindows(ffEnd, sfEnd));
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithBothWindows(ffEnd, sfEnd, 'self_funded'),
+        );
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.submissionDeadline).toBe(sfEnd.toISOString());
+    });
+
+    it('uses the fully funded window for a fully funded application even though the SF window runs later', async () => {
+        primeCaches();
+        const ffEnd = new Date(Date.now() + 86400000);
+        const sfEnd = new Date(Date.now() + 10 * 86400000);
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithBothWindows(ffEnd, sfEnd, 'fully_funded'),
+        );
 
         const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
 
         expect(result.activeApplication?.submissionDeadline).toBe(ffEnd.toISOString());
     });
 
-    it('falls back to the SF window end once FF has closed', async () => {
+    it('keeps the self funded deadline for self funded applicants after the FF window has closed', async () => {
         primeCaches();
         const ffEnd = new Date(Date.now() - 86400000);
         const sfEnd = new Date(Date.now() + 10 * 86400000);
-        mockPrisma.participantApplication.findFirst.mockResolvedValue(buildAppWithBothWindows(ffEnd, sfEnd));
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithBothWindows(ffEnd, sfEnd, 'self_funded'),
+        );
 
         const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
 
         expect(result.activeApplication?.submissionDeadline).toBe(sfEnd.toISOString());
+    });
+
+    it('omits submissionDeadline when the application own category window has already ended', async () => {
+        primeCaches();
+        const ffEnd = new Date(Date.now() - 86400000);
+        const sfEnd = new Date(Date.now() + 10 * 86400000);
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(
+            buildAppWithBothWindows(ffEnd, sfEnd, 'fully_funded'),
+        );
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        // Never falls through to the still-open SF window, and never shows a
+        // past date under "submit before X" - the popup stays shut instead.
+        expect(result.activeApplication?.submissionDeadline).toBeUndefined();
+    });
+
+    it('falls back to the program applicationDeadline when the application has no category', async () => {
+        primeCaches();
+        const ffEnd = new Date(Date.now() + 86400000);
+        const sfEnd = new Date(Date.now() + 10 * 86400000);
+        const app = buildAppWithBothWindows(ffEnd, sfEnd, null);
+        const programDeadline = new Date(Date.now() + 30 * 86400000);
+        app.program.applicationDeadline = programDeadline;
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(app);
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.submissionDeadline).toBe(programDeadline.toISOString());
+    });
+
+    it('falls back to the program applicationDeadline when the category has no configured window', async () => {
+        primeCaches();
+        // Only an FF tier carries a window; the self funded tier has none.
+        const app = buildAppWithFfTier([
+            { startDate: new Date(Date.now() - 10 * 86400000), endDate: new Date(Date.now() + 86400000) },
+        ]);
+        const programDeadline = new Date(Date.now() + 30 * 86400000);
+        app.program.applicationDeadline = programDeadline;
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(app);
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.submissionDeadline).toBe(programDeadline.toISOString());
+    });
+
+    it('omits submissionDeadline when the fallback program applicationDeadline is already past', async () => {
+        primeCaches();
+        const app = buildAppWithFfTier([]);
+        app.program.applicationDeadline = new Date(Date.now() - 5 * 86400000);
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(app);
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.submissionDeadline).toBeUndefined();
     });
 
     it('sets fullyFundedRegistrationClosed=false when the FF tier has no validity windows', async () => {
