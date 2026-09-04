@@ -636,6 +636,112 @@ describe('GetPortalDashboardHandler', () => {
 
         expect(result.activeApplication?.fullyFundedRegistrationClosed).toBe(false);
     });
+    // ---- M66: the WIB day boundary, asserted AT the boundary ----
+    // Admins pick whole calendar days, so a validity window's endDate is
+    // usually stored at 00:00 UTC, which is 07:00 WIB on that same day. Under
+    // the old raw `endDate < now` the window died at 07:00 WIB and the
+    // participant was told Fully Funded registration had closed for the
+    // remaining ~17 hours of the day it was actually still open.
+    //
+    // Every other test in this file uses a full day of margin, which reads the
+    // same whether the comparison is raw or WIB-aware. These do not.
+    const WINDOW_END_UTC_MIDNIGHT = new Date('2026-09-05T00:00:00.000Z'); // 07:00 WIB, 5 Sep
+    const WINDOW_START = new Date('2026-09-01T00:00:00.000Z');
+
+    const runDashboardAt = async (
+        systemTime: string,
+        validityPeriods: { startDate: Date; endDate: Date }[],
+        applicationCategory?: string,
+    ) => {
+        jest.useFakeTimers().setSystemTime(new Date(systemTime));
+        try {
+            mockCacheService.get.mockResolvedValue(null);
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+                id: 'p-1',
+                userId: 'u-1',
+                fullName: 'Test User',
+            });
+            mockPortalCacheService.getParticipantStats.mockResolvedValue({
+                applicationsCount: 1,
+                completedProgramsCount: 0,
+                certificatesCount: 0,
+            });
+            const app = buildAppWithFfTier(validityPeriods);
+            if (applicationCategory) app.applicationCategory = applicationCategory;
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(app);
+            return await handler.execute(new GetPortalDashboardQuery('u-1'));
+        } finally {
+            jest.useRealTimers();
+        }
+    };
+
+    it('keeps a Fully Funded window open through WIB end-of-day on the day it ends', async () => {
+        // 12:00 WIB on 5 Sep - five hours PAST the raw stored instant, and the
+        // whole point of the bug. A raw endDate < now says closed here.
+        const result = await runDashboardAt('2026-09-05T05:00:00.000Z', [
+            { startDate: WINDOW_START, endDate: WINDOW_END_UTC_MIDNIGHT },
+        ]);
+
+        expect(result.activeApplication?.fullyFundedRegistrationClosed).toBe(false);
+    });
+
+    it('closes a Fully Funded window once WIB end-of-day has passed', async () => {
+        // 00:30 WIB on 6 Sep - the first half hour after the window really ends.
+        const result = await runDashboardAt('2026-09-05T17:30:00.000Z', [
+            { startDate: WINDOW_START, endDate: WINDOW_END_UTC_MIDNIGHT },
+        ]);
+
+        expect(result.activeApplication?.fullyFundedRegistrationClosed).toBe(true);
+    });
+
+    it('still reports the active window as the submission deadline late on its final WIB day', async () => {
+        // Same instant as the first case, read through the OTHER consumer of
+        // the same rule (activeCategoryWindowEnd). The window lives on the
+        // fully-funded tier, so the application has to be fully-funded for it
+        // to be its own category's window - the deadline is deliberately
+        // category-scoped. Under the raw rule the window is not active at
+        // 12:00 WIB, so this falls through to the programme deadline instead.
+        const result = await runDashboardAt(
+            '2026-09-05T05:00:00.000Z',
+            [{ startDate: WINDOW_START, endDate: WINDOW_END_UTC_MIDNIGHT }],
+            'fully_funded',
+        );
+
+        expect(result.activeApplication?.submissionDeadline).toBe(
+            WINDOW_END_UTC_MIDNIGHT.toISOString(),
+        );
+    });
+
+    it('counts the deadline day itself as a day remaining, not zero', async () => {
+        // buildAppWithFfTier pins applicationDeadline to now + 1 day, so drive
+        // this one through a window-free application instead: at 12:00 WIB on
+        // the deadline's own WIB day there are still ~12 hours to submit, and
+        // the old raw diff reported 0.
+        jest.useFakeTimers().setSystemTime(new Date('2026-09-05T05:00:00.000Z'));
+        try {
+            mockCacheService.get.mockResolvedValue(null);
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+                id: 'p-1',
+                userId: 'u-1',
+                fullName: 'Test User',
+            });
+            mockPortalCacheService.getParticipantStats.mockResolvedValue({
+                applicationsCount: 1,
+                completedProgramsCount: 0,
+                certificatesCount: 0,
+            });
+            const app = buildAppWithFfTier([]);
+            app.applicationCategory = null as unknown as string;
+            app.program.applicationDeadline = new Date('2026-09-05T00:00:00.000Z');
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(app);
+
+            const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+            expect(result.activeApplication?.daysUntilDeadline).toBe(1);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
 });
 
 // Regression for the MEYS 6th/7th bug: this route used to build its query

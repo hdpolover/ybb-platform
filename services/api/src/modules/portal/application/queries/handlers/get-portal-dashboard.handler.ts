@@ -18,7 +18,8 @@ import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
 import { buildRichTextPreview } from '@shared/utils/rich-text';
 import { calculatePortalTotalRequired } from '../../utils/calculate-portal-total-required';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
-import { isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
+import { isPastSubmissionDeadline, resolveSubmissionCutoff } from '@shared/utils/submission-deadline.util';
+import { effectiveStart, hasTierPeriodEnded } from '@shared/utils/tier-period.util';
 
 @Injectable()
 @QueryHandler(GetPortalDashboardQuery)
@@ -215,7 +216,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 ffTiers.every(
                     (tier) =>
                         (tier.validityPeriods?.length ?? 0) > 0 &&
-                        (tier.validityPeriods ?? []).every((period) => period.endDate < now),
+                        (tier.validityPeriods ?? []).every((period) => hasTierPeriodEnded(period, now)),
                 );
 
             // Deadline shown in the "submit your application form" reminder.
@@ -237,11 +238,21 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
             // effect. If two active windows overlap, the later end is the
             // real operative close.
             const activeCategoryWindowEnd = (category: string): Date | null => {
+                // effectiveStart/hasTierPeriodEnded are evaluated against the
+                // tier's OWN period list, before flattening across tiers.
+                // effectiveStart's overlap test asks "is a period that starts
+                // earlier still open here", which only means anything among
+                // siblings of one tier - handing it the flattened cross-tier
+                // array would let an unrelated tier's window suppress the
+                // widening and reintroduce the 07:00 WIB start.
                 const activeEnds = tiers
                     .filter((tier) => Array.isArray(tier.allowedCategories) && tier.allowedCategories.includes(category))
-                    .flatMap((tier) => tier.validityPeriods ?? [])
-                    .filter((period) => period.startDate.getTime() <= now.getTime() && now.getTime() < period.endDate.getTime())
-                    .map((period) => period.endDate.getTime());
+                    .flatMap((tier) => {
+                        const periods = tier.validityPeriods ?? [];
+                        return periods
+                            .filter((period) => effectiveStart(period, periods) <= now && !hasTierPeriodEnded(period, now))
+                            .map((period) => period.endDate.getTime());
+                    });
                 return activeEnds.length > 0 ? new Date(Math.max(...activeEnds)) : null;
             };
             // No category yet (application_category is nullable) is treated
@@ -323,7 +334,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 fullyFundedRegistrationClosed,
                 progress: calculateSubmissionProgress(latestApplication),
                 currentStep: determineSubmissionCurrentStep(latestApplication),
-                daysUntilDeadline: this.calculateDaysUntilDeadline(latestApplication.program.applicationDeadline),
+                daysUntilDeadline: this.calculateDaysUntilDeadline(latestApplication.program.applicationDeadline, now),
                 submissionDeadline: submissionDeadline ? submissionDeadline.toISOString() : undefined,
                 guidebooks,
             };
@@ -422,9 +433,19 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
 
         return alerts;
     }
-    private calculateDaysUntilDeadline(deadline: Date | null): number | undefined {
-        if (!deadline) return undefined;
-        const diff = new Date(deadline).getTime() - new Date().getTime();
-        return Math.ceil(diff / (1000 * 3600 * 24));
+    /**
+     * Counts down to the instant submission actually closes, not to the raw
+     * stored deadline. application_deadline is a WIB CALENDAR DAY stored as an
+     * instant (usually 00:00 UTC = 07:00 WIB), and the submit path allows
+     * submission through 23:59:59.999 WIB on that day
+     * (portal-submit-application.handler.ts -> isPastSubmissionDeadline). A raw
+     * diff hit zero at 07:00 WIB on the deadline's own day, so the participant
+     * was told they had no days left for the ~17 hours they could still submit.
+     * Same field, same question, same helper as the gate that enforces it.
+     */
+    private calculateDaysUntilDeadline(deadline: Date | null, now: Date): number | undefined {
+        const cutoff = resolveSubmissionCutoff(deadline);
+        if (!cutoff) return undefined;
+        return Math.ceil((cutoff.getTime() - now.getTime()) / (1000 * 3600 * 24));
     }
 }

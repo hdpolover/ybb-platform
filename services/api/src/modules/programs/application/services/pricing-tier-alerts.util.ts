@@ -13,7 +13,7 @@
  * fourth time.
  */
 import { addDays, endOfWibDay, startOfWibDay } from '../../../../shared/utils/wib-time';
-import { hasTierPeriodEnded, TierValidityPeriod } from '../../../../shared/utils/tier-period.util';
+import { effectiveStart, hasTierPeriodEnded, TierValidityPeriod } from '../../../../shared/utils/tier-period.util';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -62,7 +62,11 @@ export function detectPricingTierAlerts(
         const periods = tier.validityPeriods;
         if (periods.length === 0) continue;
 
-        const openedPeriods = periods.filter((p) => p.startDate <= now);
+        // Raw startDate read a window stored at 23:59 WIB as "not open yet"
+        // for its whole first day, which suppressed the lapsed-coverage
+        // alert for exactly the day an admin most needs it. Same widening
+        // rule the end boundary below already uses.
+        const openedPeriods = periods.filter((p) => effectiveStart(p, periods) <= now);
         if (openedPeriods.length === 0) continue; // not open yet
 
         const coversNow = openedPeriods.some((p) => !hasTierPeriodEnded(p, now));
