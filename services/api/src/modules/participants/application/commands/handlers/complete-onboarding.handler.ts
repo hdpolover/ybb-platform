@@ -74,6 +74,18 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
             // Handle Referral Logic if provided
             if (dto.referralCode) {
                 // 1. Check if referral already exists
+                //
+                // Latent trap, dormant only because nothing writes
+                // AmbassadorReferral.deletedAt today (audit M73): this read is
+                // now soft-delete filtered like every other read, and it is the
+                // only thing standing between a duplicate and the
+                // @@unique([ambassadorId, participantId]) index. The moment a
+                // referral soft-delete path exists, a participant with a
+                // soft-deleted referral to the same ambassador falls through to
+                // create() and P2002s the whole onboarding-completion request -
+                // this one is NOT wrapped in a non-blocking catch, unlike the
+                // sibling in portal-submit-application.handler.ts. Make it an
+                // upsert, or filter on deletedAt explicitly, before adding one.
                 const existingReferral = await tx.ambassadorReferral.findFirst({
                     where: { participantId: participant.id }
                 });
