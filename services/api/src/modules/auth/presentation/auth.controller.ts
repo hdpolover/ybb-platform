@@ -121,7 +121,9 @@ const ONE_HOUR = 3600000;
  * So the IP tier only has to stop a single-host SPRAY — one attacker walking
  * many accounts from one address — not bound a building. At 600 per 15 minutes
  * that attacker gets ~40 login attempts a minute and every account they touch
- * still hits the 5-per-mailbox wall first. That is the trade the user chose:
+ * still hits the 5-failure account-lockout wall first (MAX_FAILED_LOGIN_ATTEMPTS,
+ * keyed on user.id and shared across all three login routes). That is the
+ * trade the user chose:
  * loose enough that no legitimate building is ever locked out, tight enough
  * that one host cannot run a sweep at machine speed.
  */

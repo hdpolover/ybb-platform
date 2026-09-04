@@ -149,11 +149,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     //
     // Placed AFTER the unreadable filter so `ttl.seconds!` is sound. One
     // consequence worth knowing: an env var set to an EMPTY STRING is not
-    // nullish, so `?? fallback` does not fire, parseTtlSeconds('') returns
-    // undefined, and the unreadable branch returns above — this ceiling is
-    // silently inert for a blank value. A blank TTL means the signer falls back
-    // to its own '1h'/'8h' literals, so it fails safe, but it also means a
-    // cleared Dokploy field disables this check rather than tripping it.
+    // undefined, so ConfigService returns "" rather than the default,
+    // parseTtlSeconds("") is undefined, and the unreadable branch returns
+    // above — this ceiling is inert for a blank value.
+    //
+    // That is not a silent hole, because the SIGNER does not fall back either:
+    // every sign site reads the same "" and jsonwebtoken throws
+    // '"expiresIn" should be a number of seconds or string representing a
+    // timespan', so a blank TTL takes login down loudly on the first attempt
+    // rather than quietly minting an unbounded credential. Verified by running
+    // it, not by reading it. Still worth knowing that a CLEARED panel field
+    // and an ABSENT one behave differently: absent uses the default and boots,
+    // blank breaks token issuance.
     const tooLong = [access, adminAccess].filter(
       (ttl) => ttl.seconds! > MAX_ACCESS_TTL_SECONDS,
     );
