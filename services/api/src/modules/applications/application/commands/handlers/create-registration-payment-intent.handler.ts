@@ -51,6 +51,21 @@ export class CreateRegistrationPaymentIntentHandler {
       throw new BadRequestException('Unauthorized to pay for this application');
     }
 
+    // `userId` on this command is a Participant.id (the check above asserts it),
+    // which is a DIFFERENT uuid from User.id. The payment service keys intents on
+    // users.id and enforces ownership against it (ProcessPayment compares the
+    // stored intent's UserID to the caller's), so forwarding a Participant.id
+    // here mints an intent the participant can never claim. Resolve the real
+    // users.id and pass participant_id separately, exactly as the portal path
+    // does (confirm-portal-payment.handler.ts).
+    const participant = await this.prisma.participant.findUnique({
+      where: { id: application.participantId },
+      select: { userId: true },
+    });
+    if (!participant) {
+      throw new NotFoundException(`Participant not found for application ${applicationId}`);
+    }
+
     if (!application.pricingTierId) {
       throw new BadRequestException('No pricing tier selected for this application.');
     }
@@ -118,7 +133,8 @@ export class CreateRegistrationPaymentIntentHandler {
 
     // 4. Create the intent via the Payment Service (with exchange-rate snapshot).
     const intent = await this.paymentClient.createIntent({
-      user_id: userId,
+      user_id: participant.userId,
+      participant_id: application.participantId,
       amount,
       currency,
       reference_type: 'application',
