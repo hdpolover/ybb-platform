@@ -94,8 +94,8 @@ export class ParticipantApplication {
     public readonly updatedAt?: Date,
     public submittedAt?: Date,
     public readonly lastEditedAt?: Date,
-    public readonly withdrawnAt?: Date,
-    public readonly withdrawnBy?: string,
+    public withdrawnAt?: Date,
+    public withdrawnBy?: string,
   ) {}
 
   /**
@@ -206,6 +206,8 @@ export class ParticipantApplication {
       throw new Error(`Cannot withdraw application in ${this.status} status`);
     }
     this.status = ApplicationStatus.WITHDRAWN;
+    this.withdrawnAt = new Date();
+    this.withdrawnBy = userId;
   }
 
   updateScore(total: number, breakdown: ScoreBreakdown, status: ScoreStatus): void {
