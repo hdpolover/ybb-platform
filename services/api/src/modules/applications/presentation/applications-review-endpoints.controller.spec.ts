@@ -67,6 +67,7 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
   const mockGetReviewHandler = { execute: jest.fn() };
   const mockUpsertReviewHandler = { execute: jest.fn() };
   const mockReviewApplicationHandler = { execute: jest.fn() };
+  const mockWithdrawApplicationHandler = { execute: jest.fn() };
   let currentUser: { userId: string; adminId?: string; role: string | string[] };
 
   beforeAll(async () => {
@@ -81,6 +82,7 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
         getApplicationReviewHandler: mockGetReviewHandler,
         upsertApplicationReviewHandler: mockUpsertReviewHandler,
         reviewApplicationHandler: mockReviewApplicationHandler,
+        withdrawApplicationHandler: mockWithdrawApplicationHandler,
       }),
     })
       .overrideGuard(JwtAuthGuard)
@@ -110,6 +112,40 @@ describe('ApplicationsController review routes (real HTTP layer)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     currentUser = { userId: 'user-1', adminId: 'admin-1', role: [UserRole.ADMIN] };
+  });
+
+  describe('POST /applications/:id/withdraw actor resolution', () => {
+    // The actor used to come from @Body('userId'). withdrawnBy is a real FK to
+    // users(id) and it is the audit record for who withdrew an application, so
+    // a client-supplied value let any admin attribute a withdrawal to anyone.
+    // The body deliberately carries a DIFFERENT id here: if it ever leaks back
+    // into the command, this fails.
+    it('takes the acting user from the JWT and ignores a userId in the body', async () => {
+      mockWithdrawApplicationHandler.execute.mockResolvedValue({ id: 'app-1' });
+
+      await request(app.getHttpServer())
+        .post('/applications/app-1/withdraw')
+        .send({ userId: 'somebody-elses-user-id' })
+        .expect(200);
+
+      expect(mockWithdrawApplicationHandler.execute).toHaveBeenCalledTimes(1);
+      const command = mockWithdrawApplicationHandler.execute.mock.calls[0][0];
+      expect(command.applicationId).toBe('app-1');
+      expect(command.userId).toBe('user-1');
+      expect(command.userId).not.toBe('somebody-elses-user-id');
+    });
+
+    it('carries the JWT user id even when the body is empty', async () => {
+      mockWithdrawApplicationHandler.execute.mockResolvedValue({ id: 'app-1' });
+
+      await request(app.getHttpServer())
+        .post('/applications/app-1/withdraw')
+        .send({})
+        .expect(200);
+
+      const command = mockWithdrawApplicationHandler.execute.mock.calls[0][0];
+      expect(command.userId).toBe('user-1');
+    });
   });
 
   describe('route resolution', () => {
