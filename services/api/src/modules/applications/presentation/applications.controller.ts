@@ -13,6 +13,7 @@ import {
   Logger,
   BadRequestException,
   ForbiddenException,
+  NotFoundException,
   ParseEnumPipe,
   Req,
 } from '@nestjs/common';
@@ -25,7 +26,12 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
-import { assertBrandAccess, assertProgramAccess, getRequestAdminScope } from '@shared/guards/admin-scope.guard';
+import {
+  assertBrandAccess,
+  assertProgramAccess,
+  getRequestAdminScope,
+  orNotFound,
+} from '@shared/guards/admin-scope.guard';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType, PaymentStatus, ScoringStage } from '@prisma/client';
 
@@ -182,6 +188,39 @@ export class ApplicationsController {
    * assignments falls back to exactly those programIds. A scoped caller that
    * supplies neither is refused rather than served the whole platform.
    */
+  /**
+   * Refuses a caller who may not act on this application's programme.
+   *
+   * Reads the owning programme from the application row rather than trusting a
+   * path or body value, then defers to the shared programme-scope rule so this
+   * route cannot drift from the other ~10 sites using it.
+   */
+  private async assertCanReviewApplication(
+    req: { user?: { adminId?: string } },
+    applicationId: string,
+  ): Promise<void> {
+    const scope = await getRequestAdminScope(this.readPrisma, req);
+    if (scope.kind === 'platform') {
+      return;
+    }
+
+    const notFound = () => new NotFoundException(`Application ${applicationId} not found`);
+
+    const application = await this.readPrisma.participantApplication.findUnique({
+      where: { id: applicationId },
+      select: { programId: true },
+    });
+
+    if (!application?.programId) {
+      throw notFound();
+    }
+
+    await orNotFound(
+      () => assertProgramAccess(this.readPrisma, scope, application.programId),
+      notFound,
+    );
+  }
+
   private async resolveScopedFilters(
     req: { user?: { adminId?: string } },
     brandId?: string,
@@ -797,7 +836,25 @@ export class ApplicationsController {
     @Param('id') id: string,
     @Body() dto: ReviewApplicationRequestDto,
     @CurrentUser() user: CurrentUserData,
+    @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationResponseDto> {
+    // SCOPE CHECK. Without this the route carried only JwtAuthGuard + @Roles,
+    // and the handler goes straight from findById to canReview with no tenant
+    // assertion anywhere — so ANY admin of ANY brand could review ANY
+    // application by id. Reviewing is not a read: the accept path cancels that
+    // application's invoices and rewrites its registration payment status.
+    //
+    // Asserted on the programme the APPLICATION belongs to, read from the row,
+    // not on anything the caller supplied. There is no programId in the path or
+    // the body to be diverged from it, which is the whole reason this shape is
+    // safe where a route param would not be (see addGallery in
+    // program-content.controller.ts for the case where they can diverge).
+    //
+    // orNotFound collapses "no such application" and "not yours" into the same
+    // 404, so the status code cannot be used to probe which application ids
+    // exist in another brand. Same rule N23 applied to programme ids.
+    await this.assertCanReviewApplication(req, id);
+
     // reviewerId MUST come from the authenticated JWT principal, never from
     // the request body, same attribution-forgery rule Task 6/8b applied to
     // createdById/actingAdminId. ReviewApplicationRequestDto has no
