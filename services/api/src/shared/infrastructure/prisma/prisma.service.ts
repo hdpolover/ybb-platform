@@ -208,6 +208,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     const logger = this.logger;
     const slowQueryThresholdMs = this.slowQueryThresholdMs;
 
+    // Captured from the prototype, not from `this`, so it is always the real
+    // Prisma implementation even if onModuleInit ever runs twice - reading
+    // `this.$transaction` after the first pass would pick up our own delegate
+    // and build the very cycle the comment below warns about.
+    const baseTransaction = PrismaClient.prototype.$transaction;
+
     // Use Prisma Extensions for Soft Delete since middleware ($use) is deprecated/removed in v7
     // Chain extensions: Monitoring (Inner) -> Soft Delete (Outer)
     const extendedClient = this
@@ -322,6 +328,42 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         configurable: true,
       });
     }
+
+    // Patching the per-model getters above covers `prisma.user.findMany()` but
+    // NOT `prisma.$transaction(async (tx) => tx.user.findMany())`: $transaction
+    // was left inherited from PrismaClient, so it ran against `this` - which
+    // $extends never touches, because it returns a NEW object rather than
+    // mutating the receiver. Every interactive transaction therefore handed its
+    // callback a RAW client: soft deletes became hard deletes and reads inside
+    // a transaction saw soft-deleted rows. Audit M73.
+    //
+    // The delegation below is deliberately written the awkward way, and it must
+    // stay that way. The obvious one-liner
+    //
+    //     $transaction(...args) { return this.extendedClient.$transaction(...args) }
+    //
+    // RECURSES UNTIL THE STACK DIES, on every transaction. $extends builds the
+    // extended client as `Object.create(this._originalClient, ...)`, and the
+    // generated client sets `_originalClient = this` - so the extended client's
+    // prototype IS this PrismaService instance. Looking `$transaction` up on the
+    // extended client walks back into whatever we defined here and calls it
+    // again. Two independent design reviews proposed exactly that one-liner.
+    //
+    // So: capture the BASE implementation once and apply it to the extended
+    // client, never dispatch $transaction on the extended client. Defined as an
+    // own property of the instance rather than a class method for the same
+    // reason - PrismaService.prototype must not carry a $transaction at all, or
+    // the extended client inherits it and the cycle is back. A test pins both
+    // halves.
+    //
+    // Prisma's own machinery does the rest: _createItxClient builds the tx
+    // client from the receiver (`Io(this)`), so the extensions ride along.
+    Object.defineProperty(this, '$transaction', {
+      value: (...args: unknown[]) =>
+        (baseTransaction as (...a: unknown[]) => unknown).apply(extendedClient, args),
+      configurable: true,
+      writable: true,
+    });
   }
 
   /**
