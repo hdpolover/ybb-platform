@@ -199,6 +199,10 @@ export class EnsurePortalPaymentInvoiceHandler {
             this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(userId, invoiceId)),
             // Minting an invoice changes the dashboard "Total Required"; bust it too
             // so the home card doesn't serve a stale $0.00 for up to the cache TTL.
+            // PORTAL_DASHBOARD is keyed by (userId, programId?) - bust both the
+            // program-scoped entry and the bare/'latest' one a caller with no
+            // programId would still be serving.
+            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId, programId)),
             this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_DASHBOARD(userId)),
         ]);
     }

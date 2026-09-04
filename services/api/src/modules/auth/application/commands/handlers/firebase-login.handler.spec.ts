@@ -12,6 +12,7 @@ import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '../../../../../shared/infrastructure/geoip/geoip.service';
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
 import { resolveAuthTargetProgram, ensureProgramApplication } from '../../services/auth-program-linking.util';
+import { ApplicationCategory } from '@prisma/client';
 
 jest.mock('../../services/auth-program-linking.util');
 
@@ -315,6 +316,84 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
       expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
     });
   });
+
+  // Regression: Google signups sent programSlug but never applicationCategory,
+  // so ensureProgramApplication always fell through to its self_funded default
+  // (auth-program-linking.util.ts) even when the participant picked Fully
+  // Funded on the edition-choice screen. The email/password path (RegisterDto)
+  // already carried this field; Firebase was the one path that dropped it.
+  describe('applicationCategory passthrough', () => {
+    it('forwards the requested applicationCategory to ensureProgramApplication', async () => {
+      const command = new FirebaseLoginCommand(
+        'firebase-id-token',
+        'provider-id-123',
+        '127.0.0.1',
+        'Mozilla/5.0 Chrome/120',
+        'brand-id-123',
+        undefined,
+        'meys-7th',
+        undefined,
+        ApplicationCategory.fully_funded,
+      );
+
+      await handler.execute(command);
+
+      expect(ensureProgramApplication).toHaveBeenCalledWith(
+        mockPrismaService,
+        expect.objectContaining({ applicationCategory: ApplicationCategory.fully_funded }),
+      );
+    });
+
+    it('leaves applicationCategory undefined when the request omits it, so the util can apply its own default', async () => {
+      const command = new FirebaseLoginCommand(
+        'firebase-id-token',
+        'provider-id-123',
+        '127.0.0.1',
+        'Mozilla/5.0 Chrome/120',
+        'brand-id-123',
+      );
+
+      await handler.execute(command);
+
+      expect(ensureProgramApplication).toHaveBeenCalledWith(
+        mockPrismaService,
+        expect.objectContaining({ applicationCategory: undefined }),
+      );
+    });
+  });
+
+  // Regression: the final `registeredPrograms` fetch had no orderBy, so
+  // availableIds[0] on the frontend's active-program selector
+  // (ybb-program-next/lib/dashboard/activeProgram.ts) was whichever row
+  // Postgres happened to return first for a multi-program participant.
+  describe('registeredPrograms application ordering', () => {
+    it('orders applications by createdAt desc so availableIds[0] is deterministic', async () => {
+      const command = new FirebaseLoginCommand(
+        'firebase-id-token',
+        'provider-id-123',
+        '127.0.0.1',
+        'Mozilla/5.0 Chrome/120',
+        'brand-id-123',
+      );
+
+      await handler.execute(command);
+
+      expect(mockPrismaService.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            participant: expect.objectContaining({
+              include: expect.objectContaining({
+                applications: expect.objectContaining({
+                  orderBy: { createdAt: 'desc' },
+                }),
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+  });
+
   // A Firebase sign-in resets failedLoginAttempts. If it does so while a
   // lockout is running it refunds the guesser a full MAX_FAILED_LOGIN_ATTEMPTS
   // for the moment lockedUntil expires — a bypass of the lockout the password

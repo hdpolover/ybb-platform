@@ -81,10 +81,13 @@ export class PortalController {
     @Get('dashboard')
     @ApiOperation({ summary: 'Get participant dashboard summary' })
     @ApiResponse({ status: 200, type: PortalDashboardResponseDto })
-    async getDashboard(@CurrentUser() user: CurrentUserData): Promise<PortalDashboardResponseDto> {
+    async getDashboard(
+        @CurrentUser() user: CurrentUserData,
+        @Query('programId') programId?: string,
+    ): Promise<PortalDashboardResponseDto> {
         const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
-        return this.queryBus.execute(new GetPortalDashboardQuery(userId));
+        return this.queryBus.execute(new GetPortalDashboardQuery(userId, programId));
     }
 
     @Get('submissions')

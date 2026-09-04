@@ -48,7 +48,7 @@ export const CACHE_KEYS = {
   LANDING_OPEN_REGISTRATION_PROGRAMS: (brandId: string) => `landing:open-registration-programs:${brandId}`,
 
   // Portal cache keys
-  PORTAL_DASHBOARD: (userId: string) => `portal:dashboard:${userId}`,
+  PORTAL_DASHBOARD: (userId: string, programId?: string) => `portal:dashboard:${userId}:${programId || 'latest'}`,
   PORTAL_SUBMISSIONS: (userId: string, programId?: string) => `portal:submissions:${userId}:${programId || 'latest'}`,
   PORTAL_PAYMENTS: (userId: string, programId?: string) => `portal:payments:${userId}:${programId || 'latest'}`,
   // userId is included in the key to prevent cross-participant cache leakage (IDOR).

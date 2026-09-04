@@ -30,10 +30,10 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
     ) {}
 
     async execute(query: GetPortalDashboardQuery): Promise<PortalDashboardResponseDto> {
-        const { userId } = query;
+        const { userId, programId } = query;
 
         // Check cache first
-        const cacheKey = CACHE_KEYS.PORTAL_DASHBOARD(userId);
+        const cacheKey = CACHE_KEYS.PORTAL_DASHBOARD(userId, programId);
         const cached = await this.cacheService.get<PortalDashboardResponseDto>(cacheKey);
         if (cached) {
             return cached;
@@ -48,7 +48,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         }
 
         const latestApplication = await this.prisma.participantApplication.findFirst({
-            where: currentApplicationWhere(participant.id),
+            where: currentApplicationWhere(participant.id, programId),
             orderBy: currentApplicationOrderBy,
             select: {
                 id: true,

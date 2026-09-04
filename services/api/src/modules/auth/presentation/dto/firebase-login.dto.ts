@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { ApplicationCategory } from '@prisma/client';
 
 export class FirebaseLoginDto {
   @ApiProperty({
@@ -57,4 +58,14 @@ export class FirebaseLoginDto {
   @IsString()
   @IsOptional()
   referralCode?: string;
+
+  @ApiProperty({
+    example: 'fully_funded',
+    description: '(Registration only) The category of registration (e.g. self_funded, fully_funded). Validates against available program options.',
+    required: false,
+    enum: ApplicationCategory,
+  })
+  @IsEnum(ApplicationCategory)
+  @IsOptional()
+  applicationCategory?: ApplicationCategory;
 }

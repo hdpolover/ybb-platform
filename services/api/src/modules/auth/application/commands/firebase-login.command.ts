@@ -1,3 +1,5 @@
+import { ApplicationCategory } from '@prisma/client';
+
 export class FirebaseLoginCommand {
   constructor(
     public readonly idToken: string,
@@ -8,5 +10,6 @@ export class FirebaseLoginCommand {
     public readonly programId?: string,
     public readonly programSlug?: string,
     public readonly referralCode?: string,
+    public readonly applicationCategory?: ApplicationCategory,
   ) {}
 }

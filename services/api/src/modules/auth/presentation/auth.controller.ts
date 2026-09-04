@@ -195,6 +195,7 @@ export class AuthController {
       dto.programId,
       dto.programSlug,
       dto.referralCode,
+      dto.applicationCategory,
     );
     return this.firebaseLoginHandler.execute(command, brandDomain);
   }
