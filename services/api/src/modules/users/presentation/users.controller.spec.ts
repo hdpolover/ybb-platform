@@ -13,6 +13,7 @@ import { MarkNotificationReadHandler } from '../application/commands/handlers/ma
 import { ListUserActivityLogsHandler } from '../application/queries/handlers/list-user-activity-logs.handler';
 import { ListUserSecurityLogsHandler } from '../application/queries/handlers/list-user-security-logs.handler';
 import { CreateDeletionRequestHandler } from '../application/commands/handlers/create-deletion-request.handler';
+import { CancelDeletionRequestHandler } from '../application/commands/handlers/cancel-deletion-request.handler';
 import { ActivateUserHandler } from '../application/commands/handlers/activate-user.handler';
 import { DeactivateUserHandler } from '../application/commands/handlers/deactivate-user.handler';
 
@@ -43,6 +44,7 @@ describe('UsersController', () => {
   const mockListUserActivityLogsHandler = { execute: jest.fn() };
   const mockListUserSecurityLogsHandler = { execute: jest.fn() };
   const mockCreateDeletionRequestHandler = { execute: jest.fn() };
+  const mockCancelDeletionRequestHandler = { execute: jest.fn() };
   const mockActivateUserHandler = { execute: jest.fn() };
   const mockDeactivateUserHandler = { execute: jest.fn() };
   const mockCacheService = {
@@ -73,6 +75,7 @@ describe('UsersController', () => {
         { provide: ListUserActivityLogsHandler, useValue: mockListUserActivityLogsHandler },
         { provide: ListUserSecurityLogsHandler, useValue: mockListUserSecurityLogsHandler },
         { provide: CreateDeletionRequestHandler, useValue: mockCreateDeletionRequestHandler },
+        { provide: CancelDeletionRequestHandler, useValue: mockCancelDeletionRequestHandler },
         { provide: ActivateUserHandler, useValue: mockActivateUserHandler },
         { provide: DeactivateUserHandler, useValue: mockDeactivateUserHandler },
         { provide: CacheService, useValue: mockCacheService },

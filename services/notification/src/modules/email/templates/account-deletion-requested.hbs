@@ -1,0 +1,33 @@
+<div style="text-align: center;">
+    <h2 style="font-size: 24px; font-weight: 700; color: {{theme.primaryDark}}; margin: 0 0 24px;">
+        Your Account Is Scheduled for Deletion
+    </h2>
+
+    <p style="font-size: 16px; color: #4b5563; margin-bottom: 24px; line-height: 1.6; text-align: left;">
+        Hi {{name}},<br><br>
+        We've received your request to delete your account{{#if brand.name}} on <strong>{{brand.name}}</strong>{{/if}}.
+        Your account has been deactivated, and on <strong>{{scheduledDeletionDate}}</strong> it will be permanently
+        anonymised - your personal information will be erased and cannot be recovered after that date.
+    </p>
+
+    <p style="font-size: 16px; color: #4b5563; margin-bottom: 32px; line-height: 1.6; text-align: left;">
+        Changed your mind? You can reactivate your account any time before then - no login required.
+    </p>
+
+    <div style="margin: 32px 0;">
+        <a href="{{cancelUrl}}" class="cta-button">
+            Cancel Deletion &amp; Reactivate My Account
+        </a>
+    </div>
+
+    <p style="font-size: 14px; color: #9ca3af; text-align: left;">
+        If you didn't request this, please use the link above right away to keep your account active.
+    </p>
+
+    <div style="margin-top: 32px; border-top: 1px solid {{theme.border}}; padding-top: 24px; text-align: left;">
+        <p style="font-size: 13px; color: #9ca3af; line-height: 1.5; margin-bottom: 8px;">
+            Link not working? Use this URL:
+        </p>
+        <a href="{{cancelUrl}}" class="link break-word" style="font-size: 13px;">{{cancelUrl}}</a>
+    </div>
+</div>

@@ -22,9 +22,12 @@ import { ListUserActivityLogsQuery, ListUserSecurityLogsQuery } from '../applica
 import { ListUserActivityLogsHandler } from '../application/queries/handlers/list-user-activity-logs.handler';
 import { ListUserSecurityLogsHandler } from '../application/queries/handlers/list-user-security-logs.handler';
 import { UserActivityLogResponseDto, UserSecurityLogResponseDto } from './dto/user-logs.dto';
-import { CreateDeletionRequestDto, DeletionRequestResponseDto } from './dto/deletion-request.dto';
+import { CancelDeletionRequestDto, CreateDeletionRequestDto, DeletionRequestResponseDto } from './dto/deletion-request.dto';
 import { CreateDeletionRequestCommand } from '../application/commands/create-deletion-request.command';
 import { CreateDeletionRequestHandler } from '../application/commands/handlers/create-deletion-request.handler';
+import { CancelDeletionRequestCommand } from '../application/commands/cancel-deletion-request.command';
+import { CancelDeletionRequestHandler } from '../application/commands/handlers/cancel-deletion-request.handler';
+import { Public } from '@shared/decorators/public.decorator';
 import { ActivateUserHandler } from '../application/commands/handlers/activate-user.handler';
 import { DeactivateUserHandler } from '../application/commands/handlers/deactivate-user.handler';
 import { ActivateUserCommand } from '../application/commands/activate-user.command';
@@ -57,6 +60,7 @@ export class UsersController {
     private readonly listUserActivityLogsHandler: ListUserActivityLogsHandler,
     private readonly listUserSecurityLogsHandler: ListUserSecurityLogsHandler,
     private readonly createDeletionRequestHandler: CreateDeletionRequestHandler,
+    private readonly cancelDeletionRequestHandler: CancelDeletionRequestHandler,
     private readonly activateUserHandler: ActivateUserHandler,
     private readonly deactivateUserHandler: DeactivateUserHandler,
     private readonly cacheService: CacheService,
@@ -169,6 +173,19 @@ export class UsersController {
   ): Promise<DeletionRequestResponseDto> {
     const command = new CreateDeletionRequestCommand(user.userId, dto, ipAddress, userAgent);
     return this.createDeletionRequestHandler.execute(command);
+  }
+
+  // Public: deactivating at request time means the guard in
+  // firebase-login.handler.ts refuses the user's own login, so reactivation
+  // cannot go through an authenticated route. Overrides the class-level
+  // JwtAuthGuard via the isPublic metadata it checks for.
+  @Post('deletion-request/cancel')
+  @Public()
+  @ApiOperation({ summary: 'Cancel a pending account deletion via emailed token (no login required)' })
+  @ApiResponse({ status: 200, description: 'Deletion cancelled, account reactivated' })
+  async cancelDeletionRequest(@Body() dto: CancelDeletionRequestDto): Promise<{ message: string }> {
+    const command = new CancelDeletionRequestCommand(dto.requestId, dto.token);
+    return this.cancelDeletionRequestHandler.execute(command);
   }
 
   @Post()

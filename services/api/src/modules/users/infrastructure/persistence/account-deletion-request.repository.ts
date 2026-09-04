@@ -8,20 +8,6 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 export class AccountDeletionRequestRepository implements IAccountDeletionRequestRepository {
     constructor(private readonly prisma: PrismaService) { }
 
-    async create(req: AccountDeletionRequest): Promise<AccountDeletionRequest> {
-        const created = await this.prisma.accountDeletionRequest.create({
-            data: {
-                userId: req.userId,
-                reason: req.reason,
-                reasonCategory: req.reasonCategory,
-                status: req.status as DeletionStatus,
-                ipAddress: req.ipAddress,
-                userAgent: req.userAgent,
-            },
-        });
-        return this.toDomain(created);
-    }
-
     async findByUserId(userId: string): Promise<AccountDeletionRequest | null> {
         const req = await this.prisma.accountDeletionRequest.findFirst({
             where: { userId },
@@ -30,11 +16,11 @@ export class AccountDeletionRequestRepository implements IAccountDeletionRequest
         return req ? this.toDomain(req) : null;
     }
 
-    async findPendingByUserId(userId: string): Promise<AccountDeletionRequest | null> {
+    async findActiveByUserId(userId: string): Promise<AccountDeletionRequest | null> {
         const req = await this.prisma.accountDeletionRequest.findFirst({
             where: {
                 userId,
-                status: 'pending',
+                status: { in: [DeletionStatus.pending, DeletionStatus.approved] },
             },
         });
         return req ? this.toDomain(req) : null;

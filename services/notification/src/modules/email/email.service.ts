@@ -705,6 +705,100 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
+  // cancelUrl arrives pre-built (the API resolves brand.websiteUrl vs.
+  // FRONTEND_URL itself, same as it does for every other token link), so
+  // this just forwards it - no baseUrl logic duplicated here.
+  async sendAccountDeletionRequestedEmail(
+    to: string,
+    name: string,
+    cancelUrl: string,
+    scheduledDeletionDate: string,
+    brand?: any,
+  ) {
+    const templateData = {
+      name,
+      cancelUrl,
+      scheduledDeletionDate: formatDate(scheduledDeletionDate),
+      brand,
+    };
+    const fallbackSubject = brand
+      ? `Your ${brand.name} account is scheduled for deletion`
+      : 'Your account is scheduled for deletion';
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'account_deletion_requested',
+      fallbackTemplateName: 'account-deletion-requested',
+      fallbackSubject,
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
+  async sendAccountDeletionReminderEmail(
+    to: string,
+    name: string,
+    cancelUrl: string,
+    scheduledDeletionDate: string,
+    brand?: any,
+  ) {
+    const templateData = {
+      name,
+      cancelUrl,
+      scheduledDeletionDate: formatDate(scheduledDeletionDate),
+      brand,
+    };
+    const fallbackSubject = brand
+      ? `Reminder: your ${brand.name} account will be deleted soon`
+      : 'Reminder: your account will be deleted soon';
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'account_deletion_reminder',
+      fallbackTemplateName: 'account-deletion-reminder',
+      fallbackSubject,
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
+  async sendAccountDeletionCancelledEmail(to: string, name: string, brand?: any) {
+    let baseUrl =
+      this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+    if (brand?.websiteUrl) {
+      baseUrl = brand.websiteUrl.replace(/\/$/, '');
+    }
+
+    const templateData = {
+      name,
+      loginUrl: `${baseUrl}/login`,
+      brand,
+    };
+    const fallbackSubject = brand
+      ? `Your ${brand.name} account deletion was cancelled`
+      : 'Your account deletion was cancelled';
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'account_deletion_cancelled',
+      fallbackTemplateName: 'account-deletion-cancelled',
+      fallbackSubject,
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
+  // Sent by the purge job BEFORE it anonymises the account - by the time
+  // this arrives the recipient's own record no longer resembles this email,
+  // which is expected: this is the last message that could ever reach them.
+  async sendAccountDeletionCompletedEmail(to: string, name: string, brand?: any) {
+    const templateData = { name, brand };
+    const fallbackSubject = brand
+      ? `Your ${brand.name} account has been deleted`
+      : 'Your account has been deleted';
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'account_deletion_completed',
+      fallbackTemplateName: 'account-deletion-completed',
+      fallbackSubject,
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
   async sendManualPaymentReceivedEmail(to: string, paymentData: any) {
     const templateData = {
       name: paymentData.name,

@@ -730,6 +730,126 @@ export class EventsController {
     );
   }
 
+  @EventPattern('user.account-deletion-requested')
+  async handleAccountDeletionRequested(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'user.account-deletion-requested',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received user.account-deletion-requested event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        const cancelUrl = getString(payload, 'cancelUrl');
+        const scheduledDeletionDate = getString(payload, 'scheduledDeletionDate');
+        if (!email || !cancelUrl || !scheduledDeletionDate) return;
+
+        await this.emailService.sendAccountDeletionRequestedEmail(
+          email,
+          getString(payload, 'name') || 'there',
+          cancelUrl,
+          scheduledDeletionDate,
+          payload.brand,
+        );
+      },
+    );
+  }
+
+  @EventPattern('user.account-deletion-reminder')
+  async handleAccountDeletionReminder(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'user.account-deletion-reminder',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received user.account-deletion-reminder event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        const cancelUrl = getString(payload, 'cancelUrl');
+        const scheduledDeletionDate = getString(payload, 'scheduledDeletionDate');
+        if (!email || !cancelUrl || !scheduledDeletionDate) return;
+
+        await this.emailService.sendAccountDeletionReminderEmail(
+          email,
+          getString(payload, 'name') || 'there',
+          cancelUrl,
+          scheduledDeletionDate,
+          payload.brand,
+        );
+      },
+    );
+  }
+
+  @EventPattern('user.account-deletion-cancelled')
+  async handleAccountDeletionCancelled(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'user.account-deletion-cancelled',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received user.account-deletion-cancelled event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        if (!email) return;
+
+        await this.emailService.sendAccountDeletionCancelledEmail(
+          email,
+          getString(payload, 'name') || 'there',
+          payload.brand,
+        );
+      },
+    );
+  }
+
+  // Emitted by the purge job BEFORE it anonymises the account - by the time
+  // this is consumed, the account's own row may already be anonymised too
+  // (the two run independently), which is fine: everything this handler
+  // needs travels in the event payload itself, not a DB lookup.
+  @EventPattern('user.account-deletion-completed')
+  async handleAccountDeletionCompleted(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'user.account-deletion-completed',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received user.account-deletion-completed event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        if (!email) return;
+
+        await this.emailService.sendAccountDeletionCompletedEmail(
+          email,
+          getString(payload, 'name') || 'there',
+          payload.brand,
+        );
+      },
+    );
+  }
+
   @EventPattern('support.ticket.created')
   async handleSupportTicketCreated(
     @Payload() data: unknown,
