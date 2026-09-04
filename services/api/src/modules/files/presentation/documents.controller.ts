@@ -287,11 +287,25 @@ export class DocumentsController {
     }
   }
 
+  /**
+   * A verification hash is the first 16 characters of a sha256 hexdigest
+   * (services/file certificate_generator.py), so it is always 16 lowercase hex
+   * characters. Anything else is rejected before the value is used.
+   *
+   * This route is @Public(), and the value reaches an outbound URL to an
+   * internal service, so its shape is validated here rather than trusted.
+   */
+  private static readonly VERIFICATION_HASH_PATTERN = /^[a-f0-9]{16}$/;
+
   @Get('verify/:hash')
   @Public()
   @ApiOperation({ summary: 'Verify certificate authenticity' })
   @ApiResponse({ status: 200, description: 'Certificate verification result' })
+  @ApiResponse({ status: 400, description: 'Malformed verification hash' })
   async verifyCertificate(@Param('hash') hash: string) {
+    if (!DocumentsController.VERIFICATION_HASH_PATTERN.test(hash)) {
+      throw new BadRequestException('Invalid verification hash');
+    }
     try {
       this.logger.log(`Verifying certificate: ${hash}`);
       return await this.fileServiceClient.verifyCertificate(hash);

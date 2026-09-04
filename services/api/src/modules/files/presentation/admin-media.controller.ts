@@ -51,6 +51,8 @@ import { multerLimits } from '@common/constants';
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class AdminMediaController {
+  private static readonly UUID_PATTERN =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   private readonly logger = new Logger(AdminMediaController.name);
 
   constructor(
@@ -195,6 +197,17 @@ export class AdminMediaController {
     // delete another brand's file by naming its brand.
     const scope = await resolveRevenueAccessScope(this.prismaRead, user);
     const program = await assertProgramAccess(this.prismaRead, scope, programId);
-    await this.fileServiceClient.deleteMediaFile(fileId, program.brandId);
+    // Validated after the scope check and immediately before the value is used,
+    // so an unauthorised caller still gets the same 404 it always did rather
+    // than a 400 that tells them their id was well-formed.
+    if (!AdminMediaController.UUID_PATTERN.test(fileId)) {
+      throw new BadRequestException('Invalid file id');
+    }
+    // The programme is forwarded as well as the brand. Brand alone was too
+    // coarse: a brand can host several programmes with separate admins, so a
+    // caller authorised for programme A could delete a file belonging to
+    // programme B in the same brand. programId is safe to send because
+    // assertProgramAccess has just validated it against this caller's scope.
+    await this.fileServiceClient.deleteMediaFile(fileId, program.brandId, programId);
   }
 }

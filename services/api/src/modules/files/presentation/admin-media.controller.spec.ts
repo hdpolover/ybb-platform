@@ -1,10 +1,12 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AdminMediaController } from './admin-media.controller';
 import { FileServiceClient } from '../infrastructure/clients/file-service.client';
 import { StorageService } from '../application/storage.service';
 import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '../application/private-file-url-resolver.service';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
+
+const FILE_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('AdminMediaController — listMedia', () => {
     let controller: AdminMediaController;
@@ -258,9 +260,26 @@ describe('AdminMediaController — uploadMedia / deleteMedia brand+identity deri
     it('deleteMedia scopes the delete to the PROGRAM brand, not a caller-supplied one', async () => {
         mockPrismaRead.admin.findUnique.mockResolvedValue(mockAdmin({ accessLevel: 10 }));
 
-        await controller.deleteMedia(PROGRAM_ID, 'file-9', platformAdminUser);
+        await controller.deleteMedia(PROGRAM_ID, FILE_ID, platformAdminUser);
 
-        expect(mockFileServiceClient.deleteMediaFile).toHaveBeenCalledWith('file-9', PROGRAM_BRAND_ID);
+        // The authorised programme is forwarded too: brand alone cannot stop an
+        // admin of programme A deleting a file owned by programme B in the same brand.
+        expect(mockFileServiceClient.deleteMediaFile).toHaveBeenCalledWith(
+            FILE_ID,
+            PROGRAM_BRAND_ID,
+            PROGRAM_ID,
+        );
+    });
+
+    it('deleteMedia rejects a file id that is not a uuid, without calling the file service', async () => {
+        // The id is interpolated into a file-service URL, so its shape is checked
+        // before it is used.
+        mockPrismaRead.admin.findUnique.mockResolvedValue(mockAdmin({ accessLevel: 10 }));
+
+        await expect(
+            controller.deleteMedia(PROGRAM_ID, '../media/program/other', platformAdminUser),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expect(mockFileServiceClient.deleteMediaFile).not.toHaveBeenCalled();
     });
 
     it('deleteMedia rejects an admin with no access to the program — and deletes nothing', async () => {
@@ -269,7 +288,7 @@ describe('AdminMediaController — uploadMedia / deleteMedia brand+identity deri
         );
 
         await expect(
-            controller.deleteMedia(PROGRAM_ID, 'file-9', foreignBrandAdmin),
+            controller.deleteMedia(PROGRAM_ID, FILE_ID, foreignBrandAdmin),
         ).rejects.toBeInstanceOf(NotFoundException);
         expect(mockFileServiceClient.deleteMediaFile).not.toHaveBeenCalled();
     });

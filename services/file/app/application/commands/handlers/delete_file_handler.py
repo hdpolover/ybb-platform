@@ -11,6 +11,19 @@ class DeleteFileHandler:
 
     Ownership check: the file's brand_id must match the caller's brand_id
     so a program admin cannot delete files belonging to a different brand.
+
+    Brand alone is too coarse. One brand can host several programmes with
+    separate admins, so a caller authorised for programme A could delete a file
+    belonging to programme B in the same brand. When the caller names a
+    programme, a file that belongs to a DIFFERENT programme is refused.
+
+    A file with no programme is deliberately still deletable on the brand check
+    alone: program_id is nullable and most files legitimately have none (user
+    avatars, payment-method icons, brand logos - 1,874 of 2,260 rows in
+    production at the time of writing). Refusing those outright, which is what a
+    plain `file.program_id != command.program_id` does, would make the majority
+    of the library undeletable. A file owned by no programme also has no
+    cross-programme victim to protect.
     """
 
     def __init__(
@@ -27,6 +40,13 @@ class DeleteFileHandler:
             raise FileNotFoundException(command.file_id)
 
         if file.brand_id != command.brand_id:
+            raise FileNotFoundException(command.file_id)
+
+        if (
+            command.program_id is not None
+            and file.program_id is not None
+            and file.program_id != command.program_id
+        ):
             raise FileNotFoundException(command.file_id)
 
         # Remove from object storage first; if it fails the record stays intact

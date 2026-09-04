@@ -127,6 +127,12 @@ export interface GenerateLoaParams {
  */
 @Injectable()
 export class FileServiceClient {
+  // Values interpolated into these URL paths are encoded, not trusted. The HTTP
+  // client resolves the finished string with the WHATWG URL parser, which
+  // collapses dot segments, so an un-encoded caller-supplied segment can change
+  // which file-service endpoint is actually called. Callers validate the shape
+  // of these identifiers too; this is the second layer, so a future caller that
+  // forgets the first does not reopen it.
   private readonly logger = new Logger(FileServiceClient.name);
   private readonly fileServiceUrl: string;
   private readonly internalServiceKey: string;
@@ -250,7 +256,7 @@ export class FileServiceClient {
       try {
         const response: AxiosResponse<FileResponse> = await firstValueFrom(
           this.httpService.get(
-            `${this.fileServiceUrl}/api/v1/files/${fileId}`,
+            `${this.fileServiceUrl}/api/v1/files/${encodeURIComponent(fileId)}`,
             {
               headers: this.getInternalHeaders(),
               params: { user_id: userId, brand_id: brandId },
@@ -454,7 +460,7 @@ export class FileServiceClient {
     try {
       const response: AxiosResponse<FileResponse> = await firstValueFrom(
         this.httpService.get(
-          `${this.fileServiceUrl}/api/v1/documents/verify/${verificationHash}`,
+          `${this.fileServiceUrl}/api/v1/documents/verify/${encodeURIComponent(verificationHash)}`,
           { headers: this.getInternalHeaders() },
         ),
       );
@@ -544,7 +550,7 @@ export class FileServiceClient {
       try {
         const response: AxiosResponse<FileResponse> = await firstValueFrom(
           this.httpService.patch(
-            `${this.fileServiceUrl}/api/v1/files/${fileId}/ready`,
+            `${this.fileServiceUrl}/api/v1/files/${encodeURIComponent(fileId)}/ready`,
             null,
             {
               params: {
@@ -569,15 +575,15 @@ export class FileServiceClient {
   /**
    * Soft-delete a media file.
    */
-  async deleteMediaFile(fileId: string, brandId: string): Promise<void> {
+  async deleteMediaFile(fileId: string, brandId: string, programId: string): Promise<void> {
     return this.executeRequest(async () => {
       try {
         await firstValueFrom(
           this.httpService.delete(
-            `${this.fileServiceUrl}/api/v1/media/${fileId}`,
+            `${this.fileServiceUrl}/api/v1/media/${encodeURIComponent(fileId)}`,
             {
               headers: this.getInternalHeaders(),
-              params: { brand_id: brandId },
+              params: { brand_id: brandId, program_id: programId },
             },
           ),
         );

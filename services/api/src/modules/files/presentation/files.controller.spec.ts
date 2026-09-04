@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { NotFoundException } from '@nestjs/common';
 import { Response } from 'express';
 import { FilesController } from './files.controller';
@@ -261,5 +262,60 @@ describe('FilesController — requestUploadUrl (brand attribution)', () => {
         expect(mockFileServiceClient.createUploadUrl).toHaveBeenCalledWith(
             expect.objectContaining({ user_id: 'real-jwt-user' }),
         );
+    });
+});
+
+describe('FilesController — identifiers forwarded to the file service (audit M186)', () => {
+    let controller: FilesController;
+    const mockFileServiceClient = {
+        getFile: jest.fn().mockResolvedValue({ id: 'x' }),
+        markFileReady: jest.fn().mockResolvedValue({ id: 'x' }),
+    };
+    const user = { userId: 'user-1', brandId: 'brand-1', email: 'a@b.c' } as never;
+
+    // A file id ends up inside a URL path sent to the file service, so its shape
+    // is checked before it is used. The controller already carried a UUID_PATTERN
+    // for the public download path; these two handlers simply never called it.
+    const TRAVERSAL = '..%2F..%2Fmedia%2Fprogram%2Fother';
+
+    beforeEach(async () => {
+        jest.clearAllMocks();
+        const module: TestingModule = await Test.createTestingModule({
+            controllers: [FilesController],
+            providers: [
+                { provide: FileServiceClient, useValue: mockFileServiceClient },
+                { provide: FileGrpcClient, useValue: {} },
+                { provide: StorageService, useValue: {} },
+                { provide: MetricsService, useValue: { fileUploadsTotal: { inc: jest.fn() } } },
+                { provide: PrismaService, useValue: {} },
+                { provide: PrismaReadService, useValue: {} },
+            ],
+        })
+            .overrideGuard(JwtAuthGuard)
+            .useValue({ canActivate: () => true })
+            .compile();
+        controller = module.get<FilesController>(FilesController);
+    });
+
+    it('getFile refuses an id that is not a uuid, without calling the file service', async () => {
+        await expect(controller.getFile(TRAVERSAL, user)).rejects.toBeInstanceOf(BadRequestException);
+        expect(mockFileServiceClient.getFile).not.toHaveBeenCalled();
+    });
+
+    it('getFile still forwards a well-formed id', async () => {
+        await controller.getFile('123e4567-e89b-12d3-a456-426614174000', user);
+        expect(mockFileServiceClient.getFile).toHaveBeenCalled();
+    });
+
+    it('markFileReady refuses an id that is not a uuid, without calling the file service', async () => {
+        await expect(controller.markFileReady(TRAVERSAL, user)).rejects.toBeInstanceOf(
+            BadRequestException,
+        );
+        expect(mockFileServiceClient.markFileReady).not.toHaveBeenCalled();
+    });
+
+    it('markFileReady still forwards a well-formed id', async () => {
+        await controller.markFileReady('123e4567-e89b-12d3-a456-426614174000', user);
+        expect(mockFileServiceClient.markFileReady).toHaveBeenCalled();
     });
 });

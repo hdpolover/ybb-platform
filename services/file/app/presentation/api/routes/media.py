@@ -58,11 +58,16 @@ async def list_program_media(
 async def delete_media_file(
     file_id: str,
     brand_id: str = Query(..., description="Brand ID — used to verify ownership"),
+    program_id: Optional[str] = Query(
+        None, description="Program ID — refuses a file owned by another programme"
+    ),
     handler: DeleteFileHandler = Depends(get_delete_file_handler),
 ) -> None:
     """Soft-delete a file record and remove it from object storage."""
     try:
-        await handler.execute(DeleteFileCommand(file_id=file_id, brand_id=brand_id))
+        await handler.execute(
+            DeleteFileCommand(file_id=file_id, brand_id=brand_id, program_id=program_id)
+        )
     except FileNotFoundException:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
