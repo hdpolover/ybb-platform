@@ -26,6 +26,7 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
   const mockAppRepository = { findById: jest.fn() };
   const mockPaymentClient = { createIntent: jest.fn() };
   const mockPrisma = {
+    participant: { findUnique: jest.fn() },
     programPricingTier: { findFirst: jest.fn() },
     program: { findUnique: jest.fn() },
     brandSetting: { findFirst: jest.fn() },
@@ -50,6 +51,10 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
 
     // Happy-path defaults: dual-priced registration tier + configured rate + not yet paid.
     mockAppRepository.findById.mockResolvedValue(makeApp());
+    // Participant.id and User.id are deliberately different values throughout
+    // this suite: the payment service keys intents on users.id, and sending a
+    // Participant.id there is the whole point of audit M98.
+    mockPrisma.participant.findUnique.mockResolvedValue({ userId: 'user-1' });
     mockPrisma.programPricingTier.findFirst.mockResolvedValue({
       price: 10,
       currency: 'USD',
@@ -147,6 +152,34 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
     expect(mockPaymentClient.createIntent).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 176000, currency: 'IDR' }),
     );
+  });
+
+  // Audit M98. `userId` on this command is a Participant.id - the ownership
+  // check asserts it equals application.participantId - but the payment service
+  // keys intents on users.id and enforces ownership against it, so forwarding
+  // the Participant.id minted an intent the participant could never claim. The
+  // portal path (confirm-portal-payment.handler.ts) has always sent the real
+  // users.id plus participant_id separately.
+  it('sends the real users.id as user_id and the participant id separately', async () => {
+    await handler.execute(command);
+
+    expect(mockPrisma.participant.findUnique).toHaveBeenCalledWith({
+      where: { id: 'participant-1' },
+      select: { userId: true },
+    });
+    expect(mockPaymentClient.createIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_id: 'user-1',
+        participant_id: 'participant-1',
+      }),
+    );
+  });
+
+  it('fails loudly when the application has no participant row', async () => {
+    mockPrisma.participant.findUnique.mockResolvedValue(null);
+
+    await expect(handler.execute(command)).rejects.toThrow(NotFoundException);
+    expect(mockPaymentClient.createIntent).not.toHaveBeenCalled();
   });
 
   it('tags the intent with the registration payment_category', async () => {
