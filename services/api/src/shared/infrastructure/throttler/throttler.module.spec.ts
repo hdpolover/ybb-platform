@@ -7,7 +7,8 @@ import { Test } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { getOptionsToken } from '@nestjs/throttler';
 import { ThrottlerModule } from './throttler.module';
-import { clientIpTracker, emailTracker } from './user-aware-throttler.guard';
+import { createHash } from 'crypto';
+import { clientIpTracker, emailTracker, recoveryMailboxBucket } from './user-aware-throttler.guard';
 import { AuthController } from '../../../modules/auth/presentation/auth.controller';
 
 // The module builds a RedisThrottlerStorage in its factory; we only care about
@@ -99,12 +100,20 @@ describe('throttler wiring for the auth routes', () => {
     ['login', AuthController.prototype.login],
     ['adminLogin', AuthController.prototype.adminLogin],
     ['ambassadorLogin', AuthController.prototype.ambassadorLogin],
-  ])('caps %s per client IP as well as per mailbox', (_name, handler) => {
-    // Email keying ALONE is not a limit on a credential route: the caller
-    // writes the body, so spraying one password across many accounts never
-    // reuses a bucket. The IP tier is the ceiling that actually binds.
+  ])('caps %s per client IP on BOTH tiers, never per mailbox', (_name, handler) => {
+    // Email keying is wrong on a credential route and used to be here. The
+    // caller writes the body, so it was a remote lockout primitive against any
+    // known address; the guard increments before the handler, so it counted
+    // SUCCESSES; and emailTracker folds +tags and gmail dots, so two distinct
+    // user rows shared one login budget. The per-account budget belongs on
+    // user.id counting only failures — that is account-lockout.util.ts.
     expect(trackerFor(handler, 'default')).toBe(clientIpTracker);
-    expect(trackerFor(handler, 'long')).toBe(emailTracker);
+
+    // `long` must stay PINNED, and pinned to an IP tier. Leaving the name
+    // unset does not remove a ceiling, it inherits the GLOBAL long tier
+    // (300/60s with a 60s block), which is tighter than what these routes
+    // carry today and lockout-shaped on a CGNAT-heavy auth path.
+    expect(trackerFor(handler, 'long')).toBe(clientIpTracker);
   });
 
   it.each([
@@ -130,5 +139,85 @@ describe('throttler wiring for the auth routes', () => {
     // caller cannot mint. That is the client IP, and it must stay named here.
     expect(trackerFor(AuthController.prototype.registerAdmin, 'default')).toBe(clientIpTracker);
     expect(trackerFor(AuthController.prototype.registerAdmin, 'default')).not.toBe(emailTracker);
+  });
+
+  describe('the per-inbox mail budget actually aggregates', () => {
+    // @nestjs/throttler hashes `ClassName-HandlerName-tierName` into every
+    // storage key (throttler.guard.js:148-150), so a tier pinned to N handlers
+    // is N independent budgets for the same tracker. That is the whole defect:
+    // /auth/forgot-password and /auth/resend-verification each held their own
+    // 10-per-hour allowance for one address, so the real ceiling was 20 where
+    // the comment said 10.
+    //
+    // These assert on the KEYS, not on the limits. A test that checked "the
+    // mailbox tier caps at 10" passes under both the broken and the fixed code
+    // and proves nothing.
+    const keyGenFor = (handler: unknown, throttler: string) =>
+      Reflect.getMetadata(`THROTTLER:KEY_GENERATOR${throttler}`, handler as object);
+
+    // What the library does when a route pins no generateKey of its own.
+    const libraryDefaultKey = (handlerName: string, throttler: string, tracker: string) =>
+      createHash('sha256')
+        .update(`AuthController-${handlerName}-${throttler}-${tracker}`)
+        .digest('hex');
+
+    const keyFor = (handlerName: string, handler: unknown, throttler: string, tracker: string) => {
+      const generateKey = keyGenFor(handler, throttler);
+      return generateKey
+        ? generateKey({} as never, tracker, throttler)
+        : libraryDefaultKey(handlerName, throttler, tracker);
+    };
+
+    const TRACKER = 'email:victim@gmail.com';
+
+    it('gives forgot-password and resend-verification ONE shared bucket', () => {
+      // Against the old code these are two different sha256 digests, because
+      // the handler name is inside the hash. This is the assertion that fails.
+      const forgot = keyFor('forgotPassword', AuthController.prototype.forgotPassword, 'default', TRACKER);
+      const resend = keyFor('resendVerification', AuthController.prototype.resendVerification, 'default', TRACKER);
+
+      expect(forgot).toBe(resend);
+    });
+
+    it('keeps /register on its OWN bucket, deliberately', () => {
+      // Not an oversight. The guard runs before the ValidationPipe, so every
+      // signup 400/409 spends mailbox budget without sending mail, and
+      // blockDuration falls through to the one-hour ttl. Sharing would let
+      // eleven junk POSTs carrying only {email} block that inbox's password
+      // reset for an hour — and password reset is the only self-service escape
+      // from an account lockout.
+      const register = keyFor('register', AuthController.prototype.register, 'default', TRACKER);
+      const forgot = keyFor('forgotPassword', AuthController.prototype.forgotPassword, 'default', TRACKER);
+
+      expect(register).not.toBe(forgot);
+    });
+
+    it('leaves the per-IP tier split per route, so no building loses ceiling', () => {
+      // Converging this one would cut a school lab's allowance threefold —
+      // the 2026-08-31 lockout shape. It must stay per-handler.
+      const forgot = keyFor('forgotPassword', AuthController.prototype.forgotPassword, 'long', 'ip:1.2.3.4');
+      const resend = keyFor('resendVerification', AuthController.prototype.resendVerification, 'long', 'ip:1.2.3.4');
+
+      expect(forgot).not.toBe(resend);
+    });
+
+    it('hashes, and never returns the raw mailbox as a Redis key', () => {
+      // throttler.guard.js:116 hands this value straight to storage. Returning
+      // the tracker verbatim would write plaintext user mailboxes into Redis
+      // keys, visible to anything that can run KEYS.
+      const key = recoveryMailboxBucket({} as never, TRACKER, 'default');
+
+      expect(key).not.toContain('victim@gmail.com');
+      expect(key).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('does not reference `this`, because the guard calls it unbound', () => {
+      // throttler.guard.js:115 calls `generateKey(context, tracker, name)` as a
+      // bare function. A `this` in there would be undefined and every request
+      // on these routes would 500 — a rate limiter causing the outage.
+      const detached = recoveryMailboxBucket;
+
+      expect(() => detached({} as never, TRACKER, 'default')).not.toThrow();
+    });
   });
 });

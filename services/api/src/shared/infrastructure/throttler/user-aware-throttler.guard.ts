@@ -1,9 +1,14 @@
 // src/shared/infrastructure/throttler/user-aware-throttler.guard.ts
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { ThrottlerGuard, ThrottlerModuleOptions, ThrottlerStorage } from '@nestjs/throttler';
+import {
+  ThrottlerGenerateKeyFunction,
+  ThrottlerGuard,
+  ThrottlerModuleOptions,
+  ThrottlerStorage,
+} from '@nestjs/throttler';
 import { ipThrottleKey, resolveClientIp } from '../../utils/client-ip';
 
 type ThrottledRequest = {
@@ -43,7 +48,12 @@ const EMAIL_SHAPE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/;
  * Key a throttle bucket on the mailbox the request is addressed to.
  *
  * Correct only where the ADDRESS is the resource being protected: one mailbox,
- * one mail budget, no matter who asks or from where. Wrong everywhere else,
+ * one mail budget, no matter who asks or from where. That guarantee is PER
+ * ROUTE unless the tier also pins a generateKey — the library hashes the
+ * handler name into the storage key (throttler.guard.js:149), so N sibling
+ * routes pinning the same tier give one inbox N budgets. See
+ * recoveryMailboxBucket below, and auth.controller.ts for which routes share a
+ * bucket and which deliberately do not. Wrong everywhere else,
  * because the caller writes the body — on a credential route it hands an
  * attacker a fresh bucket per account and no aggregate ceiling at all, which
  * is the exact shape credential stuffing wants.
@@ -103,6 +113,42 @@ export const emailTracker = (req: Record<string, unknown>): string => {
 };
 
 /**
+ * Collapse the sibling ACCOUNT-RECOVERY routes onto one shared mailbox bucket.
+ *
+ * @nestjs/throttler hashes `ClassName-HandlerName-tierName` into every storage
+ * key (throttler.guard.js:148-150), so a tier pinned to three handlers is three
+ * independent budgets for the same tracker. /auth/forgot-password and
+ * /auth/resend-verification each held their own 10-per-hour allowance against
+ * one inbox, so the real ceiling was 20 where the comment advertised 10 — and
+ * the damage that ceiling exists to bound is delivered mail, whose bounce and
+ * spam-complaint cost lands on OUR sending domain.
+ *
+ * TWO TRAPS, both load-bearing:
+ *
+ * 1. NEVER reference `this`. throttler.guard.js:115 calls this function bare
+ *    (`generateKey(context, tracker, throttler.name)`), not as a method, so a
+ *    `this` would be undefined and every request on these routes would 500 —
+ *    turning a rate limiter into an outage.
+ *
+ * 2. IT MUST HASH. throttler.guard.js:116 hands the return value straight to
+ *    storage as the Redis key. The library default hashes for us; a custom one
+ *    that returns the tracker verbatim would write plaintext user mailboxes
+ *    into Redis keys, visible to anything that can run KEYS.
+ *
+ * The cluster name is baked in rather than parameterised: there is exactly one,
+ * and a second caller sharing this function would silently merge two unrelated
+ * budgets. Credential routes must NEVER use it — a login and a password reset
+ * are different questions, and sharing a bucket would let either deny the
+ * other. /auth/register is deliberately NOT in this cluster either; see
+ * auth.controller.ts for why.
+ */
+export const recoveryMailboxBucket: ThrottlerGenerateKeyFunction = (
+  _context,
+  trackerString,
+  throttlerName,
+) => createHash('sha256').update(`mail-recovery-${throttlerName}-${trackerString}`).digest('hex');
+
+/**
  * Track a request by the AUTHENTICATED USER when there is one, else by client
  * IP resolved through the proxy chain.
  *
@@ -156,7 +202,9 @@ export const emailTracker = (req: Record<string, unknown>): string => {
  *
  * Mailbox protection is separate and real: register, forgot-password and
  * resend-verification pin one tier to emailTracker and another to
- * clientIpTracker, and both have to pass — see auth.controller.ts.
+ * clientIpTracker, and both have to pass — see auth.controller.ts. Note the
+ * mailbox tier aggregates only across the two RECOVERY routes, via
+ * recoveryMailboxBucket; register keeps its own budget on purpose.
  */
 /**
  * Where a request's resolved tracker is cached for the life of that request.
