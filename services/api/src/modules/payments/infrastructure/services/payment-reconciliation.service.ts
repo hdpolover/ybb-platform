@@ -7,6 +7,7 @@ import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitm
 import { buildParticipantPaymentsUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { isManualPaymentMethod } from '@modules/payments/application/utils/payment-method.util';
 import { isActiveParticipant } from '@shared/utils/active-participant.filter';
+import { findPaidSiblingInvoice, supersededByPaidInvoiceReason } from '@shared/utils/paid-sibling-invoice.util';
 import { PaymentServiceHttpClient } from './payment-service-http.client';
 import { PaymentGatewayClient } from './payment-gateway.client';
 
@@ -655,10 +656,14 @@ export class PaymentReconciliationService {
      * Canonical "settle paid" writes - mirrors processApplicationPayment in
      * payment-events.controller.ts. Idempotent: paidAt keeps any existing value.
      *
-     * Includes a supersede guard for registration_fee invoices: if another paid
-     * registration_fee invoice already exists for this application, the current
-     * invoice is a duplicate payment and must NOT be settled automatically - it
-     * needs refund review instead.
+     * Includes a supersede guard: if another paid invoice already exists for the
+     * SAME application-level column (registration or programme - see
+     * findPaidSiblingInvoice), the current invoice is a duplicate payment and
+     * must NOT be settled automatically - it needs refund review instead.
+     * WIDENED from registration-only: the fee-type-exact version of this guard
+     * (feeType === 'registration_fee') missed programme-fee installments writing
+     * the same programPaymentStatus column (program_fee_1 vs program_fee_2 etc.),
+     * which is exactly the gap that let production drift.
      */
     private async settlePaid(
         invoice: ProcessingInvoice,
@@ -669,31 +674,26 @@ export class PaymentReconciliationService {
             netAmount?: number;
         },
     ): Promise<{ skipped: true; reason: string } | null> {
-        // Supersede guard: prevent double-settling a registration fee
-        if (invoice.pricingTier?.feeType === 'registration_fee') {
-            const existingPaid = await this.prisma.applicationInvoice.findFirst({
-                where: {
-                    applicationId: invoice.applicationId,
-                    id: { not: invoice.id },
-                    pricingTier: { feeType: 'registration_fee' },
-                    status: PaymentStatus.paid,
+        // Supersede guard: prevent double-settling either payment-status column
+        const existingPaid = await findPaidSiblingInvoice(
+            this.prisma,
+            invoice.applicationId,
+            invoice.pricingTier?.feeType,
+            invoice.id,
+        );
+        if (existingPaid) {
+            const reason = supersededByPaidInvoiceReason(existingPaid.id);
+            await this.prisma.applicationInvoice.update({
+                where: { id: invoice.id },
+                data: {
+                    ...(invoice.rejectionReason ? {} : { rejectionReason: reason }),
+                    lastReconciledAt: new Date(),
                 },
-                select: { id: true },
             });
-            if (existingPaid) {
-                const reason = `Duplicate registration payment: gateway succeeded but superseded by paid invoice ${existingPaid.id}. Needs refund review.`;
-                await this.prisma.applicationInvoice.update({
-                    where: { id: invoice.id },
-                    data: {
-                        ...(invoice.rejectionReason ? {} : { rejectionReason: reason }),
-                        lastReconciledAt: new Date(),
-                    },
-                });
-                this.logger.warn(
-                    `[payment-reconciliation] SUPERSEDE invoice=${invoice.id} superseded by ${existingPaid.id} - needs refund review`,
-                );
-                return { skipped: true, reason: 'superseded duplicate (needs refund review)' };
-            }
+            this.logger.warn(
+                `[payment-reconciliation] SUPERSEDE invoice=${invoice.id} superseded by ${existingPaid.id} - needs refund review`,
+            );
+            return { skipped: true, reason: 'superseded duplicate (needs refund review)' };
         }
 
         const now = new Date();
@@ -748,6 +748,24 @@ export class PaymentReconciliationService {
                 ? { registrationPaymentStatus: PaymentStatus.unpaid }
                 : { programPaymentStatus: PaymentStatus.unpaid };
 
+        // Supersede guard (non-paid direction): a different invoice already paid
+        // this application's column (e.g. program_fee_1 paid while this
+        // program_fee_2 invoice is the one being reverted) - the revert is real
+        // for THIS invoice, but must not overwrite the application column, and
+        // the "please pay" reminder must not go out for a program that's already paid.
+        const paidSibling = await findPaidSiblingInvoice(
+            this.prisma,
+            invoice.applicationId,
+            invoice.pricingTier?.feeType,
+            invoice.id,
+        );
+        if (paidSibling) {
+            this.logger.warn(
+                `[payment-reconciliation] invoice=${invoice.id} superseded by paid invoice ${paidSibling.id} - ` +
+                `reverting invoice to unpaid but skipping application column overwrite and reminder email`,
+            );
+        }
+
         await this.prisma.$transaction([
             this.prisma.applicationInvoice.update({
                 where: { id: invoice.id },
@@ -756,14 +774,20 @@ export class PaymentReconciliationService {
                     paidAt: null,
                 },
             }),
-            this.prisma.participantApplication.update({
-                where: { id: invoice.applicationId },
-                data: appPaymentPatch,
-            }),
+            ...(paidSibling
+                ? []
+                : [
+                      this.prisma.participantApplication.update({
+                          where: { id: invoice.applicationId },
+                          data: appPaymentPatch,
+                      }),
+                  ]),
         ]);
 
         this.logger.log(`[payment-reconciliation] reverted abandoned invoice ${invoice.id} -> unpaid`);
-        await this.emitReminder(invoice);
+        if (!paidSibling) {
+            await this.emitReminder(invoice);
+        }
     }
 
     /**

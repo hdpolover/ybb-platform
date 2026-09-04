@@ -72,6 +72,8 @@ describe('PaymentAdminController — payment.rejected brand emission', () => {
         const mockPrisma = {
             applicationInvoice: {
                 findUnique: jest.fn().mockResolvedValue(MOCK_INVOICE),
+                // No paid sibling by default - see the supersede guard in verifyInvoice.
+                findFirst: jest.fn().mockResolvedValue(null),
                 update: jest.fn().mockResolvedValue(MOCK_INVOICE),
             },
             participantApplication: {

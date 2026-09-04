@@ -12,7 +12,7 @@ describe('CancelPortalPaymentHandler', () => {
     let handler: CancelPortalPaymentHandler;
     let mockGatewayClient: { voidTransaction: jest.Mock };
     let mockPrisma: {
-        applicationInvoice: { findUnique: jest.Mock; update: jest.Mock };
+        applicationInvoice: { findUnique: jest.Mock; findFirst: jest.Mock; update: jest.Mock };
         participantApplication: { update: jest.Mock };
         $transaction: jest.Mock;
     };
@@ -30,6 +30,8 @@ describe('CancelPortalPaymentHandler', () => {
         mockPrisma = {
             applicationInvoice: {
                 findUnique: jest.fn().mockResolvedValue(invoiceRow),
+                // No paid sibling by default - see the supersede-guard describe block below.
+                findFirst: jest.fn().mockResolvedValue(null),
                 update: jest.fn().mockResolvedValue({}),
             },
             participantApplication: { update: jest.fn().mockResolvedValue({}) },

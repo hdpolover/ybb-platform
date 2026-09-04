@@ -20,7 +20,7 @@ describe('PaymentAdminController.updateInvoiceStatus — Go cascade parity', () 
     let controller: PaymentAdminController;
     let mockGatewayClient: { voidTransaction: jest.Mock };
     let mockPrisma: {
-        applicationInvoice: { findUnique: jest.Mock; update: jest.Mock };
+        applicationInvoice: { findUnique: jest.Mock; findFirst: jest.Mock; update: jest.Mock };
         participantApplication: { update: jest.Mock };
         $transaction: jest.Mock;
     };
@@ -41,6 +41,8 @@ describe('PaymentAdminController.updateInvoiceStatus — Go cascade parity', () 
         mockPrisma = {
             applicationInvoice: {
                 findUnique: jest.fn().mockResolvedValue(invoiceRow),
+                // No paid sibling by default - see the supersede guard in updateInvoiceStatus.
+                findFirst: jest.fn().mockResolvedValue(null),
                 update: jest.fn().mockResolvedValue({ ...invoiceRow, status: 'cancelled' }),
             },
             participantApplication: { update: jest.fn().mockResolvedValue({}) },
@@ -159,7 +161,7 @@ describe('PaymentAdminController.updateInvoiceStatus — receipt email on non-pa
     let mockRabbitmq: { emit: jest.Mock };
     let loggerWarnSpy: jest.SpyInstance;
     let mockPrisma: {
-        applicationInvoice: { findUnique: jest.Mock; update: jest.Mock };
+        applicationInvoice: { findUnique: jest.Mock; findFirst: jest.Mock; update: jest.Mock };
         participantApplication: { update: jest.Mock };
         $transaction: jest.Mock;
     };
@@ -212,6 +214,8 @@ describe('PaymentAdminController.updateInvoiceStatus — receipt email on non-pa
         mockPrisma = {
             applicationInvoice: {
                 findUnique: jest.fn().mockResolvedValue(baseInvoiceRow),
+                // No paid sibling by default - see the supersede guard in updateInvoiceStatus.
+                findFirst: jest.fn().mockResolvedValue(null),
                 update: jest.fn().mockResolvedValue(buildUpdatedInvoice('participant@example.com')),
             },
             participantApplication: { update: jest.fn().mockResolvedValue({}) },

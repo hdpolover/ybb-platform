@@ -183,6 +183,39 @@ describe('PaymentReconciliationService', () => {
             expect(report.details[0].reason).toContain('superseded');
             expect(mockPrisma.$transaction).not.toHaveBeenCalled();
         });
+
+        // Regression for the audit-M158/M65 fix: the old inline guard was keyed on
+        // `feeType === 'registration_fee'` exactly, so it never even queried for a
+        // programme-fee duplicate - the programPaymentStatus column had no guard
+        // at all. findPaidSiblingInvoice widens this to any non-registration fee
+        // type sharing the programme column.
+        it('also supersedes on a PROGRAMME-fee duplicate (not just registration)', async () => {
+            const invoice = makeInvoice({
+                status: 'unpaid',
+                externalIntentId: 'intent-1',
+                pricingTier: { feeType: 'program_fee_1' },
+            });
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([invoice]);
+            mockPaymentClient.get.mockResolvedValue({
+                data: { status: 'SUCCEEDED', transactions: [] },
+            });
+            // Duplicate paid programme-fee invoice (a different fee type, same column)
+            mockPrisma.applicationInvoice.findFirst.mockResolvedValue({ id: 'inv-program-fee-2-paid' });
+
+            const report = await service.reconcileProcessingInvoices({ apply: true, graceMinutes: 1440 });
+
+            expect(report.details[0].outcome).toBe('skipped');
+            expect(report.details[0].reason).toContain('superseded');
+            expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+            expect(mockPrisma.applicationInvoice.update).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: { id: invoice.id },
+                    data: expect.objectContaining({
+                        rejectionReason: expect.stringContaining('inv-program-fee-2-paid'),
+                    }),
+                }),
+            );
+        });
     });
 
     // ── Test case 4: processing invoice + past grace + abandoned ─────────────
@@ -249,6 +282,46 @@ describe('PaymentReconciliationService', () => {
                 expect.anything(),
             );
             // But the automated nudge email does not go out.
+            expect(mockRabbitmq.emit).not.toHaveBeenCalledWith('payment.reminder', expect.anything());
+        });
+
+        // Regression for the audit-M158/M65 fix: program_fee_1 and program_fee_2
+        // are different fee types that both write programPaymentStatus. A guard
+        // keyed on exact feeType equality (like the old settlePaid) would miss
+        // this - only findPaidSiblingInvoice's column-based grouping catches it.
+        it('does NOT overwrite the application column and does NOT send a reminder when a paid sibling on the SAME column exists (program_fee_1 paid, program_fee_2 reverted)', async () => {
+            const invoice = makeInvoice({
+                status: 'processing',
+                externalIntentId: 'intent-1',
+                externalTransactionId: 'txn-1',
+                updatedAt: new Date('2020-01-01'),
+                pricingTier: { feeType: 'program_fee_2' },
+            });
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([invoice]);
+            mockPaymentClient.get.mockResolvedValue({
+                data: { status: 'REQUIRES_PAYMENT_METHOD', transactions: [] },
+            });
+            mockPaymentClient.post.mockResolvedValue({});
+            mockPrisma.$transaction.mockResolvedValue([{}, {}]);
+            // A different, already-paid invoice (program_fee_1) covers the SAME
+            // programPaymentStatus column.
+            mockPrisma.applicationInvoice.findFirst.mockResolvedValue({ id: 'inv-program-fee-1-paid' });
+
+            const report = await service.reconcileProcessingInvoices({ apply: true, graceMinutes: 1440 });
+
+            expect(report.details[0].outcome).toBe('reverted_unpaid');
+            // The invoice itself still gets reverted to unpaid - that invoice
+            // really is abandoned.
+            expect(mockPrisma.applicationInvoice.update).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: { id: invoice.id },
+                    data: expect.objectContaining({ status: 'unpaid' }),
+                }),
+            );
+            // But the application-level column must NOT be dragged back to unpaid
+            // out from under the already-paid program_fee_1 invoice.
+            expect(mockPrisma.participantApplication.update).not.toHaveBeenCalled();
+            // And no "please pay" reminder for a program that's already paid.
             expect(mockRabbitmq.emit).not.toHaveBeenCalledWith('payment.reminder', expect.anything());
         });
     });

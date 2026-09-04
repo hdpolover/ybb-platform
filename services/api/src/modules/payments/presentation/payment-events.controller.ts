@@ -8,9 +8,10 @@ import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { RedisPubSubService } from '@shared/infrastructure/redis/redis-pubsub.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
-import { PaymentStatus, Prisma } from '@prisma/client';
+import { PaymentStatus, PricingFeeType, Prisma } from '@prisma/client';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { PaymentOutboxService } from '../infrastructure/services/payment-outbox.service';
+import { findPaidSiblingInvoice, supersededByPaidInvoiceReason } from '@shared/utils/paid-sibling-invoice.util';
 import {
     acknowledgeRmqMessage,
 } from '@shared/infrastructure/rabbitmq/rmq-ack';
@@ -478,17 +479,53 @@ export class PaymentEventsController {
             updateData.programPaymentStatus = PaymentStatus.paid;
         }
 
+        // Supersede guard (paid direction): `category` is already collapsed to
+        // 'registration' | 'program' by the caller, not a real PricingFeeType, so a
+        // stand-in fee type is passed here purely to steer
+        // paymentCategoryForFeeType's equality check onto the same column - any
+        // non-registration value maps to 'program' identically to a real tier's
+        // feeType. excludeInvoiceId is existingInvoiceId when known (portal-driven
+        // payments); it's undefined for the create/existingByRef paths below since
+        // that invoice id isn't resolved until inside the transaction.
+        // On the PAID direction a sibling does not change what the column should
+        // say - both invoices settle it to 'paid' - so there is nothing to
+        // suppress. What a paid sibling means here is that the same column has
+        // now been paid twice, i.e. real money to refund, which is why this
+        // flags the invoice below instead of skipping anything.
+        const paidSibling =
+            category === 'registration' || category === 'program'
+                ? await findPaidSiblingInvoice(
+                      this.prisma,
+                      applicationId,
+                      category === 'registration' ? PricingFeeType.registration_fee : PricingFeeType.program_fee_1,
+                      existingInvoiceId,
+                  )
+                : null;
+        if (paidSibling) {
+            this.logger.warn(
+                `processApplicationPayment: application ${applicationId} category=${category} ` +
+                `superseded by paid invoice ${paidSibling.id} - skipping application column overwrite`,
+            );
+        }
+
         // If pricing tier is missing (edge case), we can't create a valid invoice relation easily
         // But preventing the status update would be worse.
         // We will try to create invoice if tier exists.
-        
+
         // Unit of Work: Application Payment Status Update + Invoice Creation
         let createdInvoiceId: string | null = null;
         let outboxQueued = false;
         let outboxDedupeKey: string | null = null;
         await this.unitOfWork.execute(
             async (repos) => {
-                // Update application payment status
+                // Update application payment status. Deliberately UNCONDITIONAL
+                // even when a paid sibling exists: money really did arrive, so
+                // 'paid' is the truthful value, writing it is idempotent when the
+                // sibling already set it, and it is the only thing that repairs a
+                // column an earlier cancel wrongly left at 'cancelled'. Gating
+                // this would remove that self-heal. The duplicate is handled
+                // AFTER the transaction, by flagging the invoice for refund
+                // review rather than by suppressing a correct write.
                 await repos.tx.participantApplication.update({
                     where: { id: applicationId },
                     data: updateData
@@ -618,6 +655,21 @@ export class PaymentEventsController {
             );
         }
 
+        // Duplicate settlement: the column was already paid by another invoice, so
+        // this one is real money that needs a refund decision. Same signal
+        // settlePaid raises during reconciliation, raised here on the primary
+        // webhook path where the vast majority of payments actually settle.
+        // Done after the transaction because the invoice id is only resolved
+        // inside it, across three different branches.
+        if (paidSibling && createdInvoiceId) {
+            await this.prisma.applicationInvoice.updateMany({
+                // updateMany + a rejectionReason: null filter makes this a no-op
+                // when a reason is already recorded, without a read-back first.
+                where: { id: createdInvoiceId, rejectionReason: null },
+                data: { rejectionReason: supersededByPaidInvoiceReason(paidSibling.id) },
+            });
+        }
+
         // Return context for cache invalidation and referral funnel
         return {
             userId: application.participant.userId,
@@ -696,7 +748,15 @@ export class PaymentEventsController {
 
             // Re-emit branded notification event
             try {
-                if (failedInvoice?.invoiceId) {
+                if (failedInvoice?.superseded) {
+                    // Either a stale event for an invoice that's actually paid, or
+                    // a genuine failure superseded by a different paid invoice on
+                    // the same application column - either way the participant
+                    // must not get a "payment failed" email.
+                    this.logger.debug(
+                        `notification.payment_failed not emitted: invoice ${failedInvoice.invoiceId} superseded (already paid or superseded by a paid sibling)`,
+                    );
+                } else if (failedInvoice?.invoiceId) {
                     const invoiceWithBrand = await this.prisma.applicationInvoice.findUnique({
                         where: { id: failedInvoice.invoiceId },
                         include: {
@@ -774,7 +834,7 @@ export class PaymentEventsController {
         transactionId?: string;
         failureReason?: string;
         paymentMethod?: string;
-    }): Promise<{ userId: string; invoiceId: string } | null> {
+    }): Promise<{ userId: string; invoiceId: string; superseded?: boolean } | null> {
         const invoice = await this.resolveFailureInvoice(input);
         if (!invoice) {
             return null;
@@ -782,7 +842,10 @@ export class PaymentEventsController {
 
         const userId = invoice.application.participant.userId;
         if (invoice.status === PaymentStatus.paid) {
-            return { userId, invoiceId: invoice.id };
+            // Stale/duplicate failure event for an invoice that's actually paid -
+            // nothing to write, and the caller must not send a "payment failed"
+            // email for a payment that in fact succeeded.
+            return { userId, invoiceId: invoice.id, superseded: true };
         }
 
         const rejectionReason =
@@ -793,6 +856,23 @@ export class PaymentEventsController {
             invoice.pricingTier?.feeType === 'registration_fee'
                 ? { registrationPaymentStatus: PaymentStatus.failed }
                 : { programPaymentStatus: PaymentStatus.failed };
+
+        // Supersede guard (non-paid direction): a different invoice already paid
+        // this application's column, so this failure is real for THIS invoice but
+        // must not overwrite the application-level status a paid sibling already
+        // set correctly.
+        const paidSibling = await findPaidSiblingInvoice(
+            this.prisma,
+            invoice.applicationId,
+            invoice.pricingTier?.feeType,
+            invoice.id,
+        );
+        if (paidSibling) {
+            this.logger.warn(
+                `markInvoiceFailed: invoice ${invoice.id} superseded by paid invoice ${paidSibling.id} - ` +
+                `marking invoice failed but skipping application column overwrite`,
+            );
+        }
 
         await this.prisma.$transaction([
             this.prisma.applicationInvoice.update({
@@ -809,13 +889,17 @@ export class PaymentEventsController {
                     rejectionReason,
                 },
             }),
-            this.prisma.participantApplication.update({
-                where: { id: invoice.applicationId },
-                data: paymentStatusPatch,
-            }),
+            ...(paidSibling
+                ? []
+                : [
+                      this.prisma.participantApplication.update({
+                          where: { id: invoice.applicationId },
+                          data: paymentStatusPatch,
+                      }),
+                  ]),
         ]);
 
-        return { userId, invoiceId: invoice.id };
+        return { userId, invoiceId: invoice.id, superseded: !!paidSibling };
     }
 
     private async markInvoiceCancelled(input: {
@@ -876,6 +960,24 @@ export class PaymentEventsController {
                 ? { registrationPaymentStatus: PaymentStatus.cancelled }
                 : { programPaymentStatus: PaymentStatus.cancelled };
 
+        // Supersede guard (non-paid direction): see markInvoiceFailed above - a
+        // paid sibling invoice already covers this application's column, so the
+        // cancellation is real for THIS invoice but must not overwrite it. No
+        // notification fires on this path (handlePaymentCancelled only invalidates
+        // cache), so there's nothing else to suppress here.
+        const paidSibling = await findPaidSiblingInvoice(
+            this.prisma,
+            invoice.applicationId,
+            invoice.pricingTier?.feeType,
+            invoice.id,
+        );
+        if (paidSibling) {
+            this.logger.warn(
+                `markInvoiceCancelled: invoice ${invoice.id} superseded by paid invoice ${paidSibling.id} - ` +
+                `marking invoice cancelled but skipping application column overwrite`,
+            );
+        }
+
         await this.prisma.$transaction([
             this.prisma.applicationInvoice.update({
                 where: { id: invoice.id },
@@ -891,10 +993,14 @@ export class PaymentEventsController {
                     rejectionReason: cancellationReason,
                 },
             }),
-            this.prisma.participantApplication.update({
-                where: { id: invoice.applicationId },
-                data: paymentStatusPatch,
-            }),
+            ...(paidSibling
+                ? []
+                : [
+                      this.prisma.participantApplication.update({
+                          where: { id: invoice.applicationId },
+                          data: paymentStatusPatch,
+                      }),
+                  ]),
         ]);
 
         return { userId, invoiceId: invoice.id };
