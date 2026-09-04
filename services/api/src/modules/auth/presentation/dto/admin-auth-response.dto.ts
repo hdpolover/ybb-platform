@@ -1,6 +1,7 @@
 
 import { ApiProperty } from '@nestjs/swagger';
 import { AuthResponseDto } from './auth-response.dto';
+import { AdminProgramAccessScope } from '../../../../shared/admin-access-response';
 
 class AdminBrandSummaryDto {
     @ApiProperty()
@@ -69,7 +70,7 @@ class AdminProgramSummaryDto {
     permissions: string[];
 
     @ApiProperty({ enum: ['assigned', 'brand_scope', 'platform'] })
-    accessType: 'assigned' | 'brand_scope' | 'platform';
+    accessType: AdminProgramAccessScope;
 }
 
 export class AdminAuthResponseDto extends AuthResponseDto {

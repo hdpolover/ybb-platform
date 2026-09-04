@@ -46,7 +46,19 @@ type AdminProgramAssignmentLike = {
   program: ProgramSummaryLike;
 };
 
-type AdminAccessLike = {
+/**
+ * The kinds of programme access an admin can have.
+ *
+ * NAMED, and exported, on purpose. It was written inline in three places, and
+ * an inline union cannot be enumerated — which is how the `'assigned'` persona
+ * came to have no test fixture anywhere, and how PR #149 shipped an admin
+ * lockout that two reviews looked straight at. See ADMIN_SCOPE_FIXTURES in
+ * test/utils/admin-scope-fixtures.ts: it is keyed by this type, so adding a
+ * fourth kind here is a COMPILE error until a fixture exists for it.
+ */
+export type AdminProgramAccessScope = 'assigned' | 'brand_scope' | 'platform';
+
+export type AdminAccessLike = {
   accessLevel: number;
   canManageAdmins?: boolean;
   canAssignRoles?: boolean;
@@ -81,7 +93,7 @@ export type AdminProgramSummary = {
   logoUrl?: string | null;
   role: string | null;
   permissions: string[];
-  accessType: 'assigned' | 'brand_scope' | 'platform';
+  accessType: AdminProgramAccessScope;
 };
 
 export function normalizePermissions(value: unknown): string[] {
@@ -120,7 +132,7 @@ function isSuperAdmin(admin: AdminAccessLike): boolean {
 
 export function getAdminProgramAccessScope(
   admin: AdminAccessLike,
-): 'assigned' | 'brand_scope' | 'platform' {
+): AdminProgramAccessScope {
   if (isSuperAdmin(admin)) {
     return 'platform';
   }
