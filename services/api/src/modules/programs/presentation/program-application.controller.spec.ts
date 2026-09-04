@@ -168,6 +168,108 @@ describe('ProgramApplicationConfigController', () => {
             await expect(controller.updatePricingTier('tier-1', {} as any, newReq())).rejects.toThrow(NotFoundException);
             expect(mockExecute.execute).not.toHaveBeenCalled();
         });
+
+        // N25: assertProgramAccess itself already answers 404 identically for
+        // "programme missing" and "programme not yours" (PR #166). But
+        // assertPricingTierScope used to call it unwrapped, so the out-of-scope
+        // branch surfaced assertProgramAccess's OWN message - which names the
+        // OWNING programme's id - instead of this tier's own not-found error.
+        // That let a scoped admin learn a tier exists (and which programme owns
+        // it) just by comparing responses. Both branches must now be
+        // byte-identical.
+        it('gives the SAME error for a missing pricing tier and one that is not yours', async () => {
+            mockReadPrisma.admin.findUnique.mockResolvedValue({
+                accessLevel: 1,
+                canManageAdmins: false,
+                canAssignRoles: false,
+                customPermissions: [],
+                role: { name: 'admin', permissions: [] },
+                adminBrands: [],
+                adminPrograms: [{ programId: 'prog-mine', permissions: [] }],
+            });
+
+            mockReadPrisma.programPricingTier.findUnique.mockResolvedValue(null);
+            const whenMissing = await controller.updatePricingTier('tier-1', {} as any, newReq()).catch((e) => e);
+
+            mockReadPrisma.programPricingTier.findUnique.mockResolvedValue({ programId: 'prog-theirs' });
+            mockReadPrisma.program.findUnique.mockResolvedValue({
+                id: 'prog-theirs', brandId: 'brand-1', name: 'Theirs', deletedAt: null,
+            });
+            const whenOutOfScope = await controller.updatePricingTier('tier-1', {} as any, newReq()).catch((e) => e);
+
+            expect(whenMissing.constructor).toBe(whenOutOfScope.constructor);
+            expect(whenMissing.getStatus()).toBe(whenOutOfScope.getStatus());
+            expect(whenMissing.message).toBe(whenOutOfScope.message);
+        });
+    });
+
+    describe('updateValidityPeriod / deleteValidityPeriod scope', () => {
+        // Fresh per test: the resolved scope is memoized onto the request object.
+        const newReq = () => ({ user: { id: 'admin-1', adminId: 'admin-1' } }) as any;
+
+        const scopedToOtherProgram = () =>
+            mockReadPrisma.admin.findUnique.mockResolvedValue({
+                accessLevel: 1,
+                canManageAdmins: false,
+                canAssignRoles: false,
+                customPermissions: [],
+                role: { name: 'admin', permissions: [] },
+                adminBrands: [],
+                adminPrograms: [{ programId: 'prog-mine', permissions: [] }],
+            });
+
+        it('resolves the owning program from the period -> tier chain, not from the request body', async () => {
+            mockReadPrisma.pricingTierValidityPeriod.findUnique.mockResolvedValue({
+                pricingTier: { programId: 'prog-owner' },
+            });
+            mockReadPrisma.program.findUnique.mockResolvedValue({
+                id: 'prog-owner', brandId: 'brand-1', name: 'Owner', deletedAt: null,
+            });
+
+            await controller.updateValidityPeriod('period-1', {} as any, newReq());
+
+            expect(mockReadPrisma.pricingTierValidityPeriod.findUnique).toHaveBeenCalledWith({
+                where: { id: 'period-1' },
+                select: { pricingTier: { select: { programId: true } } },
+            });
+            expect(mockExecute.execute).toHaveBeenCalled();
+        });
+
+        it('refuses a period whose program is outside the caller’s assignments', async () => {
+            scopedToOtherProgram();
+            mockReadPrisma.pricingTierValidityPeriod.findUnique.mockResolvedValue({
+                pricingTier: { programId: 'prog-theirs' },
+            });
+            mockReadPrisma.program.findUnique.mockResolvedValue({
+                id: 'prog-theirs', brandId: 'brand-1', name: 'Theirs', deletedAt: null,
+            });
+
+            await expect(controller.deleteValidityPeriod('period-1', newReq())).rejects.toThrow(NotFoundException);
+            expect(mockExecute.execute).not.toHaveBeenCalled();
+        });
+
+        // Same N25 gap as pricing tiers, one level deeper (period -> tier ->
+        // program): assertValidityPeriodScope called assertProgramAccess
+        // unwrapped, so an out-of-scope period leaked assertProgramAccess's own
+        // "Program <ownerId> not found" instead of this period's own error.
+        it('gives the SAME error for a missing validity period and one that is not yours', async () => {
+            scopedToOtherProgram();
+
+            mockReadPrisma.pricingTierValidityPeriod.findUnique.mockResolvedValue(null);
+            const whenMissing = await controller.deleteValidityPeriod('period-1', newReq()).catch((e) => e);
+
+            mockReadPrisma.pricingTierValidityPeriod.findUnique.mockResolvedValue({
+                pricingTier: { programId: 'prog-theirs' },
+            });
+            mockReadPrisma.program.findUnique.mockResolvedValue({
+                id: 'prog-theirs', brandId: 'brand-1', name: 'Theirs', deletedAt: null,
+            });
+            const whenOutOfScope = await controller.deleteValidityPeriod('period-1', newReq()).catch((e) => e);
+
+            expect(whenMissing.constructor).toBe(whenOutOfScope.constructor);
+            expect(whenMissing.getStatus()).toBe(whenOutOfScope.getStatus());
+            expect(whenMissing.message).toBe(whenOutOfScope.message);
+        });
     });
 
     // Ten child-entity mutation routes - requirements, essays, participation

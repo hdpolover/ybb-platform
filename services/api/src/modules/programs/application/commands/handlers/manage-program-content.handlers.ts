@@ -43,7 +43,7 @@ import { PROGRAM_LANDING_CONTENT_KEYS, isProgramLandingContentKey } from '../../
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { assertProgramContentAccess } from '../../utils/program-content-access.util';
 import { resolveRevenueAccessScope } from '@modules/stats/revenue/utils/revenue-access.util';
-import { assertBrandAccess } from '@shared/guards/admin-scope.guard';
+import { assertBrandAccess, orNotFound } from '@shared/guards/admin-scope.guard';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 
 // ─── Shared cache-invalidation helpers ───────────────────────────────────────
@@ -611,11 +611,20 @@ export class UpdateProgramGalleryHandler implements ICommandHandler<UpdateProgra
         if (!galleryItem.programId) {
             throw new NotFoundException('Program ID missing on gallery item');
         }
+        const programId = galleryItem.programId;
 
         // The parent program is resolved from the target row, so this costs no
         // extra query. The route carries only the item id - there is no program
         // id for a guard to check.
-        await assertProgramContentAccess(this.prismaRead, command.actor, galleryItem.programId);
+        //
+        // Wrapped: an out-of-scope programme must raise the SAME error as a
+        // missing gallery item, byte-identical - otherwise
+        // assertProgramContentAccess's own message (which names the OWNING
+        // programme's id) leaks straight through.
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, programId),
+            () => new NotFoundException('Gallery item not found'),
+        );
 
         if (command.image) {
             const program = await this.prisma.program.findUnique({ where: { id: galleryItem.programId } });
@@ -658,12 +667,19 @@ export class DeleteProgramGalleryHandler implements ICommandHandler<DeleteProgra
         if (!existing.programId) {
             throw new NotFoundException('Program ID missing on gallery item');
         }
+        const programId = existing.programId;
 
         // Assert BEFORE deleting. This used to delete first and read programId
         // afterwards only to invalidate the cache, so the row was already gone
         // by the time anything knew which program it belonged to - there was no
         // point at which a check could have refused it.
-        await assertProgramContentAccess(this.prismaRead, command.actor, existing.programId);
+        //
+        // Wrapped: out-of-scope must raise the SAME error as missing - see
+        // UpdateProgramGalleryHandler above.
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, programId),
+            () => new NotFoundException('Gallery item not found'),
+        );
 
         const result = await this.repository.deleteGallery(command.id);
         await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
@@ -729,7 +745,14 @@ export class UpdateProgramTestimonialHandler implements ICommandHandler<UpdatePr
         if (!existing) {
             throw new NotFoundException('Testimonial not found');
         }
-        await assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId);
+        // Wrapped: out-of-scope must raise the SAME error as missing, whichever
+        // of assertProgramOrBrandContentAccess's three branches rejects it -
+        // otherwise the programme/brand-scope branch's own message (which
+        // names the OWNING programme's id) leaks straight through.
+        await orNotFound(
+            () => assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId),
+            () => new NotFoundException('Testimonial not found'),
+        );
 
         const result = await this.repository.updateTestimonial(command.id, command.dto);
         try {
@@ -755,8 +778,12 @@ export class DeleteProgramTestimonialHandler implements ICommandHandler<DeletePr
         if (!existing) {
             throw new NotFoundException('Testimonial not found');
         }
-        // Assert BEFORE deleting - see UpdateProgramTestimonialHandler above.
-        await assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId);
+        // Assert BEFORE deleting - see UpdateProgramTestimonialHandler above,
+        // including the wrap that keeps out-of-scope and missing identical.
+        await orNotFound(
+            () => assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId),
+            () => new NotFoundException('Testimonial not found'),
+        );
 
         const testimonial = await this.prisma.programTestimonial.findUnique({
             where: { id: command.id },
@@ -803,7 +830,13 @@ export class UpdateProgramFaqHandler implements ICommandHandler<UpdateProgramFaq
         }
         // The parent program is resolved from the target row, so this costs no
         // extra query. The route carries only the item id (PUT faqs/:itemId).
-        await assertProgramContentAccess(this.prismaRead, command.actor, existing.programId);
+        //
+        // Wrapped: out-of-scope must raise the SAME error as missing - see
+        // UpdateProgramGalleryHandler above.
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
+            () => new NotFoundException('FAQ not found'),
+        );
 
         const result = await this.repository.updateFaq(command.id, command.dto);
         await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
@@ -823,8 +856,12 @@ export class DeleteProgramFaqHandler implements ICommandHandler<DeleteProgramFaq
         if (!existing) {
             throw new NotFoundException('FAQ not found');
         }
-        // Assert BEFORE deleting - same ordering fix as gallery's delete.
-        await assertProgramContentAccess(this.prismaRead, command.actor, existing.programId);
+        // Assert BEFORE deleting - same ordering fix as gallery's delete, and
+        // the same out-of-scope/missing wrap.
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
+            () => new NotFoundException('FAQ not found'),
+        );
 
         const result = await this.repository.deleteFaq(command.id);
         await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
@@ -1117,9 +1154,16 @@ export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgr
         if (!resource.programId) {
             throw new NotFoundException('Program ID missing on resource');
         }
+        const resourceProgramId = resource.programId;
         // Resolved from the target row - the route (PUT resources/:itemId)
         // carries only the item id.
-        await assertProgramContentAccess(this.prismaRead, command.actor, resource.programId);
+        //
+        // Wrapped: out-of-scope must raise the SAME error as missing - see
+        // UpdateProgramGalleryHandler above.
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, resourceProgramId),
+            () => new NotFoundException('Resource not found'),
+        );
 
         const sourceType = command.dto.sourceType ?? resource.sourceType ?? 'upload';
         let fileUrl = command.dto.fileUrl;
@@ -1201,7 +1245,13 @@ export class DeleteProgramResourceHandler implements ICommandHandler<DeleteProgr
             throw new NotFoundException('Resource not found');
         }
         if (existing.programId) {
-            await assertProgramContentAccess(this.prismaRead, command.actor, existing.programId);
+            const resourceProgramId = existing.programId;
+            // Wrapped: out-of-scope must raise the SAME error as missing - see
+            // UpdateProgramResourceHandler above.
+            await orNotFound(
+                () => assertProgramContentAccess(this.prismaRead, command.actor, resourceProgramId),
+                () => new NotFoundException('Resource not found'),
+            );
         }
 
         const result = await this.repository.deleteResource(command.id);
@@ -1800,7 +1850,13 @@ export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocu
         if (!template) throw new NotFoundException('Document template not found');
         // Resolved from the target row - the route (PUT document-templates/:itemId)
         // carries only the item id.
-        await assertProgramContentAccess(this.prismaRead, command.actor, template.programId);
+        //
+        // Wrapped: out-of-scope must raise the SAME error as missing - see
+        // UpdateProgramGalleryHandler above.
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, template.programId),
+            () => new NotFoundException('Document template not found'),
+        );
 
         const sourceType = command.dto.sourceType ?? template.sourceType ?? 'upload';
         let templateUrl = command.dto.templateUrl;
@@ -1864,8 +1920,12 @@ export class DeleteDocumentTemplateHandler implements ICommandHandler<DeleteDocu
     async execute(command: DeleteDocumentTemplateCommand) {
         const template = await this.repository.findDocumentTemplateById(command.id);
         if (!template) throw new NotFoundException('Document template not found');
-        // Assert BEFORE deleting.
-        await assertProgramContentAccess(this.prismaRead, command.actor, template.programId);
+        // Assert BEFORE deleting - and the same out-of-scope/missing wrap as
+        // UpdateDocumentTemplateHandler above.
+        await orNotFound(
+            () => assertProgramContentAccess(this.prismaRead, command.actor, template.programId),
+            () => new NotFoundException('Document template not found'),
+        );
 
         await this.repository.deleteDocumentTemplate(command.id);
         await invalidateLandingCacheByProgramId(template.programId, this.prisma, this.landingCacheInvalidation);

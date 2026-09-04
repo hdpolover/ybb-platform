@@ -9,7 +9,7 @@ import { Public } from '../../../shared/decorators/public.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
-import { AdminScopeGuard, ScopedBy, assertProgramAccess, getRequestAdminScope } from '@shared/guards/admin-scope.guard';
+import { AdminScopeGuard, ScopedBy, assertProgramAccess, getRequestAdminScope, orNotFound } from '@shared/guards/admin-scope.guard';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 
 interface AuthenticatedRequest extends ExpressRequest {
@@ -139,17 +139,22 @@ export class ProgramApplicationConfigController {
    * request body, so a scoped admin cannot reach another brand's tier by id.
    */
   private async assertPricingTierScope(req: AuthenticatedRequest, tierId: string): Promise<string> {
+    const notFound = () => new NotFoundException(`Pricing tier ${tierId} not found`);
+
     const tier = await this.readPrisma.programPricingTier.findUnique({
       where: { id: tierId },
       select: { programId: true },
     });
 
     if (!tier) {
-      throw new NotFoundException(`Pricing tier ${tierId} not found`);
+      throw notFound();
     }
 
     const scope = await getRequestAdminScope(this.readPrisma, req);
-    await assertProgramAccess(this.readPrisma, scope, tier.programId);
+    // Wrapped: an out-of-scope tier must raise the SAME error as a missing
+    // one, byte-identical - otherwise assertProgramAccess's own message
+    // (which names the OWNING programme's id) leaks straight through.
+    await orNotFound(() => assertProgramAccess(this.readPrisma, scope, tier.programId), notFound);
     return tier.programId;
   }
 
@@ -191,17 +196,21 @@ export class ProgramApplicationConfigController {
 
   /** Same, one level deeper: validity period -> pricing tier -> program. */
   private async assertValidityPeriodScope(req: AuthenticatedRequest, periodId: string): Promise<string> {
+    const notFound = () => new NotFoundException(`Validity period ${periodId} not found`);
+
     const period = await this.readPrisma.pricingTierValidityPeriod.findUnique({
       where: { id: periodId },
       select: { pricingTier: { select: { programId: true } } },
     });
 
     if (!period) {
-      throw new NotFoundException(`Validity period ${periodId} not found`);
+      throw notFound();
     }
 
     const scope = await getRequestAdminScope(this.readPrisma, req);
-    await assertProgramAccess(this.readPrisma, scope, period.pricingTier.programId);
+    // Same fix as assertPricingTierScope, one level deeper: an out-of-scope
+    // period must raise the SAME error as a missing one.
+    await orNotFound(() => assertProgramAccess(this.readPrisma, scope, period.pricingTier.programId), notFound);
     return period.pricingTier.programId;
   }
 

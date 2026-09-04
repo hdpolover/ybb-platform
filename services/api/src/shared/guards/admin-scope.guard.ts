@@ -85,6 +85,27 @@ export function assertBrandAccess(scope: AdminScope, brandId: string): void {
 }
 
 /**
+ * Runs `fn`; whatever it throws is discarded and `notFound()` is thrown in its
+ * place.
+ *
+ * For a child-entity scope check the row's own existence is already settled
+ * by the caller before `fn` runs, so the only way `fn` can still throw is
+ * "exists, but not yours" - assertProgramAccess's own NotFoundException
+ * (which names the OWNING programme's id) or assertBrandAccess's
+ * ForbiddenException. Rethrowing the caller's own not-found error instead
+ * makes "missing" and "not yours" byte-identical, closing the response off as
+ * a cross-tenant existence oracle - the same rule assertChildEntityScope
+ * (program-application.controller.ts) already applies inline.
+ */
+export async function orNotFound<T>(fn: () => Promise<T>, notFound: () => Error): Promise<T> {
+  try {
+    return await fn();
+  } catch {
+    throw notFound();
+  }
+}
+
+/**
  * Enforces @ScopedBy() on admin routes. Routes without the decorator are left
  * alone (and cost no lookup), so this guard is safe to stack onto a controller
  * that mixes scoped and unscoped endpoints.
