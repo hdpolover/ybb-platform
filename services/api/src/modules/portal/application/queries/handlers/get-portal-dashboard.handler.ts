@@ -224,35 +224,51 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
             // bug told ~4,268 MEYS 6th self-funders their deadline was
             // 5 Sep when theirs was 30 Nov), and once FF closed the old
             // logic flipped and showed every FF applicant the SF date.
-            const latestWindowEnd = (category: string): Date | null => {
-                const ends = tiers
+            //
+            // Staged registration ("bertahap"): the owner runs a MAIN window
+            // followed by short "extension" windows on purpose, to create
+            // urgency at each step (e.g. a 2-month main window, then a run
+            // of 1-day extensions). Showing the MAX end across every window
+            // would publish the whole extension ladder months in advance and
+            // contradict the date the public site advertises for the main
+            // window. Show only the window that is CURRENTLY ACTIVE for the
+            // application's own category (start <= now < end) - the shown
+            // date only moves forward when an extension actually takes
+            // effect. If two active windows overlap, the later end is the
+            // real operative close.
+            const activeCategoryWindowEnd = (category: string): Date | null => {
+                const activeEnds = tiers
                     .filter((tier) => Array.isArray(tier.allowedCategories) && tier.allowedCategories.includes(category))
                     .flatMap((tier) => tier.validityPeriods ?? [])
+                    .filter((period) => period.startDate.getTime() <= now.getTime() && now.getTime() < period.endDate.getTime())
                     .map((period) => period.endDate.getTime());
-                return ends.length > 0 ? new Date(Math.max(...ends)) : null;
+                return activeEnds.length > 0 ? new Date(Math.max(...activeEnds)) : null;
             };
             // No category yet (application_category is nullable) is treated
-            // exactly like "this category has no configured window": fall
-            // back to the program's applicationDeadline rather than guessing
-            // a category. Guessing Self Funded would over-promise a later
+            // exactly like "this category has no active window": fall back
+            // to the program's applicationDeadline rather than guessing a
+            // category. Guessing Self Funded would over-promise a later
             // date to someone who turns out to be Fully Funded, and
             // applicationDeadline is the only date that is true for every
             // applicant - it is what the submit path actually enforces
             // (portal-submit-application.handler.ts -> isPastSubmissionDeadline).
             const categoryWindowEnd = latestApplication.applicationCategory
-                ? latestWindowEnd(String(latestApplication.applicationCategory))
+                ? activeCategoryWindowEnd(String(latestApplication.applicationCategory))
                 : null;
             const programDeadline = latestApplication.program.applicationDeadline ?? null;
-            // An already-ended deadline is reported as "no deadline" so the
-            // reminder popup stays shut - it reads "submit before X", and a
-            // past X under "applications not submitted by the deadline will
-            // not be reviewed" is its own bug. The frontend already renders
-            // nothing when submissionDeadline is absent, so no UI change is
-            // needed. An ended category window does NOT fall through to the
-            // program deadline either: that window closing IS the answer for
-            // that category.
+            // No window contains `now`: either every window for this
+            // category has ended (the extension ladder is exhausted) or
+            // we're sitting in a gap between windows. Both cases revert to
+            // the programme's default guideline timing - once extensions
+            // run out, the participant page must not keep implying more are
+            // guaranteed. An already-ended fallback deadline is reported as
+            // "no deadline" so the reminder popup stays shut - it reads
+            // "submit before X", and a past X under "applications not
+            // submitted by the deadline will not be reviewed" is its own
+            // bug. The frontend already renders nothing when
+            // submissionDeadline is absent, so no UI change is needed.
             const submissionDeadline = categoryWindowEnd
-                ? (categoryWindowEnd.getTime() >= now.getTime() ? categoryWindowEnd : null)
+                ? categoryWindowEnd
                 : isPastSubmissionDeadline(programDeadline, now)
                     ? null
                     : programDeadline;
