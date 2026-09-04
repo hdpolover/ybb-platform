@@ -8,6 +8,7 @@ import { RegistrationFeeGateService } from '@modules/payments/application/servic
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { formatSubmissionDeadlineMessage, isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
+import { normalizeReferralCode } from '@modules/participants/application/utils/referral-code.util';
 
 /**
  * Portal Submit Application Handler
@@ -125,7 +126,9 @@ export class PortalSubmitApplicationHandler {
             const rawCode = referralField
                 ? (application.personalData as Record<string, unknown>)?.[referralField.name]
                 : undefined;
-            const referralCode = typeof rawCode === 'string' ? rawCode.trim() : '';
+            // trim() alone is not enough: codes are stored uppercase and compared
+            // case-sensitively, so a lower-case entry matched nothing here.
+            const referralCode = typeof rawCode === 'string' ? normalizeReferralCode(rawCode) : '';
 
             if (referralCode) {
                 await this.prisma.$transaction(async (tx) => {
@@ -162,10 +165,12 @@ export class PortalSubmitApplicationHandler {
                         where: { id: participantId },
                         select: { referralCode: true },
                     });
-                    if (participant && participant.referralCode !== referralCode) {
+                    // Store the ambassador's own code so the stored value matches
+                    // the ambassador credited above.
+                    if (participant && participant.referralCode !== ambassador.referralCode) {
                         await tx.participant.update({
                             where: { id: participantId },
-                            data: { referralCode: referralCode },
+                            data: { referralCode: ambassador.referralCode },
                         });
                     }
                 });
