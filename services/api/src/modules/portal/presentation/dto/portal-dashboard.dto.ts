@@ -90,7 +90,7 @@ export class PortalApplicationSummaryDto {
     @ApiProperty({
         required: false,
         description:
-            'ISO deadline used by the "submit your application form" reminder popup: the Fully Funded registration window end while it is still open, otherwise the Self Funded one.',
+            'ISO deadline used by the "submit your application form" reminder popup: the end of the registration window for THIS application\'s own category, or the program applicationDeadline when that category has no configured window (including when the application has no category yet). Absent once that deadline has passed, so the popup never shows a date in the past.',
     })
     submissionDeadline?: string;
 
