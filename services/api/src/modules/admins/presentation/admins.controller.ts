@@ -6,11 +6,13 @@ import { CreateAdminDto } from './dto/create-admin.dto';
 import { CreateAdminCommand } from '../application/commands/create-admin.command';
 import { UpdateAdminCommand } from '../application/commands/update-admin.command';
 import { DeleteAdminCommand } from '../application/commands/delete-admin.command';
+import { RestoreAdminCommand } from '../application/commands/restore-admin.command';
 import { GetAdminsQuery } from '../application/queries/get-admins.query';
 import { GetAdminQuery } from '../application/queries/get-admin.query';
 import { CreateAdminHandler } from '../application/commands/handlers/create-admin.handler';
 import { UpdateAdminHandler } from '../application/commands/handlers/update-admin.handler';
 import { DeleteAdminHandler } from '../application/commands/handlers/delete-admin.handler';
+import { RestoreAdminHandler } from '../application/commands/handlers/restore-admin.handler';
 import { GetAdminsHandler } from '../application/queries/handlers/get-admins.handler';
 import { GetAdminHandler } from '../application/queries/handlers/get-admin.handler';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
@@ -43,6 +45,7 @@ export class AdminsController {
         private readonly getAdminHandler: GetAdminHandler,
         private readonly updateAdminHandler: UpdateAdminHandler,
         private readonly deleteAdminHandler: DeleteAdminHandler,
+        private readonly restoreAdminHandler: RestoreAdminHandler,
         private readonly supportAccessService: SupportAccessService,
         private readonly adminAccessControl: AdminAccessControlService,
         private readonly prisma: PrismaService,
@@ -173,6 +176,22 @@ export class AdminsController {
         if (!adminId) throw new UnauthorizedException('Admin access required');
         const command = new DeleteAdminCommand(id, adminId);
         return this.deleteAdminHandler.execute(command);
+    }
+
+    @Post(':id/restore')
+    @ApiOperation({ summary: 'Restore a previously deleted Admin' })
+    @ApiResponse({ status: 200, description: 'Admin restored' })
+    @ApiResponse({ status: 404, description: 'No deleted admin with that id' })
+    @AuditTrail({ entityType: 'Admin', action: ChangeType.update })
+    async restore(
+        @Param('id') id: string,
+        @CurrentUser() currentUser: CurrentUserData
+    ) {
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        const adminId = currentUser.adminId;
+        if (!adminId) throw new UnauthorizedException('Admin access required');
+        const command = new RestoreAdminCommand(id, adminId);
+        return this.restoreAdminHandler.execute(command);
     }
 
     @Get('support-access/config')
