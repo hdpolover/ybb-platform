@@ -11,6 +11,7 @@ import { GetAdminsHandler } from './application/queries/handlers/get-admins.hand
 import { GetAdminHandler } from './application/queries/handlers/get-admin.handler';
 import { UpdateAdminHandler } from './application/commands/handlers/update-admin.handler';
 import { DeleteAdminHandler } from './application/commands/handlers/delete-admin.handler';
+import { RestoreAdminHandler } from './application/commands/handlers/restore-admin.handler';
 import { SupportAccessService } from './application/services/support-access.service';
 import { AdminAccessControlService } from './application/services/admin-access-control.service';
 
@@ -38,6 +39,7 @@ import { AuthModule } from '../auth/auth.module';
         GetAdminHandler,
         UpdateAdminHandler,
         DeleteAdminHandler,
+        RestoreAdminHandler,
         SupportAccessService,
         AdminAccessControlService,
     ],

@@ -68,6 +68,35 @@ export class CreateAdminHandler {
             primaryBrandId = defaultBrand.id;
         }
 
+        // The duplicate check at the top of this handler cannot see a
+        // soft-deleted user: the Prisma soft-delete extension injects
+        // `deletedAt: null` into every findFirst. But the row is still there,
+        // still occupying @@unique([email, brandId]), and nothing ever purges
+        // admins - so tx.user.create below would fail with an opaque P2002 and
+        // that email would be blocked for that brand forever, with no route
+        // forward. Name the cause and point at the way out.
+        //
+        // This is also why the backlog's stated fix for M218 (add
+        // `deletedAt: null` to the check above) is a no-op: it is already there
+        // implicitly. The cause is the surviving row, not the missing filter.
+        const deletedConflict = await this.prisma.user.findFirst({
+            where: {
+                email: command.email,
+                brandId: primaryBrandId,
+                deletedAt: { not: null },
+            },
+            select: { admin: { select: { id: true } } },
+        });
+
+        if (deletedConflict?.admin) {
+            throw new ConflictException({
+                message:
+                    'An admin with this email was deleted previously for this brand. Restore that admin instead of creating a new one.',
+                errorCode: 'DELETED_ADMIN_EMAIL_CONFLICT',
+                adminId: deletedConflict.admin.id,
+            });
+        }
+
         const assignmentPermissions = normalizePermissions(role?.permissions);
         const assignmentRoleName = role?.name ?? 'Admin';
 
