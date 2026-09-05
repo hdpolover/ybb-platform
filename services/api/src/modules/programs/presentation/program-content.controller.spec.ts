@@ -155,15 +155,15 @@ describe('ProgramContentController', () => {
     describe('createLoaBatch', () => {
         it('dispatches CreateLoaBatchCommand with mapped args and admin user id from req.user.id', async () => {
             mockExecute.execute.mockResolvedValue({ id: 'b1' });
-            const dto = { name: 'Wave 1', submissionFrom: '2026-01-01', submissionTo: '2026-03-31' };
+            const dto = { name: 'Wave 1', paymentFrom: '2026-01-01', paymentTo: '2026-03-31' };
             const req = { user: { id: 'admin-1' } } as any;
             await controller.createLoaBatch('prog-1', dto as any, req, actor);
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(CreateLoaBatchCommand));
             const cmd = mockExecute.execute.mock.calls[0][0] as CreateLoaBatchCommand;
             expect(cmd.programId).toBe('prog-1');
             expect(cmd.name).toBe('Wave 1');
-            expect(cmd.submissionFrom).toEqual(new Date('2026-01-01'));
-            expect(cmd.submissionTo).toEqual(new Date('2026-03-31'));
+            expect(cmd.paymentFrom).toEqual(new Date('2026-01-01'));
+            expect(cmd.paymentTo).toEqual(new Date('2026-03-31'));
             expect(cmd.adminUserId).toBe('admin-1');
         });
     });
@@ -171,15 +171,15 @@ describe('ProgramContentController', () => {
     describe('updateLoaBatch', () => {
         it('dispatches UpdateLoaBatchCommand with parsed dates', async () => {
             mockExecute.execute.mockResolvedValue({ id: 'b1' });
-            const dto = { name: 'Wave 1 Updated', submissionFrom: '2026-02-01', submissionTo: '2026-04-30' };
+            const dto = { name: 'Wave 1 Updated', paymentFrom: '2026-02-01', paymentTo: '2026-04-30' };
             await controller.updateLoaBatch('prog-1', 'b1', dto as any, actor);
             expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(UpdateLoaBatchCommand));
             const cmd = mockExecute.execute.mock.calls[0][0] as UpdateLoaBatchCommand;
             expect(cmd.batchId).toBe('b1');
             expect(cmd.programId).toBe('prog-1');
             expect(cmd.name).toBe('Wave 1 Updated');
-            expect(cmd.submissionFrom).toEqual(new Date('2026-02-01'));
-            expect(cmd.submissionTo).toEqual(new Date('2026-04-30'));
+            expect(cmd.paymentFrom).toEqual(new Date('2026-02-01'));
+            expect(cmd.paymentTo).toEqual(new Date('2026-04-30'));
         });
 
         it('dispatches UpdateLoaBatchCommand with undefined dates when not provided', async () => {
@@ -187,8 +187,8 @@ describe('ProgramContentController', () => {
             const dto = { name: 'Renamed' };
             await controller.updateLoaBatch('prog-1', 'b1', dto as any, actor);
             const cmd = mockExecute.execute.mock.calls[0][0] as UpdateLoaBatchCommand;
-            expect(cmd.submissionFrom).toBeUndefined();
-            expect(cmd.submissionTo).toBeUndefined();
+            expect(cmd.paymentFrom).toBeUndefined();
+            expect(cmd.paymentTo).toBeUndefined();
         });
     });
 

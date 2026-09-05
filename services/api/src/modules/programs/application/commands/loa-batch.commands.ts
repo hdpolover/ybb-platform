@@ -9,8 +9,8 @@ export class CreateLoaBatchCommand {
     // Resolved once inside the handler; see resolveProgramId() there.
     public readonly programId: string,
     public readonly name: string,
-    public readonly submissionFrom: Date,
-    public readonly submissionTo: Date,
+    public readonly paymentFrom: Date,
+    public readonly paymentTo: Date,
     public readonly adminUserId: string,
     public readonly actor: CurrentUserData,
   ) {}
@@ -22,8 +22,8 @@ export class UpdateLoaBatchCommand {
     public readonly programId: string,
     public readonly actor: CurrentUserData,
     public readonly name?: string,
-    public readonly submissionFrom?: Date,
-    public readonly submissionTo?: Date,
+    public readonly paymentFrom?: Date,
+    public readonly paymentTo?: Date,
   ) {}
 }
 

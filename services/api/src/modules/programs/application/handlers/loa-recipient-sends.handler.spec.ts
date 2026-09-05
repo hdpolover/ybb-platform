@@ -12,8 +12,8 @@ const batch = {
   id: 'batch-1',
   programId: 'prog-1',
   name: 'Wave 1',
-  submissionFrom: new Date('2026-01-01'),
-  submissionTo: new Date('2026-01-31'),
+  paymentFrom: new Date('2026-01-01'),
+  paymentTo: new Date('2026-01-31'),
   releasedAt: new Date('2026-02-01'),
 };
 
@@ -212,15 +212,15 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
     const releasedBatch = {
       id: 'batch-1',
       name: 'Wave 1',
-      submissionFrom: batch.submissionFrom,
-      submissionTo: batch.submissionTo,
+      paymentFrom: batch.paymentFrom,
+      paymentTo: batch.paymentTo,
       releasedAt: new Date('2026-02-01'),
     };
     const unreleasedBatch = {
       id: 'batch-2',
       name: 'Wave 2 (draft)',
-      submissionFrom: new Date('2026-04-01'),
-      submissionTo: new Date('2026-08-20'),
+      paymentFrom: new Date('2026-04-01'),
+      paymentTo: new Date('2026-08-20'),
       releasedAt: null,
     };
 
@@ -240,9 +240,14 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
           NOT: {
             OR: [
               {
-                submittedAt: {
-                  gte: releasedBatch.submissionFrom,
-                  lte: releasedBatch.submissionTo,
+                invoices: {
+                  some: {
+                    status: 'paid',
+                    paidAt: {
+                      gte: releasedBatch.paymentFrom,
+                      lte: releasedBatch.paymentTo,
+                    },
+                  },
                 },
               },
             ],
@@ -260,9 +265,14 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
       const uncoveredWhere = mockPrisma.participantApplication.count.mock.calls[0][0].where;
       expect(uncoveredWhere.NOT.OR).toEqual([
         {
-          submittedAt: {
-            gte: releasedBatch.submissionFrom,
-            lte: releasedBatch.submissionTo,
+          invoices: {
+            some: {
+              status: 'paid',
+              paidAt: {
+                gte: releasedBatch.paymentFrom,
+                lte: releasedBatch.paymentTo,
+              },
+            },
           },
         },
       ]);
@@ -354,9 +364,14 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
         where: expect.objectContaining({
           OR: [
             {
-              submittedAt: {
-                gte: unreleasedBatch.submissionFrom,
-                lte: unreleasedBatch.submissionTo,
+              invoices: {
+                some: {
+                  status: 'paid',
+                  paidAt: {
+                    gte: unreleasedBatch.paymentFrom,
+                    lte: unreleasedBatch.paymentTo,
+                  },
+                },
               },
             },
           ],

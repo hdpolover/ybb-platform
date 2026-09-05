@@ -3243,13 +3243,13 @@ export type LoaBatch = {
   id: string;
   programId: string;
   name: string;
-  /** ISO datetime string — start of the submission date window */
-  submissionFrom: string;
-  /** ISO datetime string — end of the submission date window */
-  submissionTo: string;
+  /** ISO datetime string — start of the payment date window */
+  paymentFrom: string;
+  /** ISO datetime string — end of the payment date window */
+  paymentTo: string;
   /** ISO datetime string if released, null if still draft */
   releasedAt: string | null;
-  /** Number of participants whose submissionDate falls within this batch */
+  /** Number of participants who paid within this batch's window */
   eligibleCount: number;
   /** Number of participants who have downloaded at least once in this batch */
   downloadedCount: number;
@@ -3259,17 +3259,17 @@ export type LoaBatch = {
 export type CreateLoaBatchInput = {
   name: string;
   /** ISO datetime string */
-  submissionFrom: string;
+  paymentFrom: string;
   /** ISO datetime string */
-  submissionTo: string;
+  paymentTo: string;
 };
 
 export type UpdateLoaBatchInput = {
   name?: string;
   /** ISO datetime string */
-  submissionFrom?: string;
+  paymentFrom?: string;
   /** ISO datetime string */
-  submissionTo?: string;
+  paymentTo?: string;
 };
 
 /**
@@ -4345,7 +4345,7 @@ export type LoaRecipientSend = {
 };
 
 /**
- * A submitted/accepted applicant whose submission date falls outside EVERY
+ * A submitted/accepted applicant whose payment date falls outside EVERY
  * released batch window — they are never selected for the LOA-ready email and
  * leave no trace anywhere, so they are surfaced explicitly.
  */
@@ -4354,7 +4354,7 @@ export type UncoveredParticipant = {
   participantId: string;
   participantName: string;
   email: string;
-  /** ISO datetime string */
+  /** ISO datetime string. Display context only ("when did this person apply") — coverage is decided by payment date. */
   submittedAt: string | null;
 };
 

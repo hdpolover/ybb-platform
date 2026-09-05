@@ -10,8 +10,8 @@ describe('LoaReleaseBatchRepository', () => {
     id: 'batch-1',
     programId: 'prog-1',
     name: 'Wave 1',
-    submissionFrom: new Date('2026-01-01'),
-    submissionTo: new Date('2026-03-31'),
+    paymentFrom: new Date('2026-01-01'),
+    paymentTo: new Date('2026-03-31'),
     releasedAt: null,
     createdBy: 'admin-1',
     createdAt: new Date(),
@@ -75,8 +75,8 @@ describe('LoaReleaseBatchRepository', () => {
     const result = await repo.create({
       programId: 'prog-1',
       name: 'Wave 1',
-      submissionFrom: new Date('2026-01-01'),
-      submissionTo: new Date('2026-03-31'),
+      paymentFrom: new Date('2026-01-01'),
+      paymentTo: new Date('2026-03-31'),
       createdBy: 'admin-1',
     });
     expect(prisma.loaReleaseBatch.create).toHaveBeenCalled();
@@ -135,7 +135,6 @@ describe('LoaReleaseBatchRepository', () => {
         where: expect.objectContaining({
           programId: 'prog-1',
           status: { in: ['submitted', 'accepted'] },
-          submittedAt: { gte: new Date('2026-01-01'), lte: new Date('2026-03-31') },
           deletedAt: null,
         }),
       }),
@@ -155,6 +154,39 @@ describe('LoaReleaseBatchRepository', () => {
         }),
       }),
     );
+  });
+
+  // The actual bug: an admin manually submits a late-paying participant today,
+  // long after they paid. Their submittedAt is outside the batch window, but
+  // their payment is inside it. This asserts the FULL where clause (exact
+  // equality, not objectContaining) so both directions of the fix are proven
+  // at once:
+  //  1. submittedAt is not a key anywhere in the clause, so a submission
+  //     dated outside the window (the late-manual-submission case) cannot
+  //     exclude an otherwise-eligible application.
+  //  2. the invoices-paid-in-window clause is a mandatory top-level key (not
+  //     inside an optional OR), so an application that never paid in the
+  //     window cannot match no matter what its submittedAt is.
+  it('findEligibleRecipients matches on the PAID invoice window, not on submittedAt', async () => {
+    (prisma.participantApplication.findMany as jest.Mock).mockResolvedValue([]);
+
+    const windowFrom = new Date('2026-01-01');
+    const windowTo = new Date('2026-03-31');
+    await repo.findEligibleRecipients('prog-1', windowFrom, windowTo);
+
+    const [{ where }] = (prisma.participantApplication.findMany as jest.Mock).mock.calls[0];
+    expect(where).toEqual({
+      programId: 'prog-1',
+      status: { in: ['submitted', 'accepted'] },
+      deletedAt: null,
+      participant: { deletedAt: null, user: { isActive: true, deletedAt: null } },
+      invoices: {
+        some: {
+          status: 'paid',
+          paidAt: { gte: windowFrom, lte: windowTo },
+        },
+      },
+    });
   });
 
   it('unrelease clears releasedAt', async () => {

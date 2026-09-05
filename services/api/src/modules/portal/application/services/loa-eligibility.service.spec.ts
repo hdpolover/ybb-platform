@@ -38,6 +38,7 @@ describe('LoaEligibilityService', () => {
     mockPrisma.participantApplication.findFirst.mockResolvedValue({
       status: 'rejected',
       submittedAt: new Date('2026-02-15'),
+      invoices: [{ paidAt: new Date('2026-02-10') }],
     });
 
     const result = await service.checkEligibility('app-1', 'prog-1');
@@ -50,6 +51,7 @@ describe('LoaEligibilityService', () => {
     mockPrisma.participantApplication.findFirst.mockResolvedValue({
       status: 'submitted',
       submittedAt: null,
+      invoices: [{ paidAt: new Date('2026-02-10') }],
     });
 
     const result = await service.checkEligibility('app-1', 'prog-1');
@@ -58,10 +60,65 @@ describe('LoaEligibilityService', () => {
     expect(mockPrisma.loaReleaseBatch.findFirst).not.toHaveBeenCalled();
   });
 
-  it('returns not eligible when no released batch covers the submission date', async () => {
+
+  // The batch and this gate must agree on WHICH date the window is matched
+  // against. A batch selects its recipients by payment date; if this gate kept
+  // matching on submittedAt, someone paid inside the window but submitted after
+  // it - an admin submitting a late participant stamps today - would be emailed
+  // "your Invitation Letter is ready" and then refused the download. Not a 5xx,
+  // and indistinguishable from an unreleased batch for support.
+  it('is eligible when the payment falls in the window even though the submission does not', async () => {
+    mockPrisma.participantApplication.findFirst.mockResolvedValue({
+      status: 'submitted',
+      // Submitted well AFTER the batch window closed.
+      submittedAt: new Date('2026-09-05'),
+      // Paid inside it.
+      invoices: [{ paidAt: new Date('2026-06-10') }],
+    });
+    mockPrisma.loaReleaseBatch.findFirst.mockResolvedValue({ id: 'batch-1' });
+
+    const result = await service.checkEligibility('app-1', 'prog-1');
+
+    expect(result).toEqual({ eligible: true, batchId: 'batch-1' });
+    // The window is compared against the PAYMENT date, never submittedAt.
+    const where = mockPrisma.loaReleaseBatch.findFirst.mock.calls[0][0].where;
+    expect(where.OR).toEqual([
+      { paymentFrom: { lte: new Date('2026-06-10') }, paymentTo: { gte: new Date('2026-06-10') } },
+    ]);
+  });
+
+  it('is not eligible when the application has never paid', async () => {
+    mockPrisma.participantApplication.findFirst.mockResolvedValue({
+      status: 'submitted',
+      submittedAt: new Date('2026-06-15'),
+      invoices: [],
+    });
+
+    const result = await service.checkEligibility('app-1', 'prog-1');
+
+    expect(result).toEqual({ eligible: false });
+    // An empty OR would have matched EVERY batch rather than none.
+    expect(mockPrisma.loaReleaseBatch.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('considers every payment, so one before the window does not mask one inside it', async () => {
+    mockPrisma.participantApplication.findFirst.mockResolvedValue({
+      status: 'submitted',
+      submittedAt: new Date('2026-06-15'),
+      invoices: [{ paidAt: new Date('2026-01-05') }, { paidAt: new Date('2026-06-10') }],
+    });
+    mockPrisma.loaReleaseBatch.findFirst.mockResolvedValue({ id: 'batch-1' });
+
+    await service.checkEligibility('app-1', 'prog-1');
+
+    expect(mockPrisma.loaReleaseBatch.findFirst.mock.calls[0][0].where.OR).toHaveLength(2);
+  });
+
+  it('returns not eligible when no released batch covers the payment date', async () => {
     mockPrisma.participantApplication.findFirst.mockResolvedValue({
       status: 'accepted',
       submittedAt: new Date('2026-02-15'),
+      invoices: [{ paidAt: new Date('2026-02-10') }],
     });
     // No batch matches (e.g. unreleased, soft-deleted, or date outside any window)
     mockPrisma.loaReleaseBatch.findFirst.mockResolvedValue(null);
@@ -74,8 +131,10 @@ describe('LoaEligibilityService', () => {
         programId: 'prog-1',
         deletedAt: null,
         releasedAt: { not: null },
-        submissionFrom: { lte: new Date('2026-02-15') },
-        submissionTo: { gte: new Date('2026-02-15') },
+        // Matched against the PAYMENT date (2026-02-10), not submittedAt.
+        OR: [
+          { paymentFrom: { lte: new Date('2026-02-10') }, paymentTo: { gte: new Date('2026-02-10') } },
+        ],
       },
       select: { id: true },
     });
@@ -85,6 +144,7 @@ describe('LoaEligibilityService', () => {
     mockPrisma.participantApplication.findFirst.mockResolvedValue({
       status: 'accepted',
       submittedAt: new Date('2026-02-15'),
+      invoices: [{ paidAt: new Date('2026-02-10') }],
     });
     mockPrisma.loaReleaseBatch.findFirst.mockResolvedValue({ id: 'batch-1' });
 
@@ -97,6 +157,7 @@ describe('LoaEligibilityService', () => {
     mockPrisma.participantApplication.findFirst.mockResolvedValue({
       status: 'submitted',
       submittedAt: new Date('2026-02-15'),
+      invoices: [{ paidAt: new Date('2026-02-10') }],
     });
     mockPrisma.loaReleaseBatch.findFirst.mockResolvedValue({ id: 'batch-1' });
 

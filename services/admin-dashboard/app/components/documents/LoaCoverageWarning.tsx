@@ -21,7 +21,7 @@ interface LoaCoverageWarningProps {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 /**
- * Surfaces the silent-exclusion blind spot: applicants whose submission date
+ * Surfaces the silent-exclusion blind spot: applicants whose payment date
  * falls outside every RELEASED batch window are never selected for the
  * LOA-ready email and leave no send record at all, so without this they
  * simply vanish. Overlapping batch ranges are rejected on create, so the gap
@@ -46,9 +46,9 @@ export function LoaCoverageWarning({
             {count} participant{count === 1 ? "" : "s"} not covered by any released batch
           </p>
           <p className="text-sm text-amber-800">
-            Their submission date falls outside every released window, so they were never
+            Their payment date falls outside every released window, so they were never
             sent an Invitation Letter email and have no delivery record. Create a batch
-            covering their submission dates and release it.
+            covering their payment dates and release it.
           </p>
           {coveredByUnreleasedBatchCount > 0 && (
             <p className="text-sm text-amber-800">

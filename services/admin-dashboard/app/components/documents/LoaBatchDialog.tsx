@@ -53,21 +53,21 @@ function isOverlapError(msg: string): boolean {
 
 interface ValidationError {
   name?: string;
-  submissionFrom?: string;
-  submissionTo?: string;
+  paymentFrom?: string;
+  paymentTo?: string;
 }
 
 function validate(
   name: string,
-  submissionFrom: string,
-  submissionTo: string,
+  paymentFrom: string,
+  paymentTo: string,
 ): ValidationError | null {
   const errors: ValidationError = {};
   if (!name.trim()) errors.name = "Batch name is required.";
-  if (!submissionFrom) errors.submissionFrom = "Start date is required.";
-  if (!submissionTo) errors.submissionTo = "End date is required.";
-  if (submissionFrom && submissionTo && submissionFrom > submissionTo) {
-    errors.submissionTo = "End date must be on or after start date.";
+  if (!paymentFrom) errors.paymentFrom = "Start date is required.";
+  if (!paymentTo) errors.paymentTo = "End date is required.";
+  if (paymentFrom && paymentTo && paymentFrom > paymentTo) {
+    errors.paymentTo = "End date must be on or after start date.";
   }
   return Object.keys(errors).length > 0 ? errors : null;
 }
@@ -83,11 +83,11 @@ export function LoaBatchDialog({
   const isEdit = !!batch;
 
   const [name, setName] = useState(batch?.name ?? "");
-  const [submissionFrom, setSubmissionFrom] = useState(
-    toDateInputValue(batch?.submissionFrom),
+  const [paymentFrom, setPaymentFrom] = useState(
+    toDateInputValue(batch?.paymentFrom),
   );
-  const [submissionTo, setSubmissionTo] = useState(
-    toDateInputValue(batch?.submissionTo),
+  const [paymentTo, setPaymentTo] = useState(
+    toDateInputValue(batch?.paymentTo),
   );
   const [fieldErrors, setFieldErrors] = useState<ValidationError>({});
   const [apiError, setApiError] = useState<string | null>(null);
@@ -97,7 +97,7 @@ export function LoaBatchDialog({
     e.preventDefault();
     setApiError(null);
 
-    const validationErrors = validate(name, submissionFrom, submissionTo);
+    const validationErrors = validate(name, paymentFrom, paymentTo);
     if (validationErrors) {
       setFieldErrors(validationErrors);
       return;
@@ -107,22 +107,22 @@ export function LoaBatchDialog({
     setSaving(true);
     try {
       // Convert local YYYY-MM-DD to ISO string (midnight UTC)
-      const fromIso = new Date(`${submissionFrom}T00:00:00Z`).toISOString();
-      const toIso = new Date(`${submissionTo}T00:00:00Z`).toISOString();
+      const fromIso = new Date(`${paymentFrom}T00:00:00Z`).toISOString();
+      const toIso = new Date(`${paymentTo}T00:00:00Z`).toISOString();
 
       if (isEdit && batch) {
         const payload: UpdateLoaBatchInput = {
           name: name.trim(),
-          submissionFrom: fromIso,
-          submissionTo: toIso,
+          paymentFrom: fromIso,
+          paymentTo: toIso,
         };
         await updateLoaBatch(programId, batch.id, payload);
         toast.success("Batch updated successfully.");
       } else {
         const payload: CreateLoaBatchInput = {
           name: name.trim(),
-          submissionFrom: fromIso,
-          submissionTo: toIso,
+          paymentFrom: fromIso,
+          paymentTo: toIso,
         };
         await createLoaBatch(programId, payload);
         toast.success("Batch created successfully.");
@@ -165,31 +165,31 @@ export function LoaBatchDialog({
             )}
           </div>
 
-          {/* Submission Date From */}
+          {/* Payment Date From */}
           <div className="space-y-1.5">
-            <Label htmlFor="batch-from">Submission Date From</Label>
+            <Label htmlFor="batch-from">Payment Date From</Label>
             <Input
               id="batch-from"
               type="date"
-              value={submissionFrom}
-              onChange={(e) => setSubmissionFrom(e.target.value)}
+              value={paymentFrom}
+              onChange={(e) => setPaymentFrom(e.target.value)}
             />
-            {fieldErrors.submissionFrom && (
-              <p className="text-xs text-red-600">{fieldErrors.submissionFrom}</p>
+            {fieldErrors.paymentFrom && (
+              <p className="text-xs text-red-600">{fieldErrors.paymentFrom}</p>
             )}
           </div>
 
-          {/* Submission Date To */}
+          {/* Payment Date To */}
           <div className="space-y-1.5">
-            <Label htmlFor="batch-to">Submission Date To</Label>
+            <Label htmlFor="batch-to">Payment Date To</Label>
             <Input
               id="batch-to"
               type="date"
-              value={submissionTo}
-              onChange={(e) => setSubmissionTo(e.target.value)}
+              value={paymentTo}
+              onChange={(e) => setPaymentTo(e.target.value)}
             />
-            {fieldErrors.submissionTo && (
-              <p className="text-xs text-red-600">{fieldErrors.submissionTo}</p>
+            {fieldErrors.paymentTo && (
+              <p className="text-xs text-red-600">{fieldErrors.paymentTo}</p>
             )}
           </div>
 

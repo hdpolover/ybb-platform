@@ -530,8 +530,8 @@ export class ProgramContentController {
       new CreateLoaBatchCommand(
         programId,
         dto.name,
-        new Date(dto.submissionFrom),
-        new Date(dto.submissionTo),
+        new Date(dto.paymentFrom),
+        new Date(dto.paymentTo),
         req.user.id,
         actor,
       ),
@@ -555,8 +555,8 @@ export class ProgramContentController {
         programId,
         actor,
         dto.name,
-        dto.submissionFrom ? new Date(dto.submissionFrom) : undefined,
-        dto.submissionTo ? new Date(dto.submissionTo) : undefined,
+        dto.paymentFrom ? new Date(dto.paymentFrom) : undefined,
+        dto.paymentTo ? new Date(dto.paymentTo) : undefined,
       ),
     );
   }
