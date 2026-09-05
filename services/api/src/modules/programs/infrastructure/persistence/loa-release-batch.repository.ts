@@ -1,25 +1,101 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
 import { LoaBatchReleasedRecipient } from '../../../../common/types/events';
 import { ACTIVE_PARTICIPANT_WHERE } from '../../../../shared/utils/active-participant.filter';
 
+// paymentFrom/paymentTo (DB columns payment_from/payment_to) are the
+// admin-chosen boundary dates of the batch's PAYMENT window. They are
+// compared against the participant's payment date (see
+// buildLoaEligibleApplicationWhere below), not the application's
+// submittedAt - an admin manually submitting a late-paying participant
+// stamps today's submission date, which would fall outside the window even
+// though the person paid months ago, inside it.
 export interface CreateLoaBatchData {
   programId: string;
   name: string;
-  submissionFrom: Date;
-  submissionTo: Date;
+  paymentFrom: Date;
+  paymentTo: Date;
   createdBy: string;
 }
 
 export interface UpdateLoaBatchData {
   name?: string;
-  submissionFrom?: Date;
-  submissionTo?: Date;
+  paymentFrom?: Date;
+  paymentTo?: Date;
 }
 
-// Eligible = participant_applications with status in ('submitted', 'accepted')
-// AND submittedAt within the batch window, for the batch's program, not deleted.
+// Eligible = participant_applications with status in ('submitted', 'accepted'),
+// for the batch's program, not deleted, whose participant is still active,
+// AND paid (any invoice, any fee type) within the batch window. See
+// buildLoaEligibleApplicationWhere - every call site that decides "is this
+// application in scope for this batch" MUST route through it, so the
+// recipient list, the eligible count, and the uncovered-participant summary
+// can never again disagree about who counts (audit item M10: they used to).
 const ELIGIBLE_APPLICATION_STATUSES = ['submitted', 'accepted'] as const;
+
+/**
+ * The non-window part of eligibility: status + program + not-deleted +
+ * active participant. Shared by the window predicate below and by the
+ * uncovered-participant summary, which needs the same base filter but a
+ * negated/OR'd window across multiple batches instead of one.
+ */
+export function loaEligibleBaseWhere(programId: string): Prisma.ParticipantApplicationWhereInput {
+  return {
+    programId,
+    status: { in: [...ELIGIBLE_APPLICATION_STATUSES] },
+    deletedAt: null,
+    // Deactivated/deleted accounts stay in the applications list for
+    // history but never get the automated LOA-ready email.
+    participant: ACTIVE_PARTICIPANT_WHERE,
+  };
+}
+
+/**
+ * "Paid within [windowFrom, windowTo]" = has at least one PAID invoice whose
+ * paidAt falls in that range. paidAt lives on ApplicationInvoice, not on the
+ * application, so this is a relation filter rather than a plain column
+ * comparison.
+ *
+ * "At least one paid invoice in window" vs. "earliest paid invoice in
+ * window": for a window-membership check these are equivalent by design
+ * here, not just by accident. An application with one paid invoice BEFORE
+ * the window and another INSIDE it should still count - they paid within
+ * the window, full stop, even though an earlier payment also exists outside
+ * it. `some` captures exactly that. An application whose paid invoices are
+ * ALL outside the window (all before, or all after) correctly does not
+ * match.
+ *
+ * Verified against production that "any paid invoice" and "registration-fee
+ * invoice only" give identical results, so this deliberately does not
+ * restrict by fee type - a programme with no registration-fee tier still
+ * works.
+ */
+export function loaPaymentWindowFilter(
+  windowFrom: Date,
+  windowTo: Date,
+): Prisma.ParticipantApplicationWhereInput {
+  return {
+    invoices: {
+      some: {
+        status: PaymentStatus.paid,
+        paidAt: { gte: windowFrom, lte: windowTo },
+      },
+    },
+  };
+}
+
+/** The one shared predicate: eligible base + paid-within-window. */
+export function buildLoaEligibleApplicationWhere(
+  programId: string,
+  windowFrom: Date,
+  windowTo: Date,
+): Prisma.ParticipantApplicationWhereInput {
+  return {
+    ...loaEligibleBaseWhere(programId),
+    ...loaPaymentWindowFilter(windowFrom, windowTo),
+  };
+}
 
 @Injectable()
 export class LoaReleaseBatchRepository {
@@ -28,7 +104,7 @@ export class LoaReleaseBatchRepository {
   async findByProgram(programId: string) {
     return this.prisma.loaReleaseBatch.findMany({
       where: { programId, deletedAt: null },
-      orderBy: { submissionFrom: 'asc' },
+      orderBy: { paymentFrom: 'asc' },
     });
   }
 
@@ -50,8 +126,8 @@ export class LoaReleaseBatchRepository {
         deletedAt: null,
         ...(excludeId ? { NOT: { id: excludeId } } : {}),
         // overlap: existing.from <= to AND existing.to >= from
-        submissionFrom: { lte: to },
-        submissionTo: { gte: from },
+        paymentFrom: { lte: to },
+        paymentTo: { gte: from },
       },
     });
   }
@@ -93,24 +169,17 @@ export class LoaReleaseBatchRepository {
 
   /**
    * Recipients eligible for LOA-ready notifications: submitted/accepted
-   * applications in the batch's program whose submittedAt falls within the
-   * batch window, joined through participant → user for email + full name.
+   * applications in the batch's program that PAID within the batch window
+   * (see buildLoaEligibleApplicationWhere), joined through participant →
+   * user for email + full name.
    */
   async findEligibleRecipients(
     programId: string,
-    submissionFrom: Date,
-    submissionTo: Date,
+    paymentFrom: Date,
+    paymentTo: Date,
   ): Promise<LoaBatchReleasedRecipient[]> {
     const applications = await this.prisma.participantApplication.findMany({
-      where: {
-        programId,
-        status: { in: [...ELIGIBLE_APPLICATION_STATUSES] },
-        submittedAt: { gte: submissionFrom, lte: submissionTo },
-        deletedAt: null,
-        // Deactivated/deleted accounts stay in the applications list for
-        // history but never get the automated LOA-ready email.
-        participant: ACTIVE_PARTICIPANT_WHERE,
-      },
+      where: buildLoaEligibleApplicationWhere(programId, paymentFrom, paymentTo),
       select: {
         participant: {
           select: {

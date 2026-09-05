@@ -7,7 +7,12 @@ import { IUserNotificationRepository } from '@core/interfaces/repositories/user-
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { UserNotification } from '@core/entities/user-notification.entity';
 import { LoaBatchReleasedPayload, LoaBatchReleasedRecipient } from '../../../../common/types/events';
-import { LoaReleaseBatchRepository } from '../../infrastructure/persistence/loa-release-batch.repository';
+import {
+  LoaReleaseBatchRepository,
+  loaEligibleBaseWhere,
+  loaPaymentWindowFilter,
+  buildLoaEligibleApplicationWhere,
+} from '../../infrastructure/persistence/loa-release-batch.repository';
 import { LoaBatchRecipientSendRepository } from '../../infrastructure/persistence/loa-batch-recipient-send.repository';
 import {
   CreateLoaBatchCommand,
@@ -22,7 +27,6 @@ import {
   GetLoaBatchRecipientSendsQuery,
 } from '../queries/loa-batch.queries';
 import { LoaRecipientSendResponseDto } from '../dto/loa-batch.dto';
-import { ACTIVE_PARTICIPANT_WHERE } from '@shared/utils/active-participant.filter';
 import { Prisma } from '@prisma/client';
 import { assertProgramContentAccess } from '../../application/utils/program-content-access.util';
 
@@ -60,8 +64,8 @@ const LOA_DOCUMENT_TYPE = 'letter_of_acceptance';
 
 // ─── Date window normalization ────────────────────────────────────────────────
 // Admin UI sends whole-day picks (e.g. "12 Jul") as midnight UTC. Without
-// normalization, submissionTo lands at the START of its day, which excludes
-// every submission made later that same day from eligibility. Normalize the
+// normalization, paymentTo lands at the START of its day, which excludes
+// every payment made later that same day from eligibility. Normalize the
 // batch window server-side so it's always inclusive of both full WIB days
 // (YBB's users are mostly WIB/UTC+7), using the shared wib-time helpers.
 
@@ -84,21 +88,21 @@ export class CreateLoaBatchHandler implements ICommandHandler<CreateLoaBatchComm
     }
     await assertProgramContentAccess(this.prismaRead, command.actor, programId);
 
-    const submissionFrom = startOfWibDay(command.submissionFrom);
-    const submissionTo = endOfWibDay(command.submissionTo);
+    const paymentFrom = startOfWibDay(command.paymentFrom);
+    const paymentTo = endOfWibDay(command.paymentTo);
 
-    if (submissionFrom > submissionTo) {
-      throw new BadRequestException('submissionFrom must be on or before submissionTo');
+    if (paymentFrom > paymentTo) {
+      throw new BadRequestException('paymentFrom must be on or before paymentTo');
     }
 
-    const overlapping = await this.batchRepo.findOverlapping(programId, submissionFrom, submissionTo);
+    const overlapping = await this.batchRepo.findOverlapping(programId, paymentFrom, paymentTo);
     if (overlapping.length > 0) {
       throw new ConflictException(
         `Batch date range overlaps with existing batch "${overlapping[0].name}"`,
       );
     }
 
-    return this.batchRepo.create({ programId, name, submissionFrom, submissionTo, createdBy: adminUserId });
+    return this.batchRepo.create({ programId, name, paymentFrom, paymentTo, createdBy: adminUserId });
   }
 }
 
@@ -119,8 +123,8 @@ export class UpdateLoaBatchHandler implements ICommandHandler<UpdateLoaBatchComm
     }
     await assertProgramContentAccess(this.prismaRead, command.actor, programId);
 
-    const submissionFrom = command.submissionFrom ? startOfWibDay(command.submissionFrom) : undefined;
-    const submissionTo = command.submissionTo ? endOfWibDay(command.submissionTo) : undefined;
+    const paymentFrom = command.paymentFrom ? startOfWibDay(command.paymentFrom) : undefined;
+    const paymentTo = command.paymentTo ? endOfWibDay(command.paymentTo) : undefined;
 
     const existing = await this.batchRepo.findById(batchId);
     if (!existing || existing.programId !== programId) {
@@ -128,11 +132,11 @@ export class UpdateLoaBatchHandler implements ICommandHandler<UpdateLoaBatchComm
     }
 
     // Use incoming dates if provided, otherwise fall back to existing values for overlap check
-    const from = submissionFrom ?? existing.submissionFrom;
-    const to = submissionTo ?? existing.submissionTo;
+    const from = paymentFrom ?? existing.paymentFrom;
+    const to = paymentTo ?? existing.paymentTo;
 
     if (from > to) {
-      throw new BadRequestException('submissionFrom must be on or before submissionTo');
+      throw new BadRequestException('paymentFrom must be on or before paymentTo');
     }
 
     const overlapping = await this.batchRepo.findOverlapping(programId, from, to, batchId);
@@ -142,7 +146,7 @@ export class UpdateLoaBatchHandler implements ICommandHandler<UpdateLoaBatchComm
       );
     }
 
-    return this.batchRepo.update(batchId, { name, submissionFrom, submissionTo });
+    return this.batchRepo.update(batchId, { name, paymentFrom, paymentTo });
   }
 }
 
@@ -201,13 +205,13 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
     id: string;
     programId: string;
     name: string;
-    submissionFrom: Date;
-    submissionTo: Date;
+    paymentFrom: Date;
+    paymentTo: Date;
   }): Promise<void> {
     const recipients = await this.batchRepo.findEligibleRecipients(
       batch.programId,
-      batch.submissionFrom,
-      batch.submissionTo,
+      batch.paymentFrom,
+      batch.paymentTo,
     );
 
     if (recipients.length === 0) {
@@ -402,13 +406,13 @@ export class GetLoaBatchesHandler implements IQueryHandler<GetLoaBatchesQuery> {
     return Promise.all(
       batches.map(async (batch) => {
         const [eligibleCount, downloadedCount] = await Promise.all([
-          // Eligible: submitted or accepted applications whose submittedAt falls within batch window
+          // Eligible: submitted/accepted applications that PAID within the
+          // batch window. MUST match findEligibleRecipients exactly (audit
+          // M10: this used to be a hand-rolled duplicate missing the
+          // deletedAt/active-participant filters, so the count an admin saw
+          // did not match who actually got notified).
           this.prisma.participantApplication.count({
-            where: {
-              programId,
-              status: { in: ['submitted', 'accepted'] },
-              submittedAt: { gte: batch.submissionFrom, lte: batch.submissionTo },
-            },
+            where: buildLoaEligibleApplicationWhere(programId, batch.paymentFrom, batch.paymentTo),
           }),
           // Downloaded: LOA documents linked to this batch with at least one download
           this.prisma.participantDocument.count({
@@ -563,19 +567,26 @@ export class GetLoaBatchRecipientSendsHandler
   }
 
   /**
-   * Closes the silent-exclusion blind spot. An applicant whose submittedAt
-   * falls outside every RELEASED batch window is never returned by
+   * Closes the silent-exclusion blind spot. An applicant whose PAYMENT falls
+   * outside every RELEASED batch window is never returned by
    * findEligibleRecipients, so they get no email, no log line and no
    * send-log row — a per-recipient log alone cannot catch them, because they
-   * were never a recipient. Observed in production: one applicant on China
-   * Youth Summit 2026 (submitted 2026-08-28) sits outside all released
-   * windows, and because createLoaBatch rejects overlapping ranges the gap
-   * cannot simply be papered over with a wider batch later.
+   * were never a recipient. Observed in production (pre-payment-window fix):
+   * one applicant on China Youth Summit 2026 (submitted 2026-08-28) sat
+   * outside all released windows, and because createLoaBatch rejects
+   * overlapping ranges the gap could not simply be papered over with a wider
+   * batch later.
    *
    * Coverage is computed against RELEASED batches only — an unreleased batch
    * notifies nobody. But an admin staring at "1 uncovered" is very likely
    * looking at a batch they believe they already released, so an unreleased
    * batch that WOULD cover some of them is reported alongside.
+   *
+   * Uses the SAME base predicate (loaEligibleBaseWhere) and the SAME window
+   * filter (loaPaymentWindowFilter) as findEligibleRecipients/eligibleCount
+   * above — see the M10 note on buildLoaEligibleApplicationWhere. Only the
+   * window is inverted/OR'd here across every released batch instead of
+   * matched against one.
    */
   private async summariseUncoveredParticipants(programId: string) {
     const batches = await this.prisma.loaReleaseBatch.findMany({
@@ -583,27 +594,23 @@ export class GetLoaBatchRecipientSendsHandler
       select: {
         id: true,
         name: true,
-        submissionFrom: true,
-        submissionTo: true,
+        paymentFrom: true,
+        paymentTo: true,
         releasedAt: true,
       },
     });
 
-    const toWindow = (batch: { submissionFrom: Date; submissionTo: Date }) => ({
-      submittedAt: { gte: batch.submissionFrom, lte: batch.submissionTo },
-    });
+    const toWindow = (batch: { paymentFrom: Date; paymentTo: Date }) =>
+      loaPaymentWindowFilter(batch.paymentFrom, batch.paymentTo);
     const releasedBatches = batches.filter((batch) => batch.releasedAt !== null);
     const unreleasedBatches = batches.filter((batch) => batch.releasedAt === null);
 
     const uncoveredWhere = {
-      programId,
-      status: { in: ['submitted', 'accepted'] },
-      deletedAt: null,
+      ...loaEligibleBaseWhere(programId),
+      // Legacy defensive guard, orthogonal to the payment-window change: a
+      // submitted/accepted application should always have a submittedAt, but
+      // this keeps any data-integrity anomaly out of the admin-facing list.
       submittedAt: { not: null },
-      // Deactivated/deleted accounts are excluded from the automated email,
-      // so listing them here as "missed" would be a false alarm — same
-      // predicate findEligibleRecipients uses.
-      participant: ACTIVE_PARTICIPANT_WHERE,
       // No released batch at all -> every submitted applicant is uncovered.
       ...(releasedBatches.length > 0
         ? { NOT: { OR: releasedBatches.map(toWindow) } }

@@ -2,22 +2,22 @@ import { IsString, IsDateString, IsOptional } from 'class-validator';
 
 export class CreateLoaBatchDto {
   @IsString() name: string;
-  @IsDateString() submissionFrom: string;
-  @IsDateString() submissionTo: string;
+  @IsDateString() paymentFrom: string;
+  @IsDateString() paymentTo: string;
 }
 
 export class UpdateLoaBatchDto {
   @IsOptional() @IsString() name?: string;
-  @IsOptional() @IsDateString() submissionFrom?: string;
-  @IsOptional() @IsDateString() submissionTo?: string;
+  @IsOptional() @IsDateString() paymentFrom?: string;
+  @IsOptional() @IsDateString() paymentTo?: string;
 }
 
 export class LoaBatchResponseDto {
   id: string;
   programId: string;
   name: string;
-  submissionFrom: Date;
-  submissionTo: Date;
+  paymentFrom: Date;
+  paymentTo: Date;
   releasedAt: Date | null;
   eligibleCount: number;
   downloadedCount: number;
@@ -66,10 +66,12 @@ export class LoaBatchRecipientSendsResponseDto {
   recipients: LoaRecipientSendResponseDto[];
   /**
    * Program-wide blind spot, not batch-scoped: submitted/accepted applicants
-   * whose submittedAt falls outside EVERY released batch window. They are
-   * silently never selected by findEligibleRecipients — no email, no log
-   * line, no send row — so a per-recipient log alone cannot surface them.
-   * This is the true total, not the length of the capped list below.
+   * whose PAYMENT falls outside EVERY released batch window (the window is
+   * matched against paidAt, not submittedAt — see
+   * buildLoaEligibleApplicationWhere). They are silently never selected by
+   * findEligibleRecipients — no email, no log line, no send row — so a
+   * per-recipient log alone cannot surface them. This is the true total, not
+   * the length of the capped list below.
    */
   uncoveredParticipantCount: number;
   /** Capped at 100, earliest submission first, so an admin can act on them. */
@@ -90,5 +92,7 @@ export class UncoveredParticipantDto {
   participantId: string;
   participantName: string;
   email: string;
+  // Display context only ("when did this person apply") — coverage itself is
+  // now decided by payment date, not this field. See uncoveredParticipantCount.
   submittedAt: Date | null;
 }

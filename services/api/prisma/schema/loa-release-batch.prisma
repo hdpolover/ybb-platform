@@ -2,12 +2,17 @@
 // LOA RELEASE BATCHES
 // ============================================================================
 
+// paymentFrom/paymentTo are the admin-chosen boundary dates of a batch's
+// payment window. Eligibility is matched against the participant's PAYMENT
+// date (earliest paid ApplicationInvoice), NOT this application's
+// submittedAt — see buildLoaEligibleApplicationWhere in
+// loa-release-batch.repository.ts.
 model LoaReleaseBatch {
   id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
   programId      String    @map("program_id") @db.Uuid
   name           String    @db.VarChar(255)
-  submissionFrom DateTime  @map("submission_from") @db.Timestamptz(6)
-  submissionTo   DateTime  @map("submission_to") @db.Timestamptz(6)
+  paymentFrom    DateTime  @map("payment_from") @db.Timestamptz(6)
+  paymentTo      DateTime  @map("payment_to") @db.Timestamptz(6)
   releasedAt     DateTime? @map("released_at") @db.Timestamptz(6)
   createdBy      String    @map("created_by") @db.Uuid
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -19,7 +24,7 @@ model LoaReleaseBatch {
   recipientSends       LoaBatchRecipientSend[]
 
   @@index([programId])
-  @@index([programId, submissionFrom, submissionTo])
+  @@index([programId, paymentFrom, paymentTo])
   @@map("loa_release_batches")
 }
 

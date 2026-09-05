@@ -18,10 +18,19 @@ const ELIGIBLE_APPLICATION_STATUSES = ['submitted', 'accepted'] as const;
 /**
  * Determines whether a participant may download their Letter of Acceptance.
  *
- * Eligibility rule (spec §3 / §4.1): an application is eligible iff its status is
- * `submitted` or `accepted` AND there exists a RELEASED, non-deleted LOA release
- * batch for the program whose `[submissionFrom, submissionTo]` window contains the
- * application's `submittedAt` timestamp (inclusive on both bounds).
+ * Eligibility rule: an application is eligible iff its status is `submitted` or
+ * `accepted` AND there exists a RELEASED, non-deleted LOA release batch for the
+ * program whose `[paymentFrom, paymentTo]` window contains one of the
+ * application's PAYMENT dates (inclusive on both bounds).
+ *
+ * The window is matched against a paid invoice, not against `submittedAt`, and
+ * that has to stay in step with how a batch CHOOSES its recipients
+ * (buildLoaEligibleApplicationWhere). While the two disagreed, a batch selected
+ * by payment date would notify someone whose submission fell outside the same
+ * window, and this gate would then refuse them the download - an email saying
+ * the letter is ready, followed by a refusal, on the one document people
+ * actually chase. That failure is also invisible: it is not a 5xx, and support
+ * cannot tell it apart from an unreleased batch.
  */
 @Injectable()
 export class LoaEligibilityService {
@@ -30,7 +39,18 @@ export class LoaEligibilityService {
   async checkEligibility(applicationId: string, programId: string): Promise<EligibilityResult> {
     const application = await this.prisma.participantApplication.findFirst({
       where: { id: applicationId },
-      select: { status: true, submittedAt: true },
+      select: {
+        status: true,
+        submittedAt: true,
+        // Every payment this application has made. A batch covers the
+        // application if its window contains ANY of them - the same `some`
+        // semantics the recipient query uses, so one payment before the window
+        // and another inside it still counts as covered.
+        invoices: {
+          where: { status: 'paid', paidAt: { not: null } },
+          select: { paidAt: true },
+        },
+      },
     });
 
     // No application / wrong status / never submitted → not eligible (spec §11).
@@ -44,14 +64,26 @@ export class LoaEligibilityService {
       return { eligible: false };
     }
 
-    // Find a released, non-deleted batch whose window covers the submission date.
+    // Never paid, so no window can cover them. Checked explicitly because an
+    // empty OR list below would match every batch rather than none.
+    const paidAts = application.invoices
+      .map((invoice) => invoice.paidAt)
+      .filter((paidAt): paidAt is Date => paidAt !== null);
+    if (paidAts.length === 0) {
+      return { eligible: false };
+    }
+
+    // Find a released, non-deleted batch whose window covers one of the payment
+    // dates.
     const batch = await this.prisma.loaReleaseBatch.findFirst({
       where: {
         programId,
         deletedAt: null,
         releasedAt: { not: null },
-        submissionFrom: { lte: application.submittedAt },
-        submissionTo: { gte: application.submittedAt },
+        OR: paidAts.map((paidAt) => ({
+          paymentFrom: { lte: paidAt },
+          paymentTo: { gte: paidAt },
+        })),
       },
       select: { id: true },
     });

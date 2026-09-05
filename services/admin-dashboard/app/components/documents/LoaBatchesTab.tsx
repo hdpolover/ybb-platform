@@ -142,7 +142,7 @@ function BatchRow({
     <TableRow>
       <TableCell className="font-medium">{batch.name}</TableCell>
       <TableCell className="text-sm text-zinc-500">
-        {formatDate(batch.submissionFrom)} – {formatDate(batch.submissionTo)}
+        {formatDate(batch.paymentFrom)} – {formatDate(batch.paymentTo)}
       </TableCell>
       <TableCell className="tabular-nums">{batch.eligibleCount}</TableCell>
       <TableCell className="tabular-nums">{batch.downloadedCount}</TableCell>
@@ -392,7 +392,7 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
         <EmptyState
           icon={CalendarRange}
           title="No release batches yet"
-          description="Create a batch to define a submission date window and release Invitation Letters for eligible participants."
+          description="Create a batch to define a payment date window and release Invitation Letters for eligible participants."
           action={{ label: "Create First Batch", onClick: handleNewBatch }}
         />
       )}
@@ -403,7 +403,7 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>Submission Range</TableHead>
+              <TableHead>Payment Range</TableHead>
               <TableHead>Eligible</TableHead>
               <TableHead>Downloaded</TableHead>
               <TableHead>Email Delivery</TableHead>

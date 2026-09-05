@@ -19,8 +19,8 @@ const mockBatch = {
   id: 'batch-1',
   programId: 'prog-1',
   name: 'Wave 1',
-  submissionFrom: new Date('2026-01-01'),
-  submissionTo: new Date('2026-03-31'),
+  paymentFrom: new Date('2026-01-01'),
+  paymentTo: new Date('2026-03-31'),
   releasedAt: null,
   createdBy: 'admin-1',
   createdAt: new Date(),
@@ -104,14 +104,14 @@ describe('CreateLoaBatchHandler', () => {
     // The handler normalizes the range to whole WIB days (startOfWibDay/endOfWibDay),
     // so an end date of 2026-03-31 covers that entire WIB day rather than its UTC
     // midnight boundary. Assert the normalized values the repository actually receives.
-    const submissionFrom = new Date('2025-12-31T17:00:00.000Z');
-    const submissionTo = new Date('2026-03-31T16:59:59.999Z');
-    expect(mockRepo.findOverlapping).toHaveBeenCalledWith('prog-1', submissionFrom, submissionTo);
+    const paymentFrom = new Date('2025-12-31T17:00:00.000Z');
+    const paymentTo = new Date('2026-03-31T16:59:59.999Z');
+    expect(mockRepo.findOverlapping).toHaveBeenCalledWith('prog-1', paymentFrom, paymentTo);
     expect(mockRepo.create).toHaveBeenCalledWith({
       programId: 'prog-1',
       name: 'Wave 1',
-      submissionFrom,
-      submissionTo,
+      paymentFrom,
+      paymentTo,
       createdBy: 'admin-1',
     });
   });
@@ -126,7 +126,7 @@ describe('CreateLoaBatchHandler', () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it('throws BadRequestException when submissionFrom is after submissionTo', async () => {
+  it('throws BadRequestException when paymentFrom is after paymentTo', async () => {
     mockRepo.findOverlapping.mockResolvedValue([]);
     const { CreateLoaBatchCommand } = await import('../commands/loa-batch.commands');
     await expect(
@@ -199,8 +199,8 @@ describe('UpdateLoaBatchHandler', () => {
     expect(result.name).toBe('Updated Wave 1');
     expect(mockRepo.findOverlapping).toHaveBeenCalledWith(
       'prog-1',
-      mockBatch.submissionFrom,
-      mockBatch.submissionTo,
+      mockBatch.paymentFrom,
+      mockBatch.paymentTo,
       'batch-1',
     );
   });
@@ -222,11 +222,11 @@ describe('UpdateLoaBatchHandler', () => {
     ).rejects.toThrow(ConflictException);
   });
 
-  it('throws BadRequestException when effective submissionFrom is after submissionTo', async () => {
+  it('throws BadRequestException when effective paymentFrom is after paymentTo', async () => {
     mockRepo.findById.mockResolvedValue({ ...mockBatch });
     mockRepo.findOverlapping.mockResolvedValue([]);
     const { UpdateLoaBatchCommand } = await import('../commands/loa-batch.commands');
-    // Passing a new submissionFrom that is after the existing submissionTo
+    // Passing a new paymentFrom that is after the existing paymentTo
     await expect(
       handler.execute(new UpdateLoaBatchCommand('batch-1', 'prog-1', actor, undefined, new Date('2026-12-01'), new Date('2026-01-01'))),
     ).rejects.toThrow(BadRequestException);
@@ -352,8 +352,8 @@ describe('ReleaseLoaBatchHandler', () => {
 
     expect(mockRepo.findEligibleRecipients).toHaveBeenCalledWith(
       'prog-1',
-      mockBatch.submissionFrom,
-      mockBatch.submissionTo,
+      mockBatch.paymentFrom,
+      mockBatch.paymentTo,
     );
     expect(mockPrisma.program.findUnique).toHaveBeenCalledWith({
       where: { id: 'prog-1' },
@@ -624,6 +624,28 @@ describe('GetLoaBatchesHandler', () => {
     const { GetLoaBatchesQuery } = await import('../queries/loa-batch.queries');
     const result = await handler.execute(new GetLoaBatchesQuery('prog-1', actor));
     expect(result).toHaveLength(0);
+  });
+
+  // M10: eligibleCount used to be a hand-rolled query (missing deletedAt and
+  // the active-participant filter) that could disagree with what
+  // findEligibleRecipients actually selects at release time — an admin could
+  // see "10 eligible" but only 8 people get notified. eligibleCount MUST be
+  // built from the exact same shared predicate as the recipient query, so
+  // they can never diverge again.
+  it('computes eligibleCount from the SAME shared predicate as findEligibleRecipients (M10)', async () => {
+    mockRepo.findByProgram.mockResolvedValue([{ ...mockBatch }]);
+    mockPrisma.participantApplication.count.mockResolvedValue(10);
+    mockPrisma.participantDocument.count.mockResolvedValue(0);
+
+    const { GetLoaBatchesQuery } = await import('../queries/loa-batch.queries');
+    await handler.execute(new GetLoaBatchesQuery('prog-1', actor));
+
+    const { buildLoaEligibleApplicationWhere } = await import(
+      '../../infrastructure/persistence/loa-release-batch.repository'
+    );
+    expect(mockPrisma.participantApplication.count).toHaveBeenCalledWith({
+      where: buildLoaEligibleApplicationWhere('prog-1', mockBatch.paymentFrom, mockBatch.paymentTo),
+    });
   });
 
   it('refuses a programme-scoped admin listing batches outside their assigned programmes', async () => {
