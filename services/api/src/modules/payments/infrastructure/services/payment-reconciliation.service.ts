@@ -7,7 +7,13 @@ import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitm
 import { buildParticipantPaymentsUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { isManualPaymentMethod } from '@modules/payments/application/utils/payment-method.util';
 import { isActiveParticipant } from '@shared/utils/active-participant.filter';
-import { findPaidSiblingInvoice, supersededByPaidInvoiceReason } from '@shared/utils/paid-sibling-invoice.util';
+import {
+    findPaidSiblingInvoice,
+    invoiceCategoryWhere,
+    paymentCategoryForFeeType,
+    supersededByPaidInvoiceReason,
+    type ApplicationPaymentCategory,
+} from '@shared/utils/paid-sibling-invoice.util';
 import { PaymentServiceHttpClient } from './payment-service-http.client';
 import { PaymentGatewayClient } from './payment-gateway.client';
 
@@ -67,6 +73,20 @@ export interface TerminalDriftReport {
     skipped: number;
     errors: number;
     details: TerminalDriftDetail[];
+}
+
+export interface PaidColumnDriftDetail {
+    applicationId: string;
+    category: ApplicationPaymentCategory;
+    was: PaymentStatus;
+    invoiceId: string;
+}
+
+export interface PaidColumnDriftReport {
+    scanned: number;
+    repaired: number;
+    errors: number;
+    details: PaidColumnDriftDetail[];
 }
 
 const PROCESSING_INVOICE_INCLUDE = {
@@ -172,6 +192,18 @@ export class PaymentReconciliationService {
         } catch (error) {
             this.logger.error(
                 `[payment-reconciliation] terminal-drift run failed: ${toErrorMessage(error)}`,
+            );
+        }
+
+        try {
+            const columnReport = await this.reconcilePaidColumnDrift(true);
+            this.logger.log(
+                `[payment-reconciliation] paid-column-drift scanned=${columnReport.scanned} ` +
+                `repaired=${columnReport.repaired} errors=${columnReport.errors}`,
+            );
+        } catch (error) {
+            this.logger.error(
+                `[payment-reconciliation] paid-column-drift run failed: ${toErrorMessage(error)}`,
             );
         }
     }
@@ -363,6 +395,107 @@ export class PaymentReconciliationService {
                 const reason = toErrorMessage(error);
                 report.details.push({ invoiceId: invoice.id, outcome: 'error', reason });
                 this.logger.error(`[payment-reconciliation] terminal-drift invoice=${invoice.id} failed: ${reason}`);
+            }
+        }
+
+        return report;
+    }
+
+    /**
+     * Third scan: a PAID invoice whose application-level payment column still
+     * disagrees with it.
+     *
+     * The other two scans cannot see these rows. reconcileProcessingInvoices
+     * selects status in ('processing','unpaid') and reconcileTerminalInvoiceDrift
+     * selects ('cancelled','failed','refunded'), so an invoice that is already
+     * 'paid' matches neither - which is precisely why six applications sat with a
+     * paid programme invoice and a column reading 'unpaid'/'cancelled' (USD 2,810)
+     * from July to September 2026 with nothing able to repair them. The
+     * payment.succeeded self-heal only fires on a NEW payment event, and for an
+     * application that has finished paying, another event is not coming.
+     *
+     * The column is a denormalised rollup of the invoices, so the invoice is the
+     * source of truth and 'paid' is simply the truthful value. Two paid invoices
+     * writing the same column is a duplicate needing refund review (flagged
+     * elsewhere, see findPaidSiblingInvoice) but does NOT change what the column
+     * should say, so this deliberately does not skip on a paid sibling - the same
+     * reasoning as the unconditional write on the payment.succeeded path.
+     *
+     * Only ever writes 'paid', and only where a paid invoice already exists, so it
+     * cannot invent a payment. With apply=false it is a pure dry run.
+     */
+    async reconcilePaidColumnDrift(apply: boolean): Promise<PaidColumnDriftReport> {
+        const report: PaidColumnDriftReport = { scanned: 0, repaired: 0, errors: 0, details: [] };
+
+        const drifted = await this.prisma.applicationInvoice.findMany({
+            where: {
+                status: PaymentStatus.paid,
+                application: { deletedAt: null },
+                OR: [
+                    {
+                        ...invoiceCategoryWhere('registration'),
+                        application: { registrationPaymentStatus: { not: PaymentStatus.paid } },
+                    },
+                    {
+                        ...invoiceCategoryWhere('program'),
+                        application: { programPaymentStatus: { not: PaymentStatus.paid } },
+                    },
+                ],
+            },
+            select: {
+                id: true,
+                applicationId: true,
+                pricingTier: { select: { feeType: true } },
+                application: {
+                    select: { registrationPaymentStatus: true, programPaymentStatus: true },
+                },
+            },
+            take: this.batchSize,
+        });
+
+        // Two paid installments (program_fee_1 + program_fee_2) drift the SAME
+        // column, so key the work by application+category rather than by invoice
+        // or the second one repairs an already-repaired row.
+        const seen = new Set<string>();
+
+        for (const invoice of drifted) {
+            const category = paymentCategoryForFeeType(invoice.pricingTier?.feeType);
+            const key = `${invoice.applicationId}:${category}`;
+            if (seen.has(key)) {
+                continue;
+            }
+            seen.add(key);
+            report.scanned += 1;
+
+            const was =
+                category === 'registration'
+                    ? invoice.application.registrationPaymentStatus
+                    : invoice.application.programPaymentStatus;
+            report.details.push({ applicationId: invoice.applicationId, category, was, invoiceId: invoice.id });
+
+            if (!apply) {
+                continue;
+            }
+
+            try {
+                await this.prisma.participantApplication.update({
+                    where: { id: invoice.applicationId },
+                    data:
+                        category === 'registration'
+                            ? { registrationPaymentStatus: PaymentStatus.paid }
+                            : { programPaymentStatus: PaymentStatus.paid },
+                });
+                report.repaired += 1;
+                this.logger.warn(
+                    `[payment-reconciliation] paid-column-drift repaired application=${invoice.applicationId} ` +
+                    `category=${category} was=${was} (paid invoice ${invoice.id})`,
+                );
+            } catch (error) {
+                report.errors += 1;
+                this.logger.error(
+                    `[payment-reconciliation] paid-column-drift application=${invoice.applicationId} ` +
+                    `failed: ${toErrorMessage(error)}`,
+                );
             }
         }
 

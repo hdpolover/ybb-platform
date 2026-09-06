@@ -13,8 +13,12 @@ import {
 // URL-persisted filter/sort/pagination state (nuqs) — mirrors the pattern in
 // app/programs/[programId]/participants/page.tsx. Category ("fully_funded")
 // stays hardcoded per this page's purpose, so it isn't part of the URL state.
-// `status` defaults to "submitted" (this page's historical scope) but is now
-// a real, changeable filter — "all" sends no status filter to the API.
+// `status` defaults to "all", not "submitted": payment is what makes an
+// applicant scoreable, so the parser below sets "all" and gates on
+// registrationPaymentStatus instead. "all" sends no status filter to the
+// API. This comment said "submitted" for three days after 4b1d113b changed
+// the default, and that stale line is what got the behaviour re-reported as
+// a bug (audit N29) when the code was already correct.
 //
 // Shared between FullyFundedParticipantsAll (the list) and the review queue
 // (app/hooks/useApplicationQueue.ts) so both read/write the exact same URL

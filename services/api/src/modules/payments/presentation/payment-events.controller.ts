@@ -504,7 +504,9 @@ export class PaymentEventsController {
         if (paidSibling) {
             this.logger.warn(
                 `processApplicationPayment: application ${applicationId} category=${category} ` +
-                `superseded by paid invoice ${paidSibling.id} - skipping application column overwrite`,
+                `already has paid invoice ${paidSibling.id} on the same column, so this is a ` +
+                `DUPLICATE payment needing refund review. The column write below still proceeds ` +
+                `(it is idempotent and repairs a wrongly-cancelled column); nothing is skipped.`,
             );
         }
 
