@@ -13,7 +13,7 @@ import { resolveInvoiceRevenue, ResolvedInvoiceMoney } from './utils/revenue-mon
 import { coalesceStr } from '../../applications/application/helpers/application-coalesce.helpers';
 import { resolveCountryName } from '@shared/utils/country-groups';
 import { PlatformRevenueQueryDto, RevenueTransactionsQueryDto } from './dto/revenue-query.dto';
-import { parseWibFilterDate } from '@shared/utils/wib-time';
+import { WIB_TIME_ZONE, addWibMonths, parseWibFilterDate } from '@shared/utils/wib-time';
 import {
   PlatformRevenueRollupResponseDto,
   ProgramRevenueSummaryResponseDto,
@@ -467,14 +467,20 @@ export class RevenueService {
     };
   }
 
+  /**
+   * Buckets paid invoices into 6 calendar months, anchored to WIB rather than
+   * UTC month boundaries (`Date.UTC` on the day-1 instant put the first ~7
+   * hours of a WIB month into the previous month's bar). Mirrors
+   * StatsService.getProgramDashboard's revenueByMonth, the correct sibling.
+   */
   private buildRevenueByMonth(rows: EnrichedRow[]): RevenueByMonthItemDto[] {
     const now = new Date();
     return Array.from({ length: REVENUE_BY_MONTH_WINDOW }, (_, idx) => {
-      const start = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (REVENUE_BY_MONTH_WINDOW - 1 - idx), 1),
-      );
-      const next = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
-      const label = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`;
+      const start = addWibMonths(now, -(REVENUE_BY_MONTH_WINDOW - 1 - idx));
+      const next = addWibMonths(start, 1);
+      const label = start
+        .toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', timeZone: WIB_TIME_ZONE })
+        .slice(0, 7);
 
       let grossIdr = 0;
       let feeIdr = 0;

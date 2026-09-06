@@ -117,6 +117,48 @@ describe('RevenueService', () => {
       expect(result.kpis.grossIdr).toBe(0);
       expect(result.kpis.unpaidCount).toBe(1);
     });
+
+    describe('revenueByMonth WIB month boundary', () => {
+      beforeEach(() => {
+        // "Now" = 2026-09-05 11:00 WIB, well inside September, so the
+        // 6-month window covers both August and September.
+        jest.useFakeTimers().setSystemTime(new Date('2026-09-05T04:00:00.000Z'));
+      });
+
+      afterEach(() => {
+        jest.useRealTimers();
+      });
+
+      it('buckets a payment by its WIB month, not its UTC calendar month', async () => {
+        mockPrisma.program.findUnique.mockResolvedValue({ id: 'program-1', brandId: 'brand-1', name: 'Program One', deletedAt: null });
+        mockPrisma.applicationInvoice.findMany.mockResolvedValue([
+          // 1 Sept 06:10 WIB — belongs in the September bucket.
+          invoiceRow({
+            id: 'sept-wib',
+            amount: new Prisma.Decimal('1000000'),
+            amountIdr: new Prisma.Decimal('1000000'),
+            paidAt: new Date('2026-08-31T23:10:00.000Z'),
+          }),
+          // 31 Aug 07:30 WIB — belongs in the August bucket.
+          invoiceRow({
+            id: 'aug-wib',
+            amount: new Prisma.Decimal('2000000'),
+            amountIdr: new Prisma.Decimal('2000000'),
+            paidAt: new Date('2026-08-31T00:30:00.000Z'),
+          }),
+        ]);
+
+        const result = await service.getProgramRevenueSummary('program-1', platformScope);
+
+        const septBucket = result.revenueByMonth.find((m) => m.label === '2026-09');
+        const augBucket = result.revenueByMonth.find((m) => m.label === '2026-08');
+
+        // The old UTC-bucketed version put both payments in "2026-08"
+        // (grossIdr 3,000,000) and left "2026-09" at 0.
+        expect(septBucket?.grossIdr).toBe(1000000);
+        expect(augBucket?.grossIdr).toBe(2000000);
+      });
+    });
   });
 
   describe('getPlatformRevenueRollup', () => {

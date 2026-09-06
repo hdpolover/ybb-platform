@@ -212,4 +212,33 @@ describe('AuditAdminController – cursor pagination', () => {
             ).rejects.toMatchObject({ status: 400 });
         });
     });
+
+    describe('list() - dateFrom/dateTo WIB day boundaries', () => {
+        it('anchors the range to the WIB calendar day, excluding the next day\'s early-morning WIB spillover', async () => {
+            mockPrisma.dataChangeLog.findMany.mockResolvedValue([]);
+            mockPrisma.dataChangeLog.count.mockResolvedValue(0);
+
+            await controller.list(
+                { dateFrom: '2026-08-31', dateTo: '2026-08-31' } as Partial<ListAuditLogsDto>,
+                ADMIN_USER,
+            );
+
+            const findManyCall = mockPrisma.dataChangeLog.findMany.mock.calls[0][0];
+            const { gte, lte } = findManyCall.where.createdAt;
+
+            // 1 Sept 06:10 WIB — must be excluded from a "31 Aug only" filter.
+            const excludedInstant = new Date('2026-08-31T23:10:00.000Z');
+            // 31 Aug 07:30 WIB — must be included.
+            const includedInstant = new Date('2026-08-31T00:30:00.000Z');
+
+            expect(excludedInstant >= gte && excludedInstant <= lte).toBe(false);
+            expect(includedInstant >= gte && includedInstant <= lte).toBe(true);
+
+            // dateTo used to pass straight through `new Date(dateTo)` with no
+            // end-of-day widening at all, so `lte` landed at the very first
+            // instant of the day instead of its last. Guard the widening
+            // directly: lte must be materially after midnight of that day.
+            expect(lte.getTime() - gte.getTime()).toBeGreaterThan(23 * 60 * 60 * 1000);
+        });
+    });
 });

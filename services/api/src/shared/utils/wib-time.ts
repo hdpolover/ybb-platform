@@ -79,3 +79,25 @@ export function parseWibFilterDate(value: string): Date {
   if (Number.isNaN(parsed.getTime())) return parsed;
   return DATE_ONLY_PATTERN.test(value.trim()) ? fromWibWallClock(parsed) : parsed;
 }
+
+/**
+ * Builds a `createdAt`-style Prisma range filter from admin startDate/endDate
+ * query params, anchoring both ends to the WIB calendar day.
+ *
+ * Extracted because ApplicationRepository and ExportApplicationsHandler each
+ * had a byte-for-byte copy of this logic using `new Date(startDate +
+ * 'T00:00:00.000Z')` / `'T23:59:59.999Z'` — UTC midnight, seven hours off
+ * from the WIB day the admin actually picked. One shared helper so the two
+ * copies can't drift again.
+ */
+export function buildWibDateRangeFilter(
+  startDate?: string,
+  endDate?: string,
+): { gte?: Date; lte?: Date } | undefined {
+  if (!startDate && !endDate) return undefined;
+
+  const range: { gte?: Date; lte?: Date } = {};
+  if (startDate) range.gte = parseWibFilterDate(startDate);
+  if (endDate) range.lte = endOfWibDay(parseWibFilterDate(endDate));
+  return range;
+}

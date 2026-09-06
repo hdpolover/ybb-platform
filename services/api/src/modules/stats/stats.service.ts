@@ -251,10 +251,11 @@ export class StatsService {
       }),
     ]);
 
-    // New users this month
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
+    // New users this month. Anchored to the WIB calendar month rather than
+    // the Node process's (UTC) timezone — for ~7 hours at the start of every
+    // WIB month, server-local midnight was still the last day of the
+    // previous month, so the counter reported the previous month's count.
+    const startOfMonth = startOfWibMonth(new Date());
     const newUsersThisMonth = await this.readPrisma.user.count({
       where: { ...userBrandFilter, createdAt: { gte: startOfMonth }, deletedAt: null },
     });

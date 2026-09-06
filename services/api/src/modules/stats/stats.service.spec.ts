@@ -13,6 +13,11 @@ describe('StatsService', () => {
     },
     program: {
       findUnique: jest.fn(),
+      count: jest.fn(),
+      findMany: jest.fn(),
+    },
+    user: {
+      count: jest.fn(),
     },
     participant: {
       count: jest.fn(),
@@ -21,6 +26,7 @@ describe('StatsService', () => {
     participantApplication: {
       count: jest.fn(),
       findMany: jest.fn(),
+      groupBy: jest.fn(),
     },
     applicationInvoice: {
       findMany: jest.fn(),
@@ -250,6 +256,58 @@ describe('StatsService', () => {
           byTier: { 'Registration Fee': 2, 'Program Fee Installment 1': 1 },
         },
       ],
+    });
+  });
+
+  describe('getAdminAnalytics - new_this_month WIB anchor', () => {
+    const ORIGINAL_TZ = process.env.TZ;
+
+    beforeEach(() => {
+      // Best-effort: intended to make the OLD server-local-midnight bug
+      // reproduce even on a machine whose ambient TZ is already WIB. In
+      // practice this does NOT reliably repoint `Date`'s local-time methods
+      // inside an already-running Jest worker (V8/ICU caches the process's
+      // local offset before this line runs), so on a dev box whose OS
+      // timezone is already Asia/Jakarta, the pre-fix code coincidentally
+      // computes the right answer too and this test can't tell old from new.
+      // It still correctly guards the fixed behavior (startOfWibMonth is
+      // pure offset arithmetic, not ambient-TZ-dependent) on any machine,
+      // and correctly discriminates in a real UTC-ambient environment
+      // (the prod/CI default this bug report is about).
+      process.env.TZ = 'UTC';
+      // "Now" = 2026-08-31T23:10:00Z = 1 Sept 06:10 WIB: already inside
+      // September in WIB terms, but still 31 August by UTC/server-local time.
+      jest.useFakeTimers().setSystemTime(new Date('2026-08-31T23:10:00.000Z'));
+
+      mockCacheService.get.mockResolvedValue(null);
+      mockCacheService.set.mockResolvedValue(undefined);
+      mockPrismaService.program.count.mockResolvedValue(0);
+      mockPrismaService.program.findMany.mockResolvedValue([]);
+      mockPrismaService.participantApplication.count.mockResolvedValue(0);
+      mockPrismaService.participantApplication.groupBy.mockResolvedValue([]);
+      mockPrismaService.participant.count.mockResolvedValue(0);
+      mockPrismaService.user.count.mockResolvedValue(0);
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+      process.env.TZ = ORIGINAL_TZ;
+    });
+
+    it('anchors the "new users this month" cutoff to WIB month start, not server-local midnight', async () => {
+      await service.getAdminAnalytics();
+
+      const newUsersCall = mockPrismaService.user.count.mock.calls.find(
+        (call) => (call[0] as { where?: { createdAt?: unknown } })?.where?.createdAt,
+      );
+      expect(newUsersCall).toBeDefined();
+
+      const gte = (newUsersCall![0] as { where: { createdAt: { gte: Date } } }).where.createdAt.gte;
+
+      // WIB month start for "1 Sept 06:10 WIB" is WIB midnight on 1 Sept,
+      // i.e. 2026-08-31T17:00:00Z. The broken server-local-UTC version
+      // anchored to 2026-08-01T00:00:00Z, still thinking it was August.
+      expect(gte.toISOString()).toBe('2026-08-31T17:00:00.000Z');
     });
   });
 });
