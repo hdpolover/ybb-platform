@@ -540,4 +540,85 @@ describe('PaymentReconciliationService', () => {
             expect(mockPrisma.applicationInvoice.update).not.toHaveBeenCalled();
         });
     });
+
+    // The third scan. Guards the gap that let six applications hold a paid
+    // programme invoice while their column read 'unpaid'/'cancelled' from July to
+    // September 2026: the other two scans filter on invoice status and neither
+    // range includes 'paid', so nothing could ever see them.
+    describe('reconcilePaidColumnDrift', () => {
+        const driftRow = (over: Record<string, unknown> = {}) => ({
+            id: 'inv-drift-1',
+            applicationId: 'app-1',
+            pricingTier: { feeType: 'program_fee_1' },
+            application: { registrationPaymentStatus: 'paid', programPaymentStatus: 'unpaid' },
+            ...over,
+        });
+
+        it('writes the programme column to paid when a paid programme invoice disagrees with it', async () => {
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([driftRow()]);
+
+            const report = await service.reconcilePaidColumnDrift(true);
+
+            expect(report.repaired).toBe(1);
+            expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+                where: { id: 'app-1' },
+                data: { programPaymentStatus: 'paid' },
+            });
+        });
+
+        it('writes the registration column for a registration_fee invoice, not the programme one', async () => {
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([
+                driftRow({
+                    pricingTier: { feeType: 'registration_fee' },
+                    application: { registrationPaymentStatus: 'cancelled', programPaymentStatus: 'paid' },
+                }),
+            ]);
+
+            await service.reconcilePaidColumnDrift(true);
+
+            expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+                where: { id: 'app-1' },
+                data: { registrationPaymentStatus: 'paid' },
+            });
+        });
+
+        // Two paid installments drift the SAME column. Without the dedupe the second
+        // one repairs an already-repaired row.
+        it('repairs an application+category once even when two paid installments drift it', async () => {
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([
+                driftRow({ id: 'inv-1', pricingTier: { feeType: 'program_fee_1' } }),
+                driftRow({ id: 'inv-2', pricingTier: { feeType: 'program_fee_2' } }),
+            ]);
+
+            const report = await service.reconcilePaidColumnDrift(true);
+
+            expect(report.scanned).toBe(1);
+            expect(report.repaired).toBe(1);
+            expect(mockPrisma.participantApplication.update).toHaveBeenCalledTimes(1);
+        });
+
+        it('is a pure dry run when apply is false', async () => {
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([driftRow()]);
+
+            const report = await service.reconcilePaidColumnDrift(false);
+
+            expect(report.scanned).toBe(1);
+            expect(report.repaired).toBe(0);
+            expect(mockPrisma.participantApplication.update).not.toHaveBeenCalled();
+        });
+
+        // It must only ever select invoices that are already paid: the scan writes
+        // 'paid' unconditionally, so a wider selector would invent a payment.
+        it('only ever selects invoices whose status is already paid', async () => {
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([]);
+
+            await service.reconcilePaidColumnDrift(true);
+
+            expect(mockPrisma.applicationInvoice.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: expect.objectContaining({ status: 'paid' }),
+                }),
+            );
+        });
+    });
 });
