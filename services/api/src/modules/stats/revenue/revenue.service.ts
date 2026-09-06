@@ -13,6 +13,7 @@ import { resolveInvoiceRevenue, ResolvedInvoiceMoney } from './utils/revenue-mon
 import { coalesceStr } from '../../applications/application/helpers/application-coalesce.helpers';
 import { resolveCountryName } from '@shared/utils/country-groups';
 import { PlatformRevenueQueryDto, RevenueTransactionsQueryDto } from './dto/revenue-query.dto';
+import { parseWibFilterDate } from '@shared/utils/wib-time';
 import {
   PlatformRevenueRollupResponseDto,
   ProgramRevenueSummaryResponseDto,
@@ -339,7 +340,7 @@ export class RevenueService {
     if (query.dateFrom || query.dateTo) {
       conditions.push({
         createdAt: {
-          ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
+          ...(query.dateFrom ? { gte: parseWibFilterDate(query.dateFrom) } : {}),
           ...(query.dateTo ? { lte: this.endOfDay(query.dateTo) } : {}),
         },
       });
@@ -348,7 +349,7 @@ export class RevenueService {
     if (query.paidFrom || query.paidTo) {
       conditions.push({
         paidAt: {
-          ...(query.paidFrom ? { gte: new Date(query.paidFrom) } : {}),
+          ...(query.paidFrom ? { gte: parseWibFilterDate(query.paidFrom) } : {}),
           ...(query.paidTo ? { lte: this.endOfDay(query.paidTo) } : {}),
         },
       });
@@ -371,9 +372,18 @@ export class RevenueService {
     }
   }
 
+  /**
+   * The last instant of the WIB calendar day an admin picked.
+   *
+   * `new Date('2026-08-31')` is UTC midnight, so closing the range there put
+   * the last seven hours of the WIB day into the next one - the revenue figures
+   * for a day silently included payments the dashboard labels as the day after.
+   * parseWibFilterDate anchors a bare YYYY-MM-DD to WIB midnight; a value with
+   * an explicit time or offset is already an instant and passes through.
+   */
   private endOfDay(dateStr: string): Date {
     const MS_DAY = 86399999; // matches getAdminProgramAnalytics's existing convention
-    return new Date(new Date(dateStr).getTime() + MS_DAY);
+    return new Date(parseWibFilterDate(dateStr).getTime() + MS_DAY);
   }
 
   private toNumber(value: unknown): number {
