@@ -25,6 +25,13 @@ from app.infrastructure.processors.pdf_generator import (
     generate_loa_sync,
 )
 
+# A 1x1 blue truecolour PNG, deliberately byte-distinct from the 1x1 PNG
+# used for signatures, so a test needing two images gets two XObjects
+# rather than one shared, cached one.
+STAMP_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC"
+)
+
 LOGO = "https://cdn.example.com/logo.png"
 STAMP = "https://cdn.example.com/stamp.png"
 SIGNATURE = "https://cdn.example.com/signature.png"
@@ -529,8 +536,18 @@ class TestGenerateLoaSyncSmoke:
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
             "+A8AAQUBAScY42YAAAAASUVORK5CYII="
         )
+        # The stamp MUST be a different image from the signature. WeasyPrint
+        # caches decoded images by URL, so two <img> tags sharing one data URI
+        # collapse into a single PDF XObject drawn twice - and the
+        # `image_count == 2` assertion below would then fail even though the
+        # generator emitted both tags correctly. This test asserted on two
+        # identical URIs from the day it was written and never once ran: on
+        # macOS every test in this class dies in WeasyPrint's cffi import
+        # ("cannot load library 'libgobject-2.0-0'"), so all five were written
+        # off as environmental. Four of them are. This one was a real bug in
+        # the test, and only a Linux run could tell them apart.
         signature_url = f"data:image/png;base64,{png_b64}"
-        stamp_url = f"data:image/png;base64,{png_b64}"
+        stamp_url = f"data:image/png;base64,{STAMP_PNG_B64}"
 
         pdf_bytes = generate_loa_sync(
             html_content="<p>Body.</p>",

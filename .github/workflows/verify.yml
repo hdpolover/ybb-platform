@@ -84,3 +84,57 @@ jobs:
       - name: Test
         run: npx jest
 
+
+  file:
+    name: File service (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/file
+    env:
+      # prisma-client-py resolves datasource url at generate time and throws if
+      # DATABASE_URL is absent. Nothing here connects. Same reasoning as the api
+      # job above.
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches services/file/Dockerfile (python:3.11-slim), so CI cannot
+          # pass on an interpreter production does not run. Note the local venv
+          # at ybb-new/.venv is 3.9 - do not take a green local run as proof.
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: services/file/requirements.txt
+
+      # WeasyPrint loads libgobject/pango through cffi at import time, so the
+      # LoA PDF tests cannot even collect without these. This is the exact set
+      # from services/file/Dockerfile minus the Pillow BUILD deps, which are not
+      # needed because 3.11 wheels are prebuilt.
+      #
+      # These are why the file service was worth gating: on macOS all five LoA
+      # PDF smoke tests fail with "cannot load library 'libgobject-2.0-0'", so
+      # the local baseline reads 95 passed / 5 failed and every one of those
+      # five got written off as environmental. Four of them are. The fifth was a
+      # real assertion bug that only a Linux run could show.
+      - name: Install WeasyPrint system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libcairo2 \
+            fonts-noto-core fonts-noto-cjk
+
+      # pytest is deliberately not in requirements.txt (it is a runtime image
+      # manifest, and the Dockerfile installs it into the production image).
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      # Generates types only, never connects. app/infrastructure/persistence/
+      # postgres/database.py does `from prisma import Prisma`, which raises
+      # until the client is generated.
+      - name: Generate Prisma client
+        run: prisma generate
+
+      - name: Test
+        run: python -m pytest
