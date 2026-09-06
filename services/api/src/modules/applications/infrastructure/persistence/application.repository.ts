@@ -13,6 +13,7 @@ import {
   PaymentStatus,
   Prisma,
 } from '@prisma/client';
+import { buildWibDateRangeFilter } from '@shared/utils/wib-time';
 
 /**
  * Application Repository
@@ -30,24 +31,6 @@ export class ApplicationRepository implements IApplicationRepository {
     readPrisma?: PrismaReadService,
   ) {
     this.readClient = readPrisma ?? prisma;
-  }
-
-  private buildCreatedAtFilter(startDate?: string, endDate?: string): Prisma.DateTimeFilter | undefined {
-    if (!startDate && !endDate) {
-      return undefined;
-    }
-
-    const createdAt: Prisma.DateTimeFilter = {};
-
-    if (startDate) {
-      createdAt.gte = new Date(`${startDate}T00:00:00.000Z`);
-    }
-
-    if (endDate) {
-      createdAt.lte = new Date(`${endDate}T23:59:59.999Z`);
-    }
-
-    return createdAt;
   }
 
   private buildOrderBy(filters?: {
@@ -208,7 +191,7 @@ export class ApplicationRepository implements IApplicationRepository {
       where.scoreStatus = filters.scoreStatus;
     }
 
-    const createdAt = this.buildCreatedAtFilter(filters?.startDate, filters?.endDate);
+    const createdAt = buildWibDateRangeFilter(filters?.startDate, filters?.endDate);
     if (createdAt) {
       where.createdAt = createdAt;
     }
@@ -318,7 +301,7 @@ export class ApplicationRepository implements IApplicationRepository {
       where.scoreStatus = filters.scoreStatus;
     }
 
-    const createdAt = this.buildCreatedAtFilter(filters?.startDate, filters?.endDate);
+    const createdAt = buildWibDateRangeFilter(filters?.startDate, filters?.endDate);
     if (createdAt) {
       where.createdAt = createdAt;
     }

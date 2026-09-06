@@ -13,6 +13,7 @@ import { resolveInvoiceRevenue, ResolvedInvoiceMoney } from './utils/revenue-mon
 import { coalesceStr } from '../../applications/application/helpers/application-coalesce.helpers';
 import { resolveCountryName } from '@shared/utils/country-groups';
 import { PlatformRevenueQueryDto, RevenueTransactionsQueryDto } from './dto/revenue-query.dto';
+import { WIB_TIME_ZONE, addWibMonths, parseWibFilterDate } from '@shared/utils/wib-time';
 import {
   PlatformRevenueRollupResponseDto,
   ProgramRevenueSummaryResponseDto,
@@ -339,7 +340,7 @@ export class RevenueService {
     if (query.dateFrom || query.dateTo) {
       conditions.push({
         createdAt: {
-          ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
+          ...(query.dateFrom ? { gte: parseWibFilterDate(query.dateFrom) } : {}),
           ...(query.dateTo ? { lte: this.endOfDay(query.dateTo) } : {}),
         },
       });
@@ -348,7 +349,7 @@ export class RevenueService {
     if (query.paidFrom || query.paidTo) {
       conditions.push({
         paidAt: {
-          ...(query.paidFrom ? { gte: new Date(query.paidFrom) } : {}),
+          ...(query.paidFrom ? { gte: parseWibFilterDate(query.paidFrom) } : {}),
           ...(query.paidTo ? { lte: this.endOfDay(query.paidTo) } : {}),
         },
       });
@@ -371,9 +372,18 @@ export class RevenueService {
     }
   }
 
+  /**
+   * The last instant of the WIB calendar day an admin picked.
+   *
+   * `new Date('2026-08-31')` is UTC midnight, so closing the range there put
+   * the last seven hours of the WIB day into the next one - the revenue figures
+   * for a day silently included payments the dashboard labels as the day after.
+   * parseWibFilterDate anchors a bare YYYY-MM-DD to WIB midnight; a value with
+   * an explicit time or offset is already an instant and passes through.
+   */
   private endOfDay(dateStr: string): Date {
     const MS_DAY = 86399999; // matches getAdminProgramAnalytics's existing convention
-    return new Date(new Date(dateStr).getTime() + MS_DAY);
+    return new Date(parseWibFilterDate(dateStr).getTime() + MS_DAY);
   }
 
   private toNumber(value: unknown): number {
@@ -457,14 +467,20 @@ export class RevenueService {
     };
   }
 
+  /**
+   * Buckets paid invoices into 6 calendar months, anchored to WIB rather than
+   * UTC month boundaries (`Date.UTC` on the day-1 instant put the first ~7
+   * hours of a WIB month into the previous month's bar). Mirrors
+   * StatsService.getProgramDashboard's revenueByMonth, the correct sibling.
+   */
   private buildRevenueByMonth(rows: EnrichedRow[]): RevenueByMonthItemDto[] {
     const now = new Date();
     return Array.from({ length: REVENUE_BY_MONTH_WINDOW }, (_, idx) => {
-      const start = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (REVENUE_BY_MONTH_WINDOW - 1 - idx), 1),
-      );
-      const next = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
-      const label = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`;
+      const start = addWibMonths(now, -(REVENUE_BY_MONTH_WINDOW - 1 - idx));
+      const next = addWibMonths(start, 1);
+      const label = start
+        .toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', timeZone: WIB_TIME_ZONE })
+        .slice(0, 7);
 
       let grossIdr = 0;
       let feeIdr = 0;

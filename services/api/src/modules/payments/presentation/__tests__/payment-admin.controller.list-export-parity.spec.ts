@@ -52,7 +52,7 @@ function makeInvoice(id: string) {
         verifiedBy: null,
         paidAt: null,
         personalData: null,
-        createdAt: new Date('2024-01-01'),
+        createdAt: new Date('2023-12-31T17:00:00.000Z'),
         updatedAt: new Date('2024-01-01'),
         pricingTier: { id: TIER_ID, name: 'Tier 1', feeType: 'registration_fee', usdPrice: null, idrPrice: null },
         application: {
@@ -153,7 +153,11 @@ describe('Payments list/export where-clause parity', () => {
         expect(fromExport).toEqual(fromList);
         expect(fromList.application).toEqual(expect.objectContaining({ programId: PROGRAM_ID, participant: AMBASSADOR_MATCH }));
         expect(fromList.pricingTierId).toBe(TIER_ID);
-        expect(fromList.createdAt).toEqual({ gte: new Date('2024-01-01') });
+        // An admin filter date is a WIB calendar day (audit M159), so the
+        // lower bound is WIB midnight - 17:00Z the previous day - not UTC
+        // midnight. Written as an explicit instant rather than by calling the
+        // production helper, so this stays an independent check.
+        expect(fromList.createdAt).toEqual({ gte: new Date('2023-12-31T17:00:00.000Z') });
     });
 
     it('folds the obsolete-invoice exclusion identically for both callers', () => {
@@ -198,7 +202,7 @@ describe('Payments list/export where-clause parity', () => {
             expect.objectContaining({ programId: PROGRAM_ID, participant: AMBASSADOR_MATCH }),
         );
         expect(exportWhere.where.pricingTierId).toBe(TIER_ID);
-        expect(exportWhere.where.createdAt).toEqual({ gte: new Date('2024-01-01') });
+        expect(exportWhere.where.createdAt).toEqual({ gte: new Date('2023-12-31T17:00:00.000Z') });
     });
 
     it('an unfiltered export still excludes obsolete registration-fee invoices, same as the list', async () => {

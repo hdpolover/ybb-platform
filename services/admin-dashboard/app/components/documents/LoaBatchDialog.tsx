@@ -106,7 +106,10 @@ export function LoaBatchDialog({
 
     setSaving(true);
     try {
-      // Convert local YYYY-MM-DD to ISO string (midnight UTC)
+      // Convert local YYYY-MM-DD to ISO string (midnight UTC). Do NOT "fix"
+      // this to WIB midnight — the API re-anchors both ends with
+      // startOfWibDay/endOfWibDay (loa-batch.handlers.ts createBatch/
+      // updateBatch), so sending WIB-shifted instants here would double-shift.
       const fromIso = new Date(`${paymentFrom}T00:00:00Z`).toISOString();
       const toIso = new Date(`${paymentTo}T00:00:00Z`).toISOString();
 

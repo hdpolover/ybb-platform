@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { zonedInputToUtcIso, utcToZonedInput } from "./datetime";
+import { zonedInputToUtcIso, utcToZonedInput, formatInBusinessTz } from "./datetime";
 
 /** Merge Tailwind classes safely, resolving conflicts. */
 export function cn(...inputs: ClassValue[]) {
@@ -20,36 +20,40 @@ export function formatCurrency(
   }).format(amount);
 }
 
-/** Format a date string to a human-readable locale string. */
+/**
+ * Format a date string to a human-readable locale string.
+ *
+ * Pinned to the business timezone (WIB) via lib/datetime.ts rather than the
+ * browser's ambient timezone. This is the render-side counterpart of the
+ * admin date-filter WIB bug: a filter that's correctly anchored to a WIB
+ * calendar day still looks wrong if the matching value is then displayed in
+ * whatever timezone the viewer's machine happens to be in.
+ */
 export function formatDate(
   date: string | Date | null | undefined,
   options?: Intl.DateTimeFormatOptions,
 ): string {
-  const parsed = parseApiDate(date);
-  if (Number.isNaN(parsed.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
+  return formatInBusinessTz(date, {
     day: "2-digit",
     month: "short",
     year: "numeric",
     ...options,
-  }).format(parsed);
+  });
 }
 
-/** Format a date-time string safely; returns em dash when invalid/missing. */
+/** Format a date-time string safely; returns em dash when invalid/missing. Pinned to WIB — see formatDate. */
 export function formatDateTime(
   date: string | Date | null | undefined,
   options?: Intl.DateTimeFormatOptions,
 ): string {
-  const parsed = parseApiDate(date);
-  if (Number.isNaN(parsed.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-GB", {
+  return formatInBusinessTz(date, {
     day: "2-digit",
     month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     ...options,
-  }).format(parsed);
+  });
 }
 
 /** Parse backend date values consistently before local rendering. */

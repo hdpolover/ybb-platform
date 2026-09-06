@@ -216,6 +216,33 @@ describe('ExportApplicationsHandler', () => {
     }
   });
 
+  it('filters createdAt to the WIB calendar day, not UTC midnight', async () => {
+    const prisma = buildPrismaMock({
+      distinctProgramIds: ['prog-1'],
+      applications: [APP_1],
+      fields: PROGRAM_1_FIELDS,
+      essays: PROGRAM_1_ESSAYS,
+    });
+    const excel = buildExcelMock();
+    const handler = new ExportApplicationsHandler(prisma as never, excel as never);
+
+    await handler.execute(
+      new ExportApplicationsQuery('brand-1', 'prog-1', undefined, undefined, undefined, '2026-08-31', '2026-08-31'),
+    );
+
+    const findManyApplications = prisma.participantApplication.findMany as jest.Mock;
+    const paginatedCall = findManyApplications.mock.calls.find((call) => !call[0].distinct);
+    const { gte, lte } = paginatedCall[0].where.createdAt;
+
+    // 1 Sept 06:10 WIB — must be excluded from a "31 Aug only" filter.
+    const excludedInstant = new Date('2026-08-31T23:10:00.000Z');
+    // 31 Aug 07:30 WIB — must be included.
+    const includedInstant = new Date('2026-08-31T00:30:00.000Z');
+
+    expect(excludedInstant >= gte && excludedInstant <= lte).toBe(false);
+    expect(includedInstant >= gte && includedInstant <= lte).toBe(true);
+  });
+
   it('unions columns across a multi-program export without misaligning values between programs', async () => {
     const prisma = buildPrismaMock({
       distinctProgramIds: ['prog-1', 'prog-2'],

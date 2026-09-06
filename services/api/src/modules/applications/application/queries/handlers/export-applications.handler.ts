@@ -11,6 +11,7 @@ import { resolveApplicationBirthdate } from '@shared/utils/birthdate-resolution'
 import { isRenderableEssayQuestion, coalesceStr } from '../../helpers/application-coalesce.helpers';
 import { resolveCountryName } from '@shared/utils/country-groups';
 import { ACTIVE_PARTICIPANT_WHERE } from '@shared/utils/active-participant.filter';
+import { buildWibDateRangeFilter } from '@shared/utils/wib-time';
 
 type ApplicationExportPayload = Prisma.ParticipantApplicationGetPayload<{
     select: {
@@ -162,24 +163,6 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
         private readonly excelService: ExcelService,
     ) { }
 
-    private buildCreatedAtFilter(startDate?: string, endDate?: string): Prisma.DateTimeFilter | undefined {
-        if (!startDate && !endDate) {
-            return undefined;
-        }
-
-        const createdAt: Prisma.DateTimeFilter = {};
-
-        if (startDate) {
-            createdAt.gte = new Date(`${startDate}T00:00:00.000Z`);
-        }
-
-        if (endDate) {
-            createdAt.lte = new Date(`${endDate}T23:59:59.999Z`);
-        }
-
-        return createdAt;
-    }
-
     /**
      * Loads application_form_fields + program_essays for every distinct
      * program in this export's result set (one query per table, not per
@@ -309,7 +292,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
                 { participant: { user: { email: { contains: query.search, mode: 'insensitive' } } } },
             ];
         }
-        const createdAt = this.buildCreatedAtFilter(query.startDate, query.endDate);
+        const createdAt = buildWibDateRangeFilter(query.startDate, query.endDate);
         if (createdAt) where.createdAt = createdAt;
 
         // Resolve which program(s) this export actually spans before pulling

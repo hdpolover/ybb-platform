@@ -7,6 +7,7 @@
 // filters drifted before (list showed 15 filtered rows, export shipped 1881).
 import { HttpException } from '@nestjs/common';
 import { Prisma, PaymentStatus } from '@prisma/client';
+import { endOfWibDay, parseWibFilterDate } from '@shared/utils/wib-time';
 
 // Who paid: 'ambassador' = the payer holds an ambassador record, 'participant' = they don't.
 export const PAYER_TYPES = ['all', 'participant', 'ambassador'] as const;
@@ -58,12 +59,28 @@ export function resolvePayerTypeFilter(payerType?: string): PayerType {
     return payerTypeFilter as PayerType;
 }
 
-export function endOfDayUtc(dateString: string): Date {
-    const base = new Date(dateString);
+/**
+ * The last instant of the WIB calendar day an admin picked.
+ *
+ * An admin filter date is a DAY IN JAKARTA, not a UTC day. Closing the range at
+ * UTC end-of-day let the last seven hours of it spill into the next WIB day:
+ * filtering "31 Aug to 31 Aug" on Middle East Youth Summit 6th returned 100
+ * invoices, 50 of which the dashboard displayed as 1 Sept because they were
+ * paid between 00:03 and 06:10 WIB. The honest answer for that day is 55.
+ *
+ * The lower bound needs the same treatment, which parseWibFilterDate does: a
+ * bare YYYY-MM-DD anchors to WIB midnight, while a value carrying an explicit
+ * time or offset is already an absolute instant and passes through untouched.
+ *
+ * This is the convention stats.service.ts has used since the analytics
+ * day-bucket fix; the payments list and the export simply never adopted it.
+ */
+export function endOfWibFilterDay(dateString: string): Date {
+    const base = parseWibFilterDate(dateString);
     if (Number.isNaN(base.getTime())) {
-        return new Date(dateString);
+        return base;
     }
-    return new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), 23, 59, 59, 999));
+    return endOfWibDay(base);
 }
 
 export function buildFollowUpStatusWhere(
@@ -268,14 +285,14 @@ export function buildInvoiceWhere(
 
     if (dateFrom || dateTo) {
         where.createdAt = {
-            ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-            ...(dateTo ? { lte: endOfDayUtc(dateTo) } : {}),
+            ...(dateFrom ? { gte: parseWibFilterDate(dateFrom) } : {}),
+            ...(dateTo ? { lte: endOfWibFilterDay(dateTo) } : {}),
         };
     }
     if (paidFrom || paidTo) {
         where.paidAt = {
-            ...(paidFrom ? { gte: new Date(paidFrom) } : {}),
-            ...(paidTo ? { lte: endOfDayUtc(paidTo) } : {}),
+            ...(paidFrom ? { gte: parseWibFilterDate(paidFrom) } : {}),
+            ...(paidTo ? { lte: endOfWibFilterDay(paidTo) } : {}),
         };
     }
     if (minAmountNum !== undefined || maxAmountNum !== undefined) {

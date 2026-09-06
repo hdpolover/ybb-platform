@@ -23,6 +23,7 @@ import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
 import { ListAuditLogsDto } from './dto/list-audit-logs.dto';
 import { AuditCleanupService } from './audit-cleanup.service';
 import { Prisma, ChangeType, ChangedByType, RiskLevel } from '@prisma/client';
+import { endOfWibDay, parseWibFilterDate } from '@shared/utils/wib-time';
 
 @ApiTags('audit')
 @Controller('admin/audit-logs')
@@ -230,9 +231,14 @@ export class AuditAdminController {
         if (query.source) where.source = query.source;
 
         if (query.dateFrom || query.dateTo) {
+            // A bare YYYY-MM-DD means a WIB calendar day. dateTo used to parse
+            // straight through `new Date(...)` with no end-of-day widening at
+            // all, so `lte` landed at WIB-midnight-as-UTC (or literal UTC
+            // midnight) — the very first instant of the day — and a single-day
+            // filter returned almost nothing instead of the whole day.
             where.createdAt = {};
-            if (query.dateFrom) where.createdAt.gte = new Date(query.dateFrom);
-            if (query.dateTo) where.createdAt.lte = new Date(query.dateTo);
+            if (query.dateFrom) where.createdAt.gte = parseWibFilterDate(query.dateFrom);
+            if (query.dateTo) where.createdAt.lte = endOfWibDay(parseWibFilterDate(query.dateTo));
         }
 
         if (query.search) {
