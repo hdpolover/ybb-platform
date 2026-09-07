@@ -271,6 +271,7 @@ export class AuthController {
       dto.programSlug,
       dto.referralCode,
       dto.applicationCategory,
+      dto.adAttribution,
     );
     return this.firebaseLoginHandler.execute(command, brandDomain);
   }
@@ -399,6 +400,7 @@ export class AuthController {
       ip || '0.0.0.0',
       userAgent,
       dto.applicationCategory,
+      dto.adAttribution,
     );
     return this.registerHandler.execute(command, brandDomain);
   }

@@ -1,4 +1,5 @@
 import { ApplicationCategory } from '@prisma/client';
+import { AdAttributionInput } from '../services/ad-attribution.util';
 
 export class RegisterCommand {
   constructor(
@@ -13,5 +14,6 @@ export class RegisterCommand {
     public readonly ipAddress?: string,
     public readonly userAgent?: string,
     public readonly applicationCategory?: ApplicationCategory,
+    public readonly adAttribution?: AdAttributionInput,
   ) {}
 }

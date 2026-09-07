@@ -1,6 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 import { ApplicationCategory, Participant, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
+import { MetaCapiService } from '../../../meta/meta-capi.service';
+import { parseAdAttribution } from './ad-attribution.util';
 
 const AUTH_TARGET_PROGRAM_SELECT = {
   id: true,
@@ -37,13 +39,22 @@ type EnsureProgramApplicationParams = {
   programSlug?: string;
   applicationCategory?: ApplicationCategory;
   fallbackToLatestOpenProgram?: boolean;
+  // Conversion-tracking twin of an `ApplicationCreated` pixel fire from the
+  // frontend — see the emit call at the bottom of this function for why it's
+  // passed in here rather than injected: this file is a set of plain
+  // functions (no DI container), called from three different @Injectable
+  // command handlers, each of which already has MetaCapiService available
+  // via AuthModule's global registration of MetaModule.
+  metaCapiService?: MetaCapiService;
+  userEmail?: string;
+  userId?: string;
 };
 
 type EnsureProgramApplicationResult =
   | { status: 'missing_target' }
   | { status: 'closed'; program: AuthTargetProgram }
   | { status: 'existing'; program: AuthTargetProgram }
-  | { status: 'created'; program: AuthTargetProgram };
+  | { status: 'created'; program: AuthTargetProgram; applicationId: string };
 
 /**
  * Auth-response-facing view of a program-linking outcome that the client needs
@@ -290,14 +301,53 @@ export async function ensureProgramApplication(
     }
   }
 
-  await prisma.participantApplication.create({
+  const createdApplication = await prisma.participantApplication.create({
     data: {
       participantId: params.participantId,
       programId: targetProgram.id,
       status: 'draft',
       applicationCategory,
     },
+    select: { id: true },
   });
 
-  return { status: 'created', program: targetProgram };
+  // Fire-and-forget `ApplicationCreated` conversion event (Layer 1b). Unlike
+  // the other layers this one has NO browser twin, deliberately: the frontend
+  // knows neither the application id nor the category the whitelist logic
+  // below actually resolved, so firing it there would report a guess. The
+  // `appcreated_<applicationId>` id is therefore a dedupe key against a
+  // redelivered event, not against a pixel. customData reports the RESOLVED category
+  // (which may differ from params.applicationCategory — see the whitelist
+  // fallback logic above), because the whole point of tracking this
+  // server-side is reporting what was actually written, not what was asked
+  // for. Never awaited: a tracking failure must never fail account
+  // registration/login, and emitServerEvent itself never throws.
+  //
+  // The participant's stored ad_attribution is fetched here (not passed in by
+  // the caller) so a returning user's ApplicationCreated always replays the
+  // click id captured at their ORIGINAL signup, even when this login request
+  // itself carried no adAttribution — see participants.ad_attribution's
+  // first-write-wins rule. Wrapped in its own async IIFE, never awaited, so
+  // this extra lookup adds zero latency to registration/login.
+  void (async () => {
+    try {
+      const stored = await prisma.participant.findUnique({
+        where: { id: params.participantId },
+        select: { adAttribution: true },
+      });
+      params.metaCapiService?.emitServerEvent({
+        brandId: params.brandId,
+        eventName: 'ApplicationCreated',
+        eventId: `appcreated_${createdApplication.id}`,
+        customData: { content_category: applicationCategory },
+        userData: { email: params.userEmail, externalId: params.userId },
+        ...parseAdAttribution(stored?.adAttribution),
+      });
+    } catch {
+      // Best-effort only — a failed lookup here must never surface, and must
+      // never block the caller (this IIFE is fired with `void`, never awaited).
+    }
+  })();
+
+  return { status: 'created', program: targetProgram, applicationId: createdApplication.id };
 }

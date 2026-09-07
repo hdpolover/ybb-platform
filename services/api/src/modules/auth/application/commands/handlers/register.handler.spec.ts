@@ -62,7 +62,7 @@ describe('RegisterHandler', () => {
     participantApplication: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
-      create: jest.fn(),
+      create: jest.fn().mockResolvedValue({ id: 'application-created-1' }),
     },
     programParticipationInfo: {
       findMany: jest.fn(),
@@ -284,7 +284,8 @@ describe('RegisterHandler', () => {
                 programId: 'program-id-123',
                 status: 'draft',
             applicationCategory: ApplicationCategory.self_funded,
-            }
+            },
+            select: { id: true },
         });
 
         // Verify Stats Increment
@@ -298,6 +299,122 @@ describe('RegisterHandler', () => {
 
         expect(result).toHaveProperty('accessToken', 'mock_token');
         expect(result).toHaveProperty('user');
+    });
+
+    it('persists ad click ids captured at signup onto the new participant, with a capturedAt stamp', async () => {
+        mockPrismaService.authProvider.findUnique.mockResolvedValue({
+            id: 'provider-id-123',
+            name: 'local',
+            isActive: true,
+            isOAuth: false,
+        });
+        mockPrismaService.brand.findUnique.mockResolvedValue({
+            id: 'category-id-123',
+            isActive: true,
+            name: 'Test Category',
+            requireEmailVerification: false,
+        });
+        mockPrismaService.program.findUnique.mockResolvedValue({
+            id: 'program-id-123',
+            brandId: 'category-id-123',
+            status: 'published',
+            isActive: true,
+            isPublished: true,
+            allowRegistration: true,
+            registrationOpenDate: null,
+            registrationCloseDate: null,
+        });
+        mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
+        mockPrismaService.user.findFirst.mockResolvedValue(null);
+        mockPrismaService.user.create.mockResolvedValue({
+            id: 'new-user-id',
+            email: 'test@example.com',
+            brandId: 'category-id-123',
+            isActive: true,
+            isOnboardingCompleted: false,
+        });
+        mockPrismaService.participant.findUnique.mockResolvedValue({
+            id: 'participant-id-123',
+            userId: 'new-user-id',
+        });
+        mockPrismaService.participant.create.mockResolvedValue({
+            id: 'participant-id-123',
+            userId: 'new-user-id',
+        });
+        mockPrismaService.participantApplication.findUnique.mockResolvedValue(null);
+
+        const commandWithAttribution = new RegisterCommand(
+            'test@example.com',
+            'provider-id-123',
+            'password123',
+            'category-id-123',
+            'provider-user-id-123',
+            undefined,
+            'program-slug-123',
+            undefined,
+            '127.0.0.1',
+            'Mozilla/5.0',
+            undefined,
+            { fbp: 'fb.1.111.222', fbc: 'fb.1.111.click', ttclid: 'tt-click-1' },
+        );
+
+        await handler.execute(commandWithAttribution);
+
+        const createArgs = mockPrismaService.participant.create.mock.calls[0][0];
+        expect(createArgs.data.adAttribution).toEqual({
+            fbp: 'fb.1.111.222',
+            fbc: 'fb.1.111.click',
+            ttclid: 'tt-click-1',
+            capturedAt: expect.any(String),
+        });
+    });
+
+    it('writes undefined (no column write) when no ad attribution was captured', async () => {
+        mockPrismaService.authProvider.findUnique.mockResolvedValue({
+            id: 'provider-id-123',
+            name: 'local',
+            isActive: true,
+            isOAuth: false,
+        });
+        mockPrismaService.brand.findUnique.mockResolvedValue({
+            id: 'category-id-123',
+            isActive: true,
+            name: 'Test Category',
+            requireEmailVerification: false,
+        });
+        mockPrismaService.program.findUnique.mockResolvedValue({
+            id: 'program-id-123',
+            brandId: 'category-id-123',
+            status: 'published',
+            isActive: true,
+            isPublished: true,
+            allowRegistration: true,
+            registrationOpenDate: null,
+            registrationCloseDate: null,
+        });
+        mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
+        mockPrismaService.user.findFirst.mockResolvedValue(null);
+        mockPrismaService.user.create.mockResolvedValue({
+            id: 'new-user-id',
+            email: 'test@example.com',
+            brandId: 'category-id-123',
+            isActive: true,
+            isOnboardingCompleted: false,
+        });
+        mockPrismaService.participant.findUnique.mockResolvedValue({
+            id: 'participant-id-123',
+            userId: 'new-user-id',
+        });
+        mockPrismaService.participant.create.mockResolvedValue({
+            id: 'participant-id-123',
+            userId: 'new-user-id',
+        });
+        mockPrismaService.participantApplication.findUnique.mockResolvedValue(null);
+
+        await handler.execute(command);
+
+        const createArgs = mockPrismaService.participant.create.mock.calls[0][0];
+        expect(createArgs.data.adAttribution).toBeUndefined();
     });
 
     it('should reject registration for an existing email without touching the account', async () => {
@@ -537,7 +654,8 @@ describe('RegisterHandler', () => {
                 programId: 'latest-program-id',
                 status: 'draft',
             applicationCategory: ApplicationCategory.self_funded,
-            }
+            },
+            select: { id: true },
         });
     });
   });

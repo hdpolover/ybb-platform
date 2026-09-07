@@ -1,4 +1,5 @@
 import { ApplicationCategory } from '@prisma/client';
+import { AdAttributionInput } from '../services/ad-attribution.util';
 
 export class FirebaseLoginCommand {
   constructor(
@@ -11,5 +12,6 @@ export class FirebaseLoginCommand {
     public readonly programSlug?: string,
     public readonly referralCode?: string,
     public readonly applicationCategory?: ApplicationCategory,
+    public readonly adAttribution?: AdAttributionInput,
   ) {}
 }

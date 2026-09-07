@@ -580,6 +580,11 @@ function SettingsTab({
   const hadCapiAccessToken = s?.hasCapiAccessToken ?? false;
   // Not secret — routed through the read response normally, unlike the token.
   const [capiTestEventCode, setCapiTestEventCode] = useState(s?.capiTestEventCode ?? "");
+  const [tiktokPixelId, setTiktokPixelId] = useState(s?.tiktokPixelId ?? "");
+  // Secret, write-only — same masked/"saved" treatment as capiAccessToken above.
+  const [tiktokAccessToken, setTiktokAccessToken] = useState("");
+  const hadTiktokAccessToken = s?.hasTiktokAccessToken ?? false;
+  const [tiktokTestEventCode, setTiktokTestEventCode] = useState(s?.tiktokTestEventCode ?? "");
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -605,9 +610,14 @@ function SettingsTab({
         // means.
         capiAccessToken: capiAccessToken || undefined,
         capiTestEventCode: capiTestEventCode || undefined,
+        tiktokPixelId: tiktokPixelId || undefined,
+        // Same omit-unless-typed rule as capiAccessToken above.
+        tiktokAccessToken: tiktokAccessToken || undefined,
+        tiktokTestEventCode: tiktokTestEventCode || undefined,
       });
       setSuccess("Settings saved.");
       setCapiAccessToken("");
+      setTiktokAccessToken("");
       onSaved(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save.");
@@ -697,6 +707,7 @@ function SettingsTab({
             value={pixelId}
             onChange={setPixelId}
             placeholder="0000000000000"
+            hint="15-16 digits."
           />
           <Field
             label="Meta CAPI Access Token"
@@ -718,6 +729,35 @@ function SettingsTab({
             onChange={setCapiTestEventCode}
             placeholder="TEST12345"
             hint="From Meta Events Manager's Test Events tab. Not secret — safe to display."
+          />
+          <Field
+            label="TikTok Pixel ID"
+            id="tiktokPixelId"
+            value={tiktokPixelId}
+            onChange={setTiktokPixelId}
+            placeholder="XXXXXXXXXXXXX"
+            hint="13 alphanumeric characters (uppercase letters + digits) — unlike a Meta Pixel ID, which is 15-16 digits."
+          />
+          <Field
+            label="TikTok Events API Access Token"
+            id="tiktokAccessToken"
+            type="password"
+            value={tiktokAccessToken}
+            onChange={setTiktokAccessToken}
+            placeholder={hadTiktokAccessToken ? "••••• (set) — leave blank to keep" : "Paste a new access token"}
+            hint={
+              hadTiktokAccessToken
+                ? "A token is already saved. It's write-only and never shown here — type a new value only to replace it."
+                : "Used for server-side TikTok Events API event forwarding."
+            }
+          />
+          <Field
+            label="TikTok Test Event Code"
+            id="tiktokTestEventCode"
+            value={tiktokTestEventCode}
+            onChange={setTiktokTestEventCode}
+            placeholder="TEST12345"
+            hint="From TikTok Events Manager's Test Events tab. Not secret — safe to display."
           />
         </CardContent>
       </Card>

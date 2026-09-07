@@ -78,4 +78,21 @@ export class UpdateBrandSettingsDto {
     @IsOptional()
     @IsString()
     capiTestEventCode?: string;
+
+    @ApiProperty({ required: false, description: 'TikTok Pixel ID.' })
+    @IsOptional()
+    @IsString()
+    tiktokPixelId?: string;
+
+    // Secret token — write-only, same semantics as capiAccessToken above.
+    @ApiProperty({ required: false, description: 'TikTok Events API access token. Write-only — never returned by any read endpoint.' })
+    @IsOptional()
+    @IsString()
+    tiktokAccessToken?: string;
+
+    // Not a secret — routed normally through read responses.
+    @ApiProperty({ required: false, description: 'TikTok Events API test_event_code (from TikTok Events Manager). Not secret.' })
+    @IsOptional()
+    @IsString()
+    tiktokTestEventCode?: string;
 }

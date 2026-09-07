@@ -575,6 +575,7 @@ function SettingsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
     supportEmail: brand.settings?.supportEmail ?? "",
     googleAnalyticsId: brand.settings?.googleAnalyticsId ?? "",
     pixelId: brand.settings?.pixelId ?? "",
+    tiktokPixelId: brand.settings?.tiktokPixelId ?? "",
   });
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
@@ -593,6 +594,7 @@ function SettingsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
         supportEmail: form.supportEmail || undefined,
         googleAnalyticsId: form.googleAnalyticsId || undefined,
         pixelId: form.pixelId || undefined,
+        tiktokPixelId: form.tiktokPixelId || undefined,
       });
       setOpen(false);
       onSaved();
@@ -629,6 +631,7 @@ function SettingsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
               <div className="space-y-4">
                 <FieldInput label="Google Analytics ID" id="googleAnalyticsId" value={form.googleAnalyticsId} onChange={(v) => set("googleAnalyticsId", v)} placeholder="G-XXXXXXXXXX" />
                 <FieldInput label="Pixel ID" id="pixelId" value={form.pixelId} onChange={(v) => set("pixelId", v)} placeholder="123456789" />
+                <FieldInput label="TikTok Pixel ID" id="tiktokPixelId" value={form.tiktokPixelId} onChange={(v) => set("tiktokPixelId", v)} placeholder="XXXXXXXXXXXXX" hint="13 alphanumeric characters (uppercase letters + digits), vs. a Meta Pixel ID's 15-16 digits." />
               </div>
             </div>
           </div>
@@ -913,6 +916,7 @@ function SettingsTab({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved: 
       <Section title="Integrations & Analytics">
         <FieldView label="Google Analytics ID" value={s?.googleAnalyticsId} />
         <FieldView label="Pixel ID" value={s?.pixelId} />
+        <FieldView label="TikTok Pixel ID" value={s?.tiktokPixelId} />
       </Section>
     </div>
   );

@@ -92,6 +92,9 @@ export class BrandRepository implements IBrandRepository {
                 supportEmail: data.settings.supportEmail,
                 capiAccessToken: data.settings.capiAccessToken,
                 capiTestEventCode: data.settings.capiTestEventCode,
+                tiktokPixelId: data.settings.tiktokPixelId,
+                tiktokAccessToken: data.settings.tiktokAccessToken,
+                tiktokTestEventCode: data.settings.tiktokTestEventCode,
             };
             settingsUpdate = {
                 upsert: {
@@ -194,6 +197,9 @@ export class BrandRepository implements IBrandRepository {
                 prismaEntity.settings.supportEmail,
                 prismaEntity.settings.capiAccessToken,
                 prismaEntity.settings.capiTestEventCode,
+                prismaEntity.settings.tiktokPixelId,
+                prismaEntity.settings.tiktokAccessToken,
+                prismaEntity.settings.tiktokTestEventCode,
                 prismaEntity.settings.createdAt,
                 prismaEntity.settings.updatedAt,
                 prismaEntity.settings.deletedAt,

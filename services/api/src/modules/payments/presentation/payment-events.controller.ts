@@ -18,6 +18,8 @@ import {
 import { buildParticipantPaymentsUrl, buildParticipantInvoiceUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { PaymentGatewayClient } from '../infrastructure/services/payment-gateway.client';
+import { MetaCapiService } from '@modules/meta/meta-capi.service';
+import { parseAdAttribution } from '@modules/auth/application/services/ad-attribution.util';
 
 @Controller()
 export class PaymentEventsController {
@@ -32,6 +34,12 @@ export class PaymentEventsController {
         private readonly paymentGatewayClient: PaymentGatewayClient,
         @Optional() private readonly pubSubService?: RedisPubSubService,
         @Optional() private readonly referralFunnel?: ReferralFunnelService,
+        // MetaModule is @Global(), so this resolves in production without
+        // PaymentsModule importing it. @Optional() only so existing unit tests
+        // that build this controller via a TestingModule without registering
+        // MetaCapiService keep passing (see the conversion-emit spec for a test
+        // that DOES provide it).
+        @Optional() private readonly metaCapiService?: MetaCapiService,
     ) {}
 
     @EventPattern('payment.created')
@@ -308,10 +316,22 @@ export class PaymentEventsController {
             // THAT invoice: it must belong to the application named in the event, and
             // the settled amount/currency must be what the invoice actually owes.
             // On any mismatch nothing is touched; the invoice is left for admin review.
+            // Whether the invoice named by metadata.invoice_id (portal-driven manual
+            // payments) was ALREADY 'paid' before this event — i.e. this event is a
+            // redelivered/replayed webhook, not a real unpaid->paid transition.
+            // Used below to gate the Purchase/ProgramFeePaid conversion emit: that
+            // event must fire once per real settlement, not once per delivery.
+            let invoiceAlreadyPaid = false;
             if (invoiceId) {
                 const inv = await this.prisma.applicationInvoice.findUnique({
                     where: { id: invoiceId },
-                    select: { applicationId: true, amount: true, currency: true },
+                    select: {
+                        applicationId: true,
+                        amount: true,
+                        currency: true,
+                        status: true,
+                        pricingTier: { select: { feeType: true } },
+                    },
                 });
                 if (!inv) {
                     this.logger.warn(
@@ -332,6 +352,7 @@ export class PaymentEventsController {
                     return;
                 }
                 applicationId = inv.applicationId;
+                invoiceAlreadyPaid = inv.status === PaymentStatus.paid;
             }
 
             if (applicationId) {
@@ -346,6 +367,7 @@ export class PaymentEventsController {
                     invoiceId,
                     feeProvider,
                     netAmount,
+                    invoiceAlreadyPaid,
                 );
 
                 // Invalidate portal cache for this user to reflect payment immediately
@@ -361,12 +383,32 @@ export class PaymentEventsController {
                     }
                 }
 
-                // Re-emit branded notification event
+                // Fetched once, used both for the branded notification below and
+                // the conversion-tracking emit further down (hoisted out of the
+                // notification try block so both can see it; wrapped in its own
+                // try/catch so a DB error here is swallowed exactly like it was
+                // before this fetch was shared between the two).
+                let invoiceWithBrand: Prisma.ApplicationInvoiceGetPayload<{
+                    include: {
+                        pricingTier: { select: { feeType: true } };
+                        application: {
+                            include: {
+                                participant: { include: { user: { select: { email: true } } } };
+                                program: { include: { brand: { include: { settings: true } } } };
+                            };
+                        };
+                    };
+                }> | null = null;
                 try {
-                    const invoiceWithBrand = result?.invoiceId
+                    invoiceWithBrand = result?.invoiceId
                         ? await this.prisma.applicationInvoice.findUnique({
                               where: { id: result.invoiceId },
                               include: {
+                                  // feeType decides Purchase (registration_fee) vs
+                                  // ProgramFeePaid (anything else) for the conversion
+                                  // emit below — the caller-supplied paymentCategory
+                                  // ('registration'|'program') is not the real fee type.
+                                  pricingTier: { select: { feeType: true } },
                                   application: {
                                       include: {
                                           participant: {
@@ -378,6 +420,12 @@ export class PaymentEventsController {
                               },
                           })
                         : null;
+                } catch (lookupErr) {
+                    this.logger.error('Failed to load invoice/brand for payment.succeeded notification + conversion emit', lookupErr);
+                }
+
+                // Re-emit branded notification event
+                try {
                     const rawBrand = invoiceWithBrand?.application?.program?.brand ?? null;
                     const rawProgram = invoiceWithBrand?.application?.program ?? null;
                     const brandPayload = rawBrand
@@ -422,6 +470,57 @@ export class PaymentEventsController {
                 } catch (emitErr) {
                     this.logger.error('Failed to emit notification.payment_succeeded', emitErr);
                 }
+
+                // Layer 2 / 2b conversion tracking (Purchase / ProgramFeePaid) — the
+                // server-side twin of the frontend's own re-fire-guarded pixel fire
+                // in PaymentDetailSection.tsx, covering a participant who pays by
+                // manual bank transfer and never returns to the page. Separate
+                // try/catch from the notification emit above: a tracking failure
+                // must never affect notification delivery, and this must never
+                // throw back into handlePaymentSucceeded regardless.
+                try {
+                    if (result && !result.alreadyPaid && invoiceWithBrand) {
+                        const isRegistrationFee = invoiceWithBrand.pricingTier?.feeType === PricingFeeType.registration_fee;
+                        // Owning PROGRAM's brand, not any JWT/user home brand — see
+                        // project_file_brand_attribution.md for the past defect this
+                        // avoids repeating. Program.brandId is the FK on the invoice's
+                        // application's program, i.e. the program that actually owns
+                        // this invoice.
+                        const brandId = invoiceWithBrand.application?.program?.brandId;
+                        const participant = invoiceWithBrand.application?.participant;
+                        if (brandId) {
+                            // eventId MUST byte-for-byte match the frontend's
+                            // `${isRegistrationFee ? 'purchase' : 'programfee'}_${invoice.id}`
+                            // (PaymentDetailSection.tsx) or Meta/TikTok dedupe silently fails.
+                            void this.metaCapiService?.emitServerEvent({
+                                brandId,
+                                eventName: isRegistrationFee ? 'Purchase' : 'ProgramFeePaid',
+                                eventId: `${isRegistrationFee ? 'purchase' : 'programfee'}_${invoiceWithBrand.id}`,
+                                customData: {
+                                    // The invoice's own settlement amount/currency —
+                                    // never a converted IDR display price.
+                                    value: Number(invoiceWithBrand.amount),
+                                    currency: (invoiceWithBrand.currency || 'USD').toUpperCase(),
+                                    content_category: invoiceWithBrand.application?.applicationCategory ?? undefined,
+                                },
+                                userData: {
+                                    email: participant?.user?.email,
+                                    phone: participant?.phoneNumber
+                                        ? `${participant.phoneCountryCode ?? ''}${participant.phoneNumber}`
+                                        : undefined,
+                                    externalId: participant?.userId,
+                                },
+                                // Click id captured at this participant's ORIGINAL signup
+                                // (see participants.ad_attribution) — already loaded on
+                                // `participant` above via the same invoiceWithBrand query,
+                                // no extra round trip.
+                                ...parseAdAttribution(participant?.adAttribution),
+                            });
+                        }
+                    }
+                } catch (conversionErr) {
+                    this.logger.error('Failed to emit server-side Purchase/ProgramFeePaid conversion event', conversionErr);
+                }
             } else {
                 this.logger.warn(`Payment succeeded but no application_id found in metadata. ID: ${gatewayOrderId}`);
             }
@@ -451,7 +550,14 @@ export class PaymentEventsController {
         existingInvoiceId?: string,
         feeProvider?: number,
         netAmount?: number,
-    ): Promise<{ userId: string; participantId: string; programId: string; invoiceId: string | null } | null> {
+        // True when existingInvoiceId was already 'paid' before this call (the
+        // caller checked this before the transaction — see invoiceAlreadyPaid in
+        // handlePaymentSucceeded). Seeds `alreadyPaid` below for the one branch
+        // (existingInvoiceId) that unconditionally re-writes 'paid' regardless of
+        // the invoice's prior status; the other two branches (existingByRef /
+        // create) determine it themselves further down.
+        existingInvoiceAlreadyPaid = false,
+    ): Promise<{ userId: string; participantId: string; programId: string; invoiceId: string | null; alreadyPaid: boolean } | null> {
         const application = await this.prisma.participantApplication.findUnique({
             where: { id: applicationId },
             include: {
@@ -516,6 +622,11 @@ export class PaymentEventsController {
 
         // Unit of Work: Application Payment Status Update + Invoice Creation
         let createdInvoiceId: string | null = null;
+        // Real unpaid->paid transition vs. an idempotent replay that found the
+        // invoice already settled — see existingInvoiceAlreadyPaid doc comment
+        // above and the existingByRef paid-skip branch below, the two places
+        // this flips to true.
+        let alreadyPaid = existingInvoiceId ? existingInvoiceAlreadyPaid : false;
         let outboxQueued = false;
         let outboxDedupeKey: string | null = null;
         await this.unitOfWork.execute(
@@ -571,6 +682,7 @@ export class PaymentEventsController {
                         if ((existingByRef as { id: string; status: string }).status === PaymentStatus.paid) {
                             // Already settled - use its id and skip re-settling
                             createdInvoiceId = (existingByRef as { id: string }).id;
+                            alreadyPaid = true;
                         } else {
                             // In-place idempotent re-settle
                             const updated = await repos.tx.applicationInvoice.update({
@@ -702,6 +814,7 @@ export class PaymentEventsController {
             participantId: application.participant.id,
             programId: application.programId,
             invoiceId: createdInvoiceId,
+            alreadyPaid,
         };
     }
 

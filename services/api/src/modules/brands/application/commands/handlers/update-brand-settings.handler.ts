@@ -48,6 +48,10 @@ export class UpdateBrandSettingsHandler implements ICommandHandler<UpdateBrandSe
             // token with undefined/empty.
             capiAccessToken: dto.capiAccessToken,
             capiTestEventCode: dto.capiTestEventCode,
+            tiktokPixelId: dto.tiktokPixelId,
+            // Secret, write-only: same undefined-filtering as capiAccessToken above.
+            tiktokAccessToken: dto.tiktokAccessToken,
+            tiktokTestEventCode: dto.tiktokTestEventCode,
         };
 
         // Filter out undefined from settingsUpdate so we don't overwrite with undefined?
