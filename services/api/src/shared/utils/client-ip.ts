@@ -1,4 +1,5 @@
 // src/shared/utils/client-ip.ts
+import { createHash, timingSafeEqual } from 'crypto';
 import { BlockList, isIP, isIPv6, SocketAddress } from 'net';
 
 /**
@@ -20,10 +21,19 @@ import { BlockList, isIP, isIPv6, SocketAddress } from 'net';
  *    The published ranges are shared by every Cloudflare tenant, so an
  *    attacker who points their own Cloudflare zone at our origin address
  *    lands a genuine CF edge as the peer and gets `cf-connecting-ip` trusted.
- *    The real fix is proving the hop is OUR edge: Cloudflare Authenticated
- *    Origin Pulls (mTLS terminated at Traefik), or a shared secret header set
- *    by a Cloudflare Transform Rule and required alongside the range check.
- *    Neither is implemented; both are infra work, not code work here.
+ *    Proving the hop is OUR edge needs a secret the other tenant cannot mint.
+ *    `CLOUDFLARE_ORIGIN_SECRET` is that secret (see originSecretSatisfied
+ *    below). While it is UNSET the range check stands alone and assumption 2
+ *    is live exactly as it always was; once it is set, both this and the
+ *    escalation path in assumption 1 are closed, because neither a foreign
+ *    tenant nor a forged x-forwarded-for can produce the header.
+ *
+ *    NOTE the limit: the secret gates the cf-connecting-ip branch only. If
+ *    assumption 1 ever breaks, the x-forwarded-for fallback at the bottom of
+ *    resolveClientIp still returns a caller-chosen value. Closing that too
+ *    means refusing to read headers at all without the secret, which collapses
+ *    every direct-to-origin caller into one throttle bucket -- a deliberate
+ *    decision, not taken here.
  *
  * Also worth knowing: not every brand is behind the CDN. ybbfoundation.com is
  * NOT Cloudflare-proxied (194.163.42.126, LiteSpeed, Niagahoster nameservers) —
@@ -97,6 +107,43 @@ const isCloudflareEdge = (address: string): boolean =>
 const firstHeaderValue = (value: string | string[] | undefined): string | undefined =>
   (Array.isArray(value) ? value[0] : value)?.trim() || undefined;
 
+/**
+ * The header a Cloudflare Transform Rule on OUR zone sets on every request it
+ * forwards to the origin. Only our zone can add it, so its presence is the one
+ * signal that separates our edge from any other Cloudflare tenant's.
+ */
+const ORIGIN_SECRET_HEADER = 'cf-origin-secret';
+
+/**
+ * Does this request carry proof that it came through OUR Cloudflare zone?
+ *
+ * Returns true when no secret is configured, which is the pre-Transform-Rule
+ * state and preserves the previous behaviour exactly. That default is
+ * deliberate: the code half of this fix has to be deployable BEFORE the
+ * Cloudflare rule exists, or the deploy that adds the check is also the deploy
+ * that stops trusting cf-connecting-ip for every real visitor.
+ *
+ * Compared in constant time. A length-varying or short-circuiting compare on a
+ * value an attacker can retry at will is a byte-at-a-time oracle for the
+ * secret, and this runs on unauthenticated routes with no cost to the caller.
+ */
+function originSecretSatisfied(req: ClientAddressedRequest): boolean {
+  const expected = process.env.CLOUDFLARE_ORIGIN_SECRET?.trim();
+  if (!expected) return true;
+
+  const presented = firstHeaderValue(req.headers?.[ORIGIN_SECRET_HEADER]);
+  if (!presented) return false;
+
+  // Compare the SHA-256 of each side rather than the raw bytes. timingSafeEqual
+  // throws on a length mismatch, so feeding it raw values would need an early
+  // length check -- which is itself a fast, length-leaking compare. Digests are
+  // always 32 bytes, so one constant-time compare covers content and length
+  // together and a wrong-length guess costs exactly what a right-length one does.
+  const presentedDigest = createHash('sha256').update(presented, 'utf8').digest();
+  const expectedDigest = createHash('sha256').update(expected, 'utf8').digest();
+  return timingSafeEqual(presentedDigest, expectedDigest);
+}
+
 /** The shape of an Express request this resolver reads. */
 export type ClientAddressedRequest = {
   ip?: string;
@@ -165,7 +212,7 @@ export function resolveClientIp(req: ClientAddressedRequest): string | null {
       : undefined;
   const lastForwarded = last && isIP(last) ? last : undefined;
 
-  if (lastForwarded && isCloudflareEdge(lastForwarded)) {
+  if (lastForwarded && isCloudflareEdge(lastForwarded) && originSecretSatisfied(req)) {
     const cfConnectingIp = firstHeaderValue(req.headers?.['cf-connecting-ip']);
     // Malformed or absent: fall through to the x-forwarded-for entry rather
     // than treating every such request as one shared unknown caller.

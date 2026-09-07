@@ -92,6 +92,68 @@ describe('resolveClientIp', () => {
     ).toBe('10.0.0.1');
   });
 
+  // The origin-secret gate (audit N2/N3). The published Cloudflare ranges are
+  // shared by every tenant, so a range hit alone proves "a Cloudflare customer",
+  // not "our zone". CLOUDFLARE_ORIGIN_SECRET is a header only our own Transform
+  // Rule can set, so it is what separates the two.
+  describe('CLOUDFLARE_ORIGIN_SECRET', () => {
+    const SECRET = 'a-real-looking-secret-value';
+    const original = process.env.CLOUDFLARE_ORIGIN_SECRET;
+
+    afterEach(() => {
+      if (original === undefined) delete process.env.CLOUDFLARE_ORIGIN_SECRET;
+      else process.env.CLOUDFLARE_ORIGIN_SECRET = original;
+    });
+
+    const viaEdge = (headers: Record<string, string>) =>
+      resolveClientIp({
+        headers: { 'x-forwarded-for': '203.0.113.9, 172.68.245.1', 'cf-connecting-ip': '203.0.113.9', ...headers },
+        ip: '10.0.0.5',
+      });
+
+    it('changes nothing while unset, so the code half ships before the Cloudflare rule', () => {
+      delete process.env.CLOUDFLARE_ORIGIN_SECRET;
+      expect(viaEdge({})).toBe('203.0.113.9');
+    });
+
+    it('treats an empty or whitespace-only value as unset, not as a secret to match', () => {
+      // A blank env var is how a misconfigured deploy presents. Requiring a
+      // header to equal '' would reject every real request instead.
+      for (const blank of ['', '   ']) {
+        process.env.CLOUDFLARE_ORIGIN_SECRET = blank;
+        expect(viaEdge({})).toBe('203.0.113.9');
+      }
+    });
+
+    it('trusts cf-connecting-ip when the secret matches', () => {
+      process.env.CLOUDFLARE_ORIGIN_SECRET = SECRET;
+      expect(viaEdge({ 'cf-origin-secret': SECRET })).toBe('203.0.113.9');
+    });
+
+    it('ignores cf-connecting-ip from another Cloudflare tenant, which has no secret to send', () => {
+      // This is N3: attacker points their own CF zone at our origin, so the hop
+      // IS a genuine edge and the range check passes. Without the header they
+      // fall back to the appended hop and cannot name themselves.
+      process.env.CLOUDFLARE_ORIGIN_SECRET = SECRET;
+      expect(viaEdge({})).toBe('172.68.245.1');
+      expect(viaEdge({ 'cf-origin-secret': 'wrong' })).toBe('172.68.245.1');
+      expect(viaEdge({ 'cf-origin-secret': `${SECRET}x` })).toBe('172.68.245.1');
+    });
+
+    it('closes the escalation path if Traefik ever stops appending the peer', () => {
+      // Assumption 1 broken: the whole x-forwarded-for is caller-written, so the
+      // attacker parks a Cloudflare range in the last position and names anyone.
+      // The range check passes; the secret is what stops them.
+      process.env.CLOUDFLARE_ORIGIN_SECRET = SECRET;
+      const forged = resolveClientIp({
+        headers: { 'x-forwarded-for': '172.64.0.1', 'cf-connecting-ip': '9.9.9.9' },
+        ip: '10.0.0.5',
+      });
+      expect(forged).not.toBe('9.9.9.9');
+      expect(forged).toBe('172.64.0.1');
+    });
+  });
+
   it('falls back to the socket peer, then to null', () => {
     expect(resolveClientIp({ ip: '10.0.0.1' })).toBe('10.0.0.1');
     expect(resolveClientIp({})).toBeNull();
