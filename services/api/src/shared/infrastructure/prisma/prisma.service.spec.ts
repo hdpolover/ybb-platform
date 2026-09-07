@@ -51,6 +51,10 @@ describe('PrismaService $transaction delegation (audit M73)', () => {
             baseSpy = jest
                 .spyOn(PrismaClient.prototype as unknown as Record<string, () => unknown>, '$transaction')
                 .mockImplementation(function (this: unknown) {
+                    // Capturing the receiver IS the assertion here: this test exists to
+                    // prove $transaction runs on the extended client, not the raw one
+                    // (see ade49c14), so the alias is the subject, not a closure shortcut.
+                    // eslint-disable-next-line @typescript-eslint/no-this-alias
                     receiver = this;
                     return Promise.resolve('ran');
                 });
