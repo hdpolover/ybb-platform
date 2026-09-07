@@ -7,6 +7,7 @@ import * as path from 'path';
 import { Resend } from 'resend';
 import { maskEmail } from '../../common/logging/safe-log';
 import { renderReminderTokens } from '../../common/utils/reminder-message-tokens';
+import { EmailTemplate } from '../../common/types/notification';
 
 interface ManagedEmailTemplate {
   id: string;
@@ -577,6 +578,71 @@ export class EmailService {
       data: templateData,
     });
     return this.sendRawEmail(to, subject, html, attachments);
+  }
+
+  // Sent ~3 days after payment if the application still hasn't been
+  // submitted. Warm nudge, not a warning — the fee is already paid, so
+  // nothing is at risk except the LoA staying blocked until they submit.
+  async sendSubmissionNudgeEmail(
+    to: string,
+    data: {
+      name: string;
+      program?: string;
+      applicationId?: string;
+      submissionUrl: string;
+      brand?: any;
+    },
+  ) {
+    const templateData = {
+      name: data.name,
+      program: data.program,
+      applicationId: data.applicationId,
+      submissionUrl: data.submissionUrl,
+      brand: data.brand,
+    };
+    const fallbackSubject = data.brand?.name
+      ? `Finish Your Application - ${data.brand.name}`
+      : 'Finish Your Application';
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'submission_nudge',
+      fallbackTemplateName: 'submission-nudge',
+      fallbackSubject,
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
+  // The ONLY message in the system permitted to say an application is
+  // approved — every other acceptance-adjacent email (LoA-ready, reminders)
+  // must stay silent on approval status so this stays the single source of
+  // truth for "you got in".
+  async sendApplicationAcceptedEmail(
+    to: string,
+    data: {
+      name: string;
+      program?: string;
+      applicationId?: string;
+      documentsUrl: string;
+      brand?: any;
+    },
+  ) {
+    const templateData = {
+      name: data.name,
+      program: data.program,
+      applicationId: data.applicationId,
+      documentsUrl: data.documentsUrl,
+      brand: data.brand,
+    };
+    const fallbackSubject = data.brand?.name
+      ? `Your Application Has Been Accepted - ${data.brand.name}`
+      : 'Your Application Has Been Accepted';
+    const { subject, html } = await this.resolveEmailContent({
+      type: EmailTemplate.APPLICATION_ACCEPTED,
+      fallbackTemplateName: 'application-accepted',
+      fallbackSubject,
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
   }
 
   // On-demand "send me my receipt" email — distinct from

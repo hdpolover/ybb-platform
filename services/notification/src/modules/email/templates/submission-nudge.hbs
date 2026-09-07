@@ -1,0 +1,22 @@
+<div style="text-align: center;">
+    <h2 style="font-size: 24px; font-weight: 700; color: {{theme.primaryDark}}; margin: 0 0 8px;">
+        Your Application Is Waiting
+    </h2>
+    <p style="font-size: 16px; color: #6b7280; margin: 0 0 24px;">
+        Hi {{name}}, just a friendly reminder. Your spot is paid for, but your application hasn&rsquo;t been submitted yet.
+    </p>
+
+    {{#if program}}
+    <p style="font-size: 13px; color: #6b7280; text-align: center; margin: 0 0 24px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">
+        {{program}}
+    </p>
+    {{/if}}
+
+    <p style="font-size: 15px; color: #4b5563; line-height: 1.6; text-align: left; margin: 0 0 24px;">
+        Your Invitation Letter can only be issued once your application is submitted, so this is the one step standing between you and that next milestone. It usually takes under fifteen minutes, so finish it whenever you have a moment.
+    </p>
+
+    <a href="{{submissionUrl}}" class="cta-button">
+        Finish Your Application
+    </a>
+</div>

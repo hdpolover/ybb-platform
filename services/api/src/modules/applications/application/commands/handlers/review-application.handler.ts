@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { IApplicationRepository } from '@core/interfaces/repositories/application.repository.interface';
 import { ApplicationStatus } from '@core/entities/participant-application.entity';
 import { ReviewApplicationCommand } from '../review-application.command';
@@ -9,6 +9,8 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { buildParticipantDocumentsUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 
 /**
  * Review Application Handler
@@ -18,6 +20,8 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
  */
 @Injectable()
 export class ReviewApplicationHandler {
+  private readonly logger = new Logger(ReviewApplicationHandler.name);
+
   constructor(
     @Inject(APPLICATION_REPOSITORY)
     private readonly applicationRepository: IApplicationRepository,
@@ -25,6 +29,7 @@ export class ReviewApplicationHandler {
     private readonly cacheService: CacheService,
     private readonly referralFunnel: ReferralFunnelService,
     private readonly prisma: PrismaService,
+    private readonly rabbitmqProducer: RabbitMQProducerService,
   ) {}
 
   async execute(command: ReviewApplicationCommand): Promise<ApplicationResponseDto> {
@@ -105,6 +110,15 @@ export class ReviewApplicationHandler {
     // Advance referral funnel on acceptance
     if (command.status === ApplicationStatus.ACCEPTED) {
       await this.referralFunnel.advanceToAccepted(application.participantId, application.programId);
+
+      // Fire-and-forget: notification.application_accepted only fires on a
+      // genuine transition INTO accepted. canReview() (checked above, before
+      // the switch) already excludes an application that is already
+      // ACCEPTED, so this branch can never re-fire on a re-review of an
+      // already-accepted application. Not awaited, and the method itself
+      // swallows every error, so a notification failure can never fail the
+      // review action that just committed.
+      void this.emitApplicationAcceptedNotification(command.applicationId);
     }
 
     // Return DTO
@@ -207,6 +221,75 @@ export class ReviewApplicationHandler {
     } catch (error) {
       // Log but don't throw - cache invalidation failures shouldn't break the review
       console.error(`Failed to invalidate cache for participant ${participantId}:`, error);
+    }
+  }
+
+  /**
+   * Best-effort emit of notification.application_accepted. Everything here —
+   * the lookup and the publish — is inside one try/catch: this runs after
+   * the review has already been committed, so nothing it does may ever
+   * surface back to the caller as a failure.
+   */
+  private async emitApplicationAcceptedNotification(applicationId: string): Promise<void> {
+    try {
+      const record = await this.prisma.participantApplication.findUnique({
+        where: { id: applicationId },
+        select: {
+          program: {
+            select: {
+              name: true,
+              brandId: true,
+              contactEmail: true,
+              contactAddress: true,
+              brand: { include: { settings: true } },
+            },
+          },
+          participant: {
+            select: { fullName: true, user: { select: { email: true } } },
+          },
+        },
+      });
+
+      const email = record?.participant?.user?.email;
+      if (!record || !email) {
+        this.logger.warn(
+          `[application_accepted] skipping application ${applicationId}: no email on file`,
+        );
+        return;
+      }
+
+      const rawBrand = record.program?.brand ?? null;
+      const brandPayload = rawBrand
+        ? {
+            name: rawBrand.name,
+            primaryColor: rawBrand.primaryColor,
+            logoUrl: rawBrand.logoUrl,
+            websiteUrl: rawBrand.websiteUrl,
+            contactEmail: record.program?.contactEmail ?? null,
+            contactAddress: record.program?.contactAddress ?? null,
+            socialMediaLinks: rawBrand.socialMediaLinks,
+            settings: rawBrand.settings
+              ? {
+                  footerNavigation: rawBrand.settings.footerNavigation,
+                  supportEmail: rawBrand.settings.supportEmail,
+                }
+              : null,
+          }
+        : null;
+
+      await this.rabbitmqProducer.emit('notification.application_accepted', {
+        email,
+        customer_name: record.participant?.fullName ?? 'Participant',
+        program_name: record.program?.name ?? '',
+        application_id: applicationId,
+        documents_url: buildParticipantDocumentsUrl(rawBrand),
+        brand: brandPayload,
+      });
+    } catch (error) {
+      this.logger.error(
+        `[application_accepted] failed to emit for application ${applicationId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
     }
   }
 }

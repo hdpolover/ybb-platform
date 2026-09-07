@@ -1,0 +1,22 @@
+<div style="text-align: center;">
+    <h2 style="font-size: 24px; font-weight: 700; color: {{theme.primaryDark}}; margin: 0 0 8px;">
+        Congratulations, {{name}}!
+    </h2>
+    <p style="font-size: 16px; color: #6b7280; margin: 0 0 24px;">
+        Your application has been accepted.
+    </p>
+
+    {{#if program}}
+    <p style="font-size: 13px; color: #6b7280; text-align: center; margin: 0 0 24px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">
+        {{program}}
+    </p>
+    {{/if}}
+
+    <p style="font-size: 15px; color: #4b5563; line-height: 1.6; text-align: left; margin: 0 0 24px;">
+        We&rsquo;re excited to welcome you. Head to your Documents page to see what comes next, including your Invitation Letter once it&rsquo;s ready.
+    </p>
+
+    <a href="{{documentsUrl}}" class="cta-button">
+        View Your Documents
+    </a>
+</div>

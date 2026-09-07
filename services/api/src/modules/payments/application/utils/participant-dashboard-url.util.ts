@@ -31,3 +31,9 @@ export function buildParticipantSubmissionUrl(brand: ParticipantBrandUrls): stri
   if (!base) return '';
   return `${base}/dashboard/submission`;
 }
+
+export function buildParticipantDocumentsUrl(brand: ParticipantBrandUrls): string {
+  const base = normalizeParticipantDashboardBaseUrl(brand);
+  if (!base) return '';
+  return `${base}/dashboard/documents`;
+}
