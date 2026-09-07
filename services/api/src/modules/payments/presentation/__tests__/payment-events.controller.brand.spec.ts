@@ -51,6 +51,7 @@ const MOCK_INVOICE_WITH_BRAND = {
     amount: 500000,
     currency: 'IDR',
     externalTransactionId: 'txn-1',
+    pricingTier: { feeType: 'program_fee' },
     application: {
         id: 'app-1',
         participant: MOCK_PARTICIPANT,
@@ -139,7 +140,10 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
                 // every succeeded event look like a duplicate settlement.
                 findFirst: jest.fn().mockResolvedValue(null),
                 update: jest.fn().mockResolvedValue({ id: 'invoice-1' }),
-                updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+                // count: 1 = this delivery won the guarded unpaid->failed claim in
+                // markInvoiceFailed, which is what gates the alternatives email.
+                // Tests covering a replayed delivery override this with count: 0.
+                updateMany: jest.fn().mockResolvedValue({ count: 1 }),
             },
             // $transaction receives an array of promises (from prisma.model.update calls), resolve them all
             $transaction: jest.fn().mockImplementation((ops: Promise<unknown>[]) =>
@@ -345,7 +349,7 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
             (prisma.$transaction as jest.Mock).mockResolvedValue([{}, {}]);
         });
 
-        it('should emit notification.payment_failed with brand payload', async () => {
+        it('emits payment.issue_alternative (not the old generic retry email) with the same payload shape notify-payment-issue produces', async () => {
             // Second findUnique call (for brand resolution) returns full invoice with brand
             (prisma.applicationInvoice.findUnique as jest.Mock)
                 .mockResolvedValueOnce({
@@ -365,9 +369,25 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
 
             await controller.handlePaymentFailed(basePayload as any, context);
 
+            expect(producer.emit).not.toHaveBeenCalledWith('notification.payment_failed', expect.anything());
             expect(producer.emit).toHaveBeenCalledWith(
-                'notification.payment_failed',
+                'payment.issue_alternative',
                 expect.objectContaining({
+                    email: 'john@example.com',
+                    customer_name: 'John Doe',
+                    amount: 500000,
+                    currency: 'IDR',
+                    order_id: 'invoice-1',
+                    // MOCK_PROGRAM carries no `name` field.
+                    program: null,
+                    paymentsPageUrl: expect.stringContaining('/dashboard/payments'),
+                    brandId: 'brand-1',
+                    programId: 'program-1',
+                    feeType: 'program_fee',
+                    metadata: expect.objectContaining({
+                        application_id: 'app-1',
+                        invoice_id: 'invoice-1',
+                    }),
                     brand: expect.objectContaining({
                         name: 'Test Brand',
                         primaryColor: '#FF5500',
@@ -381,7 +401,7 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
             );
         });
 
-        it('should emit notification.payment_failed with brand: null when no brand', async () => {
+        it('emits payment.issue_alternative with brand: null when no brand', async () => {
             (prisma.applicationInvoice.findUnique as jest.Mock)
                 .mockResolvedValueOnce({
                     id: 'invoice-1',
@@ -401,7 +421,7 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
             await controller.handlePaymentFailed(basePayload as any, context);
 
             expect(producer.emit).toHaveBeenCalledWith(
-                'notification.payment_failed',
+                'payment.issue_alternative',
                 expect.objectContaining({ brand: null }),
             );
         });
@@ -409,8 +429,8 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
         // Regression for the audit-M158/M65 fix: markInvoiceFailed must still
         // record the invoice's own failure, but not let it overwrite the
         // application column a different paid invoice already covers, and must
-        // not tell the participant their payment failed when it didn't.
-        it('skips the application column write and the payment_failed email when a paid sibling exists, but still marks the invoice failed', async () => {
+        // not send a payment-issue email for a failure that's covered elsewhere.
+        it('skips the application column write and the payment-issue email when a paid sibling exists, but still marks the invoice failed', async () => {
             // The supersede guard's findFirst call resolves a paid sibling invoice.
             (prisma.applicationInvoice.findFirst as jest.Mock).mockResolvedValue({ id: 'inv-paid-sibling' });
 
@@ -419,20 +439,81 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
             await controller.handlePaymentFailed(basePayload as any, context);
 
             // The invoice itself is still marked failed - it really did fail.
-            expect(prisma.applicationInvoice.update).toHaveBeenCalledWith(
+            expect(prisma.applicationInvoice.updateMany).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    where: { id: 'invoice-1' },
+                    where: { id: 'invoice-1', status: { not: 'failed' } },
                     data: expect.objectContaining({ status: 'failed' }),
                 }),
             );
             // But the application-level column must not be dragged to failed out
             // from under the already-paid sibling invoice.
             expect(prisma.participantApplication.update).not.toHaveBeenCalled();
-            // And the participant must not get a "payment failed" email.
+            // And the participant must not get any payment-issue email.
+            expect(producer.emit).not.toHaveBeenCalledWith(
+                'payment.issue_alternative',
+                expect.anything(),
+            );
             expect(producer.emit).not.toHaveBeenCalledWith(
                 'notification.payment_failed',
                 expect.anything(),
             );
+        });
+
+        // Once-per-invoice guarantee: a redelivered/replayed payment.failed for an
+        // invoice that's already 'failed' must not resend the alternatives email.
+        it('does not resend payment.issue_alternative when the invoice was already failed (replayed event)', async () => {
+            // The guarded write claims nothing: another delivery already moved this
+            // invoice to failed, so this one must stay silent. Modelling the replay
+            // this way (rather than by pre-setting status) is the point - a status
+            // read cannot separate two concurrent deliveries, the claim can.
+            // Set on $transaction directly: an earlier test in this block replaces
+            // the shared $transaction mock wholesale, and mocks are not reset
+            // between these cases, so relying on the default passthrough here
+            // would silently depend on test ordering.
+            (prisma.$transaction as jest.Mock).mockResolvedValue([{ count: 0 }, {}]);
+            (prisma.applicationInvoice.findUnique as jest.Mock).mockResolvedValue({
+                id: 'invoice-1',
+                applicationId: 'app-1',
+                status: 'failed', // already failed before this event arrived
+                rejectionReason: 'Card declined',
+                paymentMethod: null,
+                externalIntentId: null,
+                externalTransactionId: 'txn-1',
+                pricingTier: { feeType: 'program_fee' },
+                application: { participant: { userId: 'user-1' } },
+            });
+
+            const context = makeRmqContext({ getPattern: () => 'payment.failed' });
+
+            await controller.handlePaymentFailed(basePayload as any, context);
+
+            expect(producer.emit).not.toHaveBeenCalledWith(
+                'payment.issue_alternative',
+                expect.anything(),
+            );
+        });
+
+        // Fire-and-forget: a producer that throws must never break payment.failed
+        // handling (invoice/application writes already happened by this point).
+        it('does not throw when the payment.issue_alternative emit fails', async () => {
+            (prisma.applicationInvoice.findUnique as jest.Mock)
+                .mockResolvedValueOnce({
+                    id: 'invoice-1',
+                    applicationId: 'app-1',
+                    status: 'pending',
+                    rejectionReason: null,
+                    paymentMethod: null,
+                    externalIntentId: null,
+                    externalTransactionId: 'txn-1',
+                    pricingTier: { feeType: 'program_fee' },
+                    application: { participant: { userId: 'user-1' } },
+                })
+                .mockResolvedValueOnce(MOCK_INVOICE_WITH_BRAND);
+            (producer.emit as jest.Mock).mockRejectedValueOnce(new Error('rabbitmq down'));
+
+            const context = makeRmqContext({ getPattern: () => 'payment.failed' });
+
+            await expect(controller.handlePaymentFailed(basePayload as any, context)).resolves.not.toThrow();
         });
     });
 
