@@ -885,32 +885,52 @@ export class PaymentEventsController {
                 }
             }
 
-            // Re-emit branded notification event
+            // Send the payment-alternatives email instead of the old generic
+            // "Payment Failed" retry email. Same event (payment.issue_alternative)
+            // and same payload shape as the admin-triggered notify-payment-issue
+            // endpoint (payment-admin.controller.ts) - one consumer serves both
+            // producers, so this must stay field-for-field identical to that emit.
             try {
                 if (failedInvoice?.superseded) {
                     // Either a stale event for an invoice that's actually paid, or
                     // a genuine failure superseded by a different paid invoice on
                     // the same application column - either way the participant
-                    // must not get a "payment failed" email.
+                    // must not get a payment-issue email.
                     this.logger.debug(
-                        `notification.payment_failed not emitted: invoice ${failedInvoice.invoiceId} superseded (already paid or superseded by a paid sibling)`,
+                        `payment.issue_alternative not emitted: invoice ${failedInvoice.invoiceId} superseded (already paid or superseded by a paid sibling)`,
+                    );
+                } else if (failedInvoice?.alreadyFailed) {
+                    // Redelivered/replayed payment.failed for an invoice that was
+                    // already failed - the alternatives email already went out for
+                    // the real transition, so a duplicate delivery must not resend it.
+                    this.logger.debug(
+                        `payment.issue_alternative not emitted: invoice ${failedInvoice.invoiceId} already failed (redelivered event)`,
                     );
                 } else if (failedInvoice?.invoiceId) {
                     const invoiceWithBrand = await this.prisma.applicationInvoice.findUnique({
                         where: { id: failedInvoice.invoiceId },
                         include: {
+                            pricingTier: { select: { feeType: true } },
                             application: {
                                 include: {
                                     participant: {
                                         include: { user: { select: { email: true } } },
                                     },
-                                    program: { include: { brand: { include: { settings: true } } } },
+                                    program: {
+                                        include: { brand: { include: { settings: true } } },
+                                    },
                                 },
                             },
                         },
                     });
                     const rawBrand = invoiceWithBrand?.application?.program?.brand ?? null;
                     const rawProgram = invoiceWithBrand?.application?.program ?? null;
+                    const paymentsPageUrl = buildParticipantPaymentsUrl(rawBrand);
+                    if (!paymentsPageUrl) {
+                        this.logger.warn(
+                            `payment.issue_alternative for invoice ${failedInvoice.invoiceId} has no paymentsPageUrl: brand.landingUrl/websiteUrl unset`,
+                        );
+                    }
                     const brandPayload = rawBrand
                         ? {
                               name: rawBrand.name,
@@ -928,29 +948,39 @@ export class PaymentEventsController {
                                   : null,
                           }
                         : null;
-                    await this.producer.emit('notification.payment_failed', {
+                    await this.producer.emit('payment.issue_alternative', {
                         email: getString(data, 'email') || invoiceWithBrand?.application?.participant?.user?.email,
                         customer_name:
                             getString(asRecord(data.metadata as Record<string, unknown>), 'customer_name') ||
                             invoiceWithBrand?.application?.participant?.fullName ||
-                            'Customer',
-                        amount: Number(data.amount) || 0,
-                        currency: getString(data, 'currency') || 'IDR',
+                            'Participant',
+                        amount: Number(invoiceWithBrand?.amount) || Number(data.amount) || 0,
+                        currency: invoiceWithBrand?.currency || getString(data, 'currency') || 'IDR',
                         order_id: failedInvoice.invoiceId || getString(data, 'order_id') || '',
-                        reason:
-                            getString(asRecord(data.metadata as Record<string, unknown>), 'failure_reason') ||
-                            getString(data, 'reason') ||
-                            'Payment could not be processed',
-                        metadata: { application_id: applicationId, invoice_id: failedInvoice.invoiceId },
+                        program: rawProgram?.name ?? null,
+                        paymentsPageUrl,
                         brand: brandPayload,
+                        brandId: rawBrand?.id ?? null,
+                        programId: rawProgram?.id ?? null,
+                        feeType: invoiceWithBrand?.pricingTier?.feeType,
+                        metadata: {
+                            application_id: applicationId,
+                            invoice_id: failedInvoice.invoiceId,
+                            // No admin user triggers this path - it's the automated
+                            // payment.failed handler, not the notify-payment-issue
+                            // endpoint. Same keys as that endpoint's metadata so the
+                            // shared consumer never has to branch on who sent it.
+                            triggered_by: 'system:payment_failed',
+                            triggered_at: new Date().toISOString(),
+                        },
                     });
                 } else {
                     this.logger.warn(
-                        `notification.payment_failed not emitted: no resolved invoice for payment.failed event (applicationId=${applicationId ?? 'unknown'} intentId=${intentId ?? 'unknown'})`,
+                        `payment.issue_alternative not emitted: no resolved invoice for payment.failed event (applicationId=${applicationId ?? 'unknown'} intentId=${intentId ?? 'unknown'})`,
                     );
                 }
             } catch (emitErr) {
-                this.logger.error('Failed to emit notification.payment_failed', emitErr);
+                this.logger.error('Failed to emit payment.issue_alternative', emitErr);
             }
         } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
@@ -973,7 +1003,7 @@ export class PaymentEventsController {
         transactionId?: string;
         failureReason?: string;
         paymentMethod?: string;
-    }): Promise<{ userId: string; invoiceId: string; superseded?: boolean } | null> {
+    }): Promise<{ userId: string; invoiceId: string; superseded?: boolean; alreadyFailed?: boolean } | null> {
         const invoice = await this.resolveFailureInvoice(input);
         if (!invoice) {
             return null;
@@ -986,6 +1016,13 @@ export class PaymentEventsController {
             // email for a payment that in fact succeeded.
             return { userId, invoiceId: invoice.id, superseded: true };
         }
+
+        // Whether this event is a redelivered/replayed payment.failed rather than
+        // a real unpaid->failed transition is decided by the guarded write below,
+        // not by this read. Reading the status here and emitting on the strength
+        // of it would let two concurrent deliveries both observe 'not failed' and
+        // both mail the participant; the database, not timing, has to be what
+        // makes the alternatives email fire once per real failure.
 
         const rejectionReason =
             invoice.rejectionReason
@@ -1013,9 +1050,14 @@ export class PaymentEventsController {
             );
         }
 
-        await this.prisma.$transaction([
-            this.prisma.applicationInvoice.update({
-                where: { id: invoice.id },
+        // updateMany, not update, so the `status: { not: failed }` guard can ride
+        // along in the WHERE and the returned count becomes the claim: exactly one
+        // concurrent delivery gets count 1 and therefore the email. A vanished row
+        // yields 0 here instead of throwing P2025, which on this path is the safer
+        // of the two behaviours anyway.
+        const [failClaim] = await this.prisma.$transaction([
+            this.prisma.applicationInvoice.updateMany({
+                where: { id: invoice.id, status: { not: PaymentStatus.failed } },
                 data: {
                     status: PaymentStatus.failed,
                     paidAt: null,
@@ -1038,7 +1080,12 @@ export class PaymentEventsController {
                   ]),
         ]);
 
-        return { userId, invoiceId: invoice.id, superseded: !!paidSibling };
+        return {
+            userId,
+            invoiceId: invoice.id,
+            superseded: !!paidSibling,
+            alreadyFailed: failClaim.count === 0,
+        };
     }
 
     private async markInvoiceCancelled(input: {
