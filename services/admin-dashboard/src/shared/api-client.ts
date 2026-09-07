@@ -3536,6 +3536,43 @@ export function getProgramInvoice(id: string): Promise<InvoiceDetail> {
   return request<InvoiceDetail>(`/admin/payments/invoices/${id}`);
 }
 
+// Country is free text on the participant record, so ranking is by paid
+// invoice count (currency-agnostic) with amounts broken out per currency
+// rather than summed into one meaningless figure. See payment-admin.controller.ts.
+export type PaymentsByCountryRow = {
+  country: string;
+  paidCount: number;
+  amounts: { currency: string; amount: number }[];
+};
+
+export type PaymentsByCountryResponse = {
+  data: PaymentsByCountryRow[];
+  totalPaidCount: number;
+  unknownCount: number;
+};
+
+// Raw fetch (not request()) because the meta (totalPaidCount, unknownCount) lives
+// alongside `data` in the TransformInterceptor envelope, same reason listProgramInvoices does this.
+export async function getPaymentsByCountry(programId: string): Promise<PaymentsByCountryResponse> {
+  const headers = new Headers();
+  headers.set("Authorization", `Bearer ${getAccessToken()}`);
+  const res = await fetch(
+    buildApiUrl(`/admin/payments/by-country?programId=${encodeURIComponent(programId)}`),
+    { headers },
+  );
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+
+  const payload = await res.json() as {
+    data?: PaymentsByCountryRow[];
+    meta?: { totalPaidCount?: number; unknownCount?: number };
+  };
+  return {
+    data: payload.data ?? [],
+    totalPaidCount: payload.meta?.totalPaidCount ?? 0,
+    unknownCount: payload.meta?.unknownCount ?? 0,
+  };
+}
+
 export function verifyInvoice(
   id: string,
   action: "approve" | "reject",

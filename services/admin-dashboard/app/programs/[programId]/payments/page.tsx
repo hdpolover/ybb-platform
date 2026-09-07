@@ -20,13 +20,16 @@ import {
   submitApplication,
   exportProgramPaymentsExcel,
   notifyPaymentIssue,
+  getPaymentsByCountry,
   type InvoiceListItem,
   type InvoiceStatus,
   type InvoiceSummary,
   type PaginatedMeta,
   type InvoiceMetrics,
   type InvoiceFilterOptions,
+  type PaymentsByCountryResponse,
 } from "@/src/shared/api-client";
+import { PaymentsByCountrySection } from "@/app/components/payments/sections/PaymentsByCountrySection";
 import { toast } from "sonner";
 import { ArrowDownTrayIcon, EnvelopeIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -219,6 +222,12 @@ export default function PaymentsPage({
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Program-wide, independent of the invoice table's own filters (page,
+  // status, search, ...) — same "whole program" scope as overallSummary.
+  const [byCountry, setByCountry] = useState<PaymentsByCountryResponse | null>(null);
+  const [byCountryLoading, setByCountryLoading] = useState(true);
+  const [byCountryError, setByCountryError] = useState<string | null>(null);
+
   // All filters live in the URL via nuqs (batched updates -> single history write per change).
   const [filters, setFilters] = useQueryStates(paymentsFilterParsers);
   const {
@@ -363,6 +372,20 @@ export default function PaymentsPage({
   useEffect(() => {
     void fetchInvoices();
   }, [fetchInvoices]);
+
+  useEffect(() => {
+    if (!resolvedProgramId) return;
+    let mounted = true;
+    setByCountryLoading(true);
+    setByCountryError(null);
+    void getPaymentsByCountry(resolvedProgramId)
+      .then((res) => { if (mounted) setByCountry(res); })
+      .catch((err: unknown) => {
+        if (mounted) setByCountryError(err instanceof Error ? err.message : "Failed to load country breakdown.");
+      })
+      .finally(() => { if (mounted) setByCountryLoading(false); });
+    return () => { mounted = false; };
+  }, [resolvedProgramId]);
 
   async function handleExport() {
     setExporting(true);
@@ -744,6 +767,8 @@ export default function PaymentsPage({
           {error}
         </div>
       )}
+
+      <PaymentsByCountrySection data={byCountry} loading={byCountryLoading} error={byCountryError} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard

@@ -53,6 +53,23 @@ import {
 } from '@modules/payments/application/services/invoice-where.builder';
 import { extractDownstreamMessage } from './downstream-error.util';
 import { findPaidSiblingInvoice, supersededByPaidInvoiceReason } from '@shared/utils/paid-sibling-invoice.util';
+// Reuse the participant-country normalization already built for demographic
+// analytics rather than writing a second COALESCE/humanize pass here.
+import { NATIONALITY_EXPR, toCountryName } from '@modules/stats/participant-analytics.service';
+
+// Ranked per-country breakdown for the payments dashboard's country chart.
+// paidCount is the ranking metric (currency-agnostic); amounts are broken out
+// per currency since IDR and USD invoices can't be summed meaningfully.
+interface PaymentsByCountryRow {
+    country: string;
+    paidCount: number;
+    amounts: { currency: string; amount: number }[];
+}
+interface PaymentsByCountryResponse {
+    data: PaymentsByCountryRow[];
+    totalPaidCount: number;
+    unknownCount: number;
+}
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -548,6 +565,64 @@ export class PaymentAdminController {
                 baseWhere,
                 cursorWindow,
             ],
+        };
+    }
+
+    @Get('by-country')
+    @ApiOperation({ summary: 'Get paid invoices grouped by country, ranked (Admin)' })
+    @ApiQuery({ name: 'programId', required: true })
+    @ApiResponse({ status: 200, description: 'Paid invoice count and per-currency amount by country, ranked' })
+    async getPaymentsByCountry(@Query('programId') programId: string): Promise<PaymentsByCountryResponse> {
+        if (!programId) throw new HttpException('programId is required', 400);
+        return this.buildPaymentsByCountry(programId);
+    }
+
+    // Amounts can't be summed across currencies into one meaningful number
+    // (IDR and USD invoices for the same program are real, e.g. legacy pricing
+    // tiers), so paidCount (currency-agnostic) is the ranking metric and amounts
+    // are broken out per currency for display.
+    private async buildPaymentsByCountry(programId: string): Promise<PaymentsByCountryResponse> {
+        const rows = await this.readPrisma.$queryRaw<{ country: string | null; currency: string; count: bigint; amount: Prisma.Decimal | null }[]>(
+            Prisma.sql`
+                SELECT
+                    ${Prisma.raw(NATIONALITY_EXPR)} AS country,
+                    ai.currency AS currency,
+                    COUNT(*)::bigint AS count,
+                    SUM(ai.amount) AS amount
+                FROM application_invoices ai
+                JOIN participant_applications pa ON pa.id = ai.application_id
+                JOIN participants p ON p.id = pa.participant_id
+                WHERE pa.program_id = ${programId}::uuid
+                    AND pa.deleted_at IS NULL
+                    AND ai.status = ${PaymentStatus.paid}::"PaymentStatus"
+                GROUP BY country, ai.currency
+            `,
+        );
+
+        // The raw grouping is on free-text country values, so "ID" and "Indonesia"
+        // land in separate rows here. Re-aggregate after humanizing (toCountryName)
+        // so they merge into one bucket instead of splitting a country's payments.
+        const byCountry = new Map<string, { country: string; paidCount: number; amounts: Map<string, number> }>();
+        for (const row of rows) {
+            const country = row.country ? toCountryName(row.country) : 'Unknown';
+            const existing = byCountry.get(country) ?? { country, paidCount: 0, amounts: new Map<string, number>() };
+            existing.paidCount += Number(row.count);
+            existing.amounts.set(row.currency, (existing.amounts.get(row.currency) ?? 0) + Number(row.amount ?? 0));
+            byCountry.set(country, existing);
+        }
+
+        const data = Array.from(byCountry.values())
+            .map((entry) => ({
+                country: entry.country,
+                paidCount: entry.paidCount,
+                amounts: Array.from(entry.amounts.entries()).map(([currency, amount]) => ({ currency, amount })),
+            }))
+            .sort((a, b) => b.paidCount - a.paidCount);
+
+        return {
+            data,
+            totalPaidCount: data.reduce((sum, entry) => sum + entry.paidCount, 0),
+            unknownCount: data.find((entry) => entry.country === 'Unknown')?.paidCount ?? 0,
         };
     }
 

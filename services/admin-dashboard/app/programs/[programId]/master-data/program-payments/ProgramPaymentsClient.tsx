@@ -14,6 +14,7 @@ import type { PricingTier, PricingTierAlerts } from "@/app/platform/api";
 import { getExchangeRate } from "@/src/shared/api-client";
 import { parseApiDate } from "@/lib/utils";
 import { formatInBusinessTz } from "@/lib/datetime";
+import { computeRegistrationDateWarnings } from "@/lib/registration-date-warnings";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
@@ -236,8 +237,13 @@ export function ProgramPaymentsClient({
 }) {
   const resolvedProgramId = useResolvedProgramId(programId);
   const [rows, setRows] = useState<PaymentOptionRow[]>([]);
+  const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [programUsdInIdr, setProgramUsdInIdr] = useState<number | null>(null);
   const [paymentInfoHtml, setPaymentInfoHtml] = useState<string | null>(null);
+  const [registrationDates, setRegistrationDates] = useState<{
+    open: string | null;
+    close: string | null;
+  }>({ open: null, close: null });
   const [tierAlerts, setTierAlerts] = useState<PricingTierAlerts>({ lapsed: [], expiring: [] });
   const [loading, setLoading] = useState(true);
   const [search] = useState("");
@@ -258,8 +264,13 @@ export function ProgramPaymentsClient({
         getPricingTierAlerts(resolvedProgramId),
       ]);
       setRows(tiers.map((t, i) => tierToRow(t, i)));
+      setTiers(tiers);
       setProgramUsdInIdr(rate?.usdInIdr ?? null);
       setPaymentInfoHtml(program?.paymentInfoHtml ?? null);
+      setRegistrationDates({
+        open: program?.registrationOpenDate ?? null,
+        close: program?.registrationCloseDate ?? null,
+      });
       setTierAlerts(alerts);
     } catch (err) {
       setRows([]);
@@ -293,6 +304,15 @@ export function ProgramPaymentsClient({
   const needsBackfillReview = tiersNeedingReview.length > 0;
   const idrFormatter = new Intl.NumberFormat("id-ID");
 
+  // Advisory-only: flags disagreements between the program's registration
+  // dates and its pricing-tier windows without touching either. See
+  // lib/registration-date-warnings.ts for what each check catches.
+  const dateWarnings = computeRegistrationDateWarnings({
+    registrationOpenDate: registrationDates.open,
+    registrationCloseDate: registrationDates.close,
+    tiers,
+  });
+
   return (
     <main className="space-y-4">
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -316,6 +336,24 @@ export function ProgramPaymentsClient({
         initialHtml={paymentInfoHtml}
         onSaved={setPaymentInfoHtml}
       />
+
+      {dateWarnings.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 flex-none text-amber-500" />
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-amber-900">
+                Registration dates and pricing tier windows don&apos;t match up
+              </p>
+              <ul className="mt-1 space-y-1.5 text-xs text-amber-800">
+                {dateWarnings.map((w) => (
+                  <li key={w.id}>{w.message}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {tierAlerts.lapsed.length > 0 && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">

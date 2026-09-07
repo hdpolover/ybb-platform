@@ -46,8 +46,10 @@ const GENDER_CASE = `
 
 // Country lives in `nationality` for some programs and ISO-2 `origin_country`
 // (or `current_country`) for others. Prefer the first populated one.
-const NATIONALITY_EXPR = `COALESCE(NULLIF(TRIM(p.nationality), ''), NULLIF(TRIM(p.origin_country), ''), NULLIF(TRIM(p.current_country), ''))`;
-const NATIONALITY_CASE = `
+// Exported so other modules (e.g. payments-by-country) reuse the same
+// normalization instead of duplicating it.
+export const NATIONALITY_EXPR = `COALESCE(NULLIF(TRIM(p.nationality), ''), NULLIF(TRIM(p.origin_country), ''), NULLIF(TRIM(p.current_country), ''))`;
+export const NATIONALITY_CASE = `
   CASE
     WHEN ${NATIONALITY_EXPR} IS NULL THEN 'Not Specified'
     ELSE ${NATIONALITY_EXPR}
@@ -72,7 +74,7 @@ const AGE_BAND_ORDER = ['Under 18', '18-24', '25-34', '35-44', '45-54', '55+', '
 // codes to country names for display; pass anything else (full names, "Not
 // Specified") through untouched.
 const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
-function toCountryName(value: string): string {
+export function toCountryName(value: string): string {
   if (/^[A-Za-z]{2}$/.test(value)) {
     try {
       return regionNames.of(value.toUpperCase()) ?? value;
