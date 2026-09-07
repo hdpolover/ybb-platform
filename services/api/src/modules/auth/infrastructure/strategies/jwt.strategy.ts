@@ -237,6 +237,45 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Refresh token cannot be used as an access token');
     }
 
+    // Impersonation sessions are the one class of access token that MUST be
+    // revocable before its own expiry: an ordinary session ends via logout
+    // (jti blacklist), but a compromised or no-longer-needed impersonation
+    // grant can't wait out a full 1h TTL. This is why exchangeImpersonationToken
+    // anchors the token to a UserSession via `sid` and why endImpersonation
+    // flips that session's isActive off.
+    //
+    // Gated on `impersonationTicketId` so this NEVER runs for an ordinary
+    // participant/admin token — that is the whole point: a session-table
+    // lookup on every request would put this on the hot path for everyone,
+    // not just the rare impersonation session.
+    //
+    // Missing `sid` on an impersonation token is treated as revoked rather
+    // than exempted. Checked git history before deciding this: the `sid`
+    // claim (6f02224e) predates `impersonationTicketId` (137fce7e) - every
+    // commit that has ever set impersonationTicketId also set sid in the same
+    // sign() call, so there is no historical shape where an impersonation
+    // token exists without one. Combined with the 1h access-token ceiling,
+    // no token minted before either commit could still be unexpired. This is
+    // therefore not a real gap, just a defensive fail-closed for a payload
+    // shape production has never produced.
+    if (payload.impersonationTicketId) {
+      const session = payload.sid
+        ? await this.prisma.userSession.findUnique({
+            where: { sessionToken: payload.sid },
+            select: { isActive: true, revokedAt: true, expiresAt: true },
+          })
+        : null;
+
+      if (
+        !session ||
+        !session.isActive ||
+        session.revokedAt ||
+        session.expiresAt <= new Date()
+      ) {
+        throw new UnauthorizedException('Impersonation session has been revoked');
+      }
+    }
+
     // Verify user still exists and is active
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },

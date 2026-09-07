@@ -243,7 +243,47 @@ export class SupportAccessService {
 
     // Session id is minted BEFORE the token so the access token can carry it
     // as `sid`. Without it logout has no session to name (see LogoutHandler).
-    const sessionToken = randomUUID();
+    //
+    // Minted ONCE PER TICKET, not once per redeem: the ticket CONSUME record
+    // above is idempotent, but until this line, minting was not - every
+    // replay inside the 5-minute TTL (StrictMode remount, new-tab prefetch,
+    // link scanner) called randomUUID() again and created a second
+    // independent UserSession, so N redeems produced N separately-revocable
+    // credentials for the same grant, none of which end-impersonation could
+    // find by ticket id. Reusing ticket.sessionToken collapses every replay
+    // onto the one session minted by the first successful redeem.
+    let sessionToken = ticket.sessionToken;
+    if (!sessionToken) {
+      const candidateSessionToken = randomUUID();
+      // Same shape as the consumedAt guard below: an UPDATE ... WHERE that
+      // only succeeds once. Two concurrent first-redeems can both read
+      // ticket.sessionToken as null, but only one UPDATE can match
+      // `sessionToken: null` before the other's WHERE clause stops matching.
+      const claimed = await this.prisma.supportAccessImpersonationTicket.updateMany({
+        where: { id: ticket.id, sessionToken: null },
+        data: { sessionToken: candidateSessionToken },
+      });
+      if (claimed.count === 1) {
+        sessionToken = candidateSessionToken;
+      } else {
+        // Lost the race. Converge on the WINNER's sessionToken instead of
+        // proceeding with our own candidate - using it anyway would mint a
+        // second UserSession for this ticket, exactly the bug this guard
+        // exists to close.
+        const winner = await this.prisma.supportAccessImpersonationTicket.findUnique({
+          where: { id: ticket.id },
+          select: { sessionToken: true },
+        });
+        if (!winner?.sessionToken) {
+          // Unreachable in practice: we just failed the `sessionToken: null`
+          // guard, so a concurrent writer MUST have set one. Fail loudly
+          // rather than falling back to our own candidate, which would
+          // silently recreate the duplicate-session bug.
+          throw new UnauthorizedException('Invalid or expired impersonation token.');
+        }
+        sessionToken = winner.sessionToken;
+      }
+    }
 
     const accessToken = this.jwtService.sign(
       {
@@ -295,8 +335,14 @@ export class SupportAccessService {
           lastLoginAt: now,
         },
       }),
-      this.prisma.userSession.create({
-        data: {
+      // Upsert, not create: on replay this is the SAME sessionToken minted on
+      // the first redeem (see above), so this must update the one existing
+      // row rather than fail on the unique constraint or create a duplicate.
+      // ipAddress/browser/expiresAt are refreshed to the latest redeem's
+      // values; refreshToken is reissued below on every redeem regardless.
+      this.prisma.userSession.upsert({
+        where: { sessionToken },
+        create: {
           userId: user.id,
           sessionToken,
           refreshToken,
@@ -304,6 +350,14 @@ export class SupportAccessService {
           browser: userAgent.slice(0, 100),
           ipAddress,
           expiresAt,
+        },
+        update: {
+          refreshToken,
+          browser: userAgent.slice(0, 100),
+          ipAddress,
+          expiresAt,
+          isActive: true,
+          lastActivity: now,
         },
       }),
       // Record first-consume only (idempotent): updateMany no-ops on replay, so the
@@ -344,6 +398,74 @@ export class SupportAccessService {
       refreshToken,
       redirectTo: user.isOnboardingCompleted ? '/dashboard' : '/onboarding',
     };
+  }
+
+  /**
+   * Revokes an impersonation ticket's session, closing the window the audit
+   * flagged: nothing in the auth path consulted user_sessions for a
+   * participant token, so an impersonation session (unlike an admin's own
+   * refresh token) could not be ended before its 1h access token expired on
+   * its own. This is the "end" side; jwt.strategy.ts validate() is the
+   * "enforce" side that actually rejects the token once revoked here.
+   *
+   * Idempotent: ending an already-ended ticket is a no-op success, not a
+   * 500 - a support agent closing the same tab twice, or a retried request,
+   * must not surface an error for a state that already holds.
+   */
+  async endImpersonation(currentUser: CurrentUserData, ticketId: string): Promise<{ ended: boolean }> {
+    await this.assertSuperAdmin(currentUser);
+
+    const ticket = await this.prisma.supportAccessImpersonationTicket.findUnique({
+      where: { id: ticketId },
+    });
+    if (!ticket) {
+      throw new NotFoundException('Impersonation ticket not found.');
+    }
+
+    if (ticket.revokedAt) {
+      // Already ended - success, not an error (see idempotency note above).
+      return { ended: true };
+    }
+
+    const now = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.supportAccessImpersonationTicket.updateMany({
+        where: { id: ticket.id, revokedAt: null },
+        data: { revokedAt: now, status: 'revoked' },
+      }),
+      // sessionToken can still be null for a ticket that was never
+      // successfully exchanged - nothing to revoke on the session side.
+      ...(ticket.sessionToken
+        ? [
+            this.prisma.userSession.updateMany({
+              where: { sessionToken: ticket.sessionToken },
+              data: { isActive: false, revokedAt: now },
+            }),
+          ]
+        : []),
+      this.prisma.dataChangeLog.create({
+        data: {
+          entityType: 'SupportAccessImpersonation',
+          entityId: ticket.id,
+          action: ChangeType.status_change,
+          actorType: ChangedByType.admin,
+          actorId: currentUser.adminId!,
+          source: 'http',
+          endpoint: 'POST /v1/admins/support-access/impersonations/:id/end',
+          httpMethod: 'POST',
+          riskLevel: 'high',
+          status: 'SUCCESS',
+          changedFields: ['status', 'revokedAt'],
+          afterState: {
+            status: 'revoked',
+            revokedAt: now.toISOString(),
+          },
+        },
+      }),
+    ]);
+
+    return { ended: true };
   }
 
   private async assertSuperAdmin(currentUser: CurrentUserData): Promise<void> {

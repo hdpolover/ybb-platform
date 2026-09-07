@@ -8,7 +8,7 @@ import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.s
 describe('JwtStrategy - refresh tokens must not work as bearer tokens', () => {
   let strategy: JwtStrategy;
 
-  const prisma = { user: { findUnique: jest.fn() } };
+  const prisma = { user: { findUnique: jest.fn() }, userSession: { findUnique: jest.fn() } };
 
   // Production values. JWT_ADMIN_EXPIRES_IN is the longest ACCESS ttl, so it
   // is the one the lifetime check has to be derived from.
@@ -219,5 +219,90 @@ describe('JwtStrategy - refresh tokens must not work as bearer tokens', () => {
     await expect(strategy.validate(payload({ type: 'access' }))).rejects.toThrow(
       UnauthorizedException,
     );
+  });
+
+  describe('impersonation session revocation (N8)', () => {
+    // Without this, an admin-impersonation access token was indistinguishable
+    // from an ordinary one for revocation purposes: nothing consulted
+    // user_sessions for a participant token, so it lived out its full 1h life
+    // no matter what an admin did with support-access's end-impersonation
+    // endpoint. revoked_at was NULL on all 236 prod tickets because nothing
+    // could ever set it and have it matter.
+    const impersonationPayload = (overrides: Partial<JwtPayload> = {}) =>
+      payload({ type: 'access', sid: 'session-1', impersonationTicketId: 'ticket-1', ...overrides });
+
+    it('performs NO session lookup for an ordinary (non-impersonation) token', async () => {
+      // This is the point of gating on impersonationTicketId: a session-table
+      // read on every request would put every participant/admin login on the
+      // hot path just to serve the rare impersonation case.
+      const result = await strategy.validate(payload({ type: 'access', sid: 'session-1' }));
+
+      expect(result).toEqual(expect.objectContaining({ userId: 'user-1' }));
+      expect(prisma.userSession.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('accepts an impersonation token whose session is active and unexpired', async () => {
+      prisma.userSession.findUnique.mockResolvedValue({
+        isActive: true,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      const result = await strategy.validate(impersonationPayload());
+
+      expect(result).toEqual(expect.objectContaining({ userId: 'user-1' }));
+      expect(prisma.userSession.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { sessionToken: 'session-1' } }),
+      );
+    });
+
+    it('rejects an impersonation token whose session was ended (isActive: false)', async () => {
+      // This is the actual revocation path: endImpersonation flips isActive
+      // off; this is what makes that flip mean anything.
+      prisma.userSession.findUnique.mockResolvedValue({
+        isActive: false,
+        revokedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+
+      await expect(strategy.validate(impersonationPayload())).rejects.toThrow(
+        'Impersonation session has been revoked',
+      );
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rejects an impersonation token whose session has expired', async () => {
+      prisma.userSession.findUnique.mockResolvedValue({
+        isActive: true,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() - 60_000),
+      });
+
+      await expect(strategy.validate(impersonationPayload())).rejects.toThrow(
+        'Impersonation session has been revoked',
+      );
+    });
+
+    it('rejects an impersonation token whose session no longer exists', async () => {
+      prisma.userSession.findUnique.mockResolvedValue(null);
+
+      await expect(strategy.validate(impersonationPayload())).rejects.toThrow(
+        'Impersonation session has been revoked',
+      );
+    });
+
+    it('rejects an impersonation token with no `sid`, without querying for one', async () => {
+      // A sid-less impersonation token cannot be revoked because there is no
+      // session to name -- fail closed rather than exempt it. Checked git
+      // history before choosing this: the `sid` claim predates
+      // `impersonationTicketId` (6f02224e before 137fce7e), so every commit
+      // that has ever set impersonationTicketId also set sid; this shape has
+      // never been produced. No `where` clause could be built anyway (no
+      // sessionToken to look up), so this must short-circuit before the query.
+      await expect(
+        strategy.validate(impersonationPayload({ sid: undefined })),
+      ).rejects.toThrow('Impersonation session has been revoked');
+      expect(prisma.userSession.findUnique).not.toHaveBeenCalled();
+    });
   });
 });
