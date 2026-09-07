@@ -246,6 +246,7 @@ describe('auth-program-linking.util', () => {
           isActive: true,
         },
       ]);
+      prisma.participantApplication.create.mockResolvedValue({ id: 'application-new-1' });
 
       const result = await ensureProgramApplication(prisma, {
         participantId: 'participant-1',
@@ -260,8 +261,9 @@ describe('auth-program-linking.util', () => {
           status: 'draft',
           applicationCategory: ApplicationCategory.fully_funded,
         },
+        select: { id: true },
       });
-      expect(result).toEqual({ status: 'created', program: baseProgram });
+      expect(result).toEqual({ status: 'created', program: baseProgram, applicationId: 'application-new-1' });
     });
 
     it('throws when the requested application category is not offered by the program', async () => {

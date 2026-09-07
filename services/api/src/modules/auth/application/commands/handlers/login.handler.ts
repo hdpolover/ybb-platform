@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { LoginCommand } from '../login.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
@@ -15,6 +15,7 @@ import {
   toProgramRegistrationInfo,
 } from '../../services/auth-program-linking.util';
 import { recordFailedAttempt, isLockedOut, LOCKED_OUT_MESSAGE } from '../../services/account-lockout.util';
+import { MetaCapiService } from '@modules/meta/meta-capi.service';
 
 @Injectable()
 export class LoginHandler {
@@ -27,6 +28,10 @@ export class LoginHandler {
     private readonly authLoggingService: AuthLoggingService,
     private readonly geoIpService: GeoIpService,
     private readonly metricsService: MetricsService,
+    // MetaModule is @Global() — see meta.module.ts for why AuthModule doesn't
+    // (and shouldn't) list it in `imports`. @Optional() so a missing MetaModule
+    // degrades to "no conversion tracking" instead of failing login.
+    @Optional() private readonly metaCapiService?: MetaCapiService,
   ) { }
 
   /**
@@ -265,6 +270,9 @@ export class LoginHandler {
       brandId,
       programId: command.programId,
       programSlug: command.programSlug,
+      metaCapiService: this.metaCapiService,
+      userEmail: user.email,
+      userId: user.id,
     });
 
     if (applicationResult.status === 'closed') {

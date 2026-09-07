@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { RegisterCommand } from '../register.command';
 import { AuthResponseDto } from '../../../presentation/dto/auth-response.dto';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
@@ -18,6 +18,8 @@ import {
   resolveAuthTargetProgram,
   toProgramRegistrationInfo,
 } from '../../services/auth-program-linking.util';
+import { MetaCapiService } from '@modules/meta/meta-capi.service';
+import { buildAdAttributionJson } from '../../services/ad-attribution.util';
 
 @Injectable()
 export class RegisterHandler {
@@ -32,6 +34,12 @@ export class RegisterHandler {
     private readonly metricsService: MetricsService,
     private readonly geoIpService: GeoIpService,
     private readonly configService: ConfigService,
+    // MetaModule is @Global(), so this resolves without AuthModule importing
+    // it (that would close a cycle back through Landing/PlatformSettings —
+    // see meta.module.ts). @Optional() so a misconfigured/absent MetaModule
+    // (or a unit test that doesn't provide it) degrades to "no conversion
+    // tracking" instead of failing account registration outright.
+    @Optional() private readonly metaCapiService?: MetaCapiService,
   ) {}
 
   /**
@@ -306,6 +314,10 @@ export class RegisterHandler {
           // create in this handler.
           fullName: '',
           referralCode: ambassador?.referralCode, // Store valid referral code
+          // Written ONCE, here, at creation — see the field's doc comment in
+          // schema/roles.prisma. undefined (not null) when nothing was
+          // captured, so Prisma simply omits the column write.
+          adAttribution: buildAdAttributionJson(command.adAttribution) ?? undefined,
         },
       });
 
@@ -343,6 +355,9 @@ export class RegisterHandler {
         brandId,
         programId: targetProgramId,
         applicationCategory: command.applicationCategory,
+        metaCapiService: this.metaCapiService,
+        userEmail: newUser.email,
+        userId: newUser.id,
       });
 
       if (applicationResult.status === 'closed') {

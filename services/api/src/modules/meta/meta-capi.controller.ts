@@ -16,8 +16,12 @@ import { LandingService } from '../landing/landing.service';
 import { CapiEventDto } from './dto/capi-event.dto';
 import { ALLOWED_EVENT_NAMES, MetaCapiService } from './meta-capi.service';
 
+// No controller-level prefix: the handler below is registered under two
+// paths (see @Post array) so the historical /meta/capi keeps working for an
+// already-deployed frontend while /conversions/event becomes the new,
+// platform-neutral alias (this relay now also fans out to TikTok).
 @ApiTags('Meta CAPI')
-@Controller('meta')
+@Controller()
 @Public()
 export class MetaCapiController {
     constructor(
@@ -30,14 +34,16 @@ export class MetaCapiController {
     // 200/204 with no body — exactly what a `navigator.sendBeacon`/`fetch`
     // pixel caller expects, not a wrapped `{ statusCode, message, data }` JSON
     // envelope. Exception filters still apply normally for the 400/403 paths.
-    @Post('capi')
+    @Post(['meta/capi', 'conversions/event'])
     @ApiOperation({
-        summary: 'Forward a browser event to Meta Conversions API',
+        summary: 'Forward a browser event to Meta Conversions API and TikTok Events API',
         description:
-            'Public, browser-facing relay for Meta CAPI. Resolves the calling brand from the ' +
+            'Public, browser-facing relay. Resolves the calling brand from the ' +
             'request Origin/Referer, loads that brand\'s pixel + access token from brand ' +
-            'settings, and forwards a server-side event to Meta. Never throws to the client ' +
-            'on Graph API failures — analytics must never break the page.',
+            'settings, and forwards a server-side event to Meta and, in parallel, to TikTok ' +
+            '(same eventId, so TikTok dedupes it like Meta does). Never throws to the client ' +
+            'on either platform\'s failures — analytics must never break the page. Also ' +
+            'reachable at the legacy path POST /v1/meta/capi for an already-deployed frontend.',
     })
     @ApiResponse({ status: 200, description: 'Event forwarded to Meta.' })
     @ApiResponse({ status: 204, description: 'No-op — brand has no CAPI configured, or the event was rate-limited.' })

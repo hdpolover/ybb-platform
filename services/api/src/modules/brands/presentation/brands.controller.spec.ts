@@ -178,6 +178,9 @@ describe('BrandsController', () => {
                     capiAccessToken: 'secret-token-must-not-leak',
                     capiTestEventCode: 'TEST123',
                     capiEnabled: true,
+                    tiktokAccessToken: 'tiktok-secret-token-must-not-leak',
+                    tiktokPixelId: 'TIKTOKPIXEL123',
+                    tiktokTestEventCode: 'TTTEST123',
                 },
             });
 
@@ -185,11 +188,16 @@ describe('BrandsController', () => {
             const settings = result.settings as Record<string, unknown>;
 
             expect(settings).not.toHaveProperty('capiAccessToken');
+            expect(settings).not.toHaveProperty('tiktokAccessToken');
             expect(JSON.stringify(result)).not.toContain('secret-token-must-not-leak');
+            expect(JSON.stringify(result)).not.toContain('tiktok-secret-token-must-not-leak');
             expect(settings.hasCapiAccessToken).toBe(true);
+            expect(settings.hasTiktokAccessToken).toBe(true);
             // Non-secret fields still pass through normally.
             expect(settings.capiTestEventCode).toBe('TEST123');
             expect(settings.capiEnabled).toBe(true);
+            expect(settings.tiktokPixelId).toBe('TIKTOKPIXEL123');
+            expect(settings.tiktokTestEventCode).toBe('TTTEST123');
         });
     });
 

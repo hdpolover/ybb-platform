@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, Logger, Optional } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Ambassador, ApplicationCategory } from '@prisma/client';
 import { FirebaseLoginCommand } from '../firebase-login.command';
@@ -18,6 +18,8 @@ import {
   toProgramRegistrationInfo,
 } from '../../services/auth-program-linking.util';
 import { normalizeReferralCode } from '@modules/participants/application/utils/referral-code.util';
+import { MetaCapiService } from '@modules/meta/meta-capi.service';
+import { buildAdAttributionJson } from '../../services/ad-attribution.util';
 
 @Injectable()
 export class FirebaseLoginHandler {
@@ -32,6 +34,10 @@ export class FirebaseLoginHandler {
     private readonly authLoggingService: AuthLoggingService,
     private readonly geoIpService: GeoIpService,
     private readonly metricsService: MetricsService,
+    // MetaModule is @Global() — see meta.module.ts for why AuthModule doesn't
+    // (and shouldn't) list it in `imports`. @Optional() so a missing MetaModule
+    // degrades to "no conversion tracking" instead of failing login.
+    @Optional() private readonly metaCapiService?: MetaCapiService,
   ) { }
 
   private async resolveBrandId(brandId?: string, domain?: string): Promise<string> {
@@ -341,6 +347,10 @@ export class FirebaseLoginHandler {
                         referralCode: normalizeReferralCode(command.referralCode) || null,
                         profileCompletionPercentage: 0,
                         knowledgeSource: 'Other',
+                        // Written ONCE, here, at creation — never on the
+                        // returning-user branches below. See the field's doc
+                        // comment in schema/roles.prisma.
+                        adAttribution: buildAdAttributionJson(command.adAttribution) ?? undefined,
                     }
                 });
 
@@ -394,6 +404,9 @@ export class FirebaseLoginHandler {
             programId: requestedProgram?.id,
             applicationCategory: command.applicationCategory,
             fallbackToLatestOpenProgram: !requestedProgram && !existingBrandApplication,
+            metaCapiService: this.metaCapiService,
+            userEmail: user.email,
+            userId: user.id,
         });
 
         if (applicationResult.status === 'created') {

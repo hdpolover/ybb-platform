@@ -118,6 +118,7 @@ export class SettingsStrategy {
                 support_email: settings?.supportEmail || program?.contactEmail || undefined,
                 google_analytics_id: settings?.googleAnalyticsId || undefined,
                 pixel_id: settings?.pixelId || undefined,
+                tiktok_pixel_id: settings?.tiktokPixelId || undefined,
                 contact_phone: program?.contactPhone || undefined,
                 contact_whatsapp: program?.contactWhatsapp || undefined,
                 address: program?.contactAddress || undefined,

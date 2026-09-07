@@ -248,6 +248,10 @@ export type PlatformBrandDetail = PlatformBrand & {
     // Not secret — the Meta Events Manager test_event_code is safe to display
     // and edit like any other field.
     capiTestEventCode?: string | null;
+    tiktokPixelId?: string | null;
+    // Same write-only secret semantics as hasCapiAccessToken above.
+    hasTiktokAccessToken?: boolean;
+    tiktokTestEventCode?: string | null;
   } | null;
   // The brand's active program (see api/src/shared/utils/active-program-resolver.ts).
   // settings.strategy.ts prefers this program's own logoUrl over the brand's
@@ -387,6 +391,10 @@ export function updatePlatformBrandSettings(
     // the backend leaves the stored token unchanged when this key is absent.
     capiAccessToken?: string;
     capiTestEventCode?: string;
+    tiktokPixelId?: string;
+    // Same omit-unless-typed rule as capiAccessToken above.
+    tiktokAccessToken?: string;
+    tiktokTestEventCode?: string;
   },
 ): Promise<PlatformBrandDetail> {
   return request<RawPlatformBrand>(`/brands/${brandId}/settings`, {

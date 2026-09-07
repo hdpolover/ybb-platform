@@ -197,6 +197,15 @@ model Participant {
   referralCode    String? @map("referral_code") @db.VarChar(20)
   preferences     Json    @default("{}") @db.Json
 
+  // Ad click identifiers (fbp/fbc/ttp/ttclid + capturedAt) captured from the
+  // browser at signup and replayed on every later server-side conversion event
+  // for this person (see MetaCapiService.emitServerEvent) — without them a
+  // server-emitted Purchase/ProgramFeePaid/ApplicationCreated event can be
+  // counted but not attributed to the ad that drove it. Written ONCE, at
+  // participant creation; a later login must never overwrite it, since the
+  // acquisition click is the one worth keeping.
+  adAttribution Json? @map("ad_attribution") @db.Json
+
   // Audit & Analytics
   createdAt                   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)

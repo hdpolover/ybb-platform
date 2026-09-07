@@ -406,6 +406,34 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
     });
   });
 
+  describe('ad attribution first-write-wins', () => {
+    it('never touches participant.create (and so never writes adAttribution) for a returning participant', async () => {
+      // Default beforeEach setup already resolves an existingParticipant, so
+      // the handler's `if (!participant)` creation branch never runs. A
+      // second/organic login carrying different click ids must not overwrite
+      // the value captured at the original signup.
+      const returningLoginCommand = new FirebaseLoginCommand(
+        'firebase-id-token',
+        'provider-id-123',
+        '127.0.0.1',
+        'Mozilla/5.0 Chrome/120',
+        'brand-id-123',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { fbp: 'fb.1.organic-visit.999' },
+      );
+
+      await handler.execute(returningLoginCommand);
+
+      // The only participant.create in this test's tx mock is the one wired
+      // in beforeEach's UnitOfWork stub — assert unitOfWork.execute (which
+      // wraps it) was never invoked at all for a returning participant.
+      expect(mockUnitOfWork.execute).not.toHaveBeenCalled();
+    });
+  });
+
   // Regression: the final `registeredPrograms` fetch had no orderBy, so
   // availableIds[0] on the frontend's active-program selector
   // (ybb-program-next/lib/dashboard/activeProgram.ts) was whichever row

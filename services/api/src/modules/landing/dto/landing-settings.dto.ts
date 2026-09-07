@@ -45,16 +45,20 @@ export class BrandSettingsDto {
   @ApiProperty({ example: 'UA-123456-1', required: false, description: 'Google Analytics Tracking ID' })
   google_analytics_id?: string;
 
-  @ApiProperty({ example: '123456789', required: false, description: 'Meta/Facebook Pixel ID' })
+  @ApiProperty({ example: '123456789012345', required: false, description: 'Meta/Facebook Pixel ID (15-16 digits)' })
   pixel_id?: string;
 
-  // SECURITY: capi_access_token (Meta Conversions API secret) is intentionally
-  // NOT a field on this DTO. This class is explicitly field-whitelisted (no
+  @ApiProperty({ example: 'CQEFB8JC77UAAP0N7QQG', required: false, description: 'TikTok Pixel ID (13-character alphanumeric code)' })
+  tiktok_pixel_id?: string;
+
+  // SECURITY: capi_access_token (Meta Conversions API secret) and
+  // tiktok_access_token (TikTok Events API secret) are intentionally
+  // NOT fields on this DTO. This class is explicitly field-whitelisted (no
   // entity spread), and settings.strategy.ts builds `brand.*` by hand — so the
   // token can never leak through this public, unauthenticated endpoint. Do not
   // add it here. The token is only ever read server-side inside MetaCapiService
-  // to authenticate the platform's own outbound call to Meta's Graph API; it
-  // never reaches any client response.
+  // to authenticate the platform's own outbound calls to Meta's Graph API and
+  // TikTok's Events API; they never reach any client response.
 
   @ApiProperty({ example: '+628123456789', required: false, description: 'Contact phone number' })
   contact_phone?: string;

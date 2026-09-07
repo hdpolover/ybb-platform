@@ -61,4 +61,14 @@ export class CapiEventDto {
     @IsOptional()
     @IsString()
     fbc?: string;
+
+    @ApiPropertyOptional({ description: 'TikTok _ttp browser cookie value.' })
+    @IsOptional()
+    @IsString()
+    ttp?: string;
+
+    @ApiPropertyOptional({ description: 'TikTok ttclid click ID value.' })
+    @IsOptional()
+    @IsString()
+    ttclid?: string;
 }

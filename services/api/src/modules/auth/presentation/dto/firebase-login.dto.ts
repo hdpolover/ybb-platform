@@ -1,7 +1,8 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
-import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
 import { ApplicationCategory } from '@prisma/client';
+import { AdAttributionDto } from './ad-attribution.dto';
 
 export class FirebaseLoginDto {
   @ApiProperty({
@@ -68,4 +69,13 @@ export class FirebaseLoginDto {
   @IsEnum(ApplicationCategory)
   @IsOptional()
   applicationCategory?: ApplicationCategory;
+
+  @ApiPropertyOptional({
+    type: AdAttributionDto,
+    description: 'Ad click identifiers (fbp/fbc/ttp/ttclid) captured client-side, for server-side conversion attribution.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AdAttributionDto)
+  adAttribution?: AdAttributionDto;
 }
