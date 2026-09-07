@@ -218,6 +218,64 @@ export class EventsController {
     });
   }
 
+  @EventPattern('notification.submission_nudge')
+  async handleSubmissionNudge(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'notification.submission_nudge',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received notification.submission_nudge event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        if (!email) return;
+
+        await this.emailService.sendSubmissionNudgeEmail(email, {
+          name: getString(payload, 'customer_name') || 'Participant',
+          program: getString(payload, 'program_name'),
+          applicationId: getString(payload, 'application_id'),
+          submissionUrl: getString(payload, 'submission_url') || '#',
+          brand: payload.brand ?? undefined,
+        });
+      },
+    );
+  }
+
+  @EventPattern('notification.application_accepted')
+  async handleApplicationAccepted(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'notification.application_accepted',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received notification.application_accepted event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        if (!email) return;
+
+        await this.emailService.sendApplicationAcceptedEmail(email, {
+          name: getString(payload, 'customer_name') || 'Participant',
+          program: getString(payload, 'program_name'),
+          applicationId: getString(payload, 'application_id'),
+          documentsUrl: getString(payload, 'documents_url') || '#',
+          brand: payload.brand ?? undefined,
+        });
+      },
+    );
+  }
+
   @EventPattern('notification.receipt_requested')
   async handleReceiptRequested(
     @Payload() data: unknown,

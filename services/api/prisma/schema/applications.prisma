@@ -189,6 +189,13 @@ model ParticipantApplication {
   lastEditedAt DateTime? @map("last_edited_at") @db.Timestamptz(6)
   withdrawnAt  DateTime? @map("withdrawn_at") @db.Timestamptz(6)
 
+  // Claim marker for PostPaymentFollowupService: set the moment the H+3
+  // submission-nudge email is sent (or claimed for sending), so the hourly
+  // cron never double-fires. Distinct from SubmissionReminderLog (deadline
+  // countdown, keyed by offset) — this is a single one-shot nudge keyed off
+  // the registration payment instead of the deadline.
+  postPaymentFollowupSentAt DateTime? @map("post_payment_followup_sent_at") @db.Timestamptz(6)
+
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedBy   String?   @map("deleted_by") @db.Uuid
   withdrawnBy String?   @map("withdrawn_by") @db.Uuid

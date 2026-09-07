@@ -13,7 +13,15 @@ import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tok
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { createCacheServiceMock } from '@test/utils/cache-service-mock';
+
+/** Flushes the fire-and-forget notification promise chain (findUnique -> emit). */
+const flushMicrotasks = async () => {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+};
 
 describe('ReviewApplicationHandler', () => {
   let handler: ReviewApplicationHandler;
@@ -68,8 +76,29 @@ describe('ReviewApplicationHandler', () => {
     },
     participantApplication: {
       update: jest.fn(),
+      findUnique: jest.fn().mockResolvedValue({
+        program: {
+          name: 'China Youth Summit 2027',
+          brandId: 'brand-1',
+          contactEmail: null,
+          contactAddress: null,
+          brand: {
+            name: 'CYS',
+            primaryColor: '#000',
+            logoUrl: null,
+            websiteUrl: null,
+            socialMediaLinks: {},
+            settings: null,
+          },
+        },
+        participant: { fullName: 'Jane Doe', user: { email: 'jane@example.com' } },
+      }),
     },
     $transaction: jest.fn(),
+  };
+
+  const mockRabbitmqProducer = {
+    emit: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(async () => {
@@ -81,6 +110,7 @@ describe('ReviewApplicationHandler', () => {
         { provide: CacheService, useValue: mockCacheService },
         { provide: ReferralFunnelService, useValue: mockReferralFunnel },
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: RabbitMQProducerService, useValue: mockRabbitmqProducer },
       ],
     }).compile();
 
@@ -155,5 +185,63 @@ describe('ReviewApplicationHandler', () => {
     await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
     expect(application.accept).not.toHaveBeenCalled();
     expect(mockApplicationRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('emits notification.application_accepted on a genuine transition into accepted', async () => {
+    const application = buildApplication(ApplicationStatus.SUBMITTED);
+    mockApplicationRepository.findById.mockResolvedValue(application);
+    mockApplicationRepository.update.mockResolvedValue(application);
+
+    await handler.execute(
+      new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.ACCEPTED, 'ok'),
+    );
+    await flushMicrotasks();
+
+    expect(mockRabbitmqProducer.emit).toHaveBeenCalledWith(
+      'notification.application_accepted',
+      expect.objectContaining({
+        email: 'jane@example.com',
+        customer_name: 'Jane Doe',
+        program_name: 'China Youth Summit 2027',
+        application_id: 'app-1',
+      }),
+    );
+  });
+
+  it('does not emit notification.application_accepted on reject', async () => {
+    const application = buildApplication(ApplicationStatus.SUBMITTED);
+    mockApplicationRepository.findById.mockResolvedValue(application);
+    mockApplicationRepository.update.mockResolvedValue(application);
+
+    await handler.execute(
+      new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.REJECTED, 'no'),
+    );
+    await flushMicrotasks();
+
+    expect(mockRabbitmqProducer.emit).not.toHaveBeenCalled();
+  });
+
+  it('never re-fires on a re-review of an already-accepted application (blocked upstream by canReview)', async () => {
+    const application = buildApplication(ApplicationStatus.ACCEPTED);
+    mockApplicationRepository.findById.mockResolvedValue(application);
+
+    await expect(
+      handler.execute(new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.ACCEPTED)),
+    ).rejects.toThrow(BadRequestException);
+    await flushMicrotasks();
+
+    expect(mockRabbitmqProducer.emit).not.toHaveBeenCalled();
+  });
+
+  it('does not let a notification failure fail the review action', async () => {
+    const application = buildApplication(ApplicationStatus.SUBMITTED);
+    mockApplicationRepository.findById.mockResolvedValue(application);
+    mockApplicationRepository.update.mockResolvedValue(application);
+    mockRabbitmqProducer.emit.mockRejectedValueOnce(new Error('broker down'));
+
+    const command = new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.ACCEPTED, 'ok');
+
+    await expect(handler.execute(command)).resolves.toBeDefined();
+    await flushMicrotasks();
   });
 });

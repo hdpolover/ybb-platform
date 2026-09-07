@@ -29,6 +29,7 @@ import { RegistrationFeeMismatchesHandler } from './application/queries/handlers
 import { ApplicationRepository } from './infrastructure/persistence/application.repository';
 import { ApplicationMapper } from './infrastructure/mappers/application.mapper';
 import { SubmissionDeadlineReminderService } from './infrastructure/services/submission-deadline-reminder.service';
+import { PostPaymentFollowupService } from './infrastructure/services/post-payment-followup.service';
 import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
 import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
@@ -60,6 +61,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
     // Infrastructure
     ApplicationMapper,
     SubmissionDeadlineReminderService,
+    PostPaymentFollowupService,
     {
       provide: APPLICATION_REPOSITORY,
       useClass: ApplicationRepository,

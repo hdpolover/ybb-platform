@@ -332,6 +332,142 @@ describe('EventsController.handleLoaBatchReleased', () => {
   });
 });
 
+describe('EventsController.handleSubmissionNudge', () => {
+  let controller: EventsController;
+  let sendSubmissionNudgeEmail: jest.Mock;
+
+  beforeEach(() => {
+    sendSubmissionNudgeEmail = jest.fn().mockResolvedValue(undefined);
+    controller = new EventsController(
+      { sendSubmissionNudgeEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess: jest.fn().mockResolvedValue({
+          shouldProcess: true,
+          dedupeKey: 'key',
+          reason: 'new',
+        }),
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+      {
+        emit: jest.fn().mockResolvedValue(true),
+      } as unknown as RabbitMQProducerService,
+    );
+  });
+
+  it('resolves the template and sends the nudge email', async () => {
+    const payload = {
+      email: 'jane@example.com',
+      customer_name: 'Jane Doe',
+      program_name: 'YBB Summit 2026',
+      application_id: 'app-1',
+      submission_url: 'https://portal.example.com/submit',
+      brand: { name: 'YBB', websiteUrl: 'ybb.foundation' },
+    };
+
+    await controller.handleSubmissionNudge(payload, makeContext());
+
+    expect(sendSubmissionNudgeEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({
+        name: 'Jane Doe',
+        program: 'YBB Summit 2026',
+        applicationId: 'app-1',
+        submissionUrl: 'https://portal.example.com/submit',
+        brand: { name: 'YBB', websiteUrl: 'ybb.foundation' },
+      }),
+    );
+  });
+
+  it('does nothing when the payload has no email', async () => {
+    const payload = { customer_name: 'Jane Doe' };
+
+    await controller.handleSubmissionNudge(payload, makeContext());
+
+    expect(sendSubmissionNudgeEmail).not.toHaveBeenCalled();
+  });
+
+  it('does not crash the consumer when the send fails', async () => {
+    sendSubmissionNudgeEmail.mockRejectedValueOnce(new Error('smtp down'));
+    const payload = {
+      email: 'jane@example.com',
+      submission_url: 'https://portal.example.com/submit',
+    };
+
+    await expect(
+      controller.handleSubmissionNudge(payload, makeContext()),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe('EventsController.handleApplicationAccepted', () => {
+  let controller: EventsController;
+  let sendApplicationAcceptedEmail: jest.Mock;
+
+  beforeEach(() => {
+    sendApplicationAcceptedEmail = jest.fn().mockResolvedValue(undefined);
+    controller = new EventsController(
+      { sendApplicationAcceptedEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess: jest.fn().mockResolvedValue({
+          shouldProcess: true,
+          dedupeKey: 'key',
+          reason: 'new',
+        }),
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+      {
+        emit: jest.fn().mockResolvedValue(true),
+      } as unknown as RabbitMQProducerService,
+    );
+  });
+
+  it('resolves the template and sends the acceptance email', async () => {
+    const payload = {
+      email: 'jane@example.com',
+      customer_name: 'Jane Doe',
+      program_name: 'YBB Summit 2026',
+      application_id: 'app-1',
+      documents_url: 'https://portal.example.com/documents',
+      brand: { name: 'YBB', websiteUrl: 'ybb.foundation' },
+    };
+
+    await controller.handleApplicationAccepted(payload, makeContext());
+
+    expect(sendApplicationAcceptedEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({
+        name: 'Jane Doe',
+        program: 'YBB Summit 2026',
+        applicationId: 'app-1',
+        documentsUrl: 'https://portal.example.com/documents',
+        brand: { name: 'YBB', websiteUrl: 'ybb.foundation' },
+      }),
+    );
+  });
+
+  it('does nothing when the payload has no email', async () => {
+    const payload = { customer_name: 'Jane Doe' };
+
+    await controller.handleApplicationAccepted(payload, makeContext());
+
+    expect(sendApplicationAcceptedEmail).not.toHaveBeenCalled();
+  });
+
+  it('does not crash the consumer when the send fails', async () => {
+    sendApplicationAcceptedEmail.mockRejectedValueOnce(new Error('smtp down'));
+    const payload = {
+      email: 'jane@example.com',
+      documents_url: 'https://portal.example.com/documents',
+    };
+
+    await expect(
+      controller.handleApplicationAccepted(payload, makeContext()),
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe('EventsController.handleSubmissionReminder', () => {
   let controller: EventsController;
   let sendSubmissionReminderEmail: jest.Mock;
