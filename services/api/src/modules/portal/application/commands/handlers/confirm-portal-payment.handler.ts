@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, PreconditionFailedException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, PreconditionFailedException, ServiceUnavailableException, Logger } from '@nestjs/common';
+import { status as GrpcStatus } from '@grpc/grpc-js';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
@@ -6,6 +7,8 @@ import { PortalCacheService } from '../../services/portal-cache.service';
 import { ConfirmPortalPaymentCommand } from '../../queries/portal-queries';
 import { ConfirmPortalPaymentResponseDto } from '../../../presentation/dto/portal-payment.dto';
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
+import { FileGrpcClient } from '@modules/files/infrastructure/clients/file-grpc-client.service';
+import { FileResponse } from '@modules/files/infrastructure/clients/file.interface';
 import {
     buildParticipantInvoiceUrl,
     buildParticipantPaymentsUrl,
@@ -23,6 +26,7 @@ export class ConfirmPortalPaymentHandler {
         private readonly cacheService: CacheService,
         private readonly portalCacheService: PortalCacheService,
         private readonly paymentClient: PaymentGrpcClient,
+        private readonly fileGrpcClient: FileGrpcClient,
         private readonly registrationFeeGate: RegistrationFeeGateService,
     ) {}
 
@@ -37,6 +41,13 @@ export class ConfirmPortalPaymentHandler {
             }
             if (!details?.paymentDate?.trim()) {
                 throw new BadRequestException('Payment date is required for manual payment');
+            }
+            // proofFileId (not proofFileUrl) is the trust anchor: it is what we can
+            // actually verify ownership of via the file service below. The old check
+            // only required proofFileUrl, which meant an arbitrary URL could be
+            // submitted with no proof it belonged to the caller (audit M45).
+            if (!details?.proofFileId?.trim()) {
+                throw new BadRequestException('Payment proof is required for manual payment');
             }
             if (!details?.proofFileUrl?.trim()) {
                 throw new BadRequestException('Payment proof is required for manual payment');
@@ -113,6 +124,51 @@ export class ConfirmPortalPaymentHandler {
             if (alreadyPaid) {
                 throw new BadRequestException('Registration fee has already been paid.');
             }
+        }
+
+        // Manual-payment proof ownership check (audit M45). Previously proofFileId
+        // and proofFileUrl were forwarded to the Go payment service verbatim, so a
+        // participant could submit any other user's file id, or any arbitrary URL,
+        // and have it shown to admins as their own payment proof. brandId comes
+        // from the invoice's own program — the same brand scope used everywhere
+        // else in this handler — not the caller's JWT, so a cross-brand file id
+        // can't slip through.
+        let verifiedProofFileUrl: string | undefined;
+        if (paymentType === 'manual') {
+            const proofFileId = details!.proofFileId!.trim();
+            const proofFileUrl = details!.proofFileUrl!.trim();
+            const brandId = invoice.application.program.brandId;
+
+            let verifiedFile: FileResponse;
+            try {
+                verifiedFile = await this.fileGrpcClient.getFile(proofFileId, userId, brandId);
+            } catch (error) {
+                // The file service collapses "file doesn't exist" and "file belongs
+                // to someone else" into the same NOT_FOUND abort (see
+                // get_file_handler.py) — both cases mean this proof isn't usable, so
+                // surface a clean 404 rather than letting the raw gRPC error (or a
+                // transient service-down error) bubble up as a 500.
+                const code = (error as { code?: number })?.code;
+                if (code === GrpcStatus.NOT_FOUND) {
+                    throw new NotFoundException('Payment proof file not found');
+                }
+                this.logger.error(`[confirm-payment] proof file lookup failed for file=${proofFileId}: ${(error as Error)?.message}`);
+                throw new ServiceUnavailableException('Unable to verify payment proof file. Please try again.');
+            }
+
+            // Do NOT persist verifiedFile.url here: for the private `documents`
+            // bucket that field is a 1-hour presigned download URL (see
+            // GetFile in services/file/app/grpc_main.py), which would expire long
+            // before an admin reviews the payment. Instead, trust the client's
+            // proofFileUrl only after confirming it actually points at the file we
+            // just verified belongs to this caller (matches its storage_path) —
+            // the admin proof viewer (payment-admin.controller.ts downloadInvoiceProof)
+            // reads whatever URL was stored at submission time as-is and has no
+            // path to re-derive one from a file id.
+            if (!verifiedFile.storage_path || !proofUrlPointsAtFile(proofFileUrl, verifiedFile.storage_path)) {
+                throw new BadRequestException('Payment proof URL does not match the uploaded file');
+            }
+            verifiedProofFileUrl = proofFileUrl;
         }
 
         // Build customer identity for downstream events (notification service uses
@@ -202,18 +258,22 @@ export class ConfirmPortalPaymentHandler {
         });
 
         if (paymentType === 'manual') {
-            // Submit manual payment details to the Payment Service
+            // Submit manual payment details to the Payment Service. Use the
+            // verified proofFileId/proofFileUrl computed above, not the raw
+            // `details` values — they've already passed ownership + URL-match
+            // checks by this point (audit M45).
+            const verifiedProofFileId = details!.proofFileId!.trim();
             const manualResponse = await this.paymentClient.submitManualPayment({
                 intent_id: intentResponse.intent_id,
-                proof_file_id: details?.proofFileId,
-                proof_file_url: details?.proofFileUrl,
+                proof_file_id: verifiedProofFileId,
+                proof_file_url: verifiedProofFileUrl,
                 details: JSON.stringify({
                     account_name: details?.accountName,
                     source_name: details?.sourceName,
                     payment_date: details?.paymentDate,
                     payment_method: paymentMethodId,
-                    proof_file_id: details?.proofFileId,
-                    proof_file_url: details?.proofFileUrl,
+                    proof_file_id: verifiedProofFileId,
+                    proof_file_url: verifiedProofFileUrl,
                     notes: details?.notes,
                 }),
             });
@@ -288,4 +348,67 @@ export class ConfirmPortalPaymentHandler {
                 : 'Payment initiated successfully.',
         };
     }
+}
+
+/**
+ * Hosts a stored proof URL may legitimately live on.
+ *
+ * Read ONLY from FILE_CDN_HOSTS, deliberately not from STORAGE_PUBLIC_URL. In
+ * production those disagree: STORAGE_PUBLIC_URL is files.ybbhub.com while all
+ * 221 proof URLs on record are cdn.ybbhub.com, so deriving the allowlist from it
+ * would reject every real manual payment. Empty means the host check is inert.
+ */
+function allowedProofHosts(): Set<string> {
+    const hosts = new Set<string>();
+    for (const entry of (process.env.FILE_CDN_HOSTS ?? '').split(',')) {
+        const trimmed = entry.trim().toLowerCase();
+        if (!trimmed) continue;
+        const host = trimmed.replace(/^[a-z][a-z0-9+.-]*:\/\//, '').split('/')[0].split('@').pop()?.replace(/:\d+$/, '');
+        if (host) hosts.add(host);
+    }
+    return hosts;
+}
+
+/**
+ * Does this URL actually point at the file we just verified belongs to the caller?
+ *
+ * Two checks, and both matter. The PATH check is against the URL's pathname, not
+ * the raw string: a plain `url.includes(storagePath)` passes for
+ * `https://evil.example/?x=<real storage path>`, which is exactly the payload
+ * this guard exists to stop — an admin opens the stored proof URL by hand.
+ *
+ * The HOST check is opt-in and INERT until FILE_CDN_HOSTS is set, because
+ * arming it against the wrong host rejects real payments — see allowedProofHosts.
+ * Set FILE_CDN_HOSTS=cdn.ybbhub.com to arm it. Until then the path check stands
+ * alone, which still blocks the query-string payload but NOT an attacker-hosted
+ * URL that carries the real path in its pathname.
+ *
+ * Relative URLs are accepted on host: the upload route falls back to
+ * `/api/proxy/files/<id>/download`, which has no host to check.
+ */
+export function proofUrlPointsAtFile(rawUrl: string, storagePath: string): boolean {
+    const isAbsolute = /^https?:\/\//i.test(rawUrl);
+    let pathname: string;
+
+    if (isAbsolute) {
+        let parsed: URL;
+        try {
+            parsed = new URL(rawUrl);
+        } catch {
+            return false;
+        }
+        const hosts = allowedProofHosts();
+        if (hosts.size > 0 && !hosts.has(parsed.hostname.toLowerCase())) return false;
+        pathname = parsed.pathname;
+    } else {
+        pathname = rawUrl.split('?')[0].split('#')[0];
+    }
+
+    let decoded: string;
+    try {
+        decoded = decodeURIComponent(pathname);
+    } catch {
+        decoded = pathname;
+    }
+    return decoded.includes(storagePath);
 }
