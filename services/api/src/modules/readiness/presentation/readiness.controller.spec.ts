@@ -1,6 +1,6 @@
 // services/api/src/modules/readiness/presentation/readiness.controller.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
-import { QueryBus } from '@nestjs/cqrs';
+import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ReadinessController } from './readiness.controller';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
@@ -9,6 +9,7 @@ import { GetBrandReadinessQuery } from '../application/queries/get-brand-readine
 import { GetReadinessSummaryQuery } from '../application/queries/get-readiness-summary.query';
 
 const mockQueryBus = { execute: jest.fn() };
+const mockCommandBus = { execute: jest.fn() };
 
 describe('ReadinessController', () => {
   let controller: ReadinessController;
@@ -16,7 +17,10 @@ describe('ReadinessController', () => {
   beforeEach(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
       controllers: [ReadinessController],
-      providers: [{ provide: QueryBus, useValue: mockQueryBus }],
+      providers: [
+        { provide: QueryBus, useValue: mockQueryBus },
+        { provide: CommandBus, useValue: mockCommandBus },
+      ],
     })
       .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
@@ -25,6 +29,7 @@ describe('ReadinessController', () => {
     controller = moduleRef.get(ReadinessController);
     jest.clearAllMocks();
     mockQueryBus.execute.mockResolvedValue({ isReady: false });
+    mockCommandBus.execute.mockResolvedValue(undefined);
   });
 
   it('dispatches a brand readiness query', async () => {

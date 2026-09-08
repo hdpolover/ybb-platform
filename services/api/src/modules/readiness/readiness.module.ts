@@ -7,6 +7,7 @@ import { ReadinessRepository } from './infrastructure/persistence/readiness.repo
 import { GetBrandReadinessHandler } from './application/queries/handlers/get-brand-readiness.handler';
 import { GetProgramReadinessHandler } from './application/queries/handlers/get-program-readiness.handler';
 import { GetReadinessSummaryHandler } from './application/queries/handlers/get-readiness-summary.handler';
+import { CreateReadinessOverrideHandler } from './application/commands/handlers/create-readiness-override.handler';
 
 @Module({
   imports: [CqrsModule],
@@ -17,6 +18,7 @@ import { GetReadinessSummaryHandler } from './application/queries/handlers/get-r
     GetBrandReadinessHandler,
     GetProgramReadinessHandler,
     GetReadinessSummaryHandler,
+    CreateReadinessOverrideHandler,
   ],
   exports: [ReadinessContextLoader, ReadinessRepository],
 })
