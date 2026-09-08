@@ -8,7 +8,7 @@ import { buildParticipantPaymentsUrl } from '@modules/payments/application/utils
 import { ParticipantReminderDispatchPayload } from '../../../../common/types/events';
 import { ParticipantReminderRepository } from '../../infrastructure/persistence/participant-reminder.repository';
 import { ParticipantReminderSendRepository } from '../../infrastructure/persistence/participant-reminder-send.repository';
-import { RegistrationFeeAudienceService } from './registration-fee-audience.service';
+import { ReminderAudienceRegistry } from './reminder-audience.registry';
 import { REMINDER_AUDIENCES } from '../../reminder.constants';
 
 /** Belt on the braces: no single tick can fan out an unbounded number of reminders. */
@@ -66,7 +66,7 @@ export class ParticipantReminderDispatchService {
     private readonly prisma: PrismaService,
     private readonly reminderRepo: ParticipantReminderRepository,
     private readonly sendRepo: ParticipantReminderSendRepository,
-    private readonly audienceService: RegistrationFeeAudienceService,
+    private readonly audienceRegistry: ReminderAudienceRegistry,
     private readonly rabbitmqProducer: RabbitMQProducerService,
     private readonly cronLock: CronLockService,
   ) {}
@@ -125,7 +125,8 @@ export class ParticipantReminderDispatchService {
       return { reminderId, result: 'not_claimed', recipientCount: 0 };
     }
 
-    const recipients = await this.audienceService.findRecipients(reminder.programId);
+    const audience = reminder.audience ?? REMINDER_AUDIENCES.REGISTRATION_FEE_UNPAID;
+    const recipients = await this.audienceRegistry.resolve(audience).findRecipients(reminder.programId);
 
     if (recipients.length === 0) {
       // Everyone paid between scheduling and the send time, or the program has

@@ -1,8 +1,9 @@
 // app/programs/[programId]/reminders/page.tsx
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
 import { MailWarning, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -12,6 +13,7 @@ import {
   listParticipantReminders,
   type ParticipantReminder,
   type ParticipantReminderDetail,
+  type ParticipantReminderStatus,
   type ReminderAudiencePreview,
 } from "@/src/shared/api-client";
 import { Badge } from "@/src/ui/badge";
@@ -27,6 +29,8 @@ import {
 import { EmptyState } from "@/src/admin/empty-state";
 import { PageHeader } from "@/src/admin/page-header";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
+import { FilterSelect } from "@/src/ui/select";
+import { FilterPanel } from "@/src/ui/filter-panel";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { ReminderAudienceCard } from "@/app/components/reminders/ReminderAudienceCard";
 import { ReminderDialog } from "@/app/components/reminders/ReminderDialog";
@@ -56,6 +60,26 @@ const STATUS_LABEL: Record<ParticipantReminder["status"], string> = {
   sending: "Sending",
   sent: "Sent",
   cancelled: "Cancelled",
+};
+
+const STATUS_OPTIONS: ParticipantReminderStatus[] = [
+  "draft",
+  "scheduled",
+  "sending",
+  "sent",
+  "cancelled",
+];
+
+const LIST_LIMIT = 20;
+
+// URL-persisted filter state (nuqs) — mirrors the pattern in
+// app/programs/[programId]/support-tickets/page.tsx.
+const remindersFilterParsers = {
+  search: parseAsString.withDefault("").withOptions({ clearOnDefault: true }),
+  status: parseAsStringEnum(["", ...STATUS_OPTIONS])
+    .withDefault("")
+    .withOptions({ clearOnDefault: true }),
+  page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: true }),
 };
 
 /**
@@ -101,6 +125,7 @@ export default function ProgramRemindersPage() {
   const resolvedProgramId = useResolvedProgramId(params.programId);
 
   const [reminders, setReminders] = useState<ParticipantReminder[]>([]);
+  const [total, setTotal] = useState(0);
   const [audience, setAudience] = useState<ReminderAudiencePreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [audienceLoading, setAudienceLoading] = useState(true);
@@ -114,17 +139,71 @@ export default function ProgramRemindersPage() {
 
   const [delivery, setDelivery] = useState<ParticipantReminderDetail | null>(null);
 
+  // All filters live in the URL via nuqs (batched updates -> single history write per change).
+  const [filters, setFilters] = useQueryStates(remindersFilterParsers);
+  const { search: searchQuery, status: statusFilter, page } = filters;
+  const totalPages = Math.max(1, Math.ceil(total / LIST_LIMIT));
+
+  // Local input state for the search box so typing feels instant; synced to
+  // the nuqs-backed `search` filter on a short debounce so we don't write to
+  // the URL (and refetch) on every keystroke.
+  const [searchInput, setSearchInput] = useState(searchQuery);
+  const lastSyncedSearch = useRef(searchQuery);
+
+  useEffect(() => {
+    if (searchQuery !== lastSyncedSearch.current) {
+      lastSyncedSearch.current = searchQuery;
+      setSearchInput(searchQuery);
+    }
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      if (searchInput !== searchQuery) {
+        lastSyncedSearch.current = searchInput;
+        void setFilters({ search: searchInput || null, page: 1 });
+      }
+    }, 400);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
+
+  const hasActiveFilters = Boolean(searchQuery || statusFilter);
+  const clearFilters = useCallback(() => {
+    setSearchInput("");
+    lastSyncedSearch.current = "";
+    void setFilters({ search: null, status: null, page: null });
+  }, [setFilters]);
+
+  const activeFilters = useMemo(() => {
+    if (!statusFilter) return [];
+    return [
+      {
+        key: "status",
+        label: `Status: ${STATUS_LABEL[statusFilter]}`,
+        onRemove: () => void setFilters({ status: null, page: 1 }),
+      },
+    ];
+  }, [statusFilter, setFilters]);
+
   const fetchReminders = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setReminders(await listParticipantReminders(resolvedProgramId));
+      const response = await listParticipantReminders(resolvedProgramId, {
+        page,
+        limit: LIST_LIMIT,
+        status: statusFilter || undefined,
+        search: searchQuery || undefined,
+      });
+      setReminders(response.data ?? []);
+      setTotal(response.meta?.total ?? 0);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [resolvedProgramId]);
+  }, [resolvedProgramId, page, statusFilter, searchQuery]);
 
   /**
    * The audience is supplementary to the list, so it is fetched separately and
@@ -204,6 +283,39 @@ export default function ProgramRemindersPage() {
 
       <ReminderAudienceCard audience={audience} loading={audienceLoading} />
 
+      <FilterPanel
+        search={{
+          value: searchInput,
+          onChange: setSearchInput,
+          placeholder: "Search by subject...",
+        }}
+        primary={
+          <div className="w-full">
+            <FilterSelect
+              aria-label="Status"
+              value={statusFilter}
+              onChange={(e) => {
+                void setFilters({
+                  status: (e.target.value || null) as typeof statusFilter | null,
+                  page: 1,
+                });
+              }}
+            >
+              <option value="">All statuses</option>
+              {STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>
+                  {STATUS_LABEL[status]}
+                </option>
+              ))}
+            </FilterSelect>
+          </div>
+        }
+        activeFilters={activeFilters}
+        resultCount={total}
+        onClear={clearFilters}
+        clearDisabled={!hasActiveFilters}
+      />
+
       {loading && (
         <div className="flex items-center justify-center py-16">
           <span className="text-sm text-zinc-400">Loading reminders…</span>
@@ -227,9 +339,17 @@ export default function ProgramRemindersPage() {
       {!loading && !error && reminders.length === 0 && (
         <EmptyState
           icon={MailWarning}
-          title="No reminders yet"
-          description="Draft a message to everyone who still owes the registration fee, then pick a send time."
-          action={{ label: "Create First Reminder", onClick: handleNew }}
+          title={hasActiveFilters ? "No reminders match these filters" : "No reminders yet"}
+          description={
+            hasActiveFilters
+              ? "Try clearing the search or status filter."
+              : "Draft a message to an audience of participants, then pick a send time."
+          }
+          action={
+            hasActiveFilters
+              ? { label: "Clear filters", onClick: clearFilters }
+              : { label: "Create First Reminder", onClick: handleNew }
+          }
         />
       )}
 
@@ -295,11 +415,34 @@ export default function ProgramRemindersPage() {
         </Table>
       )}
 
+      {!loading && !error && totalPages > 1 && (
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={page <= 1}
+            onClick={() => void setFilters({ page: page - 1 })}
+          >
+            Previous
+          </Button>
+          <span className="text-xs text-zinc-600">
+            Page {page} of {totalPages}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={page >= totalPages}
+            onClick={() => void setFilters({ page: page + 1 })}
+          >
+            Next
+          </Button>
+        </div>
+      )}
+
       {dialogOpen && (
         <ReminderDialog
           programId={resolvedProgramId}
           reminder={editing}
-          audienceCount={audience?.count ?? 0}
           onClose={() => {
             setDialogOpen(false);
             setEditing(undefined);

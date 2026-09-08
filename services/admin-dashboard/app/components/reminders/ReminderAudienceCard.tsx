@@ -35,7 +35,7 @@ export function ReminderAudienceCard({ audience, loading }: ReminderAudienceCard
 
   if (!audience) return null;
 
-  if (!audience.registrationFeeConfigured) {
+  if (!audience.applicable) {
     return (
       <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
         <p className="text-sm text-amber-800">

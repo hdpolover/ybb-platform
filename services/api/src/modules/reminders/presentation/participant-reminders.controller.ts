@@ -6,11 +6,12 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Request,
   UseGuards,
 } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
@@ -39,11 +40,19 @@ export class ParticipantRemindersController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({
-    summary:
-      'Preview who would receive a registration-fee reminder: count plus a capped list',
+    summary: 'Preview who would receive a reminder for the given audience: count plus a capped list',
   })
-  async getAudience(@Param('programId') programId: string) {
-    return this.reminderService.previewAudience(programId);
+  @ApiQuery({
+    name: 'audience',
+    required: false,
+    type: String,
+    description: 'One of REMINDER_AUDIENCE_VALUES. Defaults to registration_fee_unpaid.',
+  })
+  async getAudience(
+    @Param('programId') programId: string,
+    @Query('audience') audience?: string,
+  ) {
+    return this.reminderService.previewAudience(programId, audience);
   }
 
   /**
@@ -61,16 +70,31 @@ export class ParticipantRemindersController {
     @Param('programId') programId: string,
     @Body() dto: CreateParticipantReminderDto,
   ) {
-    return this.reminderService.previewMessage(programId, dto.subject, dto.body);
+    return this.reminderService.previewMessage(programId, dto.subject, dto.body, dto.audience);
   }
 
   @Get(':programId/reminders')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'List participant reminders for a program' })
-  async list(@Param('programId') programId: string) {
-    return this.reminderService.list(programId);
+  @ApiOperation({ summary: 'List participant reminders for a program, paginated and filterable' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Capped at 100' })
+  @ApiQuery({ name: 'status', required: false, type: String })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Subject substring match' })
+  async list(
+    @Param('programId') programId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.reminderService.list(programId, {
+      page: pageRaw !== undefined ? Number(pageRaw) : undefined,
+      limit: limitRaw !== undefined ? Number(limitRaw) : undefined,
+      status,
+      search,
+    });
   }
 
   @Get(':programId/reminders/:id')
