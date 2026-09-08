@@ -25,21 +25,26 @@ export default function MainConfigurationPage({
   const resolvedProgramId = useResolvedProgramId(programId);
 
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(true);
   const [readinessError, setReadinessError] = useState<string | null>(null);
 
   useEffect(() => {
     // accessiblePrograms loads asynchronously, so resolvedProgramId can still
     // be the raw slug on the first render. Wait for auth to settle before
     // firing, and only ever apply the response matching the id currently in
-    // flight so a slow, now-stale request can't clobber a newer one.
+    // flight so a slow, now-stale request can't clobber a newer one. Leaving
+    // readinessLoading untouched here keeps the panel showing its loading
+    // affordance instead of the empty state while auth is still settling.
     if (authLoading) return;
 
     let cancelled = false;
+    setReadinessLoading(true);
     getProgramReadiness(resolvedProgramId)
       .then((data) => { if (!cancelled) { setReadiness(data); setReadinessError(null); } })
       .catch((err) => {
         if (!cancelled) setReadinessError(err instanceof Error ? err.message : "Failed to load readiness.");
-      });
+      })
+      .finally(() => { if (!cancelled) setReadinessLoading(false); });
     return () => { cancelled = true; };
   }, [resolvedProgramId, authLoading]);
 
@@ -49,7 +54,11 @@ export default function MainConfigurationPage({
 
       <Card className="p-6">
         <h2 className="mb-4 text-lg font-semibold text-zinc-900">Publish readiness</h2>
-        {readinessError ? (
+        {readinessLoading ? (
+          <div className="rounded-md border border-zinc-200 bg-white px-5 py-8 text-center text-xs text-zinc-400 shadow-sm">
+            Loading readiness…
+          </div>
+        ) : readinessError ? (
           <p className="text-sm text-red-700">{readinessError}</p>
         ) : (
           <ReadinessList results={readiness?.results ?? []} />

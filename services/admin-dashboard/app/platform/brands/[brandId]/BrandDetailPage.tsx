@@ -2764,6 +2764,7 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(true);
   const [readinessError, setReadinessError] = useState<string | null>(null);
 
   const load = useCallback((silent = false) => {
@@ -2780,11 +2781,13 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    setReadinessLoading(true);
     getBrandReadiness(brandId)
       .then((data) => { if (!cancelled) { setReadiness(data); setReadinessError(null); } })
       .catch((err) => {
         if (!cancelled) setReadinessError(err instanceof Error ? err.message : "Failed to load readiness.");
-      });
+      })
+      .finally(() => { if (!cancelled) setReadinessLoading(false); });
     return () => { cancelled = true; };
   }, [brandId]);
 
@@ -2932,7 +2935,13 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
 
       <Card className="p-6">
         <h2 className="mb-4 text-lg font-semibold text-zinc-900">Publish readiness</h2>
-        {readinessError ? (
+        {readinessLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-5 w-2/3" />
+            <Skeleton className="h-5 w-1/2" />
+            <Skeleton className="h-5 w-3/5" />
+          </div>
+        ) : readinessError ? (
           <p className="text-sm text-red-700">{readinessError}</p>
         ) : (
           <ReadinessList results={readiness?.results ?? []} />
