@@ -2,7 +2,7 @@
 import { ParticipantReminderDispatchService } from './participant-reminder-dispatch.service';
 import { ParticipantReminderRepository } from '../../infrastructure/persistence/participant-reminder.repository';
 import { ParticipantReminderSendRepository } from '../../infrastructure/persistence/participant-reminder-send.repository';
-import { RegistrationFeeAudienceService } from './registration-fee-audience.service';
+import { ReminderAudienceRegistry } from './reminder-audience.registry';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 
@@ -39,6 +39,11 @@ function build(over: {
   const findRecipients = jest
     .fn()
     .mockResolvedValue(over.recipients ?? RECIPIENTS);
+  // resolve() returns the same stub adapter regardless of which audience the
+  // claimed reminder carries — these tests only cover the dispatch mechanics,
+  // not per-audience recipient logic (covered by each audience service's own spec).
+  const resolve = jest.fn().mockReturnValue({ findRecipients });
+  const audienceRegistry = { resolve } as unknown as ReminderAudienceRegistry;
 
   const service = new ParticipantReminderDispatchService(
     {
@@ -56,11 +61,11 @@ function build(over: {
     } as unknown as PrismaService,
     { claimForSending, markSent, findDueIds } as unknown as ParticipantReminderRepository,
     { markPending } as unknown as ParticipantReminderSendRepository,
-    { findRecipients } as unknown as RegistrationFeeAudienceService,
+    audienceRegistry,
     { emit } as unknown as RabbitMQProducerService,
   );
 
-  return { service, claimForSending, markSent, findDueIds, markPending, emit, findRecipients };
+  return { service, claimForSending, markSent, findDueIds, markPending, emit, findRecipients, resolve };
 }
 
 describe('ParticipantReminderDispatchService', () => {
@@ -126,6 +131,26 @@ describe('ParticipantReminderDispatchService', () => {
         new Date('2026-09-09T02:00:00.000Z'),
         expect.any(Number),
       );
+    });
+  });
+
+  describe('audience dispatch', () => {
+    it('resolves recipients through the claimed reminder\'s own audience, not a hardcoded one', async () => {
+      const { service, resolve } = build();
+
+      await service.dispatchOne('rem-1');
+
+      expect(resolve).toHaveBeenCalledWith('registration_fee_unpaid');
+    });
+
+    it('falls back to registration_fee_unpaid for a legacy row with a null audience', async () => {
+      const { service, resolve } = build({
+        claim: jest.fn().mockResolvedValue({ ...REMINDER, audience: null }),
+      });
+
+      await service.dispatchOne('rem-1');
+
+      expect(resolve).toHaveBeenCalledWith('registration_fee_unpaid');
     });
   });
 

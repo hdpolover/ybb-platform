@@ -6,6 +6,9 @@ import { ParticipantRemindersController } from './presentation/participant-remin
 import { ParticipantReminderService } from './application/services/participant-reminder.service';
 import { ParticipantReminderDispatchService } from './application/services/participant-reminder-dispatch.service';
 import { RegistrationFeeAudienceService } from './application/services/registration-fee-audience.service';
+import { ApplicationDraftUnsubmittedAudienceService } from './application/services/application-draft-unsubmitted-audience.service';
+import { ProgramFeeUnpaidAudienceService } from './application/services/program-fee-unpaid-audience.service';
+import { ReminderAudienceRegistry } from './application/services/reminder-audience.registry';
 import { ParticipantReminderRepository } from './infrastructure/persistence/participant-reminder.repository';
 import { ParticipantReminderSendRepository } from './infrastructure/persistence/participant-reminder-send.repository';
 
@@ -31,6 +34,9 @@ import { ParticipantReminderSendRepository } from './infrastructure/persistence/
     ParticipantReminderService,
     ParticipantReminderDispatchService,
     RegistrationFeeAudienceService,
+    ApplicationDraftUnsubmittedAudienceService,
+    ProgramFeeUnpaidAudienceService,
+    ReminderAudienceRegistry,
     ParticipantReminderRepository,
     ParticipantReminderSendRepository,
   ],

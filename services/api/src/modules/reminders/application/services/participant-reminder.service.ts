@@ -9,22 +9,36 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { renderReminderTokens } from '@shared/utils/reminder-message-tokens.util';
 import { ParticipantReminderRepository } from '../../infrastructure/persistence/participant-reminder.repository';
 import { ParticipantReminderSendRepository } from '../../infrastructure/persistence/participant-reminder-send.repository';
-import { RegistrationFeeAudienceService } from './registration-fee-audience.service';
+import { ReminderAudienceRegistry } from './reminder-audience.registry';
 import {
+  REMINDER_AUDIENCE_OVERLAP_NOTES,
+  REMINDER_AUDIENCE_VALUES,
   REMINDER_AUDIENCES,
   REMINDER_EDITABLE_STATUSES,
+  REMINDER_LIST_DEFAULT_LIMIT,
+  REMINDER_LIST_MAX_LIMIT,
   REMINDER_STATUS,
+  REMINDER_STATUS_VALUES,
+  ReminderAudience,
   ReminderStatus,
 } from '../../reminder.constants';
 import {
   CreateParticipantReminderDto,
   ParticipantReminderDetailResponseDto,
+  ParticipantReminderListResponseDto,
   ParticipantReminderResponseDto,
   ParticipantReminderSendResponseDto,
   ParticipantReminderSendSummaryDto,
   ReminderAudiencePreviewDto,
   UpdateParticipantReminderDto,
 } from '../dto/participant-reminder.dto';
+
+export interface ListRemindersQuery {
+  page?: number;
+  limit?: number;
+  status?: string;
+  search?: string;
+}
 
 type ReminderRow = {
   id: string;
@@ -59,19 +73,25 @@ export class ParticipantReminderService {
     private readonly prisma: PrismaService,
     private readonly reminderRepo: ParticipantReminderRepository,
     private readonly sendRepo: ParticipantReminderSendRepository,
-    private readonly audienceService: RegistrationFeeAudienceService,
+    private readonly audienceRegistry: ReminderAudienceRegistry,
   ) {}
 
-  async previewAudience(programId: string): Promise<ReminderAudiencePreviewDto> {
+  async previewAudience(
+    programId: string,
+    audience: string = REMINDER_AUDIENCES.REGISTRATION_FEE_UNPAID,
+  ): Promise<ReminderAudiencePreviewDto> {
     await this.assertProgramExists(programId);
-    const audience = await this.audienceService.preview(programId);
+    this.assertValidAudience(audience);
+
+    const result = await this.audienceRegistry.resolve(audience).preview(programId);
 
     return {
-      audience: REMINDER_AUDIENCES.REGISTRATION_FEE_UNPAID,
-      registrationFeeConfigured: audience.registrationFeeConfigured,
-      count: audience.count,
-      listLimit: audience.listLimit,
-      members: audience.members,
+      audience,
+      applicable: result.applicable,
+      count: result.count,
+      listLimit: result.listLimit,
+      members: result.members,
+      overlapNote: REMINDER_AUDIENCE_OVERLAP_NOTES[audience as ReminderAudience] ?? null,
       preview: null,
     };
   }
@@ -86,14 +106,15 @@ export class ParticipantReminderService {
     programId: string,
     subject: string,
     body: string,
+    audience: string = REMINDER_AUDIENCES.REGISTRATION_FEE_UNPAID,
   ): Promise<ReminderAudiencePreviewDto> {
-    const audience = await this.previewAudience(programId);
+    const audiencePreview = await this.previewAudience(programId, audience);
     const program = await this.assertProgramExists(programId);
-    const participantName = audience.members[0]?.participantName ?? 'Participant';
+    const participantName = audiencePreview.members[0]?.participantName ?? 'Participant';
     const values = { participantName, programName: program.name };
 
     return {
-      ...audience,
+      ...audiencePreview,
       preview: {
         subject: renderReminderTokens(subject, values),
         body: renderReminderTokens(body, values),
@@ -101,14 +122,44 @@ export class ParticipantReminderService {
     };
   }
 
-  async list(programId: string): Promise<ParticipantReminderResponseDto[]> {
+  /**
+   * Paginated, filterable list — no endpoint here may return an unbounded
+   * result set. `status` and `search` are both optional; an invalid status
+   * value is silently ignored rather than erroring, since it can only arrive
+   * from a stale/hand-edited URL, not from the filter UI itself.
+   */
+  async list(
+    programId: string,
+    query: ListRemindersQuery = {},
+  ): Promise<ParticipantReminderListResponseDto> {
     await this.assertProgramExists(programId);
-    const reminders = await this.reminderRepo.findByProgram(programId);
-    const summaries = await this.summariesFor(reminders.map((reminder) => reminder.id));
 
-    return reminders.map((reminder) =>
-      toResponse(reminder, summaries.get(reminder.id) ?? EMPTY_SUMMARY),
+    // Number(garbageString) is NaN, and a malformed page/limit query param must
+    // fall back to the default rather than propagate NaN into Prisma's skip/take.
+    const page = Math.max(1, Number.isFinite(query.page) ? (query.page as number) : 1);
+    const limit = Math.min(
+      REMINDER_LIST_MAX_LIMIT,
+      Math.max(
+        1,
+        Number.isFinite(query.limit) ? (query.limit as number) : REMINDER_LIST_DEFAULT_LIMIT,
+      ),
     );
+    const status =
+      query.status && REMINDER_STATUS_VALUES.includes(query.status) ? query.status : undefined;
+    const search = query.search?.trim() || undefined;
+
+    const { rows, total } = await this.reminderRepo.findByProgram(programId, {
+      page,
+      limit,
+      status,
+      search,
+    });
+    const summaries = await this.summariesFor(rows.map((reminder) => reminder.id));
+
+    return {
+      data: rows.map((reminder) => toResponse(reminder, summaries.get(reminder.id) ?? EMPTY_SUMMARY)),
+      meta: { total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    };
   }
 
   async get(
@@ -215,6 +266,18 @@ export class ParticipantReminderService {
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────
+
+  /**
+   * GET :programId/reminders/audience takes `audience` as a free-form query
+   * param (unlike the create DTO, it is not run through class-validator), so
+   * it needs its own gate before reaching ReminderAudienceRegistry.resolve —
+   * which throws a raw Error, not an HTTP exception, on an unmapped key.
+   */
+  private assertValidAudience(audience: string): void {
+    if (!REMINDER_AUDIENCE_VALUES.includes(audience)) {
+      throw new BadRequestException(`Unknown reminder audience: ${audience}`);
+    }
+  }
 
   private assertEditable(reminder: ReminderRow): void {
     if (!REMINDER_EDITABLE_STATUSES.includes(reminder.status as ReminderStatus)) {

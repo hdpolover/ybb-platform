@@ -609,6 +609,14 @@ model PartnershipEnquiry {
 
   status String @default("pending") @db.VarChar(20)
 
+  // Internal admin-only fields — never surfaced on the public partnerships
+  // endpoint. handledBy/handledAt are stamped whenever an admin changes
+  // status, not just on first contact, so they always reflect the most
+  // recent status change.
+  notes     String?   @db.Text
+  handledBy String?   @map("handled_by") @db.Uuid
+  handledAt DateTime? @map("handled_at") @db.Timestamptz(6)
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)

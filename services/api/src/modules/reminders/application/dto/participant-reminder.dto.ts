@@ -112,15 +112,35 @@ export class ReminderAudienceMemberDto {
 export class ReminderAudiencePreviewDto {
   audience: string;
   /**
-   * False when the program has no active registration_fee pricing tier — the
-   * audience is then empty because nothing is owed, which is not the same as
-   * everybody having paid.
+   * False only when this audience is gated on program configuration that
+   * isn't in place — registration_fee_unpaid with no active registration_fee
+   * pricing tier is the one case today — meaning the audience is empty
+   * because nothing is owed, not because everybody has paid. Every other
+   * audience is always applicable.
    */
-  registrationFeeConfigured: boolean;
+  applicable: boolean;
   /** True total; `members` is capped at `listLimit`. */
   count: number;
   listLimit: number;
   members: ReminderAudienceMemberDto[];
+  /**
+   * Non-blocking heads-up shown in the create UI — e.g. this audience overlaps
+   * an automated cron that already emails the same people. Null when there is
+   * nothing to flag. See REMINDER_AUDIENCE_OVERLAP_NOTES.
+   */
+  overlapNote: string | null;
   /** The subject/body rendered against the first member, when one was asked for. */
   preview: { subject: string; body: string } | null;
+}
+
+export class ParticipantReminderListMetaDto {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export class ParticipantReminderListResponseDto {
+  data: ParticipantReminderResponseDto[];
+  meta: ParticipantReminderListMetaDto;
 }
