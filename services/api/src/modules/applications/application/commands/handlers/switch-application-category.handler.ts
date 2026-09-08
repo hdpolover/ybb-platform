@@ -7,6 +7,7 @@ import { ApplicationResponseDto } from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { ApplicationStatus } from '@core/entities/participant-application.entity';
 import { hasTierPeriodEnded } from '@shared/utils/tier-period.util';
+import { PaymentStatus } from '@prisma/client';
 
 @Injectable()
 export class SwitchApplicationCategoryHandler {
@@ -180,7 +181,16 @@ export class SwitchApplicationCategoryHandler {
     const updatedApplication = await this.prisma.$transaction(async (tx) => {
       if (cancellableInvoiceIds.length > 0) {
         await tx.applicationInvoice.updateMany({
-          where: { id: { in: cancellableInvoiceIds } },
+          // `status: 'unpaid'` belongs in the WHERE, not only in the filter that
+          // built cancellableInvoiceIds. That filter ran against the snapshot
+          // read at step 1, so a payment settling between that read and this
+          // write — a webhook landing mid-request — would be flipped to
+          // `cancelled` with the money already taken. The comment above always
+          // claimed this scoping existed; until now it existed only in memory.
+          // Re-asserting it here makes the database enforce it, and an invoice
+          // that moved on is simply not matched (updateMany no-ops rather than
+          // failing the switch).
+          where: { id: { in: cancellableInvoiceIds }, status: PaymentStatus.unpaid },
           data: { status: 'cancelled' },
         });
       }
