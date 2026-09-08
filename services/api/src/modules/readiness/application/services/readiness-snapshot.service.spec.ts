@@ -26,7 +26,9 @@ describe('ReadinessSnapshotService', () => {
     }).compile();
     service = moduleRef.get(ReadinessSnapshotService);
     jest.clearAllMocks();
-    mockRead.program.findMany.mockResolvedValue([{ id: 'p1', name: 'KYS 2027', brandId: 'b1' }]);
+    mockRead.program.findMany.mockResolvedValue([
+      { id: 'p1', name: 'KYS 2027', brandId: 'b1', brand: { name: 'Korea Youth Summit' } },
+    ]);
   });
 
   it('selects published programs using all three live flags', async () => {
@@ -37,7 +39,7 @@ describe('ReadinessSnapshotService', () => {
 
     expect(mockRead.program.findMany).toHaveBeenCalledWith({
       where: { isPublished: true, isActive: true, status: { not: 'draft' }, deletedAt: null },
-      select: { id: true, name: true, brandId: true },
+      select: { id: true, name: true, brandId: true, brand: { select: { name: true } } },
     });
   });
 
@@ -75,5 +77,74 @@ describe('ReadinessSnapshotService', () => {
     await service.reevaluatePublished();
 
     expect(mockProducer.emit).not.toHaveBeenCalled();
+  });
+
+  it('includes the brand name (not just the id) in the emitted payload', async () => {
+    mockRepo.findSnapshots.mockResolvedValue([]);
+    mockQueryBus.execute.mockResolvedValue({
+      results: [{ ruleId: 'program.has-pricing-tiers', severity: 'BLOCKER', status: 'fail', title: 'a', symptom: 'b', fix: { label: 'c', href: '/d' } }],
+      blockerCount: 1, warningCount: 0, unknownCount: 0, isReady: false, evaluatedAt: new Date(),
+    });
+
+    await service.reevaluatePublished();
+
+    const [, payload] = mockProducer.emit.mock.calls[0];
+    expect(payload.brandId).toBe('b1');
+    expect(payload.brandName).toBe('Korea Youth Summit');
+  });
+
+  it('does not treat a status change between fail and unknown on the same rule as a new blocker', async () => {
+    mockRepo.findSnapshots.mockResolvedValue([
+      { subjectType: 'program', subjectId: 'p1', brandId: 'b1', blockerCount: 1, warningCount: 0,
+        evaluatedAt: new Date(), result: [{ ruleId: 'program.has-pricing-tiers', severity: 'BLOCKER', status: 'fail' }] },
+    ]);
+    mockQueryBus.execute.mockResolvedValue({
+      results: [{ ruleId: 'program.has-pricing-tiers', severity: 'BLOCKER', status: 'unknown', title: 'a', symptom: 'b', fix: { label: 'c', href: '/d' } }],
+      blockerCount: 1, warningCount: 0, unknownCount: 1, isReady: false, evaluatedAt: new Date(),
+    });
+
+    await service.reevaluatePublished();
+
+    expect(mockProducer.emit).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a status change between unknown and fail on the same rule as a new blocker', async () => {
+    mockRepo.findSnapshots.mockResolvedValue([
+      { subjectType: 'program', subjectId: 'p1', brandId: 'b1', blockerCount: 1, warningCount: 0,
+        evaluatedAt: new Date(), result: [{ ruleId: 'program.has-pricing-tiers', severity: 'BLOCKER', status: 'unknown' }] },
+    ]);
+    mockQueryBus.execute.mockResolvedValue({
+      results: [{ ruleId: 'program.has-pricing-tiers', severity: 'BLOCKER', status: 'fail', title: 'a', symptom: 'b', fix: { label: 'c', href: '/d' } }],
+      blockerCount: 1, warningCount: 0, unknownCount: 0, isReady: false, evaluatedAt: new Date(),
+    });
+
+    await service.reevaluatePublished();
+
+    expect(mockProducer.emit).not.toHaveBeenCalled();
+  });
+
+  it('evaluates program B and emits its new blockers when program A throws', async () => {
+    mockRead.program.findMany.mockResolvedValue([
+      { id: 'p1', name: 'Program A', brandId: 'b1', brand: { name: 'Brand A' } },
+      { id: 'p2', name: 'Program B', brandId: 'b2', brand: { name: 'Brand B' } },
+    ]);
+    mockRepo.findSnapshots.mockResolvedValue([]);
+    mockQueryBus.execute.mockImplementation((query: { programId: string }) => {
+      if (query.programId === 'p1') {
+        return Promise.reject(new Error('payment service unreachable'));
+      }
+      return Promise.resolve({
+        results: [{ ruleId: 'program.deadline-order-valid', severity: 'BLOCKER', status: 'fail', title: 'e', symptom: 'f', fix: { label: 'g', href: '/h' } }],
+        blockerCount: 1, warningCount: 0, unknownCount: 0, isReady: false, evaluatedAt: new Date(),
+      });
+    });
+
+    await expect(service.reevaluatePublished()).resolves.toBeUndefined();
+
+    expect(mockProducer.emit).toHaveBeenCalledTimes(1);
+    const [routingKey, payload] = mockProducer.emit.mock.calls[0];
+    expect(routingKey).toBe('readiness.regression.detected');
+    expect(payload.subjectId).toBe('p2');
+    expect(payload.newBlockers.map((b: { ruleId: string }) => b.ruleId)).toEqual(['program.deadline-order-valid']);
   });
 });

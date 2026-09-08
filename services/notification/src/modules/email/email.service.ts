@@ -1108,6 +1108,7 @@ export class EmailService {
     subjectId: string;
     programName: string;
     brandId: string;
+    brandName: string;
     newBlockers: Array<{ ruleId: string; title: string; symptom: string }>;
   }) {
     const recipients = this.resolveOpsAlertRecipients();
@@ -1141,7 +1142,7 @@ export class EmailService {
       <div style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto;padding:24px;color:#111827;">
         <h2 style="margin:0 0 8px;font-size:20px;">Readiness regression detected</h2>
         <p style="margin:0 0 16px;color:#4b5563;">
-          ${escapeHtml(data.programName)} (brand ${escapeHtml(data.brandId)}) is published and now has
+          ${escapeHtml(data.programName)} (${escapeHtml(data.brandName)}) is published and now has
           ${data.newBlockers.length} new blocker(s) it did not have at the last check.
         </p>
         <table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;">

@@ -28,7 +28,7 @@ export class ReadinessSnapshotService {
     // not publicly visible, and alerting on it would be noise.
     const programs = await this.read.program.findMany({
       where: { isPublished: true, isActive: true, status: { not: 'draft' }, deletedAt: null },
-      select: { id: true, name: true, brandId: true },
+      select: { id: true, name: true, brandId: true, brand: { select: { name: true } } },
     });
 
     const previous = await this.repository.findSnapshots();
@@ -61,6 +61,7 @@ export class ReadinessSnapshotService {
             subjectId: program.id,
             programName: program.name,
             brandId: program.brandId,
+            brandName: program.brand.name,
             newBlockers: newBlockers.map((r) => ({
               ruleId: r.ruleId,
               title: r.title,

@@ -614,11 +614,15 @@ export class EventsController {
         // does not trust that.
         if (!subjectId || newBlockers.length === 0) return;
 
+        const brandId = getString(payload, 'brandId') || '';
         await this.emailService.sendReadinessRegressionDigest({
           subjectType: getString(payload, 'subjectType') || 'program',
           subjectId,
           programName: getString(payload, 'programName') || subjectId,
-          brandId: getString(payload, 'brandId') || '',
+          brandId,
+          // Falls back to the id (never "undefined" in the email) if the
+          // API's join failed to produce a name for some reason.
+          brandName: getString(payload, 'brandName') || brandId || 'unknown brand',
           newBlockers,
         });
       },
