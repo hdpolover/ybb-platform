@@ -752,6 +752,15 @@ export type PartnershipEnquiry = {
   updatedAt: string;
 };
 
+// GET :id returns the raw row, which additionally carries the internal
+// admin-only fields (notes / who-and-when-handled) that the list endpoint
+// deliberately omits.
+export type PartnershipEnquiryDetail = PartnershipEnquiry & {
+  notes: string | null;
+  handledBy: string | null;
+  handledAt: string | null;
+};
+
 export type ProgramSupportTicketStatus =
   | "open"
   | "in_progress"
@@ -2198,29 +2207,53 @@ export function deleteProgramAnnouncement(id: string): Promise<void> {
 
 export function listProgramPartnershipEnquiries(
   programId: string,
-  params?: { page?: number; limit?: number; status?: string; search?: string },
+  params?: { page?: number; limit?: number; status?: string; type?: string; search?: string },
 ): Promise<Paginated<PartnershipEnquiry>> {
   const q = new URLSearchParams();
   if (params?.page) q.set("page", String(params.page));
   if (params?.limit) q.set("limit", String(params.limit));
   if (params?.status) q.set("status", params.status);
+  if (params?.type) q.set("type", params.type);
   if (params?.search) q.set("search", params.search);
   return requestPaginated<PartnershipEnquiry>(
     `/admin/programs/${encodeURIComponent(programId)}/partnership-enquiries?${q}`,
   );
 }
 
-export function updateProgramPartnershipEnquiryStatus(
+export function getProgramPartnershipEnquiry(
   programId: string,
   enquiryId: string,
-  status: string,
-): Promise<PartnershipEnquiry> {
-  return request<PartnershipEnquiry>(
-    `/admin/programs/${encodeURIComponent(programId)}/partnership-enquiries/${encodeURIComponent(enquiryId)}/status`,
+): Promise<PartnershipEnquiryDetail> {
+  return request<PartnershipEnquiryDetail>(
+    `/admin/programs/${encodeURIComponent(programId)}/partnership-enquiries/${encodeURIComponent(enquiryId)}`,
+  );
+}
+
+// Superseded by updateProgramPartnershipEnquiry (status + notes in one
+// call), but kept because the API keeps the :id/status route live too —
+// nothing else in the codebase still calls this one after the page rebuild.
+
+export function updateProgramPartnershipEnquiry(
+  programId: string,
+  enquiryId: string,
+  input: { status?: string; notes?: string | null },
+): Promise<PartnershipEnquiryDetail> {
+  return request<PartnershipEnquiryDetail>(
+    `/admin/programs/${encodeURIComponent(programId)}/partnership-enquiries/${encodeURIComponent(enquiryId)}`,
     {
       method: "PATCH",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(input),
     },
+  );
+}
+
+export function deleteProgramPartnershipEnquiry(
+  programId: string,
+  enquiryId: string,
+): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(
+    `/admin/programs/${encodeURIComponent(programId)}/partnership-enquiries/${encodeURIComponent(enquiryId)}`,
+    { method: "DELETE" },
   );
 }
 
@@ -4575,14 +4608,23 @@ export type ReminderAudienceMember = {
 export type ReminderAudiencePreview = {
   audience: string;
   /**
-   * False when the program has no active registration_fee pricing tier — the
-   * audience is empty because nothing is owed, not because everyone has paid.
+   * False only when this audience is gated on program configuration that
+   * isn't in place — registration_fee_unpaid with no active registration_fee
+   * tier is the one case today — meaning the audience is empty because
+   * nothing is owed, not because everyone has paid. Every other audience is
+   * always applicable.
    */
-  registrationFeeConfigured: boolean;
+  applicable: boolean;
   /** True total; `members` is capped at `listLimit`. */
   count: number;
   listLimit: number;
   members: ReminderAudienceMember[];
+  /**
+   * Non-blocking heads-up for the create dialog, e.g. this audience overlaps
+   * an automated cron that already emails the same people. Null when there
+   * is nothing to flag.
+   */
+  overlapNote: string | null;
   /** The draft rendered against the first real recipient, when requested. */
   preview: { subject: string; body: string } | null;
 };
@@ -4590,6 +4632,8 @@ export type ReminderAudiencePreview = {
 export type CreateParticipantReminderInput = {
   subject: string;
   body: string;
+  /** Which audience to target. Omit for the default, registration_fee_unpaid. */
+  audience?: string;
   /** ISO datetime WITH an explicit offset. Omit to save as a draft. */
   scheduledAt?: string;
 };
@@ -4601,14 +4645,18 @@ export type UpdateParticipantReminderInput = {
   scheduledAt?: string | null;
 };
 
-export function getReminderAudience(programId: string): Promise<ReminderAudiencePreview> {
-  return request<ReminderAudiencePreview>(`/programs/${programId}/reminders/audience`);
+export function getReminderAudience(
+  programId: string,
+  audience?: string,
+): Promise<ReminderAudiencePreview> {
+  const qs = audience ? `?audience=${encodeURIComponent(audience)}` : "";
+  return request<ReminderAudiencePreview>(`/programs/${programId}/reminders/audience${qs}`);
 }
 
 /** Renders a draft against a real recipient. Writes nothing, sends nothing. */
 export function previewParticipantReminder(
   programId: string,
-  data: { subject: string; body: string },
+  data: { subject: string; body: string; audience?: string },
 ): Promise<ReminderAudiencePreview> {
   return request<ReminderAudiencePreview>(`/programs/${programId}/reminders/preview`, {
     method: "POST",
@@ -4618,8 +4666,22 @@ export function previewParticipantReminder(
 
 export function listParticipantReminders(
   programId: string,
-): Promise<ParticipantReminder[]> {
-  return request<ParticipantReminder[]>(`/programs/${programId}/reminders`);
+  params?: {
+    page?: number;
+    limit?: number;
+    status?: ParticipantReminderStatus;
+    search?: string;
+  },
+): Promise<Paginated<ParticipantReminder>> {
+  const q = new URLSearchParams();
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  if (params?.status) q.set("status", params.status);
+  if (params?.search) q.set("search", params.search);
+  const qs = q.toString();
+  return requestPaginated<ParticipantReminder>(
+    `/programs/${programId}/reminders${qs ? `?${qs}` : ""}`,
+  );
 }
 
 export function getParticipantReminder(

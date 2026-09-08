@@ -1,5 +1,6 @@
 // src/modules/reminders/infrastructure/persistence/participant-reminder.repository.ts
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import {
   REMINDER_EDITABLE_STATUSES,
@@ -24,15 +25,40 @@ export interface UpdateReminderData {
   status?: ReminderStatus;
 }
 
+export interface FindByProgramParams {
+  page: number;
+  limit: number;
+  status?: string;
+  search?: string;
+}
+
 @Injectable()
 export class ParticipantReminderRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findByProgram(programId: string) {
-    return this.prisma.participantReminder.findMany({
-      where: { programId },
-      orderBy: [{ scheduledAt: 'desc' }, { createdAt: 'desc' }],
-    });
+  /**
+   * Paginated + filterable list for the admin screen. `search` is a plain
+   * ILIKE on subject — there is no full-text index on this table and reminder
+   * counts per program are small, so a substring scan is fine.
+   */
+  async findByProgram(programId: string, params: FindByProgramParams) {
+    const where: Prisma.ParticipantReminderWhereInput = {
+      programId,
+      ...(params.status ? { status: params.status } : {}),
+      ...(params.search ? { subject: { contains: params.search, mode: 'insensitive' } } : {}),
+    };
+
+    const [total, rows] = await Promise.all([
+      this.prisma.participantReminder.count({ where }),
+      this.prisma.participantReminder.findMany({
+        where,
+        orderBy: [{ scheduledAt: 'desc' }, { createdAt: 'desc' }],
+        skip: (params.page - 1) * params.limit,
+        take: params.limit,
+      }),
+    ]);
+
+    return { rows, total };
   }
 
   async findById(id: string) {

@@ -6,14 +6,16 @@ describe('ParticipantReminderRepository', () => {
   let updateMany: jest.Mock;
   let findUnique: jest.Mock;
   let findMany: jest.Mock;
+  let count: jest.Mock;
   let repo: ParticipantReminderRepository;
 
   beforeEach(() => {
     updateMany = jest.fn().mockResolvedValue({ count: 1 });
     findUnique = jest.fn().mockResolvedValue({ id: 'rem-1' });
     findMany = jest.fn().mockResolvedValue([{ id: 'rem-1' }]);
+    count = jest.fn().mockResolvedValue(0);
     repo = new ParticipantReminderRepository({
-      participantReminder: { updateMany, findUnique, findMany },
+      participantReminder: { updateMany, findUnique, findMany, count },
     } as unknown as PrismaService);
   });
 
@@ -91,6 +93,59 @@ describe('ParticipantReminderRepository', () => {
         where: { id: 'rem-1', status: 'sending' },
         data: { status: 'sent', sentAt: expect.any(Date), audienceCount: 0 },
       });
+    });
+  });
+
+  describe('findByProgram', () => {
+    it('paginates with skip/take derived from page and limit', async () => {
+      await repo.findByProgram('prog-1', { page: 3, limit: 10 });
+
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 20, take: 10 }),
+      );
+    });
+
+    it('returns the true total alongside the page of rows', async () => {
+      count.mockResolvedValue(47);
+      findMany.mockResolvedValue([{ id: 'rem-1' }, { id: 'rem-2' }]);
+
+      const result = await repo.findByProgram('prog-1', { page: 1, limit: 20 });
+
+      expect(result).toEqual({ rows: [{ id: 'rem-1' }, { id: 'rem-2' }], total: 47 });
+    });
+
+    it('filters by status when given', async () => {
+      await repo.findByProgram('prog-1', { page: 1, limit: 20, status: 'scheduled' });
+
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { programId: 'prog-1', status: 'scheduled' },
+        }),
+      );
+      expect(count).toHaveBeenCalledWith({
+        where: { programId: 'prog-1', status: 'scheduled' },
+      });
+    });
+
+    it('filters by a case-insensitive subject substring when search is given', async () => {
+      await repo.findByProgram('prog-1', { page: 1, limit: 20, search: 'Fee' });
+
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            programId: 'prog-1',
+            subject: { contains: 'Fee', mode: 'insensitive' },
+          },
+        }),
+      );
+    });
+
+    it('omits status and search from the where clause when neither is given', async () => {
+      await repo.findByProgram('prog-1', { page: 1, limit: 20 });
+
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { programId: 'prog-1' } }),
+      );
     });
   });
 

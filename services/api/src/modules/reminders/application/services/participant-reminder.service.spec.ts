@@ -3,7 +3,7 @@ import { BadRequestException, ConflictException, NotFoundException } from '@nest
 import { ParticipantReminderService } from './participant-reminder.service';
 import { ParticipantReminderRepository } from '../../infrastructure/persistence/participant-reminder.repository';
 import { ParticipantReminderSendRepository } from '../../infrastructure/persistence/participant-reminder-send.repository';
-import { RegistrationFeeAudienceService } from './registration-fee-audience.service';
+import { ReminderAudienceRegistry } from './reminder-audience.registry';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
 const FUTURE = '2099-01-01T08:00:00+07:00';
@@ -49,6 +49,22 @@ function build() {
     createdAt: new Date(),
   });
   const updateIfEditable = jest.fn().mockResolvedValue(null);
+  const findByProgram = jest.fn().mockResolvedValue({ rows: [], total: 0 });
+
+  const audiencePreview = jest.fn().mockResolvedValue({
+    applicable: true,
+    count: 2,
+    members: [{ participantName: 'Ada Lovelace' }],
+    listLimit: 200,
+  });
+  // resolve() always hands back the same stub adapter regardless of which
+  // audience is asked for — these tests only exercise the default audience.
+  const audienceRegistry = {
+    resolve: jest.fn().mockReturnValue({
+      preview: audiencePreview,
+      findRecipients: jest.fn().mockResolvedValue([]),
+    }),
+  } as unknown as ReminderAudienceRegistry;
 
   const service = new ParticipantReminderService(
     {
@@ -60,23 +76,16 @@ function build() {
       findById,
       cancelIfNotSending,
       updateIfEditable,
-      findByProgram: jest.fn().mockResolvedValue([]),
+      findByProgram,
     } as unknown as ParticipantReminderRepository,
     {
       findByReminder: jest.fn().mockResolvedValue([]),
       summariseByReminderIds: jest.fn().mockResolvedValue([]),
     } as unknown as ParticipantReminderSendRepository,
-    {
-      preview: jest.fn().mockResolvedValue({
-        registrationFeeConfigured: true,
-        count: 2,
-        members: [{ participantName: 'Ada Lovelace' }],
-        listLimit: 200,
-      }),
-    } as unknown as RegistrationFeeAudienceService,
+    audienceRegistry,
   );
 
-  return { service, create, findById, cancelIfNotSending, updateIfEditable };
+  return { service, create, findById, cancelIfNotSending, updateIfEditable, findByProgram, audiencePreview };
 }
 
 describe('ParticipantReminderService', () => {
@@ -230,6 +239,106 @@ describe('ParticipantReminderService', () => {
         body: 'Hi Ada Lovelace, please pay.',
       });
       expect(result.count).toBe(2);
+    });
+  });
+
+  describe('previewAudience', () => {
+    it('rejects an audience that is not one of REMINDER_AUDIENCE_VALUES', async () => {
+      const { service } = build();
+
+      await expect(service.previewAudience('prog-1', 'not_a_real_audience')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('resolves the requested audience via the registry, not a hardcoded default', async () => {
+      const { service, audiencePreview } = build();
+
+      await service.previewAudience('prog-1', 'program_fee_unpaid');
+
+      expect(audiencePreview).toHaveBeenCalledWith('prog-1');
+    });
+
+    it('attaches the overlap note only for audiences that have one', async () => {
+      const { service } = build();
+
+      const draftUnsubmitted = await service.previewAudience('prog-1', 'application_draft_unsubmitted');
+      const registrationFee = await service.previewAudience('prog-1', 'registration_fee_unpaid');
+
+      expect(draftUnsubmitted.overlapNote).toEqual(expect.stringContaining('automated'));
+      expect(registrationFee.overlapNote).toBeNull();
+    });
+  });
+
+  describe('list', () => {
+    it('returns the pagination meta the admin dashboard reads', async () => {
+      const { service, findByProgram } = build();
+      findByProgram.mockResolvedValue({ rows: [], total: 47 });
+
+      const result = await service.list('prog-1', { page: 2, limit: 10 });
+
+      expect(result.meta).toEqual({ total: 47, page: 2, limit: 10, totalPages: 5 });
+      expect(findByProgram).toHaveBeenCalledWith('prog-1', {
+        page: 2,
+        limit: 10,
+        status: undefined,
+        search: undefined,
+      });
+    });
+
+    it('defaults to page 1 / limit 20 and clamps limit to 100', async () => {
+      const { service, findByProgram } = build();
+
+      await service.list('prog-1', { limit: 500 });
+
+      expect(findByProgram).toHaveBeenCalledWith(
+        'prog-1',
+        expect.objectContaining({ page: 1, limit: 100 }),
+      );
+    });
+
+    it('falls back to page 1 on a malformed page value rather than propagating NaN', async () => {
+      const { service, findByProgram } = build();
+
+      await service.list('prog-1', { page: Number('not-a-number') });
+
+      expect(findByProgram).toHaveBeenCalledWith(
+        'prog-1',
+        expect.objectContaining({ page: 1 }),
+      );
+    });
+
+    it('passes a valid status filter through untouched', async () => {
+      const { service, findByProgram } = build();
+
+      await service.list('prog-1', { status: 'scheduled' });
+
+      expect(findByProgram).toHaveBeenCalledWith(
+        'prog-1',
+        expect.objectContaining({ status: 'scheduled' }),
+      );
+    });
+
+    it('drops a status value that is not a real reminder status, rather than erroring', async () => {
+      const { service, findByProgram } = build();
+
+      await service.list('prog-1', { status: 'bogus' });
+
+      expect(findByProgram).toHaveBeenCalledWith(
+        'prog-1',
+        expect.objectContaining({ status: undefined }),
+      );
+    });
+
+    it('trims whitespace-only search to undefined', async () => {
+      const { service, findByProgram } = build();
+
+      await service.list('prog-1', { search: '   ' });
+
+      expect(findByProgram).toHaveBeenCalledWith(
+        'prog-1',
+        expect.objectContaining({ search: undefined }),
+      );
     });
   });
 });

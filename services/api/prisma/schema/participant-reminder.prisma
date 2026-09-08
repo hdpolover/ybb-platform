@@ -3,9 +3,9 @@
 // ============================================================================
 
 // An admin-drafted, admin-scheduled reminder email to a computed audience of
-// participants in one program. Today there is exactly one audience —
-// `registration_fee_unpaid` — and this is deliberately the shape the other
-// reminder types will be cloned from.
+// participants in one program. `registration_fee_unpaid` was the first
+// audience and is deliberately the shape the others (application_draft_
+// unsubmitted, program_fee_unpaid — see REMINDER_AUDIENCES) were cloned from.
 //
 // There is no automatic date-offset sending here on purpose. A reminder only
 // ever goes out because an admin wrote it, previewed exactly who would get it,
@@ -20,7 +20,8 @@ model ParticipantReminder {
   // Prisma enum so adding the next reminder type stays a purely additive
   // migration (no CREATE TYPE / ALTER TYPE ... ADD VALUE, which cannot run
   // inside a transaction) — same choice as LoaBatchRecipientSend.status.
-  // Constrained by a CHECK in the migration. See REMINDER_AUDIENCES.
+  // Constrained by a CHECK in the migration (widened, additively, in
+  // 20260908140000_expand_participant_reminder_audiences). See REMINDER_AUDIENCES.
   audience String @default("registration_fee_unpaid") @db.VarChar(50)
 
   subject String @db.VarChar(255)
