@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ImageIcon, Save, Upload } from "lucide-react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { LogoOverrideWarning } from "@/src/admin/components/logo-override-warning";
@@ -19,6 +19,16 @@ import {
   updatePlatformBrandSettings,
   type PlatformBrandDetail,
 } from "../../../api";
+
+// Tab ids that actually exist on this page — used to validate the `tab` query
+// param so a garbage value (e.g. ?tab=nonsense) falls back to Identity instead
+// of rendering a blank tab area.
+const EDIT_TAB_IDS = ["identity", "details", "settings"] as const;
+type EditTabId = (typeof EDIT_TAB_IDS)[number];
+
+function isEditTabId(value: string | null): value is EditTabId {
+  return EDIT_TAB_IDS.includes(value as EditTabId);
+}
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
@@ -786,6 +796,9 @@ function SettingsTab({
 
 export default function BrandEditPage({ brandId }: { brandId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const initialTab: EditTabId = isEditTabId(requestedTab) ? requestedTab : "identity";
   const [brand, setBrand] = useState<PlatformBrandDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -844,7 +857,7 @@ export default function BrandEditPage({ brandId }: { brandId: string }) {
         }
       />
 
-      <Tabs defaultValue="identity">
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="identity">Identity</TabsTrigger>
           <TabsTrigger value="details">Details</TabsTrigger>
