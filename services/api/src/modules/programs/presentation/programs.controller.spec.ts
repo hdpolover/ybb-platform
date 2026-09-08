@@ -3,8 +3,10 @@ import { ForbiddenException } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import { ProgramsController } from './programs.controller';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../../../modules/auth/infrastructure/guards/optional-jwt-auth.guard';
 import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { UserRole } from '@core/entities/user.entity';
 
 // Main Handlers
 import { ListProgramsHandler } from '../application/queries/handlers/list-programs.handler';
@@ -66,6 +68,8 @@ describe('ProgramsController', () => {
         })
         .overrideGuard(JwtAuthGuard)
         .useValue({ canActivate: () => true })
+        .overrideGuard(OptionalJwtAuthGuard)
+        .useValue({ canActivate: () => true })
         .overrideGuard(AdminScopeGuard)
         .useValue({ canActivate: () => true })
         .compile();
@@ -87,6 +91,74 @@ describe('ProgramsController', () => {
             const query = mockExecute.execute.mock.calls[0][0];
             expect(query.brandId).toBe('cat-1');
             expect(query.year).toBe(2024);
+        });
+
+        // Audit M13: findAll runs behind OptionalJwtAuthGuard now, so an anonymous
+        // caller reaches this method with no CurrentUser at all — the query must
+        // come out with isAdmin falsy, which is what makes the repository force
+        // public-safe filters (see program.repository.spec.ts for that half).
+        it('sets query.isAdmin to false when no user is resolved (anonymous caller, e.g. ?isPublished=false)', async () => {
+            const dto = { isPublished: false };
+
+            await controller.findAll(dto, undefined);
+
+            const query = mockExecute.execute.mock.calls[0][0];
+            expect(query.isAdmin).toBe(false);
+            // The dto's isPublished still rides along on the query — it's the
+            // repository's job to ignore it for a non-admin, not the controller's.
+            expect(query.isPublished).toBe(false);
+        });
+
+        it('sets query.isAdmin to false for an authenticated caller without an admin role', async () => {
+            const dto = {};
+            const participantUser = { userId: 'u-1', email: 'p@example.com', brandId: 'b-1', role: [UserRole.PARTICIPANT] } as any;
+
+            await controller.findAll(dto, participantUser);
+
+            const query = mockExecute.execute.mock.calls[0][0];
+            expect(query.isAdmin).toBe(false);
+        });
+
+        it('sets query.isAdmin to true for an ADMIN-role caller, preserving admin dashboard behavior', async () => {
+            const dto = { isPublished: false, status: 'draft' };
+            const adminUser = { userId: 'u-2', email: 'a@example.com', brandId: 'b-1', role: [UserRole.ADMIN] } as any;
+
+            await controller.findAll(dto, adminUser);
+
+            const query = mockExecute.execute.mock.calls[0][0];
+            expect(query.isAdmin).toBe(true);
+        });
+
+        it('sets query.isAdmin to true for a SUPER_ADMIN-role caller', async () => {
+            const dto = {};
+            const superAdminUser = { userId: 'u-3', email: 's@example.com', brandId: 'b-1', role: UserRole.SUPER_ADMIN } as any;
+
+            await controller.findAll(dto, superAdminUser);
+
+            const query = mockExecute.execute.mock.calls[0][0];
+            expect(query.isAdmin).toBe(true);
+        });
+    });
+
+    describe('findOne', () => {
+        // Audit M13: findOne also runs behind OptionalJwtAuthGuard, and wires the
+        // resolved caller into GetProgramDetailQuery.isAdmin the same way findAll
+        // does — see get-program-detail.handler.spec.ts for the 404/resources
+        // filtering that isAdmin drives downstream.
+        it('sets query.isAdmin to false for an anonymous caller', async () => {
+            await controller.findOne('some-slug', undefined);
+
+            const query = mockExecute.execute.mock.calls[0][0];
+            expect(query.isAdmin).toBe(false);
+        });
+
+        it('sets query.isAdmin to true for an ADMIN-role caller', async () => {
+            const adminUser = { userId: 'u-2', email: 'a@example.com', brandId: 'b-1', role: [UserRole.ADMIN] } as any;
+
+            await controller.findOne('some-slug', adminUser);
+
+            const query = mockExecute.execute.mock.calls[0][0];
+            expect(query.isAdmin).toBe(true);
         });
     });
 

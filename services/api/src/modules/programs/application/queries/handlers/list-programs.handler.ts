@@ -12,7 +12,7 @@ export class ListProgramsHandler implements IQueryHandler<ListProgramsQuery> {
     ) { }
 
     async execute(query: ListProgramsQuery): Promise<ProgramListResponseDto> {
-        const { brandId, year, isPublished, page, limit, isActive, isVisibleToUsers, status, url } = query;
+        const { brandId, year, isPublished, page, limit, isActive, isVisibleToUsers, status, url, isAdmin } = query;
 
         const { programs, total } = await this.programRepository.findAll({
             brandId: brandId,
@@ -24,6 +24,7 @@ export class ListProgramsHandler implements IQueryHandler<ListProgramsQuery> {
             status,
             page,
             limit,
+            isAdmin,
         });
 
         const data: ProgramResponseDto[] = programs.map((program) => ({

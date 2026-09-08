@@ -26,6 +26,7 @@ import { DeleteAuthProviderHandler } from './application/commands/handlers/delet
 import { AuthProviderController } from './presentation/auth-provider.controller';
 import { JwtStrategy } from './infrastructure/strategies/jwt.strategy';
 import { JwtAuthGuard } from './infrastructure/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from './infrastructure/guards/optional-jwt-auth.guard';
 import { TokenBlacklistService } from './infrastructure/services/token-blacklist.service';
 import { FirebaseAuthService } from './infrastructure/services/firebase-auth.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -72,11 +73,19 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
     DeleteAuthProviderHandler,
     JwtStrategy,
     JwtAuthGuard,
+    OptionalJwtAuthGuard,
     TokenBlacklistService,
     FirebaseAuthService,
     AuthLoggingService,
   ],
-  exports: [JwtAuthGuard, JwtStrategy, TokenBlacklistService, PassportModule, FirebaseAuthService],
+  exports: [
+    JwtAuthGuard,
+    OptionalJwtAuthGuard,
+    JwtStrategy,
+    TokenBlacklistService,
+    PassportModule,
+    FirebaseAuthService,
+  ],
 })
 export class AuthModule { }
 

@@ -81,7 +81,13 @@ QUEUES = [
     {
         'name': 'api-service-payment-events.retry',
         'args': {
-            'x-message-ttl': 30000,
+            # MUST match the API's RABBITMQ_RETRY_DELAY_MS (default 15000, see
+            # services/api/src/main.ts). These are the API's own queues; this
+            # script only pre-declares them. Whoever declares first wins, and the
+            # loser gets precondition_failed — on 2026-09-08 a rabbitmq redeploy
+            # re-ran this script, it won the race with 30000, and the API then
+            # crash-looped on boot for ~an hour because it wanted 15000.
+            'x-message-ttl': 15000,
             'x-dead-letter-exchange': '',
             'x-dead-letter-routing-key': 'api-service-payment-events',
         },

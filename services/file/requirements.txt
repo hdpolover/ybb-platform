@@ -18,7 +18,14 @@ pandas>=2.1.4
 # PDF Generation
 reportlab>=4.0.7
 PyPDF2>=3.0.1
-weasyprint>=60.1
+# Pinned below 70. WeasyPrint 70.0 (released 2026-09-08 12:25 UTC) changed the
+# url_fetcher internals this service's PDF pipeline relies on — its tests fail
+# with "'function' object has no attribute '_fail_on_errors'" — and the range was
+# open, so CI picked it up within the hour and the next image rebuild would have
+# taken it into production and broken receipt, invoice and LOA rendering.
+# 69.0 is what production runs today. Raise this deliberately, after running the
+# file service tests against the new major.
+weasyprint>=69.0,<70
 
 # Image Processing (Pillow 10+ includes SIMD optimizations by default)
 Pillow>=10.1.0
