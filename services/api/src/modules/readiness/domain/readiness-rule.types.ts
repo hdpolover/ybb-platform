@@ -75,5 +75,7 @@ export interface ReadinessContext {
     faqCount: number;
     galleryCount: number;
     testimonialCount: number;
+    /** Null when the payment service could not be reached. */
+    paymentMethods: { enabledCount: number; isConfigured: boolean } | null;
   };
 }

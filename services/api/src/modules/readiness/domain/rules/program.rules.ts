@@ -107,6 +107,38 @@ const PROGRAM_RULES: ReadinessRule[] = [
     fix: { label: 'Add testimonials', href: '' },
     evaluate: (ctx) => (ctx.program?.testimonialCount ?? 0) > 0,
   },
+  {
+    id: 'program.has-enabled-payment-method',
+    scope: 'program',
+    severity: 'BLOCKER',
+    title: 'No payment method enabled',
+    symptom: 'Participants reach the payment step with no way to pay.',
+    fix: { label: 'Enable payment methods', href: '' },
+    evaluate: (ctx) => {
+      const methods = ctx.program?.paymentMethods;
+      // Throwing is deliberate: the evaluator turns it into 'unknown', which
+      // blocks publishing. Returning true here would let a payment-service
+      // outage wave an unpayable program into production.
+      if (!methods) throw new Error('Payment service unavailable');
+      return methods.enabledCount > 0;
+    },
+  },
+  {
+    id: 'program.payment-methods-configured',
+    scope: 'program',
+    severity: 'BLOCKER',
+    title: 'Payment methods not configured for this program',
+    // With no overlay rows the read path falls back to the global master, so
+    // the program shows another brand's account details and instructions.
+    symptom:
+      'Payment instructions fall back to the global master text, showing generic account details instead of this program\'s.',
+    fix: { label: 'Configure payment methods', href: '' },
+    evaluate: (ctx) => {
+      const methods = ctx.program?.paymentMethods;
+      if (!methods) throw new Error('Payment service unavailable');
+      return methods.isConfigured;
+    },
+  },
 ];
 
 export function programRulesFor(programId: string): ReadinessRule[] {
@@ -116,6 +148,8 @@ export function programRulesFor(programId: string): ReadinessRule[] {
     'program.banner-set': `/programs/${programId}/media`,
     'program.banner-not-placeholder': `/programs/${programId}/media`,
     'program.has-gallery': `/programs/${programId}/media`,
+    'program.has-enabled-payment-method': `/programs/${programId}/master-data/payment-methods`,
+    'program.payment-methods-configured': `/programs/${programId}/master-data/payment-methods`,
   };
   const fallback = `/programs/${programId}/master-data/program-details`;
   return PROGRAM_RULES.map((rule) => ({

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ReadinessContext } from '../domain/readiness-rule.types';
+import { PaymentConfigClient } from './payment-config.client';
 
 // The soft-delete Prisma extension injects deletedAt into findUnique/findFirst/
 // findMany/delete/deleteMany but NOT into count(). Every count below passes it
@@ -9,7 +10,10 @@ const LIVE_PROGRAM = { isPublished: true, isActive: true, status: { not: 'draft'
 
 @Injectable()
 export class ReadinessContextLoader {
-  constructor(private readonly read: PrismaReadService) {}
+  constructor(
+    private readonly read: PrismaReadService,
+    private readonly payment: PaymentConfigClient,
+  ) {}
 
   async loadBrand(brandId: string): Promise<ReadinessContext> {
     const brand = await this.read.brand.findUnique({
@@ -49,7 +53,7 @@ export class ReadinessContextLoader {
 
     const brandCtx = await this.loadBrand(program.brandId);
 
-    const [pricingTierCount, objectiveCount, faqCount, galleryCount, testimonialCount] =
+    const [pricingTierCount, objectiveCount, faqCount, galleryCount, testimonialCount, paymentMethods] =
       await Promise.all([
         this.read.programPricingTier.count({ where: { programId, isActive: true, deletedAt: null } }),
         this.read.programObjective.count({ where: { programId, isActive: true, deletedAt: null } }),
@@ -64,6 +68,7 @@ export class ReadinessContextLoader {
             OR: [{ programId }, { brandId: program.brandId, programId: null }],
           },
         }),
+        this.payment.getProgramMethodSummary(programId),
       ]);
 
     return {
@@ -81,6 +86,7 @@ export class ReadinessContextLoader {
         faqCount,
         galleryCount,
         testimonialCount,
+        paymentMethods,
       },
     };
   }

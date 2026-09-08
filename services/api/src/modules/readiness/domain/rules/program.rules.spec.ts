@@ -18,6 +18,7 @@ function ctx(program: Partial<NonNullable<ReadinessContext['program']>> = {}): R
       applicationDeadline: new Date('2026-06-15'),
       pricingTierCount: 2, objectiveCount: 3, faqCount: 5, galleryCount: 10,
       testimonialCount: 4,
+      paymentMethods: { enabledCount: 2, isConfigured: true },
       ...program,
     },
   };
@@ -90,5 +91,34 @@ describe('PROGRAM_RULES', () => {
   it('throws no error when program context is absent', () => {
     const brandOnly = { brand: baseBrand } as ReadinessContext;
     expect(() => rule('program.has-pricing-tiers').evaluate(brandOnly)).not.toThrow();
+  });
+});
+
+describe('payment method rules', () => {
+  it('fails when the program has no enabled payment method', () => {
+    expect(rule('program.has-enabled-payment-method')
+      .evaluate(ctx({ paymentMethods: { enabledCount: 0, isConfigured: true } }))).toBe(false);
+  });
+
+  it('passes when at least one method is enabled', () => {
+    expect(rule('program.has-enabled-payment-method')
+      .evaluate(ctx({ paymentMethods: { enabledCount: 1, isConfigured: true } }))).toBe(true);
+  });
+
+  it('fails when the program inherits the global master instructions', () => {
+    expect(rule('program.payment-methods-configured')
+      .evaluate(ctx({ paymentMethods: { enabledCount: 3, isConfigured: false } }))).toBe(false);
+  });
+
+  it('throws when the payment service was unreachable, so the evaluator records unknown rather than pass', () => {
+    expect(() => rule('program.has-enabled-payment-method')
+      .evaluate(ctx({ paymentMethods: null }))).toThrow();
+    expect(() => rule('program.payment-methods-configured')
+      .evaluate(ctx({ paymentMethods: null }))).toThrow();
+  });
+
+  it('makes both rules blockers', () => {
+    expect(rule('program.has-enabled-payment-method').severity).toBe('BLOCKER');
+    expect(rule('program.payment-methods-configured').severity).toBe('BLOCKER');
   });
 });

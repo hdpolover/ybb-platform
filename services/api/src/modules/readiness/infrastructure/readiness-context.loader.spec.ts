@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ReadinessContextLoader } from './readiness-context.loader';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { PaymentConfigClient } from './payment-config.client';
+
+const mockPayment = { getProgramMethodSummary: jest.fn() };
 
 const mockRead = {
   brand: { findUnique: jest.fn() },
@@ -19,11 +22,16 @@ describe('ReadinessContextLoader', () => {
 
   beforeEach(async () => {
     const moduleRef: TestingModule = await Test.createTestingModule({
-      providers: [ReadinessContextLoader, { provide: PrismaReadService, useValue: mockRead }],
+      providers: [
+        ReadinessContextLoader,
+        { provide: PrismaReadService, useValue: mockRead },
+        { provide: PaymentConfigClient, useValue: mockPayment },
+      ],
     }).compile();
     loader = moduleRef.get(ReadinessContextLoader);
     jest.clearAllMocks();
 
+    mockPayment.getProgramMethodSummary.mockResolvedValue({ enabledCount: 1, isConfigured: true });
     mockRead.brand.findUnique.mockResolvedValue({
       id: 'b1', name: 'KYS', primaryColor: '', logoUrl: null, logoIconUrl: null,
       landingUrl: null, tagline: 'x', defaultCurrency: 'USD',
