@@ -12,6 +12,7 @@ import {
   requestAdminProfileRefresh,
   shouldRefreshAdminProfileForMutation,
 } from "@/src/shared/admin-profile-refresh";
+import type { ReadinessSummaryRow } from "@/lib/readiness-summary";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -4580,5 +4581,53 @@ export function cancelParticipantReminder(
 ): Promise<ParticipantReminder> {
   return request<ParticipantReminder>(`/programs/${programId}/reminders/${id}/cancel`, {
     method: "POST",
+  });
+}
+
+// ─── Readiness ──────────────────────────────────────────────────────────────
+
+export type ReadinessRuleResult = {
+  ruleId: string;
+  severity: "BLOCKER" | "WARNING" | "INFO";
+  status: "pass" | "fail" | "overridden" | "unknown";
+  title: string;
+  symptom: string;
+  fix: { label: string; href: string };
+  overrideReason?: string;
+};
+
+export type ReadinessReport = {
+  results: ReadinessRuleResult[];
+  blockerCount: number;
+  warningCount: number;
+  unknownCount: number;
+  isReady: boolean;
+  evaluatedAt: string;
+};
+
+export function getBrandReadiness(brandId: string): Promise<ReadinessReport> {
+  return request<ReadinessReport>(`/readiness/brands/${brandId}`);
+}
+
+export function getProgramReadiness(programId: string): Promise<ReadinessReport> {
+  return request<ReadinessReport>(`/readiness/programs/${programId}`);
+}
+
+// GET /readiness/summary hits the interceptor's fallback branch (bare array
+// in `data`, no `meta`), not the paginated {data, meta} shape — verified
+// against transform.interceptor.ts. Use request(), not requestPaginated().
+export function getReadinessSummary(): Promise<ReadinessSummaryRow[]> {
+  return request<ReadinessSummaryRow[]>("/readiness/summary");
+}
+
+export function createReadinessOverride(input: {
+  subjectType: "brand" | "program";
+  subjectId: string;
+  ruleId: string;
+  reason: string;
+}): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>("/readiness/overrides", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
