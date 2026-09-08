@@ -52,7 +52,7 @@ services:
       # of these must be present HERE, not only on the API. OPS_ALERT_EMAILS was set on
       # the API only, which left the digest with zero recipients and no error.
       ADMIN_DASHBOARD_URL: ${ADMIN_DASHBOARD_URL:-https://admin.ybbhub.com}
-      OPS_ALERT_EMAILS: ${OPS_ALERT_EMAILS:-}
+      OPS_ALERT_EMAILS: ${OPS_ALERT_EMAILS:-ybb.admn@gmail.com}
     networks:
       - dokploy-network
     # Notification might not need a public domain if it only consumes events
