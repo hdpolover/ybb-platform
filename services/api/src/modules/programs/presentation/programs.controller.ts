@@ -38,7 +38,6 @@ import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
 import { AdminScopeGuard, ScopedBy, assertBrandAccess, getRequestAdminScope } from '@shared/guards/admin-scope.guard';
-import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ChangeType } from '@prisma/client';
 import { UpdateProgramPaymentInfoDto, UpdateProgramPartnersCanvaUrlDto } from './dto/create-update-program-content.dto';
