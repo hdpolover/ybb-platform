@@ -48,19 +48,23 @@ services:
     image: machines/filestash:latest
     container_name: ybb-prod-filestash
     restart: always
+    ports:
+      # Loopback only — reachable through an SSH tunnel, never from the internet.
+      - "127.0.0.1:8334:8334"
     environment:
-      - APPLICATION_URL=https://console.ybbhub.com
+      - APPLICATION_URL=http://localhost:8334
     volumes:
       - filestash_data:/app/data/state/
     networks:
       - dokploy-network
+    # NOT exposed through Traefik, same reasoning as the RabbitMQ UI above:
+    # console.ybbhub.com had no public DNS record but answered on the origin IP
+    # to anyone sending that Host header, and the name is in this file in a
+    # public repo (audit N1). No application code ever used the hostname — this
+    # is a human storage browser only. Reach it with:
+    #   ssh -L 8334:127.0.0.1:8334 ybb-vps   then open http://localhost:8334
     labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-prod-filestash.rule=Host(`console.ybbhub.com`)"
-      - "traefik.http.routers.ybb-prod-filestash.entrypoints=websecure"
-      - "traefik.http.routers.ybb-prod-filestash.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ybb-prod-filestash.loadbalancer.server.port=8334"
+      - "traefik.enable=false"
 
   postgres-file:
     image: postgres:15-alpine

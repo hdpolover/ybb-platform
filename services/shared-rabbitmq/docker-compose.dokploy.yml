@@ -5,6 +5,9 @@ services:
     restart: always
     ports:
       - "5672:5672" # Optional to expose if needed by services outside dokploy network (unlikely)
+      # Management UI, LOOPBACK ONLY — not routable from the internet, and the
+      # host firewall is not what is protecting it: the bind address is.
+      - "127.0.0.1:15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
@@ -12,13 +15,18 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - dokploy-network
+    # NOT exposed through Traefik. The management UI used to answer on
+    # queue.ybbhub.com, which has no public DNS record — so its only protection
+    # was that the hostname was unpublished, while the name sits in this file in
+    # a public repo. It answered to anyone sending that Host header at the origin
+    # IP (audit N1).
+    #
+    # Nothing loses access: every service reaches the broker over the internal
+    # docker network as amqp://...@ybb-prod-shared-rabbitmq:5672/, never by
+    # hostname. For the human management UI, tunnel it:
+    #   ssh -L 15672:127.0.0.1:15672 ybb-vps   then open http://localhost:15672
     labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-prod-rabbitmq.rule=${APP_DOMAINS_RULE:-Host(`queue.ybbhub.com`)}"
-      - "traefik.http.routers.ybb-prod-rabbitmq.entrypoints=websecure"
-      - "traefik.http.routers.ybb-prod-rabbitmq.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ybb-prod-rabbitmq.loadbalancer.server.port=15672"
+      - "traefik.enable=false"
     healthcheck:
       test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
       interval: 30s
