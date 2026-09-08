@@ -84,19 +84,10 @@ services:
         condition: service_healthy
       api-release:
         condition: service_completed_successfully
-    # Marks the container ready only once the app is actually serving. Nothing
-    # consumed a readiness signal before this: the only healthcheck in the file
-    # was on postgres, so a container counted as "up" ~20s before it could
-    # answer a request. Required for a rolling update to know whether a new
-    # container is good.
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${PORT:-4000}/v1/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      # Generous: covers Nest bootstrap on a cold, loaded box. Failures during
-      # this window do not count against `retries`.
-      start_period: 45s
+    # Readiness is defined ONCE, as a HEALTHCHECK in Dockerfile.prod, so compose
+    # and Swarm cannot disagree about what "ready" means. Swarm reads health from
+    # the image, so it has to live there; repeating it here would be a second
+    # source of truth for the same thing.
     networks:
       - dokploy-network
     # Dokploy handles Traefik labels and SSL termination automatically via the UI

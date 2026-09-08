@@ -55,5 +55,17 @@ RUN sed -i 's/\r$//' /docker-entrypoint.sh \
   && chmod +x /docker-entrypoint.sh /app/rabbitmq-queue-cleanup.sh
 
 # Use entrypoint to run migrations before starting app
+# Readiness, in the image rather than only in compose, because Swarm reads its
+# health from HERE. Without it a task counts as healthy the moment the process
+# starts, so `order: start-first` would shift traffic to a container that is
+# still booting and `failure_action: rollback` would never fire — the rolling
+# update would happily roll out a broken build. Compose picks this up too, so
+# both deployment paths agree on what "ready" means.
+#
+# start-period covers Nest bootstrap on a cold, loaded box; failures inside it
+# do not count against retries.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=45s --retries=5 \
+  CMD curl -fsS "http://127.0.0.1:${PORT:-4000}/v1/health" || exit 1
+
 ENTRYPOINT ["/bin/sh", "/docker-entrypoint.sh"]
 CMD ["node", "dist/main"]
