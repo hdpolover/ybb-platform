@@ -44,3 +44,48 @@ describe('resolveAuditActor', () => {
         });
     });
 });
+
+// M88/M165: the interceptor resolved its address as
+// `request.ip || request.headers['x-forwarded-for']`. req.ip is Traefik's
+// container address for every request, and the header fallback took the WHOLE
+// comma-joined chain. That value is written to DataChangeLog.ipAddress
+// (@db.VarChar(45)), so a long chain raises Postgres 22001 and fails the audited
+// write itself — not merely its audit row. It now goes through resolveClientIp,
+// which returns a single validated address or nothing.
+describe('audit trail client address', () => {
+    // Exercised through the shared resolver the interceptor now calls, which is
+    // where the behaviour actually lives.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { resolveClientIp } = jest.requireActual('@shared/utils/client-ip') as {
+        resolveClientIp: (req: unknown) => string | null;
+    };
+
+    it('never returns a comma-joined chain, whatever the header contains', () => {
+        const resolved = resolveClientIp({
+            headers: { 'x-forwarded-for': '203.0.113.9, 198.51.100.7, 172.68.1.1' },
+            ip: '10.0.0.5',
+        });
+        expect(resolved).not.toContain(',');
+        expect((resolved ?? '').length).toBeLessThanOrEqual(45);
+    });
+
+    it('never returns the array form a repeated header produces', () => {
+        const resolved = resolveClientIp({
+            headers: { 'x-forwarded-for': ['203.0.113.9', '198.51.100.7'] },
+            ip: '10.0.0.5',
+        });
+        expect(typeof resolved === 'string' || resolved === null).toBe(true);
+        expect(resolved).not.toContain(',');
+    });
+
+    it('prefers the real caller over Traefik\'s container address', () => {
+        // The old `request.ip ||` short-circuit meant the container address won
+        // every time, so every audit row recorded the same internal hop.
+        expect(
+            resolveClientIp({
+                headers: { 'x-forwarded-for': '203.0.113.9, 172.68.1.1', 'cf-connecting-ip': '203.0.113.9' },
+                ip: '10.0.0.5',
+            }),
+        ).toBe('203.0.113.9');
+    });
+});

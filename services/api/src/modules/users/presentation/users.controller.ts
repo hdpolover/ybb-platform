@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, Patch, Ip, Headers } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, Patch, Headers } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { CreateUserHandler } from '../application/commands/handlers/create-user.handler';
 import { GetUserHandler } from '../application/queries/handlers/get-user.handler';
@@ -43,6 +43,7 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
+import { ClientIp } from '@shared/decorators/client-ip.decorator';
 
 @ApiTags('Users')
 @Controller('users')
@@ -168,7 +169,8 @@ export class UsersController {
   async requestDeletion(
     @CurrentUser() user: CurrentUserData,
     @Body() dto: CreateDeletionRequestDto,
-    @Ip() ipAddress?: string,
+    // @ClientIp() resolves the real caller through Cloudflare + Traefik and validates the result; @Ip() is the socket peer, i.e. Traefik's container address for every request (audit M88/M165).
+        @ClientIp() ipAddress?: string,
     @Headers('user-agent') userAgent?: string,
   ): Promise<DeletionRequestResponseDto> {
     const command = new CreateDeletionRequestCommand(user.userId, dto, ipAddress, userAgent);

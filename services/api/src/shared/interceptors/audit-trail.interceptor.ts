@@ -12,6 +12,7 @@ import { ChangeType, ChangedByType } from '@prisma/client';
 import { PrismaService } from '../infrastructure/prisma/prisma.service';
 import { DataChangeLogService } from '../services/data-change-log.service';
 import { AUDIT_TRAIL_KEY, AuditTrailMetadata } from '../decorators/audit-trail.decorator';
+import { resolveClientIp } from '@shared/utils/client-ip';
 
 /**
  * Interceptor that automatically captures before/after state for audited endpoints.
@@ -137,7 +138,15 @@ export class AuditTrailInterceptor implements NestInterceptor {
         // Build endpoint string
         const endpoint = `${request.method} ${request.route?.path || request.url}`;
         const httpMethod = request.method;
-        const ipAddress = request.ip || request.headers?.['x-forwarded-for'] || null;
+        // resolveClientIp, not req.ip and not the raw header. req.ip is Traefik's
+        // container address for every request, and the old x-forwarded-for
+        // fallback took the WHOLE comma-joined chain — "1.2.3.4, 5.6.7.8" (or an
+        // array, when the header repeats). That lands in
+        // DataChangeLog.ipAddress @db.VarChar(45), so a long chain raises 22001
+        // and takes down the audited write, not just its audit row (M88/M165).
+        // undefined, not null: the log DTO omits an absent address rather than
+        // writing one, and an unknown caller should be absent rather than a value.
+        const ipAddress = resolveClientIp(request) ?? undefined;
         const userAgent = request.headers?.['user-agent'] || null;
 
         // --- Fetch "before" state (only for updates/deletes/status_changes) ---

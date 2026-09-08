@@ -9,7 +9,7 @@ export class ProgramRepository implements IProgramRepository {
     constructor(private readonly prisma: PrismaService) { }
 
     async findAll(params: FindAllProgramsParams): Promise<FindAllProgramsResult> {
-        const { brandId, url, year, isPublished, isActive, isVisibleToUsers, status, page = 1, limit = 10 } = params;
+        const { brandId, url, year, isPublished, isActive, isVisibleToUsers, status, page = 1, limit = 10, isAdmin } = params;
 
         const where: Prisma.ProgramWhereInput = {
             brandId,
@@ -30,20 +30,32 @@ export class ProgramRepository implements IProgramRepository {
             where.year = year;
         }
 
-        if (isPublished !== undefined) {
-            where.isPublished = isPublished;
-        }
+        // Audit M13: a non-admin caller (anonymous, or authenticated without an
+        // admin role) must never be able to list draft/unpublished/hidden programs
+        // by passing isPublished=false / isActive=false / isVisibleToUsers=false /
+        // status=draft. Their filters on these fields are ignored, not validated —
+        // an anonymous caller asking for drafts just gets published programs back,
+        // the same as asking for nothing at all. Admin callers keep full control,
+        // which the admin dashboard's programs list depends on (it requests drafts).
+        if (isAdmin) {
+            if (isPublished !== undefined) {
+                where.isPublished = isPublished;
+            }
 
-        if (isActive !== undefined) {
-            where.isActive = isActive;
-        }
+            if (isActive !== undefined) {
+                where.isActive = isActive;
+            }
 
-        if (status !== undefined) {
-            where.status = status;
-        }
+            if (status !== undefined) {
+                where.status = status;
+            }
 
-        if (isVisibleToUsers !== undefined) {
-            where.isVisibleToUsers = isVisibleToUsers;
+            if (isVisibleToUsers !== undefined) {
+                where.isVisibleToUsers = isVisibleToUsers;
+            }
+        } else {
+            where.isPublished = true;
+            where.isVisibleToUsers = true;
         }
 
         const skip = (page - 1) * limit;

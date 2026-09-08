@@ -9,5 +9,8 @@ export class ListProgramsQuery {
     public readonly isVisibleToUsers?: boolean,
     public readonly status?: string,
     public readonly url?: string,
+    // Audit M13: whether the caller is an admin, so findAll can force
+    // public-safe filters for everyone else. See program.repository.interface.ts.
+    public readonly isAdmin?: boolean,
   ) { }
 }

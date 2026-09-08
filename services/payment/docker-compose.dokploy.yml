@@ -37,6 +37,35 @@ services:
       - "traefik.http.routers.ybb-prod-payment.entrypoints=websecure"
       - "traefik.http.routers.ybb-prod-payment.tls.certresolver=letsencrypt"
       - "traefik.http.services.ybb-prod-payment.loadbalancer.server.port=8002"
+      # Audit M208: /swagger and /metrics answered 200 to anyone on
+      # payments.ybbhub.com — the full API surface (including /payments/{id}/verify
+      # and /payments/{id}/proof) plus Go runtime metrics, verified live.
+      #
+      # Blocked at the EDGE rather than in the handler, deliberately: Prometheus
+      # scrapes the internal docker hostname (ybb-payment:8002, see
+      # services/monitoring/prometheus/prometheus.prod.yml) and never goes through
+      # Traefik, so an edge rule closes the public hole without touching internal
+      # scraping. Gating the route in Go would have blocked the scraper too.
+      #
+      # The host rule itself has to stay: the API keeps
+      # PAYMENT_SERVICE_FALLBACK_URL=https://payments.ybbhub.com as its fallback
+      # path, so dropping it entirely is not free.
+      #
+      # Traefik has no "deny" middleware; an ipallowlist that only permits
+      # loopback is the idiomatic way to express one, since no public request can
+      # ever present that source. `ipallowlist` is the Traefik v3 spelling — this
+      # fleet runs v3.6.1; on v2 it would be `ipwhitelist`.
+      #
+      # APP_DOMAINS_RULE is parenthesised before the && so that a value
+      # containing a top-level || (e.g. two Host rules) cannot bind more tightly
+      # than intended and silently narrow this router to one of them.
+      - "traefik.http.middlewares.ybb-prod-payment-deny.ipallowlist.sourcerange=127.0.0.1/32"
+      - "traefik.http.routers.ybb-prod-payment-internal.rule=(${APP_DOMAINS_RULE:-Host(`payments.ybbhub.com`)}) && (PathPrefix(`/swagger`) || PathPrefix(`/metrics`))"
+      - "traefik.http.routers.ybb-prod-payment-internal.entrypoints=websecure"
+      - "traefik.http.routers.ybb-prod-payment-internal.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.ybb-prod-payment-internal.priority=100"
+      - "traefik.http.routers.ybb-prod-payment-internal.middlewares=ybb-prod-payment-deny"
+      - "traefik.http.routers.ybb-prod-payment-internal.service=ybb-prod-payment"
 
   postgres-payment:
     image: postgres:15-alpine

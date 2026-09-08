@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Headers,
-  Ip,
   Param,
   Post,
   Req,
@@ -21,6 +20,7 @@ import {
   ExchangeSupportImpersonationDto,
 } from './dto/support-access.dto';
 import { SupportAccessService } from '../application/services/support-access.service';
+import { ClientIp } from '@shared/decorators/client-ip.decorator';
 
 @ApiTags('admin-support-access')
 @Controller('admins/support-access')
@@ -33,7 +33,8 @@ export class SupportAccessController {
   @ApiResponse({ status: 201, description: 'Token exchanged' })
   async exchangeImpersonationToken(
     @Body() dto: ExchangeSupportImpersonationDto,
-    @Ip() ipAddress: string,
+    // @ClientIp() resolves the real caller through Cloudflare + Traefik and validates the result; @Ip() is the socket peer, i.e. Traefik's container address for every request (audit M88/M165).
+        @ClientIp() ipAddress: string,
     @Req() req: Request,
     @Headers('x-brand-domain') _brandDomain?: string,
   ) {

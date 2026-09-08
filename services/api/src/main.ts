@@ -296,9 +296,27 @@ async function ensureRetryTopology(
         options.binding.routingKey,
       );
     }
+  } catch (error) {
+    // Name the queue. A channel-level broker error here is almost always an
+    // argument mismatch against a queue that already exists, and the amqplib
+    // error alone says only "Channel closed" — see the finally block below.
+    throw new Error(
+      `RabbitMQ topology assertion failed for queue "${queueName}": ${
+        error instanceof Error ? error.message : String(error)
+      }. If this is a precondition_failed, the existing queue was declared with ` +
+      `different arguments (check RABBITMQ_RETRY_DELAY_MS against x-message-ttl ` +
+      `on ${queueName}.retry, and services/shared-rabbitmq/scripts/init_rabbitmq.py, ` +
+      `which pre-declares some of these queues).`,
+    );
   } finally {
-    await channel.close();
-    await connection.close();
+    // Best-effort, and that matters. On a channel-level error the broker has
+    // ALREADY closed the channel, so close() throws IllegalOperationError — and
+    // throwing from a finally block REPLACES the real error. That is exactly how
+    // an x-message-ttl mismatch reached production as a bare "Channel closed"
+    // crash loop with no mention of the queue or the argument, while the real
+    // precondition_failed was visible only in the broker's own log.
+    await channel.close().catch(() => undefined);
+    await connection.close().catch(() => undefined);
   }
 }
 
