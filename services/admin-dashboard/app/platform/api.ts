@@ -1035,7 +1035,6 @@ export function createPlatformProgram(input: {
   endDate: string;
   applicationDeadline: string;
   status?: string;
-  isPublished?: boolean;
   isActive?: boolean;
 }): Promise<PlatformProgram> {
   return request<MutationEnvelope<PlatformProgram>>(
@@ -1060,7 +1059,6 @@ export function updatePlatformProgram(
     endDate: string;
     applicationDeadline: string;
     status?: string;
-    isPublished?: boolean;
     isActive?: boolean;
   },
 ): Promise<PlatformProgram> {

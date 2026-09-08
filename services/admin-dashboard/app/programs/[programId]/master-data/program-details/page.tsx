@@ -28,6 +28,14 @@ import { parseApiDate, toLocalDatetimeInputValue, toUtcIsoFromLocalInput } from 
 import { formatInBusinessTz } from "@/lib/datetime";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
+import { PublishReadinessModal } from "@/src/admin/publish-readiness-modal";
+import {
+  ApiError,
+  publishProgram,
+  unpublishProgram,
+  type PublishBlocker,
+} from "@/src/shared/api-client";
+import { toast } from "sonner";
 
 type ProgramDetail = {
   id: string;
@@ -259,7 +267,6 @@ function toSpecificsFormValues(detail: ProgramDetail): ProgramSpecificsFormValue
     endDate: toDateInputValue(detail.endDate),
     applicationDeadline: toDateInputValue(detail.applicationDeadline),
     status: (detail.status as ProgramStatus) ?? "draft",
-    isPublished: detail.isPublished,
     location: detail.location ?? "",
     capacity: detail.capacity !== null && detail.capacity !== undefined ? String(detail.capacity) : "",
     requirePayment: detail.requirePayment,
@@ -280,7 +287,7 @@ export default function ProgramDetailsPage({
 }) {
   const resolvedParams = use(params);
   const resolvedSearchParams = use(searchParams);
-  const { accessiblePrograms } = useAuth();
+  const { accessiblePrograms, isPlatformAdmin } = useAuth();
 
   const programId = resolvedParams.programId;
   const resolvedProgramId = useResolvedProgramId(programId);
@@ -298,6 +305,8 @@ export default function ProgramDetailsPage({
   const [isGeneralSaving, setIsGeneralSaving] = useState(false);
   const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
   const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishBlockers, setPublishBlockers] = useState<PublishBlocker[] | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -382,7 +391,6 @@ export default function ProgramDetailsPage({
         endDate: values.endDate || undefined,
         applicationDeadline: values.applicationDeadline || undefined,
         status: values.status,
-        isPublished: values.isPublished,
         location: values.location.trim() || undefined,
         capacity: values.capacity.trim() === "" ? undefined : Number(values.capacity),
         requirePayment: values.requirePayment,
@@ -508,6 +516,39 @@ export default function ProgramDetailsPage({
     }
   };
 
+  const attemptPublish = async () => {
+    if (!programDetail) return;
+    setIsPublishing(true);
+    try {
+      await publishProgram(programDetail.id);
+      toast.success(`${programName} is now published.`);
+      setPublishBlockers(null);
+      await refreshProgramDetail();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 422 && error.blockers) {
+        setPublishBlockers(error.blockers);
+      } else {
+        toast.error(error instanceof Error ? error.message : "Failed to publish program.");
+      }
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handleUnpublish = async () => {
+    if (!programDetail) return;
+    setIsPublishing(true);
+    try {
+      await unpublishProgram(programDetail.id);
+      toast.success(`${programName} is now unpublished.`);
+      await refreshProgramDetail();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to unpublish program.");
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
   return (
     <main className="space-y-4">
       <HeaderSection programName={programName} />
@@ -566,6 +607,25 @@ export default function ProgramDetailsPage({
                 isSaving={isSaving}
                 errorMessage={saveError}
               />
+              {programDetail?.isPublished ? (
+                <button
+                  type="button"
+                  onClick={() => void handleUnpublish()}
+                  disabled={isPublishing}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  <span>Unpublish</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void attemptPublish()}
+                  disabled={isPublishing}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:opacity-60"
+                >
+                  <span>{isPublishing ? "Publishing..." : "Publish"}</span>
+                </button>
+              )}
             </div>
           ) : activeTab === "exchange-rate" ? null : null}
         </div>
@@ -623,6 +683,17 @@ export default function ProgramDetailsPage({
           void refreshProgramDetail();
         }}
       />
+
+      {publishBlockers && programDetail ? (
+        <PublishReadinessModal
+          subjectType="program"
+          subjectId={programDetail.id}
+          blockers={publishBlockers}
+          canOverride={isPlatformAdmin}
+          onClose={() => setPublishBlockers(null)}
+          onRetry={() => void attemptPublish()}
+        />
+      ) : null}
     </main>
   );
 }

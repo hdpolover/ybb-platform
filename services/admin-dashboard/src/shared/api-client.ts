@@ -37,6 +37,37 @@ export function getAccessToken(): string {
 export type ApiFieldError = { path: string; message: string };
 
 /**
+ * One unmet publish-readiness rule, as emitted by the `POST /programs/:id/publish`
+ * 422 body: `{ message, blockers: [...] }`. `status` is "fail" for a rule that
+ * actively fails and "unknown" for one that couldn't be evaluated.
+ */
+export type PublishBlocker = {
+  ruleId: string;
+  title: string;
+  symptom: string;
+  status: "fail" | "unknown";
+  fix: { label: string; href: string };
+};
+
+function parsePublishBlockers(raw: unknown): PublishBlocker[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const parsed = raw.filter((b): b is PublishBlocker => {
+    if (typeof b !== "object" || b === null) return false;
+    const candidate = b as { ruleId?: unknown; title?: unknown; symptom?: unknown; fix?: unknown };
+    return (
+      typeof candidate.ruleId === "string" &&
+      typeof candidate.title === "string" &&
+      typeof candidate.symptom === "string" &&
+      typeof candidate.fix === "object" &&
+      candidate.fix !== null &&
+      typeof (candidate.fix as { label?: unknown }).label === "string" &&
+      typeof (candidate.fix as { href?: unknown }).href === "string"
+    );
+  });
+  return parsed.length > 0 ? parsed : undefined;
+}
+
+/**
  * Error carrying the API's machine-readable `errorCode` alongside its message,
  * so callers can branch on the code instead of pattern-matching English copy.
  * Also carries `fieldErrors` when the server responded with a structured
@@ -44,19 +75,29 @@ export type ApiFieldError = { path: string; message: string };
  * failures), so callers can key a form error onto the exact field instead of
  * only having a flattened message string. `status` lets callers distinguish
  * e.g. 409 (conflict, no active rubric / gate closed) from 400 (validation).
+ * `blockers` is populated for the 422 the publish-readiness gate returns, so
+ * callers can render the unmet rules without a second request.
  * Extends Error, so existing `err instanceof Error` handling still works.
  */
 export class ApiError extends Error {
   readonly status: number;
   readonly errorCode?: string;
   readonly fieldErrors?: ApiFieldError[];
+  readonly blockers?: PublishBlocker[];
 
-  constructor(message: string, status: number, errorCode?: string, fieldErrors?: ApiFieldError[]) {
+  constructor(
+    message: string,
+    status: number,
+    errorCode?: string,
+    fieldErrors?: ApiFieldError[],
+    blockers?: PublishBlocker[],
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.errorCode = errorCode;
     this.fieldErrors = fieldErrors;
+    this.blockers = blockers;
   }
 }
 
@@ -74,19 +115,26 @@ function parseFieldErrors(raw: unknown): ApiFieldError[] | undefined {
 
 async function readErrorBody(
   res: Response,
-): Promise<{ message: string; errorCode?: string; fieldErrors?: ApiFieldError[] }> {
+): Promise<{
+  message: string;
+  errorCode?: string;
+  fieldErrors?: ApiFieldError[];
+  blockers?: PublishBlocker[];
+}> {
   try {
     const body = (await res.json()) as {
       message?: string | string[];
       error?: string;
       errorCode?: string;
       errors?: unknown;
+      blockers?: unknown;
     };
     const errorCode = typeof body.errorCode === "string" ? body.errorCode : undefined;
     const fieldErrors = parseFieldErrors(body.errors);
-    if (Array.isArray(body.message)) return { message: body.message.join(", "), errorCode, fieldErrors };
-    if (typeof body.message === "string") return { message: body.message, errorCode, fieldErrors };
-    if (typeof body.error === "string") return { message: body.error, errorCode, fieldErrors };
+    const blockers = parsePublishBlockers(body.blockers);
+    if (Array.isArray(body.message)) return { message: body.message.join(", "), errorCode, fieldErrors, blockers };
+    if (typeof body.message === "string") return { message: body.message, errorCode, fieldErrors, blockers };
+    if (typeof body.error === "string") return { message: body.error, errorCode, fieldErrors, blockers };
   } catch { /* fall through */ }
   return { message: "Something went wrong. Please try again." };
 }
@@ -117,8 +165,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    const { message, errorCode, fieldErrors } = await readErrorBody(res);
-    throw new ApiError(message, res.status, errorCode, fieldErrors);
+    const { message, errorCode, fieldErrors, blockers } = await readErrorBody(res);
+    throw new ApiError(message, res.status, errorCode, fieldErrors, blockers);
   }
   if (res.status === 204) {
     if (shouldRefreshAdminProfileForMutation(path, method)) {
@@ -4630,4 +4678,19 @@ export function createReadinessOverride(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+// ─── Publishing ─────────────────────────────────────────────────────────────
+// Guarded publish/unpublish. `isPublished` is no longer accepted on the
+// program update payload (PUT /programs/:id throws) — publishing a program
+// must go through these endpoints so the readiness gate runs. A blocked
+// publish comes back as a 422 ApiError carrying `blockers`; unpublish is
+// never gated.
+
+export async function publishProgram(programId: string): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/programs/${programId}/publish`, { method: "POST" });
+}
+
+export async function unpublishProgram(programId: string): Promise<{ success: boolean }> {
+  return request<{ success: boolean }>(`/programs/${programId}/unpublish`, { method: "POST" });
 }

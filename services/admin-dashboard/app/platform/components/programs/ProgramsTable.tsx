@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Trash2, Eye, Layers, TriangleAlert } from "lucide-react";
+import { Pencil, Trash2, Eye, EyeOff, Layers, TriangleAlert, Rocket } from "lucide-react";
 import Link from "next/link";
 import {
   Table,
@@ -37,9 +37,20 @@ type ProgramsTableProps = {
   programs: Program[];
   onEdit: (program: Program) => void;
   onDelete: (program: Program) => void;
+  onPublish: (program: Program) => void;
+  onUnpublish: (program: Program) => void;
+  /** True while a publish request is in flight, to keep the row action from double-firing. */
+  isPublishing?: boolean;
 };
 
-export function ProgramsTable({ programs, onEdit, onDelete }: ProgramsTableProps) {
+export function ProgramsTable({
+  programs,
+  onEdit,
+  onDelete,
+  onPublish,
+  onUnpublish,
+  isPublishing = false,
+}: ProgramsTableProps) {
   if (programs.length === 0) {
     return (
       <EmptyState
@@ -123,6 +134,26 @@ export function ProgramsTable({ programs, onEdit, onDelete }: ProgramsTableProps
                 >
                   <Eye className="h-4 w-4" />
                 </Link>
+                {program.isPublished ? (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => onUnpublish(program)}
+                    title="Unpublish program"
+                  >
+                    <EyeOff className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => onPublish(program)}
+                    disabled={isPublishing}
+                    title="Publish program"
+                  >
+                    <Rocket className="h-4 w-4" />
+                  </Button>
+                )}
                 <Button
                   size="icon"
                   variant="ghost"
