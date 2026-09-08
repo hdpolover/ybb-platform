@@ -35,12 +35,15 @@ export function ReadinessList({ results }: { results: ReadinessRuleResult[] }) {
             <Icon className="mt-0.5 h-5 w-5 shrink-0 text-zinc-400" aria-hidden />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium text-zinc-900">{result.title}</span>
+                <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  {result.title}
+                </span>
                 <StatusBadge context="readiness" status={result.status} />
               </div>
               {/* The symptom is the point: it says what a visitor sees today,
-                  not merely that a field is empty. */}
-              <p className="mt-1 text-sm text-zinc-600">{result.symptom}</p>
+                  not merely that a field is empty. It carries the visual
+                  weight the rule title used to have. */}
+              <p className="mt-1 text-base font-medium text-zinc-900">{result.symptom}</p>
               {result.overrideReason ? (
                 <p className="mt-1 text-sm text-amber-700">
                   Overridden: {result.overrideReason}
