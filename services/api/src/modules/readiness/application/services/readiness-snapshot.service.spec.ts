@@ -5,6 +5,7 @@ import { ReadinessSnapshotService } from './readiness-snapshot.service';
 import { ReadinessRepository } from '../../infrastructure/persistence/readiness.repository';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 
 const mockQueryBus = { execute: jest.fn() };
 const mockRepo = {
@@ -15,6 +16,9 @@ const mockRepo = {
 };
 const mockProducer = { emit: jest.fn() };
 const mockRead = { program: { findMany: jest.fn() }, brand: { findMany: jest.fn() } };
+const mockCronLock = {
+  runExclusive: jest.fn((_jobName: string, fn: () => Promise<void>) => fn()),
+};
 
 describe('ReadinessSnapshotService', () => {
   let service: ReadinessSnapshotService;
@@ -27,6 +31,7 @@ describe('ReadinessSnapshotService', () => {
         { provide: ReadinessRepository, useValue: mockRepo },
         { provide: RabbitMQProducerService, useValue: mockProducer },
         { provide: PrismaReadService, useValue: mockRead },
+        { provide: CronLockService, useValue: mockCronLock },
       ],
     }).compile();
     service = moduleRef.get(ReadinessSnapshotService);

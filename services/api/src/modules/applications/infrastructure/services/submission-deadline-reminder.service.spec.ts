@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { SubmissionDeadlineReminderService } from './submission-deadline-reminder.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 import { startOfWibDay, addDays } from '@shared/utils/wib-time';
 import { resolveSubmissionCutoff } from '@shared/utils/submission-deadline.util';
 
@@ -56,6 +57,10 @@ describe('SubmissionDeadlineReminderService', () => {
         SubmissionDeadlineReminderService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: RabbitMQProducerService, useValue: mockRabbitmq },
+        {
+          provide: CronLockService,
+          useValue: { runExclusive: jest.fn((_jobName: string, fn: () => Promise<void>) => fn()) },
+        },
       ],
     }).compile();
 

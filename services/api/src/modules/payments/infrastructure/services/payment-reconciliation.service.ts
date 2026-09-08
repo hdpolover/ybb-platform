@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { PaymentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { buildParticipantPaymentsUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { isManualPaymentMethod } from '@modules/payments/application/utils/payment-method.util';
@@ -135,6 +136,7 @@ export class PaymentReconciliationService {
         private readonly configService: ConfigService,
         private readonly prisma: PrismaService,
         private readonly rabbitmqProducer: RabbitMQProducerService,
+        private readonly cronLock: CronLockService,
     ) {
         this.paymentServiceInternalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
     }
@@ -146,6 +148,13 @@ export class PaymentReconciliationService {
     /**
      * Hourly safety net. Reconciles 'processing' and 'unpaid' invoices (with
      * external references) against the payment service. Enabled by default.
+     *
+     * Has no internal claim guard of its own (unlike most of the other cron
+     * jobs), so without CronLockService N replicas would each run a full
+     * reconciliation pass against the payment gateway every hour - N x the
+     * gateway calls and, worse, N independent settle/revert decisions racing
+     * on the same invoices. jobName is distinct per cron so this never
+     * contends with any other job's lock.
      */
     @Cron('0 * * * *')
     async runScheduledReconciliation(): Promise<void> {
@@ -153,59 +162,61 @@ export class PaymentReconciliationService {
             return;
         }
 
-        try {
-            const report = await this.reconcileProcessingInvoices({
-                apply: true,
-                graceMinutes: this.cronGraceMinutes,
-            });
-            this.logger.log(
-                `[payment-reconciliation] scanned=${report.scanned} settledPaid=${report.settledPaid} ` +
-                `revertedUnpaid=${report.revertedUnpaid} skipped=${report.skipped} errors=${report.errors}`,
-            );
-        } catch (error) {
-            this.logger.error(
-                `[payment-reconciliation] scheduled run failed: ${toErrorMessage(error)}`,
-            );
-        }
-
-        try {
-            const driftReport = await this.reconcileTerminalInvoiceDrift(true);
-            this.logger.log(
-                `[payment-reconciliation] terminal-drift scanned=${driftReport.scanned} ` +
-                `voided=${driftReport.voided} dangerSettled=${driftReport.dangerSettled} ` +
-                `resolvedRefundedManual=${driftReport.resolvedRefundedManual} ` +
-                `needsReview=${driftReport.needsReview} skipped=${driftReport.skipped} errors=${driftReport.errors}`,
-            );
-            if (driftReport.dangerSettled > 0) {
+        await this.cronLock.runExclusive('payment-reconciliation', async () => {
+            try {
+                const report = await this.reconcileProcessingInvoices({
+                    apply: true,
+                    graceMinutes: this.cronGraceMinutes,
+                });
+                this.logger.log(
+                    `[payment-reconciliation] scanned=${report.scanned} settledPaid=${report.settledPaid} ` +
+                    `revertedUnpaid=${report.revertedUnpaid} skipped=${report.skipped} errors=${report.errors}`,
+                );
+            } catch (error) {
                 this.logger.error(
-                    `[payment-reconciliation] DANGER: ${driftReport.dangerSettled} cancelled/failed/refunded ` +
-                    `invoice(s) have a SUCCESS transaction at the gateway — needs human refund/un-cancel review`,
+                    `[payment-reconciliation] scheduled run failed: ${toErrorMessage(error)}`,
                 );
             }
-            if (driftReport.needsReview > 0) {
+
+            try {
+                const driftReport = await this.reconcileTerminalInvoiceDrift(true);
+                this.logger.log(
+                    `[payment-reconciliation] terminal-drift scanned=${driftReport.scanned} ` +
+                    `voided=${driftReport.voided} dangerSettled=${driftReport.dangerSettled} ` +
+                    `resolvedRefundedManual=${driftReport.resolvedRefundedManual} ` +
+                    `needsReview=${driftReport.needsReview} skipped=${driftReport.skipped} errors=${driftReport.errors}`,
+                );
+                if (driftReport.dangerSettled > 0) {
+                    this.logger.error(
+                        `[payment-reconciliation] DANGER: ${driftReport.dangerSettled} cancelled/failed/refunded ` +
+                        `invoice(s) have a SUCCESS transaction at the gateway — needs human refund/un-cancel review`,
+                    );
+                }
+                if (driftReport.needsReview > 0) {
+                    this.logger.error(
+                        `[payment-reconciliation] NEEDS REVIEW: ${driftReport.needsReview} cancelled/failed/refunded ` +
+                        `invoice(s) have a proof-backed/under-review manual transfer at the gateway — refusing to ` +
+                        `auto-void, needs human review`,
+                    );
+                }
+            } catch (error) {
                 this.logger.error(
-                    `[payment-reconciliation] NEEDS REVIEW: ${driftReport.needsReview} cancelled/failed/refunded ` +
-                    `invoice(s) have a proof-backed/under-review manual transfer at the gateway — refusing to ` +
-                    `auto-void, needs human review`,
+                    `[payment-reconciliation] terminal-drift run failed: ${toErrorMessage(error)}`,
                 );
             }
-        } catch (error) {
-            this.logger.error(
-                `[payment-reconciliation] terminal-drift run failed: ${toErrorMessage(error)}`,
-            );
-        }
 
-        try {
-            const columnReport = await this.reconcilePaidColumnDrift(true);
-            this.logger.log(
-                `[payment-reconciliation] paid-column-drift scanned=${columnReport.scanned} ` +
-                `repaired=${columnReport.repaired} errors=${columnReport.errors}`,
-            );
-        } catch (error) {
-            this.logger.error(
-                `[payment-reconciliation] paid-column-drift run failed: ${toErrorMessage(error)}`,
-            );
-        }
+            try {
+                const columnReport = await this.reconcilePaidColumnDrift(true);
+                this.logger.log(
+                    `[payment-reconciliation] paid-column-drift scanned=${columnReport.scanned} ` +
+                    `repaired=${columnReport.repaired} errors=${columnReport.errors}`,
+                );
+            } catch (error) {
+                this.logger.error(
+                    `[payment-reconciliation] paid-column-drift run failed: ${toErrorMessage(error)}`,
+                );
+            }
+        });
     }
 
     /**

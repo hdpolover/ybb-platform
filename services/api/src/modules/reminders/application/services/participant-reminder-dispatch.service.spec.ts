@@ -5,6 +5,7 @@ import { ParticipantReminderSendRepository } from '../../infrastructure/persiste
 import { RegistrationFeeAudienceService } from './registration-fee-audience.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 
 const RECIPIENTS = [
   { participantId: 'p-1', userId: 'u-1', email: 'ada@example.com', fullName: 'Ada' },
@@ -58,6 +59,9 @@ function build(over: {
     { markPending } as unknown as ParticipantReminderSendRepository,
     { findRecipients } as unknown as RegistrationFeeAudienceService,
     { emit } as unknown as RabbitMQProducerService,
+    {
+      runExclusive: jest.fn((_jobName: string, fn: () => Promise<void>) => fn()),
+    } as unknown as CronLockService,
   );
 
   return { service, claimForSending, markSent, findDueIds, markPending, emit, findRecipients };

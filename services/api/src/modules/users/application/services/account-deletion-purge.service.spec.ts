@@ -5,6 +5,7 @@ import { AccountDeletionPurgeService } from './account-deletion-purge.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { FirebaseAuthService } from '@modules/auth/infrastructure/services/firebase-auth.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 import { DeletionStatus, Prisma } from '@prisma/client';
 
 describe('AccountDeletionPurgeService', () => {
@@ -45,6 +46,9 @@ describe('AccountDeletionPurgeService', () => {
   const mockFirebaseAuthService = { deleteUser: jest.fn() };
   const mockRabbitmqProducer = { emit: jest.fn() };
   const mockConfigService = { get: jest.fn(() => 'https://example.ybb.id') };
+  const mockCronLock = {
+    runExclusive: jest.fn((_jobName: string, fn: () => Promise<void>) => fn()),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -54,6 +58,7 @@ describe('AccountDeletionPurgeService', () => {
         { provide: FirebaseAuthService, useValue: mockFirebaseAuthService },
         { provide: RabbitMQProducerService, useValue: mockRabbitmqProducer },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: CronLockService, useValue: mockCronLock },
       ],
     }).compile();
 

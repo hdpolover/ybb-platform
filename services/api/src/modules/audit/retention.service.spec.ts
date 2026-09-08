@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { RetentionService } from './retention.service';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
+import { CronLockService } from '../../shared/infrastructure/database/cron-lock.service';
 
 function makeDelegate() {
     return {
@@ -19,6 +20,7 @@ describe('RetentionService', () => {
         submissionReminderLog: ReturnType<typeof makeDelegate>;
     };
     let mockConfigService: { get: jest.Mock };
+    let mockCronLock: { runExclusive: jest.Mock };
 
     beforeEach(async () => {
         mockPrismaService = {
@@ -30,16 +32,38 @@ describe('RetentionService', () => {
         mockConfigService = {
             get: jest.fn((_key: string, defaultValue: number) => defaultValue),
         };
+        mockCronLock = {
+            runExclusive: jest.fn((_jobName: string, fn: () => Promise<void>) => fn()),
+        };
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 RetentionService,
                 { provide: PrismaService, useValue: mockPrismaService },
                 { provide: ConfigService, useValue: mockConfigService },
+                { provide: CronLockService, useValue: mockCronLock },
             ],
         }).compile();
 
         service = module.get<RetentionService>(RetentionService);
+    });
+
+    // Replica-safety: N API replicas would otherwise each run their own
+    // deleteMany batches against the same window every night - see
+    // CronLockService.
+    it('runs the cleanup through CronLockService.runExclusive with a stable jobName', async () => {
+        await service.runScheduledCleanup();
+
+        expect(mockCronLock.runExclusive).toHaveBeenCalledTimes(1);
+        expect(mockCronLock.runExclusive).toHaveBeenCalledWith('audit-retention', expect.any(Function));
+    });
+
+    it('does not prune anything when the lock is not acquired', async () => {
+        mockCronLock.runExclusive.mockImplementation(async () => undefined); // simulate lock lost
+
+        await service.runScheduledCleanup();
+
+        expect(mockPrismaService.userSession.findMany).not.toHaveBeenCalled();
     });
 
     it('deletes expired sessions by expiresAt, not by a fixed age', async () => {

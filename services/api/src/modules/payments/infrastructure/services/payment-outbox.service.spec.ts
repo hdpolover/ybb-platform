@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentOutboxService } from './payment-outbox.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 
 describe('PaymentOutboxService', () => {
     let service: PaymentOutboxService;
@@ -26,6 +27,11 @@ describe('PaymentOutboxService', () => {
                 PaymentOutboxService,
                 { provide: PrismaService, useValue: mockPrisma },
                 { provide: RabbitMQProducerService, useValue: mockRabbitMQ },
+                // Real CronLockService would reuse mockPrisma.$queryRaw for its own
+                // advisory-lock query, muddying the $queryRaw assertions below that
+                // are about claimBatch()'s SQL. A plain passthrough keeps this
+                // suite's existing assertions about claimBatch's own query intact.
+                { provide: CronLockService, useValue: { runExclusive: jest.fn((_jobName: string, fn: () => Promise<void>) => fn()) } },
             ],
         }).compile();
 

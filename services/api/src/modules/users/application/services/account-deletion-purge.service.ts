@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { DeletionStatus, Prisma } from '@prisma/client';
 import { randomUUID, randomBytes, createHash } from 'crypto';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 import { FirebaseAuthService } from '@modules/auth/infrastructure/services/firebase-auth.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { buildAccountDeletionCancelUrl } from '../utils/account-deletion-cancel-url.util';
@@ -78,84 +79,104 @@ export class AccountDeletionPurgeService {
     private readonly firebaseAuthService: FirebaseAuthService,
     private readonly rabbitmqProducer: RabbitMQProducerService,
     private readonly configService: ConfigService,
+    private readonly cronLock: CronLockService,
   ) {}
 
   // Runs once daily at 04:00 WIB - after RetentionService's 03:30 slot.
   // UsersModule (like AuditModule) is only imported by the root AppModule,
   // never by any of the RMQ consumer bootstrap modules
   // (audit/reporting/payment-events/loa-events/reminder-events - see
-  // src/bootstrap/*.ts), so this cron fires exactly once per deploy. Mirrors
-  // the precedent documented on RetentionService.runScheduledCleanup.
+  // src/bootstrap/*.ts). That made this fire exactly once per deploy when
+  // there was exactly one HTTP app container; with N replicas it fires N
+  // times, so it is still wrapped like every other cron. Mirrors the
+  // precedent documented on RetentionService.runScheduledCleanup.
+  //
+  // purgeOne() does have its own row-level updateMany claim guard, but that
+  // only stops two replicas double-purging the SAME request - without the
+  // lock they would still each pull the full due batch and each attempt
+  // Firebase account deletion / irreversible data wipes on every request in
+  // parallel, racing each other for no reason.
   @Cron('0 4 * * *', { timeZone: 'Asia/Jakarta' })
   async runScheduledPurge(): Promise<void> {
-    const due: DueRequest[] = await this.prisma.accountDeletionRequest.findMany({
-      where: {
-        status: DeletionStatus.approved,
-        scheduledDeletionDate: { lte: new Date() },
-      },
-      select: { id: true, userId: true },
-      take: BATCH_SIZE,
-    });
+    await this.cronLock.runExclusive('account-deletion-purge', async () => {
+      const due: DueRequest[] = await this.prisma.accountDeletionRequest.findMany({
+        where: {
+          status: DeletionStatus.approved,
+          scheduledDeletionDate: { lte: new Date() },
+        },
+        select: { id: true, userId: true },
+        take: BATCH_SIZE,
+      });
 
-    if (due.length === 0) return;
+      if (due.length === 0) return;
 
-    let purged = 0;
-    for (const request of due) {
-      try {
-        await this.purgeOne(request);
-        purged += 1;
-      } catch (error) {
-        this.logger.error(
-          `[account-deletion-purge] request=${request.id} user=${request.userId} failed, will retry next run: ${toErrorMessage(error)}`,
-        );
+      let purged = 0;
+      for (const request of due) {
+        try {
+          await this.purgeOne(request);
+          purged += 1;
+        } catch (error) {
+          this.logger.error(
+            `[account-deletion-purge] request=${request.id} user=${request.userId} failed, will retry next run: ${toErrorMessage(error)}`,
+          );
+        }
       }
-    }
 
-    this.logger.log(`[account-deletion-purge] processed=${due.length} purged=${purged}`);
+      this.logger.log(`[account-deletion-purge] processed=${due.length} purged=${purged}`);
+    });
   }
 
   // Runs once daily at 05:00 WIB - after the purge job's own 04:00 slot, so
   // a request whose scheduledDeletionDate is due TODAY gets purged (and its
   // completion email) before this ever gets a chance to send it a "your
   // account is being deleted soon" reminder instead.
+  //
+  // sendReminder() has no per-request claim guard at all (dataSnapshot's
+  // reminderSentAt is only written after send, and only in this JS filter) -
+  // without the lock, N replicas racing this tick would each pass the same
+  // filter and each send the same "your account is being deleted soon" email.
+  // Distinct jobName from runScheduledPurge's lock above, so the 04:00 purge
+  // and 05:00 reminder never contend with each other even on an overrun.
   @Cron('0 5 * * *', { timeZone: 'Asia/Jakarta' })
   async runScheduledReminders(): Promise<void> {
-    const now = new Date();
-    const windowEnd = new Date(now.getTime() + REMINDER_DAYS_BEFORE * 24 * 60 * 60 * 1000);
+    await this.cronLock.runExclusive('account-deletion-reminder', async () => {
+      const now = new Date();
+      const windowEnd = new Date(now.getTime() + REMINDER_DAYS_BEFORE * 24 * 60 * 60 * 1000);
 
-    const candidates: ReminderCandidate[] = await this.prisma.accountDeletionRequest.findMany({
-      where: {
-        status: DeletionStatus.approved,
-        scheduledDeletionDate: { gt: now, lte: windowEnd },
-      },
-      select: { id: true, userId: true, scheduledDeletionDate: true, dataSnapshot: true },
-    });
+      const candidates: ReminderCandidate[] = await this.prisma.accountDeletionRequest.findMany({
+        where: {
+          status: DeletionStatus.approved,
+          scheduledDeletionDate: { gt: now, lte: windowEnd },
+        },
+        select: { id: true, userId: true, scheduledDeletionDate: true, dataSnapshot: true },
+      });
 
-    // ponytail: "reminder not yet sent" is filtered here in JS rather than a
-    // Postgres JSON-path where clause, since dataSnapshot is JSON and this
-    // list is small (grace-period requests only). Add a dedicated
-    // reminderSentAt column + index if this job's candidate set ever grows
-    // large enough for that to matter.
-    const due = candidates.filter((c) => {
-      const snapshot = c.dataSnapshot as { reminderSentAt?: string } | null;
-      return !snapshot?.reminderSentAt;
-    });
+      // ponytail: "reminder not yet sent" is filtered here in JS rather than a
+      // Postgres JSON-path where clause, since dataSnapshot is JSON and this
+      // list is small (grace-period requests only). Add a dedicated
+      // reminderSentAt column + index if this job's candidate set ever grows
+      // large enough for that to matter.
+      const due = candidates.filter((c) => {
+        const snapshot = c.dataSnapshot as { reminderSentAt?: string } | null;
+        return !snapshot?.reminderSentAt;
+      });
 
-    if (due.length === 0) return;
+      if (due.length === 0) return;
 
-    let sent = 0;
-    for (const request of due) {
-      try {
-        await this.sendReminder(request);
-        sent += 1;
-      } catch (error) {
-        this.logger.error(
-          `[account-deletion-reminder] request=${request.id} user=${request.userId} failed, will retry next run: ${toErrorMessage(error)}`,
-        );
+      let sent = 0;
+      for (const request of due) {
+        try {
+          await this.sendReminder(request);
+          sent += 1;
+        } catch (error) {
+          this.logger.error(
+            `[account-deletion-reminder] request=${request.id} user=${request.userId} failed, will retry next run: ${toErrorMessage(error)}`,
+          );
+        }
       }
-    }
 
-    this.logger.log(`[account-deletion-reminder] candidates=${candidates.length} sent=${sent}`);
+      this.logger.log(`[account-deletion-reminder] candidates=${candidates.length} sent=${sent}`);
+    });
   }
 
   private async sendReminder(request: ReminderCandidate): Promise<void> {

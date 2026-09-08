@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ApplicationStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { startOfWibDay, addDays } from '@shared/utils/wib-time';
 import { resolveSubmissionCutoff } from '@shared/utils/submission-deadline.util';
@@ -63,6 +64,7 @@ export class SubmissionDeadlineReminderService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmqProducer: RabbitMQProducerService,
+    private readonly cronLock: CronLockService,
   ) {}
 
   /**
@@ -76,18 +78,26 @@ export class SubmissionDeadlineReminderService {
    * those consumer containers additionally never import ScheduleModule, so
    * @Cron is inert there even if that ever changes. Mirrors the precedent and
    * reasoning documented on PaymentReconciliationService.runScheduledReconciliation.
+   *
+   * claimReminder() already guards each individual send with an updateMany,
+   * so two replicas can't double-email the same participant - but without the
+   * lock every replica would still separately scan the full due set every
+   * tick. Kept for defence in depth (it also covers RabbitMQ redelivery,
+   * unrelated to replica count) rather than removed now that the lock exists.
    */
   @Cron('0 8 * * *', { timeZone: 'Asia/Jakarta' })
   async runScheduledReminders(): Promise<void> {
-    try {
-      const report = await this.sendDueReminders();
-      this.logger.log(
-        `[submission-reminder] scanned=${report.scanned} sent=${report.sent} ` +
-          `alreadySent=${report.alreadySent} skippedNoEmail=${report.skippedNoEmail} errors=${report.errors}`,
-      );
-    } catch (error) {
-      this.logger.error(`[submission-reminder] scheduled run failed: ${toErrorMessage(error)}`);
-    }
+    await this.cronLock.runExclusive('submission-deadline-reminder', async () => {
+      try {
+        const report = await this.sendDueReminders();
+        this.logger.log(
+          `[submission-reminder] scanned=${report.scanned} sent=${report.sent} ` +
+            `alreadySent=${report.alreadySent} skippedNoEmail=${report.skippedNoEmail} errors=${report.errors}`,
+        );
+      } catch (error) {
+        this.logger.error(`[submission-reminder] scheduled run failed: ${toErrorMessage(error)}`);
+      }
+    });
   }
 
   /**
