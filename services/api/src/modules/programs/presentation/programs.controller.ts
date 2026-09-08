@@ -27,9 +27,11 @@ import { ProgressStepDto } from './dto/participant-progress-response.dto';
 import { Public } from '../../../shared/decorators/public.decorator';
 import { BrandDomain } from '../../../shared/decorators/brand-domain.decorator';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../../../modules/auth/infrastructure/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
@@ -76,6 +78,24 @@ interface ProgramLike {
   updatedAt: Date;
 }
 
+/**
+ * Audit M13: the two @Public() program routes below run behind
+ * OptionalJwtAuthGuard rather than no guard at all, so an admin bearer token
+ * still gets resolved into req.user while an absent/invalid one just leaves
+ * it undefined (never throws — see optional-jwt-auth.guard.ts). This mirrors
+ * RolesGuard's own role check (@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+ * used throughout this controller) rather than inventing a second notion of
+ * "admin" — same roles, same array-or-string handling.
+ */
+function isAdminCaller(user: CurrentUserData | undefined): boolean {
+  if (!user?.role) {
+    return false;
+  }
+
+  const roles = Array.isArray(user.role) ? user.role : [user.role];
+  return roles.some((role) => role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN);
+}
+
 @ApiTags('Programs')
 @Controller('programs')
 @ApiHeader({
@@ -98,10 +118,12 @@ export class ProgramsController {
 
   @Get()
   @Public()
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get all programs' })
   @ApiResponse({ status: 200, type: ProgramListResponseDto })
   async findAll(
     @Query() dto: ListProgramsDto,
+    @CurrentUser() user?: CurrentUserData,
     @BrandDomain() brandDomain?: string,
   ): Promise<ProgramListResponseDto> {
     if (!dto.url && brandDomain) {
@@ -118,12 +140,14 @@ export class ProgramsController {
       dto.isVisibleToUsers,
       dto.status,
       dto.url,
+      isAdminCaller(user),
     );
     return this.listProgramsHandler.execute(query);
   }
 
   @Get(':identifier')
   @Public()
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get program detail by ID or slug' })
   @ApiQuery({ name: 'include', required: false, description: 'Comma-separated relations to include (timeline, schedules, speakers, gallery, testimonials, faqs, partners, resources, pricing-tiers, requirements)' })
   @ApiQuery({ name: 'testimonialsLimit', required: false, type: Number, description: 'Limit the number of testimonials returned' })
@@ -133,6 +157,7 @@ export class ProgramsController {
   @ApiResponse({ status: 404, description: 'Program not found' })
   async findOne(
     @Param('identifier') identifier: string,
+    @CurrentUser() user?: CurrentUserData,
     @Query('include') include?: string,
     @Query('testimonialsLimit') testimonialsLimit?: number,
     @Query('announcementsLimit') announcementsLimit?: number,
@@ -144,6 +169,7 @@ export class ProgramsController {
       testimonialsLimit,
       announcementsLimit,
       resourcesLimit,
+      isAdminCaller(user),
     );
     return this.getProgramDetailHandler.execute(query) as Promise<ProgramDetailResponseDto>;
   }
