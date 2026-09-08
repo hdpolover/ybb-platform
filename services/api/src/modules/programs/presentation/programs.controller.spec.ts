@@ -17,6 +17,8 @@ import { GetParticipantProgressHandler } from '../application/queries/handlers/g
 
 import { ListProgramsQuery } from '../application/queries/list-programs.query';
 import { CreateProgramCommand } from '../application/commands/create-program.command';
+import { PublishProgramCommand } from '../application/commands/publish-program.command';
+import { UnpublishProgramCommand } from '../application/commands/unpublish-program.command';
 
 describe('ProgramsController', () => {
     let controller: ProgramsController;
@@ -137,6 +139,41 @@ describe('ProgramsController', () => {
 
             await expect(controller.create(dto, req)).rejects.toThrow(ForbiddenException);
             expect(mockExecute.execute).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('publish', () => {
+        it('dispatches a PublishProgramCommand using the admin id from @CurrentUser', async () => {
+            const user = { userId: 'user-1', adminId: 'admin-1', email: 'a@x.com', brandId: 'brand-1' } as any;
+
+            await controller.publish('prog-1', user);
+
+            expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(PublishProgramCommand));
+            const cmd = mockExecute.execute.mock.calls[0][0];
+            expect(cmd.programId).toBe('prog-1');
+            expect(cmd.adminId).toBe('admin-1');
+        });
+
+        it('falls back to userId when adminId is absent from @CurrentUser', async () => {
+            const user = { userId: 'user-2', email: 'b@x.com', brandId: 'brand-1' } as any;
+
+            await controller.publish('prog-1', user);
+
+            const cmd = mockExecute.execute.mock.calls[0][0];
+            expect(cmd.adminId).toBe('user-2');
+        });
+    });
+
+    describe('unpublish', () => {
+        it('dispatches an UnpublishProgramCommand using the admin id from @CurrentUser', async () => {
+            const user = { userId: 'user-1', adminId: 'admin-1', email: 'a@x.com', brandId: 'brand-1' } as any;
+
+            await controller.unpublish('prog-1', user);
+
+            expect(mockExecute.execute).toHaveBeenCalledWith(expect.any(UnpublishProgramCommand));
+            const cmd = mockExecute.execute.mock.calls[0][0];
+            expect(cmd.programId).toBe('prog-1');
+            expect(cmd.adminId).toBe('admin-1');
         });
     });
 });
