@@ -1,0 +1,34 @@
+// Publish-readiness persistence: admin overrides that suppress individual
+// rule failures, and the last-evaluated snapshot per subject used to power
+// list/sort views without re-running the rule engine on every request.
+
+model ReadinessOverride {
+  id          String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  subjectType String    @map("subject_type") @db.VarChar(20) // 'brand' | 'program'
+  subjectId   String    @map("subject_id") @db.Uuid
+  ruleId      String    @map("rule_id") @db.VarChar(100)
+  adminId     String    @map("admin_id") @db.Uuid
+  reason      String    @db.Text
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([subjectType, subjectId])
+  @@index([ruleId])
+  @@map("readiness_overrides")
+}
+
+model ReadinessSnapshot {
+  subjectType   String   @map("subject_type") @db.VarChar(20)
+  subjectId     String   @map("subject_id") @db.Uuid
+  brandId       String   @map("brand_id") @db.Uuid
+  result        Json
+  blockerCount  Int      @map("blocker_count")
+  warningCount  Int      @map("warning_count")
+  evaluatedAt   DateTime @map("evaluated_at") @db.Timestamptz(6)
+
+  @@id([subjectType, subjectId])
+  @@index([brandId])
+  @@map("readiness_snapshots")
+}
