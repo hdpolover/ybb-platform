@@ -1,9 +1,16 @@
-import { IsOptional, IsObject, IsString, IsNotEmpty, ValidateNested } from 'class-validator';
+import { IsOptional, IsObject, IsString, IsNotEmpty, MaxLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 import { IsSubmissionDataEnglish } from '@shared/validators/submission-data-english.validator';
 import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
 
+// MaxLength on every string below mirrors its Postgres column exactly:
+// participants.full_name VarChar(255), nick_name/display_name VarChar(100), and
+// participant_applications.twibbon_link VarChar(500). Without them an overlong
+// value reaches Postgres and raises 22001. PR #139 already maps that to a 4xx
+// rather than an opaque 500, but the DTO is what lets the response NAME the
+// field that was too long instead of blaming the request as a whole. Same
+// defect class as the VarChar overflows already on record in this codebase.
 /**
  * Patch for Participant table columns that appear on generated documents
  * (LoA, ID cards, certificates).  Only the fields relevant to document
@@ -18,6 +25,7 @@ export class AdminParticipantPatchDto {
   @IsOptional()
   @IsString()
   @IsEnglishName()
+  @MaxLength(255)
   fullName?: string;
 
   @ApiPropertyOptional({
@@ -27,6 +35,7 @@ export class AdminParticipantPatchDto {
   @IsOptional()
   @IsString()
   @IsEnglishName()
+  @MaxLength(100)
   nickName?: string;
 
   @ApiPropertyOptional({
@@ -36,6 +45,7 @@ export class AdminParticipantPatchDto {
   @IsOptional()
   @IsString()
   @IsEnglishName()
+  @MaxLength(100)
   displayName?: string;
 }
 
@@ -66,6 +76,7 @@ export class AdminApplicationPatchDto {
   @ApiPropertyOptional({ description: 'Twibbon / social post link.' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   twibbonLink?: string;
 }
 

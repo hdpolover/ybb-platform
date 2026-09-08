@@ -4,8 +4,10 @@ import {
   Body,
   Logger,
   Headers,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { createHash, timingSafeEqual } from 'crypto';
 import { ApiTags, ApiOperation, ApiResponse, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
 
@@ -13,7 +15,18 @@ import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.servi
  * Storage Events Controller
  *
  * Receives webhooks from MinIO/S3 when files are uploaded/deleted.
- * Protected by MINIO_WEBHOOK_SECRET env var — set it in MinIO webhook config.
+ *
+ * Requires MINIO_WEBHOOK_SECRET. The guard used to be written as
+ * `if (expectedSecret && ...)`, so leaving the variable unset did not weaken the
+ * check — it removed it, and the variable was set nowhere: not in .env, not in
+ * any compose file, not on the running container. The endpoint was an
+ * unauthenticated POST that writes file state.
+ *
+ * It now refuses to serve at all without the secret. That is free rather than
+ * risky here: the handler has logged zero events in seven days of production
+ * logs, and object storage is DigitalOcean Spaces rather than MinIO, so nothing
+ * is calling this today. If it is ever wired up, set the secret FIRST — an
+ * unset secret is now a 503, by design.
  */
 @ApiTags('files')
 @Controller('files/events')
@@ -32,8 +45,17 @@ export class StorageEventsController {
     @Body() payload: Record<string, unknown>,
     @Headers('authorization') authHeader?: string
   ) {
-    const expectedSecret = process.env.MINIO_WEBHOOK_SECRET;
-    if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
+    const expectedSecret = process.env.MINIO_WEBHOOK_SECRET?.trim();
+    if (!expectedSecret) {
+      // Fail CLOSED. An unconfigured secret must never mean "no authentication".
+      this.logger.error(
+        'MINIO_WEBHOOK_SECRET is not configured; refusing the storage webhook. ' +
+          'Set it on the API and in the bucket notification config before enabling this.',
+      );
+      throw new ServiceUnavailableException('Storage webhook is not configured');
+    }
+
+    if (!matchesWebhookSecret(authHeader, expectedSecret)) {
       throw new UnauthorizedException('Invalid webhook secret');
     }
 
@@ -88,4 +110,22 @@ export class StorageEventsController {
 
     return { status: 'processed', count: records.length };
   }
+}
+
+/**
+ * Constant-time bearer comparison.
+ *
+ * Compares SHA-256 digests rather than raw bytes: timingSafeEqual throws on a
+ * length mismatch, so raw values would need a length pre-check, which is itself
+ * a fast, length-leaking compare on an endpoint an attacker can retry freely.
+ * Digests are always 32 bytes, so one comparison covers content and length.
+ */
+function matchesWebhookSecret(authHeader: string | undefined, expected: string): boolean {
+  const prefix = 'Bearer ';
+  if (!authHeader || !authHeader.startsWith(prefix)) return false;
+  const presented = authHeader.slice(prefix.length);
+  return timingSafeEqual(
+    createHash('sha256').update(presented, 'utf8').digest(),
+    createHash('sha256').update(expected, 'utf8').digest(),
+  );
 }
