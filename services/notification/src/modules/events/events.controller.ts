@@ -60,6 +60,11 @@ type PricingTierAlertProgram = {
   brandName: string;
   tiers: PricingTierAlertTier[];
 };
+type ReadinessRegressionBlocker = {
+  ruleId: string;
+  title: string;
+  symptom: string;
+};
 type RmqMessage = {
   content?: Buffer;
   properties?: {
@@ -583,6 +588,39 @@ export class EventsController {
             );
           }
         }
+      },
+    );
+  }
+
+  @EventPattern('readiness.regression.detected')
+  async handleReadinessRegression(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'readiness.regression.detected',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received readiness.regression.detected event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const subjectId = getString(payload, 'subjectId');
+        const newBlockers = getReadinessRegressionBlockers(payload, 'newBlockers');
+        // Nothing to alert on without a subject or any new blocker — the API
+        // only emits this event when both are present, but this handler
+        // does not trust that.
+        if (!subjectId || newBlockers.length === 0) return;
+
+        await this.emailService.sendReadinessRegressionDigest({
+          subjectType: getString(payload, 'subjectType') || 'program',
+          subjectId,
+          programName: getString(payload, 'programName') || subjectId,
+          brandId: getString(payload, 'brandId') || '',
+          newBlockers,
+        });
       },
     );
   }
@@ -1537,6 +1575,25 @@ function extractProviderMessageId(response: unknown): string | null {
 
 function getStringArray(source: Record<string, unknown>, key: string): string[] {
   return getArray(source, key).filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+}
+
+function getReadinessRegressionBlockers(
+  source: Record<string, unknown>,
+  key: string,
+): ReadinessRegressionBlocker[] {
+  const normalized: ReadinessRegressionBlocker[] = [];
+  for (const rawBlocker of getArray(source, key)) {
+    const blocker = asRecord(rawBlocker);
+    const ruleId = getString(blocker, 'ruleId');
+    const title = getString(blocker, 'title');
+    if (!ruleId || !title) continue;
+    normalized.push({
+      ruleId,
+      title,
+      symptom: getString(blocker, 'symptom') || '',
+    });
+  }
+  return normalized;
 }
 
 function getPricingTierAlertPrograms(

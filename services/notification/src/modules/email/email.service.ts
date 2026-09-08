@@ -1095,6 +1095,82 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
+  /**
+   * Nightly regression digest for ReadinessSnapshotService (API). Same
+   * reasoning as sendPricingTierCoverageAlertEmail above: an internal ops
+   * alert, not a brand-templated participant email, so it skips
+   * resolveEmailContent()/layout.hbs and builds a plain self-contained
+   * table. Reports change (new blockers only), not full state — the caller
+   * already filtered out blockers that existed in the previous snapshot.
+   */
+  async sendReadinessRegressionDigest(data: {
+    subjectType: string;
+    subjectId: string;
+    programName: string;
+    brandId: string;
+    newBlockers: Array<{ ruleId: string; title: string; symptom: string }>;
+  }) {
+    const recipients = this.resolveOpsAlertRecipients();
+    if (recipients.length === 0) {
+      this.logger.error(
+        `[readiness-regression] program=${data.subjectId} has ${data.newBlockers.length} new blocker(s) ` +
+          `but OPS_ALERT_EMAILS is missing or empty - no email can be delivered. Set OPS_ALERT_EMAILS to a ` +
+          `comma-separated recipient list.`,
+      );
+      return;
+    }
+
+    const adminBaseUrl = (
+      this.configService.get<string>('ADMIN_DASHBOARD_URL') || 'http://localhost:3001'
+    ).replace(/\/$/, '');
+    const readinessUrl = `${adminBaseUrl}/platform/readiness`;
+
+    const rows = data.newBlockers
+      .map(
+        (blocker) => `
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(blocker.title)}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(blocker.symptom)}</td>
+          </tr>`,
+      )
+      .join('');
+
+    const subject = `[Action Required] ${data.newBlockers.length} new readiness blocker(s) - ${data.programName}`;
+
+    const html = `
+      <div style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto;padding:24px;color:#111827;">
+        <h2 style="margin:0 0 8px;font-size:20px;">Readiness regression detected</h2>
+        <p style="margin:0 0 16px;color:#4b5563;">
+          ${escapeHtml(data.programName)} (brand ${escapeHtml(data.brandId)}) is published and now has
+          ${data.newBlockers.length} new blocker(s) it did not have at the last check.
+        </p>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;">
+          <thead>
+            <tr style="text-align:left;">
+              <th style="padding:8px 12px;border-bottom:2px solid #e5e7eb;">Blocker</th>
+              <th style="padding:8px 12px;border-bottom:2px solid #e5e7eb;">Symptom</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <p style="margin:24px 0 0;">
+          <a href="${escapeHtml(readinessUrl)}" style="color:#1D4ED8;">View readiness details</a>
+        </p>
+      </div>`;
+
+    for (const recipient of recipients) {
+      await this.sendRawEmail(recipient, subject, html);
+    }
+  }
+
+  private resolveOpsAlertRecipients(): string[] {
+    const raw = this.configService.get<string>('OPS_ALERT_EMAILS') ?? '';
+    return raw
+      .split(',')
+      .map((email) => email.trim())
+      .filter((email) => email.length > 0);
+  }
+
   async sendPaymentRefundedEmail(to: string, paymentData: any) {
     const templateData = {
       name: paymentData.name,

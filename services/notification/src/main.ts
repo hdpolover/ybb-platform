@@ -76,6 +76,11 @@ async function bootstrap() {
         exchangeType: 'topic',
         routingKey: 'reminder.participant.dispatch',
       },
+      // Nightly readiness regression digest (ReadinessSnapshotService in the
+      // API). No 'readiness.#' wildcard exists, and a pattern with no
+      // binding here drops silently with no error anywhere — this line is
+      // what makes the event arrive at all.
+      { exchange: 'ybb.events', exchangeType: 'topic', routingKey: 'readiness.regression.detected' },
     ],
   });
 

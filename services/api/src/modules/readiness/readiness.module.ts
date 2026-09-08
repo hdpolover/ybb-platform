@@ -10,6 +10,7 @@ import { GetBrandReadinessHandler } from './application/queries/handlers/get-bra
 import { GetProgramReadinessHandler } from './application/queries/handlers/get-program-readiness.handler';
 import { GetReadinessSummaryHandler } from './application/queries/handlers/get-readiness-summary.handler';
 import { CreateReadinessOverrideHandler } from './application/commands/handlers/create-readiness-override.handler';
+import { ReadinessSnapshotService } from './application/services/readiness-snapshot.service';
 
 @Module({
   imports: [CqrsModule, PaymentsModule],
@@ -22,6 +23,7 @@ import { CreateReadinessOverrideHandler } from './application/commands/handlers/
     GetProgramReadinessHandler,
     GetReadinessSummaryHandler,
     CreateReadinessOverrideHandler,
+    ReadinessSnapshotService,
   ],
   exports: [ReadinessContextLoader, ReadinessRepository],
 })
