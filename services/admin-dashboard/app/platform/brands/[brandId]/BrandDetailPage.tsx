@@ -568,7 +568,7 @@ function SettingsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [form, setForm] = useState({
-    defaultCurrency: brand.defaultCurrency ?? "IDR",
+    defaultCurrency: brand.defaultCurrency ?? "USD",
     enableMultiCurrency: brand.enableMultiCurrency ?? false,
     isMaintenanceMode: brand.settings?.isMaintenanceMode ?? false,
     maintenanceMessage: brand.settings?.maintenanceMessage ?? "",

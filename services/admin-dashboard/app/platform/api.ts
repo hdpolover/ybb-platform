@@ -113,6 +113,7 @@ function normalizePlatformBrand(raw: RawPlatformBrand): PlatformBrand {
 function normalizePlatformBrandDetail(raw: RawPlatformBrand): PlatformBrandDetail {
   return {
     ...normalizePlatformBrand(raw),
+    tagline: raw.tagline ?? null,
     about: raw.about ?? null,
     vision: raw.vision ?? null,
     mission: raw.mission ?? null,
@@ -225,6 +226,7 @@ async function request<T>(
 }
 
 export type PlatformBrandDetail = PlatformBrand & {
+  tagline?: string | null;
   about?: string | null;
   vision?: string | null;
   mission?: string | null;
@@ -355,6 +357,7 @@ export function updatePlatformBrandMedia(
 export function updatePlatformBrandDetails(
   brandId: string,
   input: {
+    tagline?: string;
     about?: string;
     vision?: string;
     mission?: string;
@@ -365,6 +368,7 @@ export function updatePlatformBrandDetails(
   },
 ): Promise<PlatformBrandDetail> {
   const formData = new FormData();
+  if (input.tagline != null) formData.set("tagline", input.tagline);
   if (input.about != null) formData.set("about", input.about);
   if (input.vision != null) formData.set("vision", input.vision);
   if (input.mission != null) formData.set("mission", input.mission);
