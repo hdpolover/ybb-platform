@@ -1,5 +1,5 @@
 
-import { Controller, Post, Body, Get, Patch, Delete, Param, Query, UseGuards, UnauthorizedException, Put, Ip, Req } from '@nestjs/common';
+import { Controller, Post, Body, Get, Patch, Delete, Param, Query, UseGuards, UnauthorizedException, Put, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CreateAdminDto } from './dto/create-admin.dto';
@@ -32,6 +32,7 @@ import {
 import { ResetAdminPasswordDto } from './dto/reset-admin-password.dto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
+import { ClientIp } from '@shared/decorators/client-ip.decorator';
 
 @ApiTags('admins')
 @Controller('admins')
@@ -219,7 +220,8 @@ export class AdminsController {
     async createSupportImpersonation(
         @CurrentUser() currentUser: CurrentUserData,
         @Body() dto: CreateSupportImpersonationDto,
-        @Ip() ipAddress: string,
+        // @ClientIp() resolves the real caller through Cloudflare + Traefik and validates the result; @Ip() is the socket peer, i.e. Traefik's container address for every request (audit M88/M165).
+        @ClientIp() ipAddress: string,
         @Req() req: Request,
     ) {
         if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');

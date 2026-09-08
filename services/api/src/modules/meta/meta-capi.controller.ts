@@ -15,6 +15,7 @@ import { cleanDomain } from '../../shared/decorators/brand-domain.decorator';
 import { LandingService } from '../landing/landing.service';
 import { CapiEventDto } from './dto/capi-event.dto';
 import { ALLOWED_EVENT_NAMES, MetaCapiService } from './meta-capi.service';
+import { resolveClientIp } from '@shared/utils/client-ip';
 
 // No controller-level prefix: the handler below is registered under two
 // paths (see @Post array) so the historical /meta/capi keeps working for an
@@ -97,19 +98,18 @@ export class MetaCapiController {
     // appends the address it saw. A client can prepend arbitrary values, so the
     // LEFTMOST entry is attacker-controlled — using it lets an attacker rotate a
     // fake IP per request to defeat the per-IP rate limit, and feeds garbage to
-    // Meta's client_ip_address. The RIGHTMOST entry is the one our own trusted
-    // ingress appended, so it's the real connecting client (assuming a single
-    // trusted proxy hop, which is our deployment). If the proxy topology grows,
-    // configure Express `trust proxy` to the hop count and switch to `req.ip`.
+    // Meta's client_ip_address, via the shared resolver (audit M88/M165).
+    //
+    // This used to take the rightmost x-forwarded-for hop unconditionally. That
+    // is correct only on a direct-to-origin request; behind Cloudflare the
+    // rightmost hop is the EDGE address, so every visitor arriving through the
+    // CDN was reported to Meta as a Cloudflare IP — and since the edge rotates,
+    // one visitor spread across several addresses while unrelated visitors
+    // shared one. That is a bad signal for the event matching this parameter
+    // exists to feed. resolveClientIp prefers cf-connecting-ip when the hop is a
+    // genuine Cloudflare edge, falls back to the same rightmost entry otherwise,
+    // and validates the result instead of forwarding whatever the header said.
     private extractIp(req: Request): string | undefined {
-        const forwardedFor = req.headers['x-forwarded-for'];
-        const header = Array.isArray(forwardedFor) ? forwardedFor.join(',') : forwardedFor;
-        if (header) {
-            const hops = header.split(',').map((h) => h.trim()).filter(Boolean);
-            if (hops.length > 0) {
-                return hops[hops.length - 1];
-            }
-        }
-        return req.ip;
+        return resolveClientIp(req) ?? undefined;
     }
 }

@@ -7,6 +7,7 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { ApplicationCategory } from '@core/entities/participant-application.entity';
 import { makePrismaTxMock, expectNoOuterWrites } from '@test/utils/prisma-tx-mock';
+import { PaymentStatus } from '@prisma/client';
 
 describe('SwitchApplicationCategoryHandler', () => {
   let handler: SwitchApplicationCategoryHandler;
@@ -240,7 +241,11 @@ describe('SwitchApplicationCategoryHandler', () => {
 
     expect(mockTx.applicationInvoice.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: { in: ['inv-1'] } },
+        // The status predicate is the point (audit M110): filtering for `unpaid`
+        // in memory scoped the cancel to a snapshot read earlier in the request,
+        // so a payment settling mid-request was flipped to `cancelled` with the
+        // money already taken. The database has to enforce it.
+        where: { id: { in: ['inv-1'] }, status: PaymentStatus.unpaid },
         data: { status: 'cancelled' },
       }),
     );

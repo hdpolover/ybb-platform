@@ -21,6 +21,35 @@ import { PaymentGatewayClient } from '../infrastructure/services/payment-gateway
 import { MetaCapiService } from '@modules/meta/meta-capi.service';
 import { parseAdAttribution } from '@modules/auth/application/services/ad-attribution.util';
 
+/**
+ * Is this failure event about an attempt the invoice has already moved past?
+ *
+ * resolveFailureInvoice finds the invoice by id (or by application) without ever
+ * checking that the event describes the invoice's CURRENT attempt. A participant
+ * who retries after a failure gets a new gateway transaction on the same invoice,
+ * so a late `payment.failed` for the abandoned first attempt would mark the
+ * second one failed — and, because the guarded write below fires on a real
+ * status transition, mail them that a payment failed while the retry is still in
+ * flight or already settled (audit M157).
+ *
+ * Deliberately conservative: only a DEFINITE mismatch counts. If the event
+ * carries no ids, or the invoice has none recorded yet, there is nothing to
+ * compare and the event is treated as current — the same behaviour as before.
+ */
+export function isSupersededAttempt(
+    invoice: { externalTransactionId?: string | null; externalIntentId?: string | null },
+    input: { transactionId?: string; intentId?: string },
+): boolean {
+    if (input.transactionId && invoice.externalTransactionId && input.transactionId !== invoice.externalTransactionId) {
+        return true;
+    }
+    if (input.intentId && invoice.externalIntentId && input.intentId !== invoice.externalIntentId) {
+        return true;
+    }
+    return false;
+}
+
+
 @Controller()
 export class PaymentEventsController {
     private readonly logger = new Logger(PaymentEventsController.name);
@@ -1010,6 +1039,17 @@ export class PaymentEventsController {
         }
 
         const userId = invoice.application.participant.userId;
+
+        // A failure for a superseded attempt must not touch the current one.
+        if (isSupersededAttempt(invoice, input)) {
+            this.logger.warn(
+                `markInvoiceFailed: ignoring stale event for invoice ${invoice.id} - ` +
+                `event txn=${input.transactionId ?? '-'} intent=${input.intentId ?? '-'} but invoice holds ` +
+                `txn=${invoice.externalTransactionId ?? '-'} intent=${invoice.externalIntentId ?? '-'}`,
+            );
+            return { userId, invoiceId: invoice.id, superseded: true };
+        }
+
         if (invoice.status === PaymentStatus.paid) {
             // Stale/duplicate failure event for an invoice that's actually paid -
             // nothing to write, and the caller must not send a "payment failed"
@@ -1102,6 +1142,18 @@ export class PaymentEventsController {
         }
 
         const userId = invoice.application.participant.userId;
+
+        // Same stale-attempt guard as markInvoiceFailed: a cancellation for an
+        // abandoned attempt must not cancel the retry that replaced it (M157).
+        if (isSupersededAttempt(invoice, input)) {
+            this.logger.warn(
+                `markInvoiceCancelled: ignoring stale event for invoice ${invoice.id} - ` +
+                `event txn=${input.transactionId ?? '-'} intent=${input.intentId ?? '-'} but invoice holds ` +
+                `txn=${invoice.externalTransactionId ?? '-'} intent=${invoice.externalIntentId ?? '-'}`,
+            );
+            return { userId, invoiceId: invoice.id };
+        }
+
         if (invoice.status === PaymentStatus.paid || invoice.status === PaymentStatus.cancelled) {
             return { userId, invoiceId: invoice.id };
         }
