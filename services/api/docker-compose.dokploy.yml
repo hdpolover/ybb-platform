@@ -77,12 +77,62 @@ services:
       LOKI_URL: ${LOKI_URL}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
+      # Release tasks run once, in api-release below, not on every boot.
+      SKIP_RELEASE_TASKS: "true"
+    depends_on:
+      postgres-api:
+        condition: service_healthy
+      api-release:
+        condition: service_completed_successfully
+    # Marks the container ready only once the app is actually serving. Nothing
+    # consumed a readiness signal before this: the only healthcheck in the file
+    # was on postgres, so a container counted as "up" ~20s before it could
+    # answer a request. Required for a rolling update to know whether a new
+    # container is good.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${PORT:-4000}/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Generous: covers Nest bootstrap on a cold, loaded box. Failures during
+      # this window do not count against `retries`.
+      start_period: 45s
+    networks:
+      - dokploy-network
+    # Dokploy handles Traefik labels and SSL termination automatically via the UI
+
+  # One-shot: queue cleanup, prisma migrate deploy, reference seed — then exits.
+  # The api service waits on it completing successfully, so ordering is
+  # unchanged; what changes is that this work happens ONCE per deploy instead of
+  # once per container start, and is not sitting in front of the port opening.
+  #
+  # Same build as api, so the image is built once and reused rather than pulled
+  # or rebuilt separately.
+  api-release:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: "no"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-api:5432/${DATABASE_NAME}
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
+      RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY: ${RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY:-false}
+      RABBITMQ_QUEUE_CLEANUP_TARGETS: ${RABBITMQ_QUEUE_CLEANUP_TARGETS:-audit_log_queue,reporting_queue}
+      RABBITMQ_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ: ${RABBITMQ_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ:-true}
+      RABBITMQ_MANAGEMENT_URL: ${RABBITMQ_MANAGEMENT_URL:-}
+      RABBITMQ_MANAGEMENT_USER: ${RABBITMQ_MANAGEMENT_USER:-}
+      RABBITMQ_MANAGEMENT_PASS: ${RABBITMQ_MANAGEMENT_PASS:-}
+      RABBITMQ_MANAGEMENT_VHOST: ${RABBITMQ_MANAGEMENT_VHOST:-}
+      RUN_SEED: ${RUN_SEED:-false}
+    # The entrypoint runs the release tasks and then execs this, so the
+    # container exits 0 as soon as they finish.
+    command: ["node", "-e", "process.exit(0)"]
     depends_on:
       postgres-api:
         condition: service_healthy
     networks:
       - dokploy-network
-    # Dokploy handles Traefik labels and SSL termination automatically via the UI
 
   postgres-api:
     image: postgres:15-alpine
