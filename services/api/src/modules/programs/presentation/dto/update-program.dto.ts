@@ -82,11 +82,6 @@ export class UpdateProgramDto {
     @IsOptional()
     status?: string;
 
-    @ApiProperty({ description: 'Publish program immediately', required: false })
-    @IsBoolean()
-    @IsOptional()
-    isPublished?: boolean;
-
     @ApiProperty({ description: 'Registration open date (send null to clear)', required: false, nullable: true })
     @IsDateString()
     @IsOptional()

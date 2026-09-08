@@ -18,6 +18,8 @@ import { UpdateProgramCommand } from '../application/commands/update-program.com
 import { UpdateProgramHandler } from '../application/commands/handlers/update-program.handler';
 import { DeleteProgramCommand } from '../application/commands/delete-program.command';
 import { DeleteProgramHandler } from '../application/commands/handlers/delete-program.handler';
+import { PublishProgramCommand } from '../application/commands/publish-program.command';
+import { UnpublishProgramCommand } from '../application/commands/unpublish-program.command';
 import { UploadProgramBrandingDto } from './dto/upload-content.dto';
 import { UpdateProgramBrandingCommand } from '../application/commands/update-program-branding.command';
 import { UpdateProgramBrandingHandler } from '../application/commands/handlers/update-program-branding.handler';
@@ -34,6 +36,7 @@ import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
 import { AdminScopeGuard, ScopedBy, assertBrandAccess, getRequestAdminScope } from '@shared/guards/admin-scope.guard';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ChangeType } from '@prisma/client';
 import { UpdateProgramPaymentInfoDto, UpdateProgramPartnersCanvaUrlDto } from './dto/create-update-program-content.dto';
@@ -372,6 +375,35 @@ export class ProgramsController {
     return {
       message: 'Program deleted successfully',
     };
+  }
+
+  @Post(':id/publish')
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Publish a program, subject to readiness blockers' })
+  @ApiResponse({ status: 200, description: 'Program published successfully' })
+  @ApiResponse({ status: 422, description: 'Program is not ready to publish' })
+  @AuditTrail({ entityType: 'Program', action: ChangeType.update })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  async publish(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    await this.commandBus.execute(new PublishProgramCommand(id, user.adminId ?? user.userId));
+    return { success: true };
+  }
+
+  @Post(':id/unpublish')
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Unpublish a program. Never gated by readiness.' })
+  @ApiResponse({ status: 200, description: 'Program unpublished successfully' })
+  @AuditTrail({ entityType: 'Program', action: ChangeType.update })
+  @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
+  async unpublish(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+    await this.commandBus.execute(new UnpublishProgramCommand(id, user.adminId ?? user.userId));
+    return { success: true };
   }
 
   @Get(':id/participant/progress')

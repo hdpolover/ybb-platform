@@ -1,5 +1,5 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject, NotFoundException } from '@nestjs/common';
+import { Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { UpdateProgramCommand } from '../update-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
@@ -53,6 +53,15 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
                 registrationCloseDate: mergedDate('registrationCloseDate'),
                 applicationDeadline: mergedDate('applicationDeadline'),
             });
+        }
+
+        // Publishing moved to POST /programs/:id/publish so it can run the
+        // readiness guard. Any caller still sending isPublished here is a caller
+        // that would silently bypass that guard.
+        if ('isPublished' in (updateProgramDto as Record<string, unknown>)) {
+            throw new BadRequestException(
+                'isPublished is no longer accepted here. Use POST /programs/:id/publish or /unpublish.',
+            );
         }
 
         // If this request flips isPublished/isActive true without also sending

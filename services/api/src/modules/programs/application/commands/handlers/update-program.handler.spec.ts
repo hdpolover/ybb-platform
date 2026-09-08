@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { UpdateProgramHandler } from './update-program.handler';
 import { UpdateProgramCommand } from '../update-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
@@ -176,21 +176,7 @@ describe('UpdateProgramHandler', () => {
         expect(updatedSlug.length).toBeLessThanOrEqual(255);
     });
 
-    describe('status/isPublished drift guard (MEYS 7th incident)', () => {
-        it('advances status from draft to published when isPublished is set true without touching status', async () => {
-            const program = makeProgram({ status: 'draft' });
-            programRepository.findById.mockResolvedValue(program as any);
-            programRepository.update.mockImplementation((_id, data) => Promise.resolve({ ...program, ...data } as any));
-
-            const command = new UpdateProgramCommand('prog-1', { isPublished: true }, 'user-1');
-            await handler.execute(command);
-
-            expect(programRepository.update).toHaveBeenCalledWith(
-                'prog-1',
-                expect.objectContaining({ isPublished: true, status: 'published' }),
-            );
-        });
-
+    describe('status/isActive drift guard (MEYS 7th incident)', () => {
         it('advances status from draft to published when isActive is set true without touching status', async () => {
             const program = makeProgram({ status: 'draft' });
             programRepository.findById.mockResolvedValue(program as any);
@@ -210,25 +196,45 @@ describe('UpdateProgramHandler', () => {
             programRepository.findById.mockResolvedValue(program as any);
             programRepository.update.mockImplementation((_id, data) => Promise.resolve({ ...program, ...data } as any));
 
-            const command = new UpdateProgramCommand('prog-1', { isPublished: true, status: 'draft' }, 'user-1');
+            const command = new UpdateProgramCommand('prog-1', { isActive: true, status: 'draft' }, 'user-1');
             await handler.execute(command);
 
             expect(programRepository.update).toHaveBeenCalledWith(
                 'prog-1',
-                expect.objectContaining({ isPublished: true, status: 'draft' }),
+                expect.objectContaining({ isActive: true, status: 'draft' }),
             );
         });
 
-        it('does not drag a completed program back to published when isPublished is re-saved true', async () => {
+        it('does not drag a completed program back to published when isActive is re-saved true', async () => {
             const program = makeProgram({ status: 'completed' });
             programRepository.findById.mockResolvedValue(program as any);
             programRepository.update.mockImplementation((_id, data) => Promise.resolve({ ...program, ...data } as any));
 
-            const command = new UpdateProgramCommand('prog-1', { isPublished: true }, 'user-1');
+            const command = new UpdateProgramCommand('prog-1', { isActive: true }, 'user-1');
             await handler.execute(command);
 
             const updateArg = (programRepository.update as jest.Mock).mock.calls[0][1];
             expect(updateArg.status).toBeUndefined();
+        });
+    });
+
+    describe('isPublished guard (publish moved to POST /programs/:id/publish)', () => {
+        // isPublished is no longer part of UpdateProgramDto's type, but a caller
+        // (or an old client build) can still send it over the wire — this must
+        // be rejected rather than silently bypassing the readiness guard on the
+        // dedicated publish endpoint.
+        it('rejects any payload still carrying isPublished', async () => {
+            const program = makeProgram({ status: 'draft' });
+            programRepository.findById.mockResolvedValue(program as any);
+
+            const command = new UpdateProgramCommand(
+                'prog-1',
+                { isPublished: true } as any,
+                'user-1',
+            );
+
+            await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
+            expect(programRepository.update).not.toHaveBeenCalled();
         });
     });
 });
