@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { scanProgramsForPricingTierAlerts } from './scan-pricing-tier-alerts.util';
 
@@ -25,6 +26,7 @@ export class PricingTierCoverageAlertService {
     private readonly prisma: PrismaService,
     private readonly rabbitmqProducer: RabbitMQProducerService,
     private readonly configService: ConfigService,
+    private readonly cronLock: CronLockService,
   ) {}
 
   /**
@@ -38,14 +40,21 @@ export class PricingTierCoverageAlertService {
    * those consumer containers additionally never import ScheduleModule, so
    * @Cron is inert there even if that ever changes. Mirrors the precedent and
    * reasoning documented on SubmissionDeadlineReminderService.runScheduledReminders.
+   *
+   * scanAndAlert() has no claim guard of its own - it is a pure scan-and-emit,
+   * not a per-row claim like most other crons here - so without the advisory
+   * lock N replicas would each detect the same lapse and each emit its own
+   * ops alert event, i.e. N duplicate emails for one real incident.
    */
   @Cron('0 8 * * *', { timeZone: 'Asia/Jakarta' })
   async runScheduledScan(): Promise<void> {
-    try {
-      await this.scanAndAlert();
-    } catch (error) {
-      this.logger.error(`[pricing-tier-coverage-alert] scheduled run failed: ${toErrorMessage(error)}`);
-    }
+    await this.cronLock.runExclusive('pricing-tier-coverage-alert', async () => {
+      try {
+        await this.scanAndAlert();
+      } catch (error) {
+        this.logger.error(`[pricing-tier-coverage-alert] scheduled run failed: ${toErrorMessage(error)}`);
+      }
+    });
   }
 
   async scanAndAlert(now: Date = new Date()): Promise<void> {

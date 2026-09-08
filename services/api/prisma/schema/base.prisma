@@ -11,3 +11,31 @@ datasource db {
   provider   = "postgresql"
   extensions = [uuidOssp(map: "uuid-ossp")]
 }
+
+/// Distributed lease so a scheduled job runs on ONE replica per tick.
+///
+/// Deliberately a table rather than a Postgres advisory lock. Advisory locks are
+/// SESSION-scoped, and Prisma runs each query on an arbitrary pooled connection
+/// (this API runs a pool of 9), so `pg_try_advisory_lock` and
+/// `pg_advisory_unlock` land on different sessions: the unlock silently no-ops,
+/// the lock stays held by a long-lived pooled connection, and every later tick
+/// fails to acquire. That fails SILENTLY and permanently — strictly worse than
+/// the duplicate-run problem it was meant to solve.
+///
+/// A lease is pool-agnostic (any connection can read and write it) and
+/// crash-safe: a replica that dies mid-job stops renewing, the lease expires,
+/// and the next tick picks it up. The trade is that `lockedUntil` must exceed a
+/// job's real runtime or a second replica could start it early — see
+/// CRON_LEASE_TTL_MS in cron-lock.service.ts.
+model CronLock {
+  jobName     String   @id @map("job_name") @db.VarChar(100)
+  /// The lease is held until this instant. A row whose lockedUntil is in the
+  /// past is free, which is what makes a crashed holder self-healing.
+  lockedUntil DateTime @map("locked_until") @db.Timestamptz(6)
+  /// Which replica holds it — release is guarded on this so a replica cannot
+  /// release a lease that already expired and was taken by someone else.
+  holder      String   @db.VarChar(120)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("cron_locks")
+}

@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
+import { CronLockService } from '../../shared/infrastructure/database/cron-lock.service';
 
 const BATCH_SIZE = 5000;
 // Bounds one run to at most 20 x 5000 = 100k deletes per table, so a run with
@@ -31,6 +32,7 @@ export class RetentionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly cronLock: CronLockService,
   ) {}
 
   /**
@@ -42,48 +44,52 @@ export class RetentionService {
    * HTTP-app-only: AuditModule (which provides this service) is only
    * imported by the root AppModule, never by any of the RMQ consumer
    * bootstrap modules (audit/reporting/payment-events/loa-events/reminder-
-   * events - see src/bootstrap/*.ts), so this cron fires exactly once per
-   * deploy. Mirrors the precedent documented on
+   * events - see src/bootstrap/*.ts). That made this fire exactly once per
+   * deploy when there was exactly one HTTP app container; with N replicas of
+   * that same container it fires N times, so it is still wrapped here like
+   * every other cron. Mirrors the precedent documented on
    * PaymentReconciliationService.runScheduledReconciliation.
    */
   @Cron('30 3 * * *', { timeZone: 'Asia/Jakarta' })
   async runScheduledCleanup(): Promise<void> {
-    const activityLogDays = this.configService.get<number>('RETENTION_ACTIVITY_LOG_DAYS', 180);
-    const reminderLogDays = this.configService.get<number>('RETENTION_REMINDER_LOG_DAYS', 180);
+    await this.cronLock.runExclusive('audit-retention', async () => {
+      const activityLogDays = this.configService.get<number>('RETENTION_ACTIVITY_LOG_DAYS', 180);
+      const reminderLogDays = this.configService.get<number>('RETENTION_REMINDER_LOG_DAYS', 180);
 
-    try {
-      const deleted = await this.pruneBatched('userSession', { expiresAt: { lt: new Date() } });
-      this.logger.log(`[retention] user_sessions deleted=${deleted}`);
-    } catch (error) {
-      this.logger.error(`[retention] user_sessions cleanup failed: ${toErrorMessage(error)}`);
-    }
+      try {
+        const deleted = await this.pruneBatched('userSession', { expiresAt: { lt: new Date() } });
+        this.logger.log(`[retention] user_sessions deleted=${deleted}`);
+      } catch (error) {
+        this.logger.error(`[retention] user_sessions cleanup failed: ${toErrorMessage(error)}`);
+      }
 
-    try {
-      const deleted = await this.pruneBatched('userSecurityLog', {
-        createdAt: { lt: daysAgo(activityLogDays) },
-      });
-      this.logger.log(`[retention] user_security_logs deleted=${deleted} retentionDays=${activityLogDays}`);
-    } catch (error) {
-      this.logger.error(`[retention] user_security_logs cleanup failed: ${toErrorMessage(error)}`);
-    }
+      try {
+        const deleted = await this.pruneBatched('userSecurityLog', {
+          createdAt: { lt: daysAgo(activityLogDays) },
+        });
+        this.logger.log(`[retention] user_security_logs deleted=${deleted} retentionDays=${activityLogDays}`);
+      } catch (error) {
+        this.logger.error(`[retention] user_security_logs cleanup failed: ${toErrorMessage(error)}`);
+      }
 
-    try {
-      const deleted = await this.pruneBatched('userActivityLog', {
-        createdAt: { lt: daysAgo(activityLogDays) },
-      });
-      this.logger.log(`[retention] user_activity_logs deleted=${deleted} retentionDays=${activityLogDays}`);
-    } catch (error) {
-      this.logger.error(`[retention] user_activity_logs cleanup failed: ${toErrorMessage(error)}`);
-    }
+      try {
+        const deleted = await this.pruneBatched('userActivityLog', {
+          createdAt: { lt: daysAgo(activityLogDays) },
+        });
+        this.logger.log(`[retention] user_activity_logs deleted=${deleted} retentionDays=${activityLogDays}`);
+      } catch (error) {
+        this.logger.error(`[retention] user_activity_logs cleanup failed: ${toErrorMessage(error)}`);
+      }
 
-    try {
-      const deleted = await this.pruneBatched('submissionReminderLog', {
-        sentAt: { lt: daysAgo(reminderLogDays) },
-      });
-      this.logger.log(`[retention] submission_reminder_logs deleted=${deleted} retentionDays=${reminderLogDays}`);
-    } catch (error) {
-      this.logger.error(`[retention] submission_reminder_logs cleanup failed: ${toErrorMessage(error)}`);
-    }
+      try {
+        const deleted = await this.pruneBatched('submissionReminderLog', {
+          sentAt: { lt: daysAgo(reminderLogDays) },
+        });
+        this.logger.log(`[retention] submission_reminder_logs deleted=${deleted} retentionDays=${reminderLogDays}`);
+      } catch (error) {
+        this.logger.error(`[retention] submission_reminder_logs cleanup failed: ${toErrorMessage(error)}`);
+      }
+    });
   }
 
   /**

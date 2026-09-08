@@ -2,6 +2,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { buildParticipantPaymentsUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { ParticipantReminderDispatchPayload } from '../../../../common/types/events';
@@ -67,25 +68,34 @@ export class ParticipantReminderDispatchService {
     private readonly sendRepo: ParticipantReminderSendRepository,
     private readonly audienceRegistry: ReminderAudienceRegistry,
     private readonly rabbitmqProducer: RabbitMQProducerService,
+    private readonly cronLock: CronLockService,
   ) {}
 
+  // dispatchOne() already claims each reminder with its own guard (the
+  // strongest of any cron in this codebase), so two replicas can't
+  // double-dispatch the same reminder - but without the lock every replica
+  // would still separately scan and attempt-claim the full due set every
+  // minute. Kept for defence in depth rather than removed now that the lock
+  // exists.
   @Cron(CronExpression.EVERY_MINUTE)
   async runScheduledDispatch(): Promise<void> {
-    try {
-      const outcomes = await this.dispatchDue();
-      if (outcomes.length === 0) return;
+    await this.cronLock.runExclusive('participant-reminder-dispatch', async () => {
+      try {
+        const outcomes = await this.dispatchDue();
+        if (outcomes.length === 0) return;
 
-      const sent = outcomes.filter((outcome) => outcome.result === 'sent').length;
-      const empty = outcomes.filter((outcome) => outcome.result === 'empty_audience').length;
-      const notClaimed = outcomes.filter((outcome) => outcome.result === 'not_claimed').length;
-      this.logger.log(
-        `[participant-reminder] due=${outcomes.length} sent=${sent} emptyAudience=${empty} notClaimed=${notClaimed}`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `[participant-reminder] scheduled dispatch failed: ${toErrorMessage(error)}`,
-      );
-    }
+        const sent = outcomes.filter((outcome) => outcome.result === 'sent').length;
+        const empty = outcomes.filter((outcome) => outcome.result === 'empty_audience').length;
+        const notClaimed = outcomes.filter((outcome) => outcome.result === 'not_claimed').length;
+        this.logger.log(
+          `[participant-reminder] due=${outcomes.length} sent=${sent} emptyAudience=${empty} notClaimed=${notClaimed}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `[participant-reminder] scheduled dispatch failed: ${toErrorMessage(error)}`,
+        );
+      }
+    });
   }
 
   async dispatchDue(now: Date = new Date()): Promise<ReminderDispatchOutcome[]> {

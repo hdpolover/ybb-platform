@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { QueryBus } from '@nestjs/cqrs';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { ReadinessRepository } from '../../infrastructure/persistence/readiness.repository';
 import { GetProgramReadinessQuery } from '../queries/get-program-readiness.query';
@@ -29,12 +30,18 @@ export class ReadinessSnapshotService {
     private readonly repository: ReadinessRepository,
     private readonly producer: RabbitMQProducerService,
     private readonly read: PrismaReadService,
+    private readonly cronLock: CronLockService,
   ) {}
 
+  // No claim guard of its own - a plain scan-and-diff-against-baseline. Left
+  // unwrapped, N replicas would each diff the same baseline and each emit its
+  // own readiness-regressed alert event for one real regression.
   @Cron('0 6 * * *', { timeZone: 'Asia/Jakarta' })
   async reevaluatePublished(): Promise<void> {
-    await this.sweepPrograms();
-    await this.sweepBrands();
+    await this.cronLock.runExclusive('readiness-snapshot', async () => {
+      await this.sweepPrograms();
+      await this.sweepBrands();
+    });
   }
 
   private async sweepPrograms(): Promise<void> {

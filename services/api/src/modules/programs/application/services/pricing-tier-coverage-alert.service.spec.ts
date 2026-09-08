@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { PricingTierCoverageAlertService } from './pricing-tier-coverage-alert.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 
 const now = new Date('2027-01-10T01:00:00Z');
 
@@ -41,9 +42,13 @@ describe('PricingTierCoverageAlertService', () => {
   let mockPrisma: { program: { findMany: jest.Mock } };
   let mockRabbitmq: { emit: jest.Mock };
   let mockConfig: { get: jest.Mock };
+  let mockCronLock: { runExclusive: jest.Mock };
 
   const build = async (opsAlertEmails: string | undefined) => {
     mockConfig = { get: jest.fn().mockReturnValue(opsAlertEmails) };
+    mockCronLock = {
+      runExclusive: jest.fn((_jobName: string, fn: () => Promise<void>) => fn()),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -51,6 +56,7 @@ describe('PricingTierCoverageAlertService', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: RabbitMQProducerService, useValue: mockRabbitmq },
         { provide: ConfigService, useValue: mockConfig },
+        { provide: CronLockService, useValue: mockCronLock },
       ],
     }).compile();
 
@@ -115,5 +121,30 @@ describe('PricingTierCoverageAlertService', () => {
     expect(scanLine).toContain('scanned=0');
 
     logSpy.mockRestore();
+  });
+
+  // Replica-safety: without this, N API replicas would each detect the same
+  // lapsed pricing tier and each emit their own ops alert (N duplicate
+  // emails for one real incident) - see CronLockService.
+  it('runScheduledScan runs the scan through CronLockService.runExclusive with a stable jobName', async () => {
+    mockPrisma = { program: { findMany: jest.fn().mockResolvedValue([]) } };
+    service = await build('ops1@ybb.id');
+
+    await service.runScheduledScan();
+
+    expect(mockCronLock.runExclusive).toHaveBeenCalledTimes(1);
+    expect(mockCronLock.runExclusive).toHaveBeenCalledWith('pricing-tier-coverage-alert', expect.any(Function));
+    // The passthrough mock actually invokes fn(), so a real scan happened.
+    expect(mockPrisma.program.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('runScheduledScan does not run the scan when the lock is not acquired', async () => {
+    mockPrisma = { program: { findMany: jest.fn().mockResolvedValue([]) } };
+    service = await build('ops1@ybb.id');
+    mockCronLock.runExclusive.mockImplementation(async () => undefined); // simulate lock lost
+
+    await service.runScheduledScan();
+
+    expect(mockPrisma.program.findMany).not.toHaveBeenCalled();
   });
 });

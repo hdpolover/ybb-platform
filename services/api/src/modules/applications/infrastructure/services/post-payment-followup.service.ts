@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma, PaymentStatus, PricingFeeType } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { startOfWibDay, addDays } from '@shared/utils/wib-time';
 import { buildParticipantSubmissionUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
@@ -79,19 +80,27 @@ export class PostPaymentFollowupService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmqProducer: RabbitMQProducerService,
+    private readonly cronLock: CronLockService,
   ) {}
 
+  // followUpOne() already claims each candidate with an updateMany guard, so
+  // two replicas can't double-send the same follow-up email - but without the
+  // lock every replica would still separately scan the full candidate set
+  // every hour. Kept for defence in depth rather than removed now that the
+  // lock exists.
   @Cron(CronExpression.EVERY_HOUR)
   async runScheduledFollowups(): Promise<void> {
-    try {
-      const report = await this.sendDueFollowups();
-      this.logger.log(
-        `[post-payment-followup] scanned=${report.scanned} sent=${report.sent} ` +
-          `notYetDue=${report.notYetDue} notClaimed=${report.notClaimed} errors=${report.errors}`,
-      );
-    } catch (error) {
-      this.logger.error(`[post-payment-followup] scheduled run failed: ${toErrorMessage(error)}`);
-    }
+    await this.cronLock.runExclusive('post-payment-followup', async () => {
+      try {
+        const report = await this.sendDueFollowups();
+        this.logger.log(
+          `[post-payment-followup] scanned=${report.scanned} sent=${report.sent} ` +
+            `notYetDue=${report.notYetDue} notClaimed=${report.notClaimed} errors=${report.errors}`,
+        );
+      } catch (error) {
+        this.logger.error(`[post-payment-followup] scheduled run failed: ${toErrorMessage(error)}`);
+      }
+    });
   }
 
   /**

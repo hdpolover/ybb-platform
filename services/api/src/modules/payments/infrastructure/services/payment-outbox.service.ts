@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { createHash } from 'crypto';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { PrismaTransactionClient } from '@shared/types/prisma-transaction.type';
 
@@ -51,6 +52,7 @@ export class PaymentOutboxService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly rabbitmqProducer: RabbitMQProducerService,
+        private readonly cronLock: CronLockService,
     ) {}
 
     isEnabled(): boolean {
@@ -109,20 +111,27 @@ export class PaymentOutboxService {
         return { queued: Number(inserted) > 0, dedupeKey };
     }
 
+    // claimBatch() already atomically claims rows via `FOR UPDATE SKIP LOCKED`,
+    // so two replicas racing this tick would not double-publish the same row -
+    // but they WOULD each run a full claim query and lock scan every 10s for
+    // nothing. The advisory lock turns that into one replica doing the work
+    // per tick, same as every other cron here.
     @Cron('*/10 * * * * *')
     async publishPending(): Promise<void> {
         if (!this.enabled) {
             return;
         }
 
-        const claimed = await this.claimBatch();
-        if (claimed.length === 0) {
-            return;
-        }
+        await this.cronLock.runExclusive('payment-outbox', async () => {
+            const claimed = await this.claimBatch();
+            if (claimed.length === 0) {
+                return;
+            }
 
-        for (const row of claimed) {
-            await this.publishOne(row);
-        }
+            for (const row of claimed) {
+                await this.publishOne(row);
+            }
+        });
     }
 
     private async claimBatch(): Promise<ClaimedOutboxRow[]> {

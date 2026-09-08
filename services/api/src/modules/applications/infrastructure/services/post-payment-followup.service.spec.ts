@@ -6,6 +6,7 @@ import {
 } from './post-payment-followup.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,10 @@ describe('PostPaymentFollowupService', () => {
         PostPaymentFollowupService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: RabbitMQProducerService, useValue: mockRabbitmq },
+        {
+          provide: CronLockService,
+          useValue: { runExclusive: jest.fn((_jobName: string, fn: () => Promise<void>) => fn()) },
+        },
       ],
     }).compile();
 

@@ -5,6 +5,7 @@ import { PaymentServiceHttpClient } from './payment-service-http.client';
 import { ConfigService } from '@nestjs/config';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { PaymentGatewayClient } from './payment-gateway.client';
+import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,9 @@ describe('PaymentReconciliationService', () => {
                 { provide: PaymentGatewayClient, useValue: mockGatewayClient },
                 { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('') } },
                 { provide: RabbitMQProducerService, useValue: mockRabbitmq },
+                // Tests here exercise the business methods directly (not the
+                // @Cron-decorated wrapper), so the lock is just a passthrough.
+                { provide: CronLockService, useValue: { runExclusive: jest.fn((_jobName: string, fn: () => Promise<void>) => fn()) } },
             ],
         }).compile();
 
