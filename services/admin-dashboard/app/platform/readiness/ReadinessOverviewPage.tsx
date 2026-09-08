@@ -50,8 +50,9 @@ export default function ReadinessOverviewPage() {
         </Card>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-4">
             <StatCard title="Subjects with blockers" value={String(stats.subjectsWithBlockers)} />
+            <StatCard title="Subjects clear" value={String(stats.subjectsClear)} />
             <StatCard title="Total blockers" value={String(stats.totalBlockers)} />
             <StatCard title="Total warnings" value={String(stats.totalWarnings)} />
           </div>
@@ -83,7 +84,10 @@ export default function ReadinessOverviewPage() {
                             ? `/platform/brands/${row.subjectId}`
                             : `/programs/${row.subjectId}/settings/main-configuration`}
                         >
-                          {row.subjectType} {row.subjectId.slice(0, 8)}
+                          {row.subjectName ?? `${row.subjectType} ${row.subjectId.slice(0, 8)}`}
+                          {row.subjectType === "program" && row.brandName ? (
+                            <span className="ml-1 font-normal text-zinc-400">· {row.brandName}</span>
+                          ) : null}
                         </a>
                       </td>
                       <td className="px-4 py-3 font-semibold text-zinc-900">{row.blockerCount}</td>

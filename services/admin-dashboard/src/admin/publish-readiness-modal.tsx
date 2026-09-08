@@ -2,13 +2,10 @@
 "use client";
 
 import { useState } from "react";
-import { ShieldAlert, HelpCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/src/ui/dialog";
 import { Button } from "@/src/ui/button";
-import { StatusBadge } from "@/src/admin/status-badge";
-import { createReadinessOverride, type PublishBlocker } from "@/src/shared/api-client";
-
-const ICONS = { fail: ShieldAlert, unknown: HelpCircle } as const;
+import { ReadinessList } from "@/src/admin/readiness-list";
+import { ApiError, createReadinessOverride, type PublishBlocker } from "@/src/shared/api-client";
 
 const MIN_OVERRIDE_REASON_LENGTH = 10;
 
@@ -26,8 +23,13 @@ type PublishReadinessModalProps = {
 /**
  * Shown when POST /programs/:id/publish (or the brand equivalent) returns 422.
  * Renders the blocking readiness rules from the error body rather than
- * re-fetching the readiness report, and lets a platform admin override a
- * single rule with a required reason before retrying the publish.
+ * re-fetching the readiness report, reusing ReadinessList for the row markup
+ * so there is exactly one place that defines what a readiness row looks like.
+ * Lets a platform admin override a single "fail" rule with a required reason
+ * before retrying the publish. A rule whose status is "unknown" (its
+ * evaluation threw, e.g. a dependent service is unreachable) never gets an
+ * override affordance — overriding it can't change the outcome, since the
+ * engine assigns "unknown" before an override is ever considered.
  */
 export function PublishReadinessModal({
   subjectType,
@@ -53,7 +55,11 @@ export function PublishReadinessModal({
       });
       onRetry();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save override.");
+      if (err instanceof ApiError && err.status === 403) {
+        setError("You do not have permission to override this rule. It requires super admin access.");
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to save override.");
+      }
     } finally {
       setSavingRuleId(null);
     }
@@ -76,56 +82,47 @@ export function PublishReadinessModal({
           </div>
         ) : null}
 
-        <ul className="max-h-[60vh] divide-y divide-zinc-200 overflow-y-auto">
-          {blockers.map((blocker) => {
-            const Icon = ICONS[blocker.status] ?? ShieldAlert;
-            const reason = reasons[blocker.ruleId] ?? "";
-            const isSaving = savingRuleId === blocker.ruleId;
-            return (
-              <li key={blocker.ruleId} className="space-y-2 py-4">
-                <div className="flex items-start gap-3">
-                  <Icon className="mt-0.5 h-5 w-5 shrink-0 text-zinc-400" aria-hidden />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                        {blocker.title}
-                      </span>
-                      <StatusBadge context="readiness" status={blocker.status} />
-                    </div>
-                    <p className="mt-1 text-sm font-medium text-zinc-900">{blocker.symptom}</p>
-                    <a
-                      href={blocker.fix.href}
-                      className="mt-1 inline-block text-sm font-medium text-blue-600 hover:text-blue-700"
-                    >
-                      {blocker.fix.label}
-                    </a>
-                  </div>
-                </div>
+        <div className="max-h-[60vh] overflow-y-auto">
+          <ReadinessList
+            results={blockers}
+            renderAction={(blocker) => {
+              if (blocker.status === "unknown") {
+                return (
+                  <p className="text-sm text-zinc-500">
+                    This rule could not be evaluated right now — for example because a dependent
+                    service is unreachable. It cannot be overridden. Publishing will be possible
+                    once it can be evaluated.
+                  </p>
+                );
+              }
 
-                {canOverride ? (
-                  <div className="flex gap-2 pl-8">
-                    <input
-                      type="text"
-                      className="flex-1 rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-                      placeholder="Reason for overriding (required)"
-                      value={reason}
-                      onChange={(e) => setReasons({ ...reasons, [blocker.ruleId]: e.target.value })}
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      loading={isSaving}
-                      disabled={isSaving || reason.trim().length < MIN_OVERRIDE_REASON_LENGTH}
-                      onClick={() => overrideRule(blocker.ruleId)}
-                    >
-                      Override
-                    </Button>
-                  </div>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
+              if (!canOverride) return null;
+
+              const reason = reasons[blocker.ruleId] ?? "";
+              const isSaving = savingRuleId === blocker.ruleId;
+              return (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                    placeholder="Reason for overriding (required)"
+                    value={reason}
+                    onChange={(e) => setReasons({ ...reasons, [blocker.ruleId]: e.target.value })}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={isSaving}
+                    disabled={isSaving || reason.trim().length < MIN_OVERRIDE_REASON_LENGTH}
+                    onClick={() => overrideRule(blocker.ruleId)}
+                  >
+                    Override
+                  </Button>
+                </div>
+              );
+            }}
+          />
+        </div>
 
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>

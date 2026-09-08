@@ -7,6 +7,11 @@ export type ReadinessSummaryRow = {
   blockerCount: number;
   warningCount: number;
   evaluatedAt: string;
+  /** Human-readable name for the subject (brand name, or program title). Optional
+   * until the API lands it — callers must fall back to the id when absent. */
+  subjectName?: string;
+  /** Owning brand's name, present for program rows. Optional for the same reason. */
+  brandName?: string;
 };
 
 // A snapshot is only as fresh as the last cron run. Anything older than two
