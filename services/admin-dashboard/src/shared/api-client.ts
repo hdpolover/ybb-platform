@@ -39,31 +39,58 @@ export type ApiFieldError = { path: string; message: string };
 /**
  * One unmet publish-readiness rule, as emitted by the `POST /programs/:id/publish`
  * 422 body: `{ message, blockers: [...] }`. `status` is "fail" for a rule that
- * actively fails and "unknown" for one that couldn't be evaluated.
+ * actively fails, "overridden" for one a platform admin has waived, and
+ * "unknown" for one that couldn't be evaluated (also the safe fallback when
+ * the server sends a status we don't recognise — see parsePublishBlockers).
  */
 export type PublishBlocker = {
   ruleId: string;
   title: string;
   symptom: string;
-  status: "fail" | "unknown";
+  status: "pass" | "fail" | "overridden" | "unknown";
   fix: { label: string; href: string };
 };
 
+const KNOWN_BLOCKER_STATUSES: ReadonlySet<PublishBlocker["status"]> = new Set([
+  "pass",
+  "fail",
+  "overridden",
+  "unknown",
+]);
+
 function parsePublishBlockers(raw: unknown): PublishBlocker[] | undefined {
   if (!Array.isArray(raw)) return undefined;
-  const parsed = raw.filter((b): b is PublishBlocker => {
-    if (typeof b !== "object" || b === null) return false;
-    const candidate = b as { ruleId?: unknown; title?: unknown; symptom?: unknown; fix?: unknown };
-    return (
-      typeof candidate.ruleId === "string" &&
-      typeof candidate.title === "string" &&
-      typeof candidate.symptom === "string" &&
-      typeof candidate.fix === "object" &&
-      candidate.fix !== null &&
-      typeof (candidate.fix as { label?: unknown }).label === "string" &&
-      typeof (candidate.fix as { href?: unknown }).href === "string"
-    );
-  });
+  const parsed = raw
+    .filter((b): b is Record<string, unknown> => typeof b === "object" && b !== null)
+    .filter((candidate) => {
+      return (
+        typeof candidate.ruleId === "string" &&
+        typeof candidate.title === "string" &&
+        typeof candidate.symptom === "string" &&
+        typeof candidate.fix === "object" &&
+        candidate.fix !== null &&
+        typeof (candidate.fix as { label?: unknown }).label === "string" &&
+        typeof (candidate.fix as { href?: unknown }).href === "string"
+      );
+    })
+    .map((candidate): PublishBlocker => {
+      const status = candidate.status;
+      // A missing/unrecognised status is coerced to "unknown" rather than
+      // "fail": "unknown" is the honest description of a status we couldn't
+      // interpret, and it's the one value that never offers an override
+      // affordance that could never work.
+      const safeStatus: PublishBlocker["status"] =
+        typeof status === "string" && KNOWN_BLOCKER_STATUSES.has(status as PublishBlocker["status"])
+          ? (status as PublishBlocker["status"])
+          : "unknown";
+      return {
+        ruleId: candidate.ruleId as string,
+        title: candidate.title as string,
+        symptom: candidate.symptom as string,
+        status: safeStatus,
+        fix: candidate.fix as { label: string; href: string },
+      };
+    });
   return parsed.length > 0 ? parsed : undefined;
 }
 

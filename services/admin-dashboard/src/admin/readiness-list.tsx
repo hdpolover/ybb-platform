@@ -55,7 +55,7 @@ export function ReadinessList<T extends ReadinessListRow>({
   return (
     <ul className="divide-y divide-zinc-200">
       {outstanding.map((result) => {
-        const Icon = ICONS[result.status];
+        const Icon = ICONS[result.status] ?? ShieldAlert;
         return (
           <li key={result.ruleId} className="space-y-2 py-4">
             <div className="flex items-start gap-3">

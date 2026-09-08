@@ -83,6 +83,13 @@ export function PublishReadinessModal({
         ) : null}
 
         <div className="max-h-[60vh] overflow-y-auto">
+          {blockers.length === 0 ? (
+            <p className="text-sm text-zinc-600">
+              Publishing was refused, but no specific blocking rule was returned. This usually
+              means a rule could not be evaluated. Check the program&apos;s readiness panel for
+              the full picture.
+            </p>
+          ) : (
           <ReadinessList
             results={blockers}
             renderAction={(blocker) => {
@@ -122,6 +129,7 @@ export function PublishReadinessModal({
               );
             }}
           />
+          )}
         </div>
 
         <div className="flex justify-end gap-2">
