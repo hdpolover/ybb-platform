@@ -18,6 +18,7 @@ export class GetProgramDetailHandler {
     const {
       identifier,
       include = 'all',
+      isAdmin = false,
     } = query;
     let {
       testimonialsLimit = 10,
@@ -25,9 +26,13 @@ export class GetProgramDetailHandler {
       resourcesLimit = 10,
     } = query;
 
-    // Generate cache key
+    // Generate cache key. isAdmin is part of the key (not just the where clause
+    // below) because the admin and public responses for the SAME identifier
+    // differ — an admin response can include a draft program and non-public
+    // resources. Without isAdmin in the key, whichever caller hit this
+    // identifier first would poison the cache for the other (audit M13).
     const cacheKey = CACHE_KEYS.PROGRAM_DETAIL(
-      `${identifier}:${include}:${testimonialsLimit}:${announcementsLimit}:${resourcesLimit}`,
+      `${identifier}:${include}:${testimonialsLimit}:${announcementsLimit}:${resourcesLimit}:${isAdmin}`,
     );
 
     // Sanitize limits (handle NaN)
@@ -60,11 +65,22 @@ export class GetProgramDetailHandler {
       testimonialsLimit,
       announcementsLimit,
       resourcesLimit,
+      isAdmin,
     );
+
+    // Audit M13: a non-admin caller (anonymous, or authenticated without an
+    // admin role) must get a 404 for a draft/unpublished/hidden program
+    // identical to the 404 for an identifier that doesn't exist at all — no
+    // existence leak via a different response shape. Admin callers are
+    // unaffected: this controller's other routes already gate program
+    // mutation on ADMIN/SUPER_ADMIN, so an admin here legitimately needs to
+    // see drafts (e.g. previewing before publish).
+    const publicOnlyWhere = isAdmin ? {} : { isPublished: true, isVisibleToUsers: true };
 
     const program = await this.prisma.program.findFirst({
       where: {
         ...where,
+        ...publicOnlyWhere,
         deletedAt: null,
       },
       include: includeRelations,
@@ -90,6 +106,7 @@ export class GetProgramDetailHandler {
     testimonialsLimit: number,
     announcementsLimit: number,
     resourcesLimit: number,
+    isAdmin: boolean,
   ) {
     const now = new Date();
 
@@ -188,10 +205,15 @@ export class GetProgramDetailHandler {
 
     if (include === 'all') {
       includes.resources = {
-        where: {
-          isActive: true,
-          OR: [{ isPublic: true }, { isPublic: false }], // Include all for now, filter in controller based on auth
-        },
+        // Audit M13: this used to fetch isPublic:true AND isPublic:false with a
+        // comment promising the controller would filter by auth — it never did,
+        // so every anonymous caller received non-public resources verbatim.
+        // isAdmin now comes from the resolved caller (OptionalJwtAuthGuard), so
+        // a non-admin's query is scoped to public resources at the DB level
+        // rather than trusting a later filter step that doesn't exist.
+        where: isAdmin
+          ? { isActive: true }
+          : { isActive: true, isPublic: true },
         orderBy: { order: 'asc' },
         take: resourcesLimit, // Pagination
       };
