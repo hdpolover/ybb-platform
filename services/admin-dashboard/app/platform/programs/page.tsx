@@ -10,9 +10,17 @@ import { PageHeader } from "@/src/admin/page-header";
 import { StatCard } from "@/src/admin/stat-card";
 import { FilterBar } from "@/src/admin/filter-bar";
 import { ConfirmDialog } from "@/src/admin/confirm-dialog";
+import { PublishReadinessModal } from "@/src/admin/publish-readiness-modal";
 import { Button } from "@/src/ui/button";
+import { useAuth } from "@/app/contexts/AuthContext";
 import { fetchContentTemplates } from "@/app/components/shared/content-templates/content-templates-api";
 import { postApplyTemplate } from "@/app/components/shared/copy-from-program/copy-api";
+import {
+  ApiError,
+  publishProgram,
+  unpublishProgram,
+  type PublishBlocker,
+} from "@/src/shared/api-client";
 import {
   createPlatformProgram,
   deletePlatformProgram,
@@ -47,6 +55,7 @@ function mapProgram(program: PlatformProgram): Program {
 }
 
 export default function ProgramsPage() {
+  const { isPlatformAdmin } = useAuth();
   const [programs, setPrograms] = useState<Program[]>([]);
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,6 +73,9 @@ export default function ProgramsPage() {
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
   const [cloneNewProgramId, setCloneNewProgramId] = useState<string | null>(null);
   const [cloneBrandId, setCloneBrandId] = useState<string | null>(null);
+  const [publishTarget, setPublishTarget] = useState<Program | null>(null);
+  const [publishBlockers, setPublishBlockers] = useState<PublishBlocker[] | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -160,7 +172,6 @@ export default function ProgramsPage() {
         endDate: data.endDate,
         applicationDeadline: data.applicationDeadline,
         status: data.status,
-        isPublished: data.isPublished,
         isActive: data.isActive,
       });
 
@@ -210,7 +221,6 @@ export default function ProgramsPage() {
         endDate: data.endDate,
         applicationDeadline: data.applicationDeadline,
         status: data.status,
-        isPublished: data.isPublished,
         isActive: data.isActive,
       });
 
@@ -257,6 +267,49 @@ export default function ProgramsPage() {
     setDeleteError(null);
     setSelectedProgram(program);
     setIsDeleteModalOpen(true);
+  };
+
+  const attemptPublish = async (program: Program) => {
+    setIsPublishing(true);
+    try {
+      await publishProgram(program.id);
+      setPrograms((current) =>
+        current.map((p) => (p.id === program.id ? { ...p, isPublished: true } : p)),
+      );
+      toast.success(`${program.name} is now published.`);
+      setPublishTarget(null);
+      setPublishBlockers(null);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 422 && error.blockers) {
+        setPublishTarget(program);
+        setPublishBlockers(error.blockers);
+      } else {
+        toast.error(error instanceof Error ? error.message : "Failed to publish program.");
+      }
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handlePublish = (program: Program) => {
+    void attemptPublish(program);
+  };
+
+  const handleUnpublish = async (program: Program) => {
+    try {
+      await unpublishProgram(program.id);
+      setPrograms((current) =>
+        current.map((p) => (p.id === program.id ? { ...p, isPublished: false } : p)),
+      );
+      toast.success(`${program.name} is now unpublished.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to unpublish program.");
+    }
+  };
+
+  const closePublishModal = () => {
+    setPublishTarget(null);
+    setPublishBlockers(null);
   };
 
   const handleCloseFormModal = () => {
@@ -357,7 +410,14 @@ export default function ProgramsPage() {
           Loading programs…
         </div>
       ) : (
-        <ProgramsTable programs={filteredPrograms} onEdit={handleEdit} onDelete={handleDelete} />
+        <ProgramsTable
+          programs={filteredPrograms}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onPublish={handlePublish}
+          onUnpublish={handleUnpublish}
+          isPublishing={isPublishing}
+        />
       )}
 
       <ProgramFormModal
@@ -391,6 +451,17 @@ export default function ProgramsPage() {
         onConfirm={handleDeleteProgram}
         loading={isDeleting}
       />
+
+      {publishTarget && publishBlockers ? (
+        <PublishReadinessModal
+          subjectType="program"
+          subjectId={publishTarget.id}
+          blockers={publishBlockers}
+          canOverride={isPlatformAdmin}
+          onClose={closePublishModal}
+          onRetry={() => void attemptPublish(publishTarget)}
+        />
+      ) : null}
     </div>
   );
 }

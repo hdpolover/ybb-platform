@@ -146,11 +146,14 @@ import {
 } from './application/handlers/loa-batch.handlers';
 import { PreviewLoaTemplateHandler } from './application/handlers/loa-preview.handler';
 import { PortalModule } from '@modules/portal/portal.module';
+import { ReadinessModule } from '@modules/readiness/readiness.module';
+import { PublishProgramHandler } from './application/commands/handlers/publish-program.handler';
+import { UnpublishProgramHandler } from './application/commands/handlers/unpublish-program.handler';
 import { LoaPreviewParticipantService } from './application/services/loa-preview-participant.service';
 import { PricingTierCoverageAlertService } from './application/services/pricing-tier-coverage-alert.service';
 
 @Module({
-  imports: [CqrsModule, HttpModule, AuthModule, UsersModule, FilesModule, RabbitMQModule, PortalModule],
+  imports: [CqrsModule, HttpModule, AuthModule, UsersModule, FilesModule, RabbitMQModule, PortalModule, ReadinessModule],
   controllers: [
     ProgramsController,
     AdminProgramsController,
@@ -176,6 +179,8 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
     UpdateProgramHandler,
     UpdateProgramBrandingHandler,
     DeleteProgramHandler,
+    PublishProgramHandler,
+    UnpublishProgramHandler,
     GetParticipantProgressHandler,
     UpdateExchangeRateHandler,
     // Content Handlers

@@ -24,6 +24,14 @@ const paymentStatusMap: Record<string, BadgeProps["variant"]> = {
   requires_payment_method: "warning",
 };
 
+// Readiness rule status
+const readinessStatusMap: Record<string, BadgeProps["variant"]> = {
+  pass: "success",
+  fail: "destructive",
+  overridden: "warning",
+  unknown: "secondary",
+};
+
 // Generic status map fallback
 const genericStatusMap: Record<string, BadgeProps["variant"]> = {
   active: "success",
@@ -46,7 +54,7 @@ function normalizeLabel(status: string) {
 
 interface StatusBadgeProps {
   status: string;
-  context?: "application" | "payment" | "generic";
+  context?: "application" | "payment" | "readiness" | "generic";
   label?: string;
   className?: string;
 }
@@ -59,7 +67,9 @@ export function StatusBadge({ status, context = "generic", label, className }: S
       ? (applicationStatusMap[normalized] ?? "secondary")
       : context === "payment"
         ? (paymentStatusMap[normalized] ?? "secondary")
-        : (genericStatusMap[normalized] ?? "secondary");
+        : context === "readiness"
+          ? (readinessStatusMap[normalized] ?? "secondary")
+          : (genericStatusMap[normalized] ?? "secondary");
 
   return (
     <Badge variant={variant} className={className}>

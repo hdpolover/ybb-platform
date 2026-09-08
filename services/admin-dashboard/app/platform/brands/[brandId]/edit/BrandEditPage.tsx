@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ImageIcon, Save, Upload } from "lucide-react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { LogoOverrideWarning } from "@/src/admin/components/logo-override-warning";
@@ -19,6 +19,16 @@ import {
   updatePlatformBrandSettings,
   type PlatformBrandDetail,
 } from "../../../api";
+
+// Tab ids that actually exist on this page — used to validate the `tab` query
+// param so a garbage value (e.g. ?tab=nonsense) falls back to Identity instead
+// of rendering a blank tab area.
+const EDIT_TAB_IDS = ["identity", "details", "settings"] as const;
+type EditTabId = (typeof EDIT_TAB_IDS)[number];
+
+function isEditTabId(value: string | null): value is EditTabId {
+  return EDIT_TAB_IDS.includes(value as EditTabId);
+}
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
@@ -208,6 +218,7 @@ function IdentityTab({
   const [slug, setSlug] = useState(brand.slug);
   const [description, setDescription] = useState(brand.description ?? "");
   const [websiteUrl, setWebsiteUrl] = useState(brand.websiteUrl ?? "");
+  const [landingUrl, setLandingUrl] = useState(brand.landingUrl ?? "");
   const [primaryColor, setPrimaryColor] = useState(brand.primaryColor ?? "");
   const [isActive, setIsActive] = useState(brand.isActive);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -244,6 +255,7 @@ function IdentityTab({
         slug,
         description: description || undefined,
         websiteUrl: websiteUrl || undefined,
+        landingUrl: landingUrl || undefined,
         primaryColor: primaryColor || undefined,
         isActive,
         logo: logoFile ?? undefined,
@@ -373,6 +385,14 @@ function IdentityTab({
             onChange={setWebsiteUrl}
             placeholder="https://example.com"
           />
+          <Field
+            label="Landing URL"
+            id="landingUrl"
+            value={landingUrl}
+            onChange={setLandingUrl}
+            placeholder="https://example.com"
+            hint="Landing deployment URL — drives cache revalidation."
+          />
           <div className="space-y-1.5">
             <Label htmlFor="primaryColor">Primary Color</Label>
             <div className="flex items-center gap-2">
@@ -422,6 +442,7 @@ function DetailsTab({
   brand: PlatformBrandDetail;
   onSaved: (updated: PlatformBrandDetail) => void;
 }) {
+  const [tagline, setTagline] = useState(brand.tagline ?? "");
   const [about, setAbout] = useState(brand.about ?? "");
   const [vision, setVision] = useState(brand.vision ?? "");
   const [mission, setMission] = useState(brand.mission ?? "");
@@ -465,6 +486,7 @@ function DetailsTab({
 
     try {
       const updated = await updatePlatformBrandDetails(brand.id, {
+        tagline: tagline || undefined,
         about: about || undefined,
         vision: vision || undefined,
         mission: mission || undefined,
@@ -487,6 +509,13 @@ function DetailsTab({
       <Card>
         <CardHeader><CardTitle>About</CardTitle></CardHeader>
         <CardContent className="space-y-4">
+          <Field
+            label="Tagline"
+            id="tagline"
+            value={tagline}
+            onChange={setTagline}
+            placeholder="Empowering the next generation of global leaders"
+          />
           <TextArea label="About" id="about" value={about} onChange={setAbout} rows={4} placeholder="Who is this brand?" />
           <TextArea label="Vision" id="vision" value={vision} onChange={setVision} rows={3} placeholder="Long-term vision…" />
           <TextArea label="Mission" id="mission" value={mission} onChange={setMission} rows={3} placeholder="What does this brand do…" />
@@ -561,11 +590,7 @@ function SettingsTab({
   const [requireEmailVerification, setRequireEmailVerification] = useState(
     brand.requireEmailVerification ?? true,
   );
-  // Only USD/IDR can actually settle; coerce any legacy value (e.g. a stray "CNY")
-  // to IDR so saving the form doesn't trip the API's currency validation.
-  const [defaultCurrency, setDefaultCurrency] = useState(
-    brand.defaultCurrency === "USD" ? "USD" : "IDR",
-  );
+  const [defaultCurrency, setDefaultCurrency] = useState(brand.defaultCurrency ?? "USD");
   const [enableMultiCurrency, setEnableMultiCurrency] = useState(brand.enableMultiCurrency ?? false);
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(s?.isMaintenanceMode ?? false);
   const [maintenanceMessage, setMaintenanceMessage] = useState(s?.maintenanceMessage ?? "");
@@ -771,6 +796,9 @@ function SettingsTab({
 
 export default function BrandEditPage({ brandId }: { brandId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const initialTab: EditTabId = isEditTabId(requestedTab) ? requestedTab : "identity";
   const [brand, setBrand] = useState<PlatformBrandDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -829,7 +857,7 @@ export default function BrandEditPage({ brandId }: { brandId: string }) {
         }
       />
 
-      <Tabs defaultValue="identity">
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="identity">Identity</TabsTrigger>
           <TabsTrigger value="details">Details</TabsTrigger>

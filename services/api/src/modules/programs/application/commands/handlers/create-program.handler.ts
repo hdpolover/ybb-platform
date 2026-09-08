@@ -1,5 +1,5 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject } from '@nestjs/common';
+import { Inject, BadRequestException } from '@nestjs/common';
 import { CreateProgramCommand } from '../create-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { Program } from '@core/entities/program.entity';
@@ -21,7 +21,18 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
 
     async execute(command: CreateProgramCommand): Promise<any> {
         const { createProgramDto, userId } = command;
-        
+
+        // isPublished is not part of CreateProgramDto's type, but a caller (or
+        // an old client build) can still send it over the wire — reject it the
+        // same as update-program.handler.ts does, rather than letting a direct
+        // API call create a program that is live from birth and never touched
+        // the readiness guard at POST /programs/:id/publish.
+        if ('isPublished' in (createProgramDto as unknown as Record<string, unknown>)) {
+            throw new BadRequestException(
+                'isPublished is not accepted on create. Create the program, then use POST /programs/:id/publish.',
+            );
+        }
+
         if (!createProgramDto.slug) {
             createProgramDto.slug = this.generateSlug(createProgramDto.name);
         }

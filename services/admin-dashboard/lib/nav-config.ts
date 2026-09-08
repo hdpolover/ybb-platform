@@ -103,6 +103,7 @@ export const platformNavSections: NavSection[] = [
     items: [
       { id: "analytics", label: "Analytics", href: "/platform/analytics", icon: BarChart3 },
       { id: "metrics", label: "Metrics", href: "/platform/metrics", icon: Database },
+      { id: "readiness", label: "Publish readiness", href: "/platform/readiness", icon: ShieldCheck },
     ],
   },
   {

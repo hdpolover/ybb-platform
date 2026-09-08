@@ -145,9 +145,9 @@ describe('CreateProgramHandler', () => {
     });
 
     // Regression guard for the MEYS 7th incident: a program created with
-    // isPublished true but no explicit status must not default to 'draft'
+    // isActive true but no explicit status must not default to 'draft'
     // and go invisible on every public query (status !== 'draft' gate).
-    it('advances status to published when created with isPublished true and no explicit status', async () => {
+    it('advances status to published when created with isActive true and no explicit status', async () => {
         const dto: CreateProgramDto = {
             name: 'Test Program',
             brandId: 'brand-1',
@@ -156,7 +156,7 @@ describe('CreateProgramHandler', () => {
             endDate: '2024-01-10',
             applicationDeadline: '2023-12-31',
             slug: 'test-program',
-            isPublished: true,
+            isActive: true,
         };
         const command = new CreateProgramCommand(dto, 'user-1');
 
@@ -165,11 +165,11 @@ describe('CreateProgramHandler', () => {
         await handler.execute(command);
 
         expect(mockProgramRepository.create).toHaveBeenCalledWith(
-            expect.objectContaining({ isPublished: true, status: 'published' }),
+            expect.objectContaining({ isActive: true, status: 'published' }),
         );
     });
 
-    it('respects an explicit draft status even when created with isPublished true', async () => {
+    it('respects an explicit draft status even when created with isActive true', async () => {
         const dto: CreateProgramDto = {
             name: 'Test Program',
             brandId: 'brand-1',
@@ -178,7 +178,7 @@ describe('CreateProgramHandler', () => {
             endDate: '2024-01-10',
             applicationDeadline: '2023-12-31',
             slug: 'test-program',
-            isPublished: true,
+            isActive: true,
             status: 'draft',
         };
         const command = new CreateProgramCommand(dto, 'user-1');
@@ -188,7 +188,35 @@ describe('CreateProgramHandler', () => {
         await handler.execute(command);
 
         expect(mockProgramRepository.create).toHaveBeenCalledWith(
-            expect.objectContaining({ isPublished: true, status: 'draft' }),
+            expect.objectContaining({ isActive: true, status: 'draft' }),
         );
+    });
+
+    // IMPORTANT 5: the update door was closed (update-program.handler.spec.ts's
+    // "isPublished guard" describe block) but a direct POST /programs call
+    // could still create a program already live, bypassing the readiness
+    // engine entirely. isPublished is no longer part of CreateProgramDto's
+    // type, but a caller (or an old client build) can still send it over the
+    // wire — this must be rejected rather than silently creating a published
+    // program that never touched POST /programs/:id/publish.
+    describe('isPublished guard (publish moved to POST /programs/:id/publish)', () => {
+        it('rejects any payload still carrying isPublished', async () => {
+            const dto = {
+                name: 'Test Program',
+                brandId: 'brand-1',
+                year: 2024,
+                startDate: '2024-01-01',
+                endDate: '2024-01-10',
+                applicationDeadline: '2023-12-31',
+                slug: 'test-program',
+                isPublished: true,
+            } as unknown as CreateProgramDto;
+            const command = new CreateProgramCommand(dto, 'user-1');
+
+            await expect(handler.execute(command)).rejects.toThrow(
+                'isPublished is not accepted on create. Create the program, then use POST /programs/:id/publish.',
+            );
+            expect(mockProgramRepository.create).not.toHaveBeenCalled();
+        });
     });
 });

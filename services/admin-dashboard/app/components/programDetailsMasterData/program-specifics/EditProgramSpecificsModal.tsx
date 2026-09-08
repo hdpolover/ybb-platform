@@ -25,7 +25,6 @@ export interface ProgramSpecificsFormValues {
   endDate: string;
   applicationDeadline: string;
   status: ProgramStatus;
-  isPublished: boolean;
   location: string;
   capacity: string;
   requirePayment: boolean;
@@ -213,23 +212,10 @@ export function EditProgramSpecificsModal({
             </select>
           </div>
           <div className="flex flex-col justify-end gap-2">
-            <label className="flex items-center gap-3 rounded-md border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium text-zinc-700 shadow-sm">
-              <input
-                type="checkbox"
-                checked={formValues.isPublished}
-                onChange={(event) => updateField("isPublished", event.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
-              />
-              Published
-            </label>
+            <p className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs text-zinc-500">
+              Publishing is managed from the Publish action next to this drawer, gated by the readiness check.
+            </p>
           </div>
-          {formValues.isPublished && formValues.status === "draft" && (
-            <div className="md:col-span-2 xl:col-span-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              Status is still &quot;Draft&quot; while Published is checked. Every public query hides draft
-              programs regardless of Published/Active, so this program will stay invisible on the site
-              until Status is changed. Pick a status above (usually &quot;Published&quot;) to make it live.
-            </div>
-          )}
         </div>
       </FormSection>
 

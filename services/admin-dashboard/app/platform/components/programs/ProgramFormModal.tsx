@@ -34,7 +34,6 @@ export type ProgramFormData = {
   applicationDeadline: string;
   startDate: string;
   endDate: string;
-  isPublished: boolean;
   isActive: boolean;
 };
 
@@ -57,7 +56,6 @@ export function ProgramFormModal({
     applicationDeadline: program?.applicationDeadline?.slice(0, 10) ?? "",
     startDate: program?.startDate?.slice(0, 10) ?? "",
     endDate: program?.endDate?.slice(0, 10) ?? "",
-    isPublished: program?.isPublished ?? false,
     isActive: program?.isActive ?? true,
   }));
   const [autoGenerateSlug, setAutoGenerateSlug] = useState(() => !program);
@@ -232,15 +230,15 @@ export function ProgramFormModal({
                 ) : null}
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-zinc-700">
-                <input
-                  type="checkbox"
-                  checked={formData.isPublished}
-                  onChange={(e) => setFormData({ ...formData, isPublished: e.target.checked })}
-                  className="rounded border-zinc-300"
-                />
-                Publish after save
-              </label>
+              {program?.id ? (
+                <p className="text-xs text-zinc-500">
+                  Publishing is managed from the Programs table — use the Publish action on this row once the program passes readiness.
+                </p>
+              ) : (
+                <p className="text-xs text-zinc-500">
+                  New programs are created as drafts. Publish it from the Programs table once it passes readiness.
+                </p>
+              )}
               <label className="flex items-center gap-2 text-sm text-zinc-700">
                 <input
                   type="checkbox"

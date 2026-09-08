@@ -107,6 +107,72 @@ describe('HttpExceptionFilter', () => {
     expect(body).toEqual(expect.objectContaining({ statusCode: 400, message: 'Bad input.' }));
   });
 
+  it('forwards a blockers[] array from the exception body intact (publish-readiness 422 detail)', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/programs/prog-1/publish' });
+
+    filter.catch(
+      new HttpException(
+        {
+          message: 'This program is not ready to publish',
+          blockers: [
+            {
+              ruleId: 'program.has-pricing-tiers',
+              title: 'No pricing tiers configured',
+              symptom: 'The pricing page renders empty.',
+              fix: { label: 'Add a pricing tier', href: '/platform/programs/prog-1/pricing' },
+              status: 'fail',
+            },
+          ],
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      ),
+      host,
+    );
+
+    expect(statusMock).toHaveBeenCalledWith(422);
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).toEqual(
+      expect.objectContaining({
+        statusCode: 422,
+        message: 'This program is not ready to publish',
+        blockers: [
+          {
+            ruleId: 'program.has-pricing-tiers',
+            title: 'No pricing tiers configured',
+            symptom: 'The pricing page renders empty.',
+            fix: { label: 'Add a pricing tier', href: '/platform/programs/prog-1/pricing' },
+            status: 'fail',
+          },
+        ],
+      }),
+    );
+  });
+
+  it('does not forward a non-array blockers value, and does not break the response', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/programs/prog-1/publish' });
+
+    filter.catch(
+      new HttpException(
+        { message: 'Not ready.', blockers: 'not-an-array' },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      ),
+      host,
+    );
+
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).not.toHaveProperty('blockers');
+    expect(body).toEqual(expect.objectContaining({ statusCode: 422, message: 'Not ready.' }));
+  });
+
+  it('emits no blockers key at all when the exception body does not carry one', () => {
+    const host = makeHost({ method: 'POST', url: '/v1/programs/prog-1/publish' });
+
+    filter.catch(new BadRequestException('Plain failure, no blockers.'), host);
+
+    const [body] = jsonMock.mock.calls[0];
+    expect(body).not.toHaveProperty('blockers');
+  });
+
   it('does not forward an object (non-array) errors value either', () => {
     const host = makeHost({ method: 'PUT', url: '/v1/applications/app-1/review' });
 

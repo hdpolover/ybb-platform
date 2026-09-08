@@ -1,4 +1,7 @@
 import { IsString, IsNotEmpty, IsOptional, IsNumber, IsDateString, IsBoolean, IsUUID, MaxLength } from 'class-validator';
+// Note: `isPublished` is deliberately NOT a field here. Publishing is gated
+// by the readiness engine at POST /programs/:id/publish — see
+// create-program.handler.ts's guard, which mirrors update-program.handler.ts.
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateProgramDto {
@@ -58,11 +61,6 @@ export class CreateProgramDto {
     @IsString()
     @IsOptional()
     status?: string;
-
-    @ApiProperty({ description: 'Publish program immediately', required: false, default: false })
-    @IsBoolean()
-    @IsOptional()
-    isPublished?: boolean;
 
     @ApiProperty({ description: 'Whether the program is currently active', required: false, default: true })
     @IsBoolean()

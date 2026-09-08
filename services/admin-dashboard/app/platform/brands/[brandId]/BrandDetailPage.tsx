@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { StatusBadge } from "@/src/admin/status-badge";
 import { EmptyState } from "@/src/admin/empty-state";
+import { ReadinessList } from "@/src/admin/readiness-list";
 import { Button } from "@/src/ui/button";
 import { Badge } from "@/src/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
@@ -81,6 +82,7 @@ import {
   type BrandMetadata,
   type BrandSectionBackground,
 } from "../../api";
+import { getBrandReadiness, type ReadinessReport } from "@/src/shared/api-client";
 
 // files.title is VARCHAR(255). These upload flows pass the raw filename as a
 // derived display label (the admin never types it), so clamp instead of
@@ -568,7 +570,7 @@ function SettingsSheet({ brand, onSaved }: { brand: PlatformBrandDetail; onSaved
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [form, setForm] = useState({
-    defaultCurrency: brand.defaultCurrency ?? "IDR",
+    defaultCurrency: brand.defaultCurrency ?? "USD",
     enableMultiCurrency: brand.enableMultiCurrency ?? false,
     isMaintenanceMode: brand.settings?.isMaintenanceMode ?? false,
     maintenanceMessage: brand.settings?.maintenanceMessage ?? "",
@@ -2761,6 +2763,9 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
   const [brand, setBrand] = useState<PlatformBrandDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(true);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
 
   const load = useCallback((silent = false) => {
     getPlatformBrand(brandId)
@@ -2773,6 +2778,18 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
   }, [brandId]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReadinessLoading(true);
+    getBrandReadiness(brandId)
+      .then((data) => { if (!cancelled) { setReadiness(data); setReadinessError(null); } })
+      .catch((err) => {
+        if (!cancelled) setReadinessError(err instanceof Error ? err.message : "Failed to load readiness.");
+      })
+      .finally(() => { if (!cancelled) setReadinessLoading(false); });
+    return () => { cancelled = true; };
+  }, [brandId]);
 
   if (loading) {
     return <BrandDetailSkeleton />;
@@ -2915,6 +2932,21 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
           <SettingsTab brand={brand} onSaved={() => load(true)} />
         </TabsContent>
       </Tabs>
+
+      <Card className="p-6">
+        <h2 className="mb-4 text-lg font-semibold text-zinc-900">Publish readiness</h2>
+        {readinessLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-5 w-2/3" />
+            <Skeleton className="h-5 w-1/2" />
+            <Skeleton className="h-5 w-3/5" />
+          </div>
+        ) : readinessError ? (
+          <p className="text-sm text-red-700">{readinessError}</p>
+        ) : (
+          <ReadinessList results={readiness?.results ?? []} />
+        )}
+      </Card>
     </div>
   );
 }
