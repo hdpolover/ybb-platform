@@ -2,6 +2,7 @@
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { PaymentsModule } from '@modules/payments/payments.module';
+import { AuthModule } from '@modules/auth/auth.module';
 import { ReadinessController } from './presentation/readiness.controller';
 import { ReadinessContextLoader } from './infrastructure/readiness-context.loader';
 import { ReadinessRepository } from './infrastructure/persistence/readiness.repository';
@@ -13,7 +14,7 @@ import { CreateReadinessOverrideHandler } from './application/commands/handlers/
 import { ReadinessSnapshotService } from './application/services/readiness-snapshot.service';
 
 @Module({
-  imports: [CqrsModule, PaymentsModule],
+  imports: [CqrsModule, PaymentsModule, AuthModule],
   controllers: [ReadinessController],
   providers: [
     ReadinessContextLoader,
