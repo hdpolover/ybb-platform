@@ -35,6 +35,7 @@ import { ParticipantsModule } from '@modules/participants/participants.module';
 import { PartnershipsModule } from '@modules/partnerships/partnerships.module';
 import { PaymentsModule } from '@modules/payments/payments.module';
 import { ProgramsModule } from '@modules/programs/programs.module';
+import { ReadinessModule } from '@modules/readiness/readiness.module';
 import { StatsModule } from '@modules/stats/stats.module';
 import { RevenueModule } from '@modules/stats/revenue/revenue.module';
 import { SupportModule } from '@modules/support/support.module';
@@ -150,6 +151,7 @@ import { PlatformSettingsModule } from '@modules/platform-settings/platform-sett
     ReportingModule,
     AdminsModule,
     PlatformSettingsModule,
+    ReadinessModule,
   ],
   controllers: [CacheController, MetricsController, QueueController],
 })

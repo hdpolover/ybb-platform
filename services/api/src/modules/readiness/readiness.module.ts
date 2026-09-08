@@ -1,0 +1,23 @@
+// services/api/src/modules/readiness/readiness.module.ts
+import { Module } from '@nestjs/common';
+import { CqrsModule } from '@nestjs/cqrs';
+import { ReadinessController } from './presentation/readiness.controller';
+import { ReadinessContextLoader } from './infrastructure/readiness-context.loader';
+import { ReadinessRepository } from './infrastructure/persistence/readiness.repository';
+import { GetBrandReadinessHandler } from './application/queries/handlers/get-brand-readiness.handler';
+import { GetProgramReadinessHandler } from './application/queries/handlers/get-program-readiness.handler';
+import { GetReadinessSummaryHandler } from './application/queries/handlers/get-readiness-summary.handler';
+
+@Module({
+  imports: [CqrsModule],
+  controllers: [ReadinessController],
+  providers: [
+    ReadinessContextLoader,
+    ReadinessRepository,
+    GetBrandReadinessHandler,
+    GetProgramReadinessHandler,
+    GetReadinessSummaryHandler,
+  ],
+  exports: [ReadinessContextLoader, ReadinessRepository],
+})
+export class ReadinessModule {}
