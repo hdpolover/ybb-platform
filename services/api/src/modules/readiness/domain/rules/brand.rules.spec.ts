@@ -97,8 +97,9 @@ describe('BRAND_RULES', () => {
 });
 
 describe('brandRulesFor', () => {
-  it('binds every fix link to the given brand id', () => {
+  it('binds every fix link to the given brand id, except the signature rule (no brand-scoped signature UI exists)', () => {
     for (const rule of brandRulesFor('b-123')) {
+      if (rule.id === 'brand.has-active-signature') continue;
       expect(rule.fix.href).toContain('/platform/brands/b-123/edit');
     }
   });
@@ -106,5 +107,14 @@ describe('brandRulesFor', () => {
   it('routes settings-tab rules to the settings tab', () => {
     const rule = brandRulesFor('b-123').find((r) => r.id === 'brand.support-email-set');
     expect(rule?.fix.href).toContain('tab=settings');
+  });
+
+  // MINOR d: signatures are managed inside a specific program's LOA template
+  // editor, not on the brand edit page — routing this rule's fix link to
+  // ?tab=identity would land the admin on a tab with no signature UI at all.
+  it('does not send brand.has-active-signature to a brand-edit tab that cannot manage signatures', () => {
+    const rule = brandRulesFor('b-123').find((r) => r.id === 'brand.has-active-signature');
+    expect(rule?.fix.href).not.toContain('tab=identity');
+    expect(rule?.fix.href).not.toContain('/edit');
   });
 });

@@ -20,7 +20,9 @@ export class GetBrandReadinessHandler implements IQueryHandler<GetBrandReadiness
       this.repository.findActiveOverrides('brand', query.brandId),
     ]);
     const report = evaluateRules(brandRulesFor(query.brandId), ctx, overrides);
-    await this.repository.saveSnapshot('brand', query.brandId, query.brandId, report);
+    await this.repository.saveSnapshot('brand', query.brandId, query.brandId, report, {
+      subjectName: ctx.brand.name,
+    });
     return report;
   }
 }

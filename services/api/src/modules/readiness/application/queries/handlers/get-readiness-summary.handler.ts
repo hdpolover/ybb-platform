@@ -7,8 +7,11 @@ export interface ReadinessSummaryRow {
   subjectType: string;
   subjectId: string;
   brandId: string;
+  subjectName: string;
+  brandName: string | null;
   blockerCount: number;
   warningCount: number;
+  unknownCount: number;
   evaluatedAt: Date;
 }
 

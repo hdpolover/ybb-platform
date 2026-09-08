@@ -23,12 +23,41 @@ model ReadinessSnapshot {
   subjectType   String   @map("subject_type") @db.VarChar(20)
   subjectId     String   @map("subject_id") @db.Uuid
   brandId       String   @map("brand_id") @db.Uuid
+  // Display name of the subject itself (program name, or brand name when
+  // subjectType is 'brand') so the fleet board can render a name instead of
+  // a UUID fragment.
+  subjectName   String   @map("subject_name") @db.VarChar(255)
+  // Owning brand's display name. Only populated for subjectType 'program';
+  // null for a brand row, since brandId there already identifies the brand.
+  brandName     String?  @map("brand_name") @db.VarChar(255)
   result        Json
   blockerCount  Int      @map("blocker_count")
   warningCount  Int      @map("warning_count")
+  // Rules that could not be evaluated (e.g. the payment service was down).
+  // Persisted separately from blockerCount so a snapshot taken during an
+  // outage can never be mistaken for "all clear" by the fleet board — see
+  // evaluate-rules.ts's isReady, which also treats unknown as not-ready.
+  unknownCount  Int      @default(0) @map("unknown_count")
   evaluatedAt   DateTime @map("evaluated_at") @db.Timestamptz(6)
 
   @@id([subjectType, subjectId])
   @@index([brandId])
   @@map("readiness_snapshots")
+}
+
+// The nightly alert cron's own "what did we already know about" baseline.
+// Deliberately separate from ReadinessSnapshot: that table is overwritten on
+// every readiness panel GET (see get-brand-readiness/get-program-readiness
+// handlers), so an admin opening a panel after a regression would otherwise
+// erase the cron's ability to tell the regression was new. Only
+// ReadinessSnapshotService reads or writes this table.
+model ReadinessAlertBaseline {
+  subjectType    String   @map("subject_type") @db.VarChar(20)
+  subjectId      String   @map("subject_id") @db.Uuid
+  // Rule ids that were blocking (fail or unknown) as of the last sweep.
+  blockerRuleIds Json     @map("blocker_rule_ids")
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@id([subjectType, subjectId])
+  @@map("readiness_alert_baselines")
 }

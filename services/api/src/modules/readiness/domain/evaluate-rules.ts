@@ -2,11 +2,21 @@ import {
   ActiveOverride, ReadinessContext, ReadinessReport, ReadinessRule, RuleResult,
 } from './readiness-rule.types';
 
+const isExpired = (o: ActiveOverride, now: Date) =>
+  o.expiresAt !== null && o.expiresAt.getTime() <= now.getTime();
+
+// A rule can have more than one active override row over time (a fresh one
+// issued to replace an expired one, the old row only ever revoked/deleted —
+// never guaranteed to be). Whichever the repository returns first must not
+// decide the outcome: a non-expired override for this rule always wins over
+// an expired one, regardless of query return order.
 function findOverride(overrides: ActiveOverride[], ruleId: string, now: Date) {
-  const match = overrides.find((o) => o.ruleId === ruleId);
-  if (!match) return { override: null, expired: false };
-  const expired = match.expiresAt !== null && match.expiresAt.getTime() <= now.getTime();
-  return { override: expired ? null : match, expired };
+  const candidates = overrides.filter((o) => o.ruleId === ruleId);
+  if (candidates.length === 0) return { override: null, expired: false };
+  const active = candidates.find((o) => !isExpired(o, now));
+  if (active) return { override: active, expired: false };
+  // Every candidate for this rule is expired.
+  return { override: null, expired: true };
 }
 
 export function evaluateRules(

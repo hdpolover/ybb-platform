@@ -42,8 +42,12 @@ describe('GetBrandReadinessHandler', () => {
     expect(report.isReady).toBe(false);
   });
 
-  it('persists a snapshot so the fleet summary stays current', async () => {
+  it('persists a snapshot so the fleet summary stays current, naming the brand', async () => {
     await handler.execute(new GetBrandReadinessQuery('b1'));
-    expect(mockRepo.saveSnapshot).toHaveBeenCalledWith('brand', 'b1', 'b1', expect.objectContaining({ isReady: false }));
+    expect(mockRepo.saveSnapshot).toHaveBeenCalledWith(
+      'brand', 'b1', 'b1',
+      expect.objectContaining({ isReady: false }),
+      { subjectName: 'KYS' },
+    );
   });
 });

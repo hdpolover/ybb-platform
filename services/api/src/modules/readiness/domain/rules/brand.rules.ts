@@ -131,8 +131,19 @@ export function brandRulesFor(brandId: string): ReadinessRule[] {
     'brand.currency-consistent': 'settings',
     'brand.tagline-set': 'details',
   };
-  return BRAND_RULES.map((rule) => ({
-    ...rule,
-    fix: { ...rule.fix, href: brandHref(brandId, tabByRule[rule.id] ?? 'identity') },
-  }));
+  return BRAND_RULES.map((rule) => {
+    // Signatures are NOT managed on the brand edit page (identity/details/
+    // settings tabs only — see BrandEditPage.tsx). They live in the
+    // brand-scoped signature list inside LoaTemplateEditor.tsx, which is
+    // only reachable via a specific program's LOA template page
+    // (/programs/:programId/documents/loa-template) — this rule has no
+    // programId to link to, since it is evaluated at brand scope. Rather
+    // than default it into the identity tab (which has no signature UI at
+    // all and would just be a dead end), leave its own fix.href
+    // ('/platform/brands') alone as the least-wrong landing spot.
+    if (rule.id === 'brand.has-active-signature') {
+      return rule;
+    }
+    return { ...rule, fix: { ...rule.fix, href: brandHref(brandId, tabByRule[rule.id] ?? 'identity') } };
+  });
 }

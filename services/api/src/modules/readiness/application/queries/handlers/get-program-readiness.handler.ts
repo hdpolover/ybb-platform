@@ -31,7 +31,10 @@ export class GetProgramReadinessHandler implements IQueryHandler<GetProgramReadi
       ctx,
       [...programOverrides, ...brandOverrides],
     );
-    await this.repository.saveSnapshot('program', query.programId, brandId, report);
+    await this.repository.saveSnapshot('program', query.programId, brandId, report, {
+      subjectName: ctx.program?.name ?? query.programId,
+      brandName: ctx.brand.name,
+    });
     return report;
   }
 }

@@ -39,6 +39,30 @@ describe('evaluateRules', () => {
     expect(report.results[0].overrideExpired).toBe(true);
   });
 
+  // Regression guard: a rule can carry both an old, expired override and a
+  // freshly-issued one that replaces it. Whichever the repository happens to
+  // return first must never decide the outcome.
+  describe('a rule with both an expired and a live override', () => {
+    const overrides = [
+      { ruleId: 'test.always-fails', reason: 'stale', adminId: 'a1', expiresAt: new Date('2020-01-01') },
+      { ruleId: 'test.always-fails', reason: 'fresh, still active', adminId: 'a2', expiresAt: null },
+    ];
+
+    it('applies the live override when the expired one is returned first', () => {
+      const report = evaluateRules([failingRule], ctx, overrides);
+      expect(report.results[0].status).toBe('overridden');
+      expect(report.results[0].overrideReason).toBe('fresh, still active');
+      expect(report.isReady).toBe(true);
+    });
+
+    it('applies the live override when the expired one is returned last', () => {
+      const report = evaluateRules([failingRule], ctx, [...overrides].reverse());
+      expect(report.results[0].status).toBe('overridden');
+      expect(report.results[0].overrideReason).toBe('fresh, still active');
+      expect(report.isReady).toBe(true);
+    });
+  });
+
   it('does not let a failing warning block readiness', () => {
     const warn: ReadinessRule = { ...failingRule, id: 'test.warn', severity: 'WARNING' };
     const report = evaluateRules([warn], ctx, []);

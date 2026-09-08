@@ -56,6 +56,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // were ever read off the exception body below. Only included when present,
     // to stay backward compatible with every other thrown exception shape.
     let errors: unknown;
+    // Optional structured blocker detail forwarded from the exception response
+    // body (e.g. publish-program.handler.ts's UnprocessableEntityException({
+    // message, blockers: [...] })), used by the admin publish modal to render
+    // the exact rules blocking a publish. Without this branch it was silently
+    // dropped by the fixed whitelist below, same failure class as `errors`.
+    // Only included when present, to stay backward compatible.
+    let blockers: unknown;
     // Server-side-only detail appended to the 4xx warn line. A Prisma error
     // that now maps to a 4xx would otherwise lose its trail entirely: the
     // client message is hand-written and the 5xx error+stack branch no longer
@@ -91,6 +98,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
       if (typeof body === 'object' && body !== null && 'errors' in body && Array.isArray((body as { errors: unknown }).errors)) {
         errors = (body as { errors: unknown[] }).errors;
+      }
+      if (typeof body === 'object' && body !== null && 'blockers' in body && Array.isArray((body as { blockers: unknown }).blockers)) {
+        blockers = (body as { blockers: unknown[] }).blockers;
       }
       // Sanitize 5xx messages in production
       if (isProd && status >= 500) {
@@ -146,6 +156,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       path: req.url,
       ...(errorCode ? { errorCode } : {}),
       ...(errors ? { errors } : {}),
+      ...(blockers ? { blockers } : {}),
     });
   }
 }

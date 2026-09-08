@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { Controller, Get, Query, Param, ParseUUIDPipe, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFiles } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Request as ExpressRequest } from 'express';
@@ -387,7 +387,7 @@ export class ProgramsController {
   @ApiResponse({ status: 422, description: 'Program is not ready to publish' })
   @AuditTrail({ entityType: 'Program', action: ChangeType.update })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
-  async publish(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+  async publish(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: CurrentUserData) {
     await this.commandBus.execute(new PublishProgramCommand(id, user.adminId ?? user.userId));
     return { success: true };
   }
@@ -401,7 +401,7 @@ export class ProgramsController {
   @ApiResponse({ status: 200, description: 'Program unpublished successfully' })
   @AuditTrail({ entityType: 'Program', action: ChangeType.update })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
-  async unpublish(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
+  async unpublish(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: CurrentUserData) {
     await this.commandBus.execute(new UnpublishProgramCommand(id, user.adminId ?? user.userId));
     return { success: true };
   }

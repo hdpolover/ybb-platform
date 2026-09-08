@@ -6,10 +6,19 @@ import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.ser
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { ReadinessRepository } from '../../infrastructure/persistence/readiness.repository';
 import { GetProgramReadinessQuery } from '../queries/get-program-readiness.query';
-import { ReadinessReport, RuleResult } from '../../domain/readiness-rule.types';
+import { GetBrandReadinessQuery } from '../queries/get-brand-readiness.query';
+import { ReadinessReport, ReadinessScope, RuleResult } from '../../domain/readiness-rule.types';
 
 const isBlocking = (r: Pick<RuleResult, 'severity' | 'status'>) =>
   r.severity === 'BLOCKER' && (r.status === 'fail' || r.status === 'unknown');
+
+interface AlertEventBase {
+  subjectType: ReadinessScope;
+  subjectId: string;
+  programName: string;
+  brandId: string;
+  brandName: string;
+}
 
 @Injectable()
 export class ReadinessSnapshotService {
@@ -24,6 +33,11 @@ export class ReadinessSnapshotService {
 
   @Cron('0 6 * * *', { timeZone: 'Asia/Jakarta' })
   async reevaluatePublished(): Promise<void> {
+    await this.sweepPrograms();
+    await this.sweepBrands();
+  }
+
+  private async sweepPrograms(): Promise<void> {
     // All three flags: a program with isPublished true but isActive false is
     // not publicly visible, and alerting on it would be noise.
     const programs = await this.read.program.findMany({
@@ -31,44 +45,18 @@ export class ReadinessSnapshotService {
       select: { id: true, name: true, brandId: true, brand: { select: { name: true } } },
     });
 
-    const previous = await this.repository.findSnapshots();
-    const previousBySubject = new Map(
-      previous.map((row) => [`${row.subjectType}:${row.subjectId}`, row]),
-    );
-
     for (const program of programs) {
       try {
         const report: ReadinessReport = await this.queryBus.execute(
           new GetProgramReadinessQuery(program.id),
         );
-
-        const before = previousBySubject.get(`program:${program.id}`);
-        const previousBlocking = new Set(
-          ((before?.result as RuleResult[] | undefined) ?? [])
-            .filter(isBlocking)
-            .map((r) => r.ruleId),
-        );
-
-        // Report change, not state. A rule that was already failing is not news
-        // and would train admins to ignore the digest.
-        const newBlockers = report.results
-          .filter(isBlocking)
-          .filter((r) => !previousBlocking.has(r.ruleId));
-
-        if (newBlockers.length > 0) {
-          this.producer.emit('readiness.regression.detected', {
-            subjectType: 'program',
-            subjectId: program.id,
-            programName: program.name,
-            brandId: program.brandId,
-            brandName: program.brand.name,
-            newBlockers: newBlockers.map((r) => ({
-              ruleId: r.ruleId,
-              title: r.title,
-              symptom: r.symptom,
-            })),
-          });
-        }
+        await this.diffAgainstBaselineAndAlert('program', program.id, report, {
+          subjectType: 'program',
+          subjectId: program.id,
+          programName: program.name,
+          brandId: program.brandId,
+          brandName: program.brand.name,
+        });
       } catch (error) {
         // One unevaluable program must not abort the whole sweep.
         this.logger.error(
@@ -76,5 +64,69 @@ export class ReadinessSnapshotService {
         );
       }
     }
+  }
+
+  // The fleet board only shows a brand if someone opens its readiness panel
+  // (GET writes the snapshot). A brand nobody happens to click into stayed
+  // invisible on the board and never got swept for the nightly alert either.
+  private async sweepBrands(): Promise<void> {
+    const brands = await this.read.brand.findMany({
+      where: { isActive: true, deletedAt: null },
+      select: { id: true, name: true },
+    });
+
+    for (const brand of brands) {
+      try {
+        const report: ReadinessReport = await this.queryBus.execute(
+          new GetBrandReadinessQuery(brand.id),
+        );
+        await this.diffAgainstBaselineAndAlert('brand', brand.id, report, {
+          subjectType: 'brand',
+          subjectId: brand.id,
+          programName: brand.name,
+          brandId: brand.id,
+          brandName: brand.name,
+        });
+      } catch (error) {
+        this.logger.error(
+          `Readiness re-evaluation failed for brand ${brand.id}: ${(error as Error).message}`,
+        );
+      }
+    }
+  }
+
+  // The alert job keeps its own baseline (readiness_alert_baselines),
+  // written only here — never by get-brand-readiness/get-program-readiness,
+  // which write readiness_snapshots on every GET to keep the fleet board
+  // fresh. Diffing against readiness_snapshots instead let an admin merely
+  // viewing a panel overwrite the "previous" state, so a real regression
+  // that happened between sweeps looked already-known and nobody got
+  // emailed. See readiness-snapshot.service.spec.ts.
+  private async diffAgainstBaselineAndAlert(
+    subjectType: ReadinessScope,
+    subjectId: string,
+    report: ReadinessReport,
+    eventBase: AlertEventBase,
+  ): Promise<void> {
+    const previousBlocking = new Set(await this.repository.getAlertBaseline(subjectType, subjectId) ?? []);
+
+    const blocking = report.results.filter(isBlocking);
+
+    // Report change, not state. A rule that was already failing is not news
+    // and would train admins to ignore the digest.
+    const newBlockers = blocking.filter((r) => !previousBlocking.has(r.ruleId));
+
+    if (newBlockers.length > 0) {
+      this.producer.emit('readiness.regression.detected', {
+        ...eventBase,
+        newBlockers: newBlockers.map((r) => ({
+          ruleId: r.ruleId,
+          title: r.title,
+          symptom: r.symptom,
+        })),
+      });
+    }
+
+    await this.repository.saveAlertBaseline(subjectType, subjectId, blocking.map((r) => r.ruleId));
   }
 }
