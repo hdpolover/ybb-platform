@@ -319,3 +319,100 @@ describe('FilesController — identifiers forwarded to the file service (audit M
         expect(mockFileServiceClient.markFileReady).toHaveBeenCalled();
     });
 });
+
+// M182: POST /v1/files/upload took `bucket` and `participant_id` straight off the
+// request body. `bucket` selects the storage path AND decides whether the object
+// is world-readable (the file service serves a set of buckets as public
+// categories), so a participant could publish a private document by naming a
+// public bucket, or file an upload against someone else's participant record.
+describe('FilesController — uploadFile (caller-supplied bucket and participant)', () => {
+    let controller: FilesController;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let mockPrisma: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let storage: any;
+
+    const FILE = { originalname: 'passport.pdf', buffer: Buffer.from('x') } as Express.Multer.File;
+    const participant = { userId: 'user-1', email: 'p@example.com', brandId: 'brand-1' };
+    const admin = { ...participant, adminId: 'admin-1' };
+
+    beforeEach(async () => {
+        storage = { uploadFile: jest.fn().mockResolvedValue({ fileInfo: { id: 'f1' } }) };
+        mockPrisma = {
+            participant: { findUnique: jest.fn().mockResolvedValue({ id: 'own-participant' }) },
+            program: { findUnique: jest.fn() },
+        };
+
+        const module: TestingModule = await Test.createTestingModule({
+            controllers: [FilesController],
+            providers: [
+                { provide: FileServiceClient, useValue: {} },
+                { provide: FileGrpcClient, useValue: {} },
+                { provide: StorageService, useValue: storage },
+                { provide: MetricsService, useValue: { fileUploadsTotal: { inc: jest.fn() } } },
+                { provide: PrismaService, useValue: mockPrisma },
+                { provide: PrismaReadService, useValue: {} },
+            ],
+        })
+            .overrideGuard(JwtAuthGuard)
+            .useValue({ canActivate: () => true })
+            .compile();
+
+        controller = module.get<FilesController>(FilesController);
+    });
+
+    it('rejects a public content bucket from a participant', async () => {
+        // The exploit: name a public category and the "private" upload is served
+        // to anyone without presigned auth.
+        await expect(
+            controller.uploadFile(FILE, participant, 'gallery'),
+        ).rejects.toThrow(BadRequestException);
+        expect(storage.uploadFile).not.toHaveBeenCalled();
+    });
+
+    it('rejects a bucket that is not on the allowlist at all', async () => {
+        await expect(
+            controller.uploadFile(FILE, participant, '../../etc'),
+        ).rejects.toThrow(BadRequestException);
+        expect(storage.uploadFile).not.toHaveBeenCalled();
+    });
+
+    it('allows the two buckets participant flows actually use', async () => {
+        for (const bucket of ['avatars', 'documents']) {
+            await expect(controller.uploadFile(FILE, participant, bucket)).resolves.toBeDefined();
+        }
+        expect(storage.uploadFile).toHaveBeenCalledTimes(2);
+    });
+
+    it('files a participant upload against the caller\'s OWN participant record', async () => {
+        // 'someone-else' is what the body asked for and must be discarded.
+        await controller.uploadFile(FILE, participant, 'documents', undefined, 'someone-else');
+
+        expect(mockPrisma.participant.findUnique).toHaveBeenCalledWith({
+            where: { userId: 'user-1' },
+            select: { id: true },
+        });
+        expect(storage.uploadFile).toHaveBeenCalledWith(
+            FILE, 'user-1', 'brand-1', 'documents', undefined, 'ybb', 'own-participant',
+        );
+    });
+
+    it('still lets an admin upload on another participant\'s behalf, and into content buckets', async () => {
+        await controller.uploadFile(FILE, admin, 'gallery', undefined, 'someone-else');
+
+        expect(mockPrisma.participant.findUnique).not.toHaveBeenCalled();
+        expect(storage.uploadFile).toHaveBeenCalledWith(
+            FILE, 'user-1', 'brand-1', 'gallery', undefined, 'ybb', 'someone-else',
+        );
+    });
+
+    it('resolves the brand from the programme rather than trusting the token', async () => {
+        // resolveUploadBrandId validates the programme; a deleted/absent one is a 404
+        // instead of an upload silently filed under the caller's own brand.
+        mockPrisma.program.findUnique.mockResolvedValueOnce(null);
+        await expect(
+            controller.uploadFile(FILE, participant, 'documents', 'prog-x'),
+        ).rejects.toThrow(NotFoundException);
+        expect(storage.uploadFile).not.toHaveBeenCalled();
+    });
+});

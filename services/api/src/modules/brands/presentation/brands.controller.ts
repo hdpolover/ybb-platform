@@ -73,8 +73,22 @@ export class BrandsController {
         return this.queryBus.execute(new GetBrandDetailQuery(id));
     }
 
+    // Guarded, and brand-scoped, like every other admin route in this file.
+    // It was anonymous, and the query DTO lets the CALLER choose isPublished,
+    // isActive, isVisibleToUsers and status — so `?isPublished=false` returned
+    // unannounced programmes with their fees and capacity to anybody who asked.
+    //
+    // Guarding rather than forcing public-safe filters, because nothing
+    // first-party calls this: the participant frontends were deliberately moved
+    // onto the /auth bootstrap endpoint precisely to stop querying /v1/brands +
+    // /v1/programs (see auth.controller.ts), the admin dashboard never builds
+    // this path, and no other service does either. Public programme data is
+    // served by the published-only routes those clients actually use.
     @Get(':id/programs')
-    @ApiOperation({ summary: 'List brand programs' })
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+    @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'List brand programs (Admin only)' })
     @ApiResponse({ status: 200, description: 'Return list of brand programs', type: ProgramListResponseDto })
     async listBrandPrograms(
         @Param('id', ParseUUIDPipe) id: string,

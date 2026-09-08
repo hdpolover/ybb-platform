@@ -42,6 +42,43 @@ import { multerLimits } from '@common/constants';
  * Presentation Layer - REST API
  * Handles file upload/download requests and proxies them to the File Service
  */
+/**
+ * Buckets a PARTICIPANT may upload into — exactly the two their own flows use
+ * (avatars for the profile photo, documents for payment proof and support
+ * attachments; see ybb-program-next/app/api/**). Both are private categories.
+ */
+const PARTICIPANT_UPLOAD_BUCKETS = ['avatars', 'documents'] as const satisfies readonly string[];
+
+/**
+ * Additionally available to admins: the content buckets the file service serves
+ * publicly. Mirrors PUBLIC_CATEGORIES in
+ * services/file/app/application/commands/handlers/upload_file_handler.py —
+ * if that list gains a bucket, add it here too or admin uploads to it 400.
+ */
+const ADMIN_UPLOAD_BUCKETS: readonly string[] = [
+  ...PARTICIPANT_UPLOAD_BUCKETS,
+  'gallery',
+  'programs',
+  'banners',
+  'assets',
+  'partners',
+  'sponsors',
+  'speakers',
+  'content',
+  'announcements',
+  'faq',
+  'payment_icons',
+  'payment-methods',
+  'payment_methods',
+  'brands',
+  'brands/logos',
+  'brands/banners',
+  'brands/sponsor-logos',
+  'programs/banners',
+  'programs/logos',
+  'programs/thumbnails',
+];
+
 @ApiTags('files')
 @Controller('files')
 @UseGuards(JwtAuthGuard)
@@ -356,11 +393,41 @@ export class FilesController {
   ) {
     try {
       const userId = user.userId;
-      const brandId = user.brandId;
+      const isAdmin = Boolean(user.adminId);
+
+      // `bucket` decides the storage path AND whether the object is world
+      // readable: the file service treats a set of buckets as PUBLIC
+      // CATEGORIES served without presigned auth (see upload_file_handler.py).
+      // Taken verbatim off the body, a participant could upload a passport scan
+      // to `bucket=gallery` and publish it, or write into brand asset paths.
+      // Participants get only the two buckets their own flows use.
+      const allowed = isAdmin ? ADMIN_UPLOAD_BUCKETS : PARTICIPANT_UPLOAD_BUCKETS;
+      if (!allowed.includes(bucket)) {
+        throw new BadRequestException(`Unsupported upload bucket: ${bucket}`);
+      }
+
+      // A participant may only ever file an upload against their OWN participant
+      // record, so it is read from the authenticated user rather than believed
+      // from the body. Admins keep the explicit value: they legitimately upload
+      // on someone else's behalf, and are already scope-checked below.
+      const ownParticipantId = isAdmin
+        ? participantId
+        : (
+            await this.prisma.participant.findUnique({
+              where: { userId },
+              select: { id: true },
+            })
+          )?.id;
+
+      // Same brand resolution the sibling requestUploadUrl already performs,
+      // which validates the programme and enforces cross-brand admin scope
+      // instead of trusting the token's brand for someone else's programme.
+      const brandId = await this.resolveUploadBrandId(programId, user);
+
       this.logger.log(
         `Uploading file: ${file.originalname} for user ${userId}, brand ${brandId}`,
       );
-      
+
       const uploadResult = await this.storageService.uploadFile(
         file,
         userId,
@@ -368,7 +435,7 @@ export class FilesController {
         bucket,
         programId,
         'ybb',
-        participantId
+        ownParticipantId
       );
       
       this.metricsService.fileUploadsTotal.inc({ file_type: bucket });
