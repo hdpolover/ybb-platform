@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsIn, MaxLength } from 'class-validator';
 
 export class PortalPaymentMethodDto {
     @ApiProperty() id: string;
@@ -265,10 +265,24 @@ export class ConfirmPortalPaymentDto {
     @IsIn(['gateway', 'manual'])
     payment_type: 'gateway' | 'manual';
 
+    // application_invoices.payment_method is @db.VarChar(50) (see
+    // prisma/schema/applications.prisma). This is written AFTER the payment
+    // service side effect (createIntent/processPayment/submitManualPayment)
+    // has already happened — money can already have moved — so an
+    // over-length value must be rejected here, before the handler runs, not
+    // discovered as a Postgres error after the fact (audit M46).
     @ApiProperty({ description: 'Payment method ID, e.g. bca, bni, credit_card, virtual_account' })
     @IsString()
     @IsNotEmpty()
+    @MaxLength(50)
     payment_method_id: string;
+
+    // The remaining fields below (account_name, source_name, payment_date,
+    // notes, proof_file_id, proof_file_url, gateway_token) are JSON-serialized
+    // and forwarded to the payment-service gRPC calls rather than written to
+    // any bounded column in this service's own Prisma schema (verified: no
+    // matching field in prisma/schema/*.prisma) — so there is no local
+    // VarChar(N) to guard them against here.
 
     @ApiPropertyOptional({ description: 'Payer account/holder name (manual only)' })
     @IsString()

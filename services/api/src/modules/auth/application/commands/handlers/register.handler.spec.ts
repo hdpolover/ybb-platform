@@ -11,7 +11,7 @@ import { AuthLoggingService } from '../../services/auth-logging.service';
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
 import { GeoIpService } from '../../../../../shared/infrastructure/geoip/geoip.service';
 import { RegisterCommand } from '../register.command';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 jest.mock('bcrypt', () => ({
@@ -88,6 +88,7 @@ describe('RegisterHandler', () => {
 
   const mockRabbitMQProducer = {
     emit: jest.fn(),
+    emitSafe: jest.fn().mockResolvedValue(true),
   };
 
   const mockAuthLoggingService = {
@@ -299,6 +300,88 @@ describe('RegisterHandler', () => {
 
         expect(result).toHaveProperty('accessToken', 'mock_token');
         expect(result).toHaveProperty('user');
+    });
+
+    it('awaits the verification email publish and logs an error (without failing registration) when the broker publish fails — regression for M86/M131', async () => {
+        // Mock Provider (local, so the verify-email branch is reachable)
+        mockPrismaService.authProvider.findUnique.mockResolvedValue({
+            id: 'provider-id-123',
+            name: 'local',
+            isActive: true,
+            isOAuth: false,
+        });
+
+        // requireEmailVerification: true so an emailVerificationToken is minted
+        // and the 'user.verify-email' emit is actually reached.
+        mockPrismaService.brand.findUnique.mockResolvedValue({
+            id: 'category-id-123',
+            isActive: true,
+            name: 'Test Category',
+            requireEmailVerification: true,
+        });
+
+        mockPrismaService.program.findUnique.mockResolvedValue({
+            id: 'program-id-123',
+            brandId: 'category-id-123',
+            status: 'published',
+            isActive: true,
+            isPublished: true,
+            allowRegistration: true,
+            registrationOpenDate: null,
+            registrationCloseDate: null,
+            // Program-level setting wins over the brand-level default set
+            // above (see register.handler.ts) — must also be true here so
+            // the token is actually minted.
+            requireEmailVerification: true,
+        });
+
+        mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
+        mockPrismaService.user.findFirst.mockResolvedValue(null);
+        mockPrismaService.user.create.mockResolvedValue({
+            id: 'new-user-id',
+            email: 'test@example.com',
+            brandId: 'category-id-123',
+            isActive: true,
+            isOnboardingCompleted: false,
+            identities: [{ providerId: 'provider-id-123' }],
+        });
+        mockPrismaService.participant.findUnique.mockResolvedValue({
+            id: 'participant-id-123',
+            userId: 'new-user-id',
+        });
+        mockPrismaService.participant.create.mockResolvedValue({
+            id: 'participant-id-123',
+            userId: 'new-user-id',
+        });
+        mockPrismaService.participantApplication.findUnique.mockResolvedValue(null);
+
+        // The underlying broker publish "fails" — emitSafe never rejects, it
+        // resolves false. This is exactly what a broker hiccup looks like to
+        // callers now that the fire-and-forget .emit() call has been replaced.
+        mockRabbitMQProducer.emitSafe.mockResolvedValueOnce(false);
+
+        const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+        const result = await handler.execute(command);
+
+        // The publish must have been awaited with the verification token —
+        // not fired-and-forgotten.
+        expect(mockRabbitMQProducer.emitSafe).toHaveBeenCalledWith(
+            'user.verify-email',
+            expect.objectContaining({ email: 'test@example.com', token: expect.any(String) }),
+        );
+
+        // A failed publish must be logged loudly, not swallowed.
+        expect(errorSpy).toHaveBeenCalledWith(
+            expect.stringContaining('Failed to publish verification email'),
+        );
+
+        // Registration itself must still succeed — a broker hiccup must not
+        // cost the user their whole registration.
+        expect(result).toHaveProperty('accessToken', 'mock_token');
+        expect(result).toHaveProperty('user');
+
+        errorSpy.mockRestore();
     });
 
     it('persists ad click ids captured at signup onto the new participant, with a capturedAt stamp', async () => {

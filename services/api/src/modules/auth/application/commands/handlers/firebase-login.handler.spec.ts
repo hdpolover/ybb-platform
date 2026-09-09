@@ -587,4 +587,66 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
       expect(result).toHaveProperty('accessToken', 'mock_token');
     });
   });
+
+  describe('new-participant creation with an over-long referral code', () => {
+    // Regression for M135: participants.referral_code is VarChar(20). Before
+    // the fix, an over-long code reached repos.tx.participant.create()
+    // unguarded, Postgres raised 22001 (string data right truncation) inside
+    // the unit-of-work transaction, and that error propagated up to the
+    // outer catch in FirebaseLoginHandler, which swallowed it — skipping
+    // participant/application creation entirely for the whole login. This
+    // pins that an over-long code no longer does that: it is dropped and
+    // participant creation proceeds.
+    const overLongReferralCode = 'THIS-CODE-IS-WAY-TOO-LONG-FOR-THE-COLUMN'; // > 20 chars
+
+    beforeEach(() => {
+      // No existing participant -> reaches the "Create Participant Profile if
+      // missing" branch instead of the existing-participant attribution path.
+      mockPrismaService.participant.findUnique.mockResolvedValue(null);
+    });
+
+    it('drops the code, logs a warning, and still creates the participant via the unit of work', async () => {
+      const warnSpy = jest.spyOn((handler as any).logger, 'warn').mockImplementation(() => undefined);
+
+      const createdParticipant = { id: 'new-participant-id', userId: existingUser.id, referralCode: null };
+      const createSpy = jest.fn().mockResolvedValue(createdParticipant);
+      mockUnitOfWork.execute.mockImplementation(async (work: any) =>
+        work({
+          tx: { participant: { create: createSpy } },
+          createAmbassadorReferral: jest.fn(),
+          incrementAmbassadorReferrals: jest.fn(),
+        }),
+      );
+
+      const command = new FirebaseLoginCommand(
+        'firebase-id-token',
+        'provider-id-123',
+        '127.0.0.1',
+        'Mozilla/5.0 Chrome/120',
+        'brand-id-123',
+        undefined,
+        undefined,
+        overLongReferralCode,
+      );
+
+      const result = await handler.execute(command);
+
+      // Login AND participant creation must still succeed.
+      expect(result).toHaveProperty('accessToken', 'mock_token');
+      expect(createSpy).toHaveBeenCalledTimes(1);
+
+      // The write must never receive the over-long value.
+      const writeArgs = createSpy.mock.calls[0][0];
+      expect(writeArgs.data.referralCode).toBeNull();
+
+      // An unmatchable/too-long code must not even trigger an ambassador
+      // lookup with a value that can never fit the column.
+      expect(mockPrismaService.ambassador.findUnique).not.toHaveBeenCalled();
+
+      // The drop must be logged, not silent.
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exceeds 20 chars'));
+
+      warnSpy.mockRestore();
+    });
+  });
 });

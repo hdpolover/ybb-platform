@@ -14,7 +14,7 @@ const mockRepo = {
   getAlertBaseline: jest.fn(),
   saveAlertBaseline: jest.fn(),
 };
-const mockProducer = { emit: jest.fn() };
+const mockProducer = { emit: jest.fn(), emitSafe: jest.fn().mockResolvedValue(true) };
 const mockRead = { program: { findMany: jest.fn() }, brand: { findMany: jest.fn() } };
 const mockCronLock = {
   runExclusive: jest.fn((_jobName: string, fn: () => Promise<void>) => fn()),
@@ -69,8 +69,8 @@ describe('ReadinessSnapshotService', () => {
 
     await service.reevaluatePublished();
 
-    expect(mockProducer.emit).toHaveBeenCalledTimes(1);
-    const [routingKey, payload] = mockProducer.emit.mock.calls[0];
+    expect(mockProducer.emitSafe).toHaveBeenCalledTimes(1);
+    const [routingKey, payload] = mockProducer.emitSafe.mock.calls[0];
     expect(routingKey).toBe('readiness.regression.detected');
     expect(payload.newBlockers.map((b: { ruleId: string }) => b.ruleId)).toEqual(['program.deadline-order-valid']);
   });
@@ -84,7 +84,7 @@ describe('ReadinessSnapshotService', () => {
 
     await service.reevaluatePublished();
 
-    expect(mockProducer.emit).not.toHaveBeenCalled();
+    expect(mockProducer.emitSafe).not.toHaveBeenCalled();
   });
 
   it('records the new blocking rule set as the baseline after every sweep, whether or not it alerted', async () => {
@@ -107,7 +107,7 @@ describe('ReadinessSnapshotService', () => {
 
     await service.reevaluatePublished();
 
-    const [, payload] = mockProducer.emit.mock.calls[0];
+    const [, payload] = mockProducer.emitSafe.mock.calls[0];
     expect(payload.brandId).toBe('b1');
     expect(payload.brandName).toBe('Korea Youth Summit');
   });
@@ -121,7 +121,7 @@ describe('ReadinessSnapshotService', () => {
 
     await service.reevaluatePublished();
 
-    expect(mockProducer.emit).not.toHaveBeenCalled();
+    expect(mockProducer.emitSafe).not.toHaveBeenCalled();
   });
 
   it('does not treat a status change between unknown and fail on the same rule as a new blocker', async () => {
@@ -133,7 +133,7 @@ describe('ReadinessSnapshotService', () => {
 
     await service.reevaluatePublished();
 
-    expect(mockProducer.emit).not.toHaveBeenCalled();
+    expect(mockProducer.emitSafe).not.toHaveBeenCalled();
   });
 
   it('evaluates program B and emits its new blockers when program A throws', async () => {
@@ -153,8 +153,8 @@ describe('ReadinessSnapshotService', () => {
 
     await expect(service.reevaluatePublished()).resolves.toBeUndefined();
 
-    expect(mockProducer.emit).toHaveBeenCalledTimes(1);
-    const [routingKey, payload] = mockProducer.emit.mock.calls[0];
+    expect(mockProducer.emitSafe).toHaveBeenCalledTimes(1);
+    const [routingKey, payload] = mockProducer.emitSafe.mock.calls[0];
     expect(routingKey).toBe('readiness.regression.detected');
     expect(payload.subjectId).toBe('p2');
     expect(payload.newBlockers.map((b: { ruleId: string }) => b.ruleId)).toEqual(['program.deadline-order-valid']);
@@ -203,8 +203,8 @@ describe('ReadinessSnapshotService', () => {
     await service.reevaluatePublished();
 
     expect(mockRepo.findSnapshots).not.toHaveBeenCalled();
-    expect(mockProducer.emit).toHaveBeenCalledTimes(2);
-    const [, secondPayload] = mockProducer.emit.mock.calls[1];
+    expect(mockProducer.emitSafe).toHaveBeenCalledTimes(2);
+    const [, secondPayload] = mockProducer.emitSafe.mock.calls[1];
     expect(secondPayload.newBlockers.map((b: { ruleId: string }) => b.ruleId)).toEqual(['program.rule-y']);
   });
 
@@ -229,7 +229,7 @@ describe('ReadinessSnapshotService', () => {
       });
       expect(mockRepo.saveAlertBaseline).toHaveBeenCalledWith('brand', 'b9', ['brand.has-active-signature']);
 
-      const brandEmit = mockProducer.emit.mock.calls.find(([, payload]) => payload.subjectType === 'brand');
+      const brandEmit = mockProducer.emitSafe.mock.calls.find(([, payload]) => payload.subjectType === 'brand');
       expect(brandEmit).toBeDefined();
       const [, payload] = brandEmit!;
       expect(payload.subjectId).toBe('b9');

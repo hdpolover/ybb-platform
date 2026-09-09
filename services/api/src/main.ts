@@ -4,6 +4,26 @@ import './tracing';
   const n = Number(this);
   return Number.isSafeInteger(n) ? n : this.toString();
 };
+
+// Process-level safety net, installed before anything else runs. This
+// process hosts the HTTP app AND every RMQ consumer (see the consumerApps
+// wiring in bootstrap() below) — an unhandled rejection anywhere takes all of
+// it down together, not just the request or message that caused it.
+//
+// This is NOT a silent catch-all: it logs at error level with the full
+// reason/stack and does nothing else. It does not prevent the underlying bug
+// from being visible — it prevents one dropped promise from being a process
+// outage. Fire-and-forget call sites (e.g. RabbitMQProducerService.emitSafe)
+// should still handle their own errors; this is the backstop for whatever
+// they, or a future call site, miss.
+process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
+  console.error(
+    '[FATAL-CANDIDATE] Unhandled promise rejection — this indicates a missing .catch()/try-catch somewhere. ' +
+      'The process is intentionally NOT exiting, but this must be fixed:',
+    reason instanceof Error ? reason.stack ?? reason.message : reason,
+    { promise },
+  );
+});
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions } from '@nestjs/microservices';
 import { ValidationPipe, VersioningType, INestMicroservice, Type } from '@nestjs/common';

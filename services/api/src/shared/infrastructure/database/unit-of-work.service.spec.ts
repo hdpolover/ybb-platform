@@ -1,7 +1,20 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { UnitOfWork } from './unit-of-work.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MetricsService } from '../monitoring/metrics.service';
+
+// A real "can't reach database server" error, as opposed to a plain Error —
+// the circuit breaker now only classifies specific Prisma connection error
+// codes (and a couple of Prisma error classes) as infrastructure failures.
+// See isInfrastructureFailure() in unit-of-work.service.ts.
+function makeDbConnectionError(): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError("Can't reach database server", {
+    code: 'P1001',
+    clientVersion: '5.0.0',
+  });
+}
 
 describe('UnitOfWork', () => {
   let unitOfWork: UnitOfWork;
@@ -234,9 +247,8 @@ describe('UnitOfWork', () => {
   });
 
   describe('circuit breaker', () => {
-    it('should open circuit after failure threshold', async () => {
-      const error = new Error('Database connection failed');
-      prismaService.$transaction.mockRejectedValue(error);
+    it('should open circuit after failure threshold on infrastructure failures', async () => {
+      prismaService.$transaction.mockRejectedValue(makeDbConnectionError());
 
       // Trigger 5 failures to open the circuit
       for (let i = 0; i < 5; i++) {
@@ -253,10 +265,36 @@ describe('UnitOfWork', () => {
       ).rejects.toThrow(/Circuit breaker is OPEN/);
     });
 
+    // Regression for M78: business exceptions used to count toward the
+    // breaker just like infrastructure failures, so 5 consecutive validation
+    // errors from normal traffic could trip it and block every transactional
+    // endpoint for a full timeout window — an outage caused by the safety
+    // mechanism itself, with a perfectly healthy database underneath.
+    it('should NOT open the circuit on repeated business exceptions', async () => {
+      const notFound = new NotFoundException('Application not found');
+      prismaService.$transaction.mockRejectedValue(notFound);
+
+      // Far more than the failure threshold (5) of consecutive business
+      // exceptions.
+      for (let i = 0; i < 10; i++) {
+        await expect(
+          unitOfWork.execute(async (repos) => ({}), { name: 'business-error-test' })
+        ).rejects.toThrow('Application not found');
+      }
+
+      // Circuit must still be closed — the next call must reach $transaction
+      // again (i.e. NOT be rejected with "Circuit breaker is OPEN").
+      prismaService.$transaction.mockResolvedValueOnce({ ok: true });
+      const result = await unitOfWork.execute(async (repos) => ({ ok: true }), {
+        name: 'business-error-test',
+      });
+      expect(result).toEqual({ ok: true });
+      expect(unitOfWork.getCircuitState().state).toBe('closed');
+    });
+
     it('should transition to half-open after timeout', async () => {
       jest.useFakeTimers();
-      const error = new Error('Database connection failed');
-      prismaService.$transaction.mockRejectedValue(error);
+      prismaService.$transaction.mockRejectedValue(makeDbConnectionError());
 
       // Open the circuit
       for (let i = 0; i < 5; i++) {

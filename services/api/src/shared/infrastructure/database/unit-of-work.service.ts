@@ -1,8 +1,71 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpException, Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MetricsService } from '../monitoring/metrics.service';
 import { TransactionalRepositories } from './transactional-repositories';
 import { PrismaTransactionClient } from '@shared/types/prisma-transaction.type';
+
+// Prisma error codes that represent an actual inability to reach/use the
+// database connection, as opposed to a query that executed fine and came
+// back with a result the caller didn't like. See
+// https://www.prisma.io/docs/orm/reference/error-reference for the full list.
+//   P1001 - Can't reach database server
+//   P1002 - Database server was reached but timed out
+//   P1008 - Operations timed out
+//   P1017 - Server has closed the connection
+const PRISMA_CONNECTION_ERROR_CODES = new Set(['P1001', 'P1002', 'P1008', 'P1017']);
+
+/**
+ * Classifies whether a transaction failure should count toward the circuit
+ * breaker's failure threshold.
+ *
+ * Only INFRASTRUCTURE failures count — the database being unreachable, a
+ * connection timing out, the connection pool exhausted, the query engine
+ * crashing. Ordinary business exceptions (validation errors, not-found,
+ * conflict, etc.) do NOT count: those mean the database is working fine and
+ * correctly rejected/reported on a request, which has nothing to do with
+ * infrastructure health. Before this fix, 5 consecutive validation errors
+ * from normal traffic could trip the breaker and block every transactional
+ * endpoint for a full timeout window — an outage caused by the safety
+ * mechanism itself.
+ *
+ * Ambiguous cases default to NOT counting. An under-tripping breaker just
+ * means a real infrastructure problem takes a few more failures to detect —
+ * it still degrades gracefully. An over-tripping breaker turns unrelated
+ * business errors into a platform-wide outage. The asymmetry in cost is why
+ * "unsure" resolves to false here.
+ */
+function isInfrastructureFailure(error: unknown): boolean {
+  // A NestJS HttpException (BadRequestException, NotFoundException,
+  // ConflictException, UnprocessableEntityException, ...) is by definition a
+  // business-logic decision made by application code that already ran
+  // successfully against the database — never an infrastructure failure.
+  if (error instanceof HttpException) {
+    return false;
+  }
+
+  if (error instanceof Prisma.PrismaClientInitializationError) {
+    // The database could not be reached/initialized at all.
+    return true;
+  }
+
+  if (error instanceof Prisma.PrismaClientRustPanicError) {
+    // The query engine itself crashed — as infrastructure-level as it gets.
+    return true;
+  }
+
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    PRISMA_CONNECTION_ERROR_CODES.has(error.code)
+  ) {
+    return true;
+  }
+
+  // Everything else (PrismaClientValidationError, PrismaClientUnknownRequestError,
+  // a plain thrown Error from application code, etc.) is treated as NOT an
+  // infrastructure failure — see the "default to not counting" rule above.
+  return false;
+}
 
 /**
  * Circuit Breaker State
@@ -179,10 +242,12 @@ export class UnitOfWork {
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;
-      
-      // Record failure in circuit breaker
-      this.recordFailure();
-      
+
+      // Record failure in circuit breaker — only if this was actually an
+      // infrastructure problem, not a business exception. See
+      // isInfrastructureFailure() for why.
+      this.recordFailure(error);
+
       // Record failure metrics
       this.metrics.incrementTransactionCounter(name, 'failed');
       
@@ -465,10 +530,22 @@ export class UnitOfWork {
 
   /**
    * Circuit Breaker: Record failed operation
+   *
+   * `error` is the transaction failure that triggered this call. Only
+   * infrastructure failures (see isInfrastructureFailure()) count toward the
+   * breaker at all — a business exception (validation, not-found, conflict,
+   * ...) means the database is healthy and answered the request correctly,
+   * so it is a no-op here. General "this transaction failed" observability
+   * for business exceptions is still recorded unconditionally by the caller
+   * via metrics.incrementTransactionCounter(name, 'failed').
    */
-  private recordFailure(): void {
+  private recordFailure(error?: unknown): void {
+    if (!isInfrastructureFailure(error)) {
+      return;
+    }
+
     this.lastFailureTime = Date.now();
-    
+
     // Record failure metric
     this.metrics.incrementCircuitBreakerFailures();
 

@@ -57,7 +57,7 @@ export class RabbitMQProducerService implements OnModuleInit, OnModuleDestroy {
       await this.channelWrapper.publish(
         this.exchange,
         pattern,
-        { pattern, data }, 
+        { pattern, data },
         {
           persistent: options?.persistent ?? true,
           messageId: options?.messageId,
@@ -69,6 +69,38 @@ export class RabbitMQProducerService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       this.logger.error(`Failed to publish message: ${error.message}`, error);
       throw error;
+    }
+  }
+
+  /**
+   * Same as emit(), but NEVER rejects. Use this for every call site that does
+   * not already wrap emit() in its own try/catch — a broker hiccup must not
+   * become an unhandled rejection, because this process hosts both the HTTP
+   * app and every RMQ consumer (see main.ts bootstrap()); one unhandled
+   * rejection here can crash all of it, not just the request that triggered
+   * the publish.
+   *
+   * Returns true on success, false on failure. Callers that need to know
+   * whether the message actually went out (e.g. a user-visible email) should
+   * check the return value and log/react accordingly instead of assuming
+   * fire-and-forget is safe to ignore.
+   */
+  async emitSafe(pattern: string, data: unknown, options?: EmitOptions): Promise<boolean> {
+    try {
+      await this.emit(pattern, data, options);
+      return true;
+    } catch (error) {
+      // emit() already logs the error before rethrowing; log again here with
+      // the identifying context (pattern + messageId, when the caller passed
+      // one) so a dropped event is debuggable from this log line alone,
+      // without needing to correlate against emit()'s internal log.
+      this.logger.error(
+        `emitSafe: swallowed publish failure for pattern '${pattern}'` +
+          (options?.messageId ? ` (messageId: ${options.messageId})` : '') +
+          `: ${error.message}`,
+        error,
+      );
+      return false;
     }
   }
 }

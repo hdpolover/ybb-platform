@@ -72,14 +72,18 @@ export class VerifyEmailHandler {
     );
 
     // Emit user.registered to send Welcome Email (delayed until verification)
-    this.rabbitmqProducer.emit('user.registered', {
+    // Fire-and-forget via emitSafe: verification itself already succeeded
+    // (the row updates above committed), so this is a downstream welcome
+    // email — not something the caller's success response should wait on.
+    void this.rabbitmqProducer.emitSafe('user.registered', {
       email: user.email,
       name: user.email.split('@')[0],
       brand: brand,
     });
 
-    // Emit user.email-verified for explicit confirmation
-    this.rabbitmqProducer.emit('user.email-verified', {
+    // Emit user.email-verified for explicit confirmation. Same reasoning as
+    // above: purely a notification, verification has already happened.
+    void this.rabbitmqProducer.emitSafe('user.email-verified', {
         email: user.email,
         name: user.email.split('@')[0],
         brand: brand,

@@ -43,8 +43,11 @@ export class CreateUserHandler {
     // Save to repository
     const createdUser = await this.userRepository.create(user, passwordHash);
 
-    // Emit event
-    this.rabbitmqProducer.emit('user.registered', {
+    // Emit event. Fire-and-forget via emitSafe: this is an admin-initiated
+    // user creation (not the self-service registration flow that M86/M131
+    // was about) — the admin already knows the account exists from this
+    // API's own response, so a lost welcome email is not a dead end.
+    void this.rabbitmqProducer.emitSafe('user.registered', {
       email: createdUser.email,
       name: 'User',
     });

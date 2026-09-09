@@ -373,13 +373,29 @@ export class RegisterHandler {
       // none. The email local part is not a name: it addressed people as
       // "Hi owaiskhalifa56,". The notification service falls back to a
       // generic salutation when this is absent.
-      this.rabbitmqProducer.emit('user.verify-email', {
+      //
+      // Awaited (via emitSafe, which never rejects): without a verification
+      // email a local-account registration is a dead end for the user, so a
+      // broker failure here must be observed synchronously in the request
+      // flow rather than dropped as a fire-and-forget publish (see M86/M131 —
+      // that used to crash the whole process via an unhandled rejection and
+      // silently lose the email at the same time).
+      const verifyEmailSent = await this.rabbitmqProducer.emitSafe('user.verify-email', {
         email: newUser.email,
         token: emailVerificationToken,
         brand: brand,
       });
+      if (!verifyEmailSent) {
+        this.logger.error(
+          `Failed to publish verification email for new user ${newUser.id} (${newUser.email}) — account was created but no verification email was sent.`,
+        );
+      }
     } else if (authProvider.isOAuth) {
-      this.rabbitmqProducer.emit('user.registered', {
+      // Fire-and-forget: OAuth accounts are already verified by the provider,
+      // so this is a welcome email, not a gate on the user completing
+      // registration. Losing it is a minor UX miss, not a dead end — safe to
+      // not block the response on it.
+      void this.rabbitmqProducer.emitSafe('user.registered', {
         email: newUser.email,
         brand: brand,
       });

@@ -21,6 +21,11 @@ import { normalizeReferralCode } from '@modules/participants/application/utils/r
 import { MetaCapiService } from '@modules/meta/meta-capi.service';
 import { buildAdAttributionJson } from '../../services/ad-attribution.util';
 
+// participants.referral_code is declared @db.VarChar(20) in
+// prisma/schema/roles.prisma — kept in sync with that column, not derived
+// from it at runtime.
+const PARTICIPANT_REFERRAL_CODE_MAX_LENGTH = 20;
+
 @Injectable()
 export class FirebaseLoginHandler {
   private readonly logger = new Logger(FirebaseLoginHandler.name);
@@ -313,13 +318,34 @@ export class FirebaseLoginHandler {
 
         // Create Participant Profile if missing
         if (!participant) {
+            // participants.referral_code is VarChar(20) (see
+            // prisma/schema/roles.prisma). Guard the length BEFORE it ever
+            // reaches the write below: an over-long code used to hit Postgres
+            // 22001 (string data right truncation) inside the unit-of-work
+            // transaction, which threw up to the outer catch at the bottom of
+            // this method and skipped participant/application creation
+            // entirely for the whole login — an unrelated bad referral code
+            // cost the user their registration. A code that doesn't fit is
+            // not a valid referral, so it is dropped (logged, not silently
+            // truncated/guessed-at) and the rest of registration proceeds
+            // exactly as if no referral code had been supplied.
+            const normalizedReferralCode = normalizeReferralCode(command.referralCode);
+            let safeReferralCode: string | null = normalizedReferralCode || null;
+            if (safeReferralCode && safeReferralCode.length > PARTICIPANT_REFERRAL_CODE_MAX_LENGTH) {
+                this.logger.warn(
+                    `Referral code for user ${user.id} exceeds ${PARTICIPANT_REFERRAL_CODE_MAX_LENGTH} chars ` +
+                        `(length ${safeReferralCode.length}) and cannot be stored — dropping it, registration continues.`,
+                );
+                safeReferralCode = null;
+            }
+
             // Check for Referral Code
             let ambassador: Ambassador | null = null;
-            if (command.referralCode) {
+            if (safeReferralCode) {
                 const foundAmbassador = await this.prisma.ambassador.findUnique({
-                    where: { referralCode: normalizeReferralCode(command.referralCode) }
+                    where: { referralCode: safeReferralCode }
                 });
-                
+
                 if (foundAmbassador && foundAmbassador.isActive) {
                     ambassador = foundAmbassador;
                 }
@@ -343,8 +369,9 @@ export class FirebaseLoginHandler {
                         fullName: fullName,
                         // Normalised, not raw: keeps the record of what was typed
                         // (so an unmatched code is still visible to support) while
-                        // making the column joinable against ambassadors.
-                        referralCode: normalizeReferralCode(command.referralCode) || null,
+                        // making the column joinable against ambassadors. Already
+                        // length-guarded above.
+                        referralCode: safeReferralCode,
                         profileCompletionPercentage: 0,
                         knowledgeSource: 'Other',
                         // Written ONCE, here, at creation — never on the

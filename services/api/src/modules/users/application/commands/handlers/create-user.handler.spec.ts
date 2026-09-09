@@ -24,6 +24,7 @@ describe('CreateUserHandler', () => {
 
     const mockRabbitMQ = {
         emit: jest.fn(),
+        emitSafe: jest.fn().mockResolvedValue(true),
     };
 
     const mockCacheService = {
@@ -57,7 +58,7 @@ describe('CreateUserHandler', () => {
 
         expect(mockRepository.exists).toHaveBeenCalledWith('test@example.com', 'brand-1');
         expect(mockRepository.create).toHaveBeenCalled();
-        expect(mockRabbitMQ.emit).toHaveBeenCalledWith('user.registered', {
+        expect(mockRabbitMQ.emitSafe).toHaveBeenCalledWith('user.registered', {
             email: 'test@example.com',
             name: 'User',
         });
@@ -66,11 +67,11 @@ describe('CreateUserHandler', () => {
 
     it('should throw ConflictException if user exists', async () => {
         const command = new CreateUserCommand('brand-1', 'test@example.com', 'password');
-        
+
         mockRepository.exists.mockResolvedValue(true);
 
         await expect(handler.execute(command)).rejects.toThrow(ConflictException);
         expect(mockRepository.create).not.toHaveBeenCalled();
-        expect(mockRabbitMQ.emit).not.toHaveBeenCalled();
+        expect(mockRabbitMQ.emitSafe).not.toHaveBeenCalled();
     });
 });

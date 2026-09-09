@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header, ForbiddenException, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header, ForbiddenException, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Readable } from 'stream';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -346,8 +346,18 @@ export class PortalController {
             }
 
             return await this.getGlobalPaymentMethods();
-        } catch {
-            return [];
+        } catch (error) {
+            // Previously this returned [] for ANY failure here, including the
+            // payment service being down — indistinguishable from "this brand
+            // has no payment methods configured", which leaves a participant
+            // staring at an empty payment page with no way to tell the
+            // difference. Log with context and surface it as a 503 instead so
+            // an outage is visibly an outage.
+            this.logger.error(
+                `Failed to resolve payment methods for user ${user.userId}: ${(error as Error).message}`,
+                (error as Error).stack,
+            );
+            throw new ServiceUnavailableException('Payment methods are temporarily unavailable');
         }
     }
 

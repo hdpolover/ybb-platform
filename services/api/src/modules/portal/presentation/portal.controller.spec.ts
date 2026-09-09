@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PortalController } from './portal.controller';
 import { QueryBus, CommandBus } from '@nestjs/cqrs';
 import { ConfigService } from '@nestjs/config';
-import { UnauthorizedException } from '@nestjs/common';
+import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PortalReceiptService } from '../application/services/portal-receipt.service';
@@ -21,6 +21,7 @@ import {
 describe('PortalController', () => {
   let controller: PortalController;
   let queryBus: QueryBus;
+  let paymentServiceClient: PaymentServiceHttpClient;
 
   const mockUser = { userId: 'user-123', email: 'test@test.com', brandId: 'brand-id' } as import('@shared/decorators/current-user.decorator').CurrentUserData;
 
@@ -35,7 +36,13 @@ describe('PortalController', () => {
         { provide: EnsurePortalPaymentInvoiceHandler, useValue: { execute: jest.fn() } },
         { provide: PaymentServiceHttpClient, useValue: { get: jest.fn() } },
         { provide: ConfigService, useValue: { get: jest.fn() } },
-        { provide: PrismaService, useValue: { applicationInvoice: { findUnique: jest.fn() } } },
+        {
+          provide: PrismaService,
+          useValue: {
+            applicationInvoice: { findUnique: jest.fn() },
+            participant: { findUnique: jest.fn().mockResolvedValue(null) },
+          },
+        },
         { provide: PortalReceiptService, useValue: { generate: jest.fn() } },
         { provide: LoaDownloadService, useValue: { downloadLoa: jest.fn() } },
       ],
@@ -46,6 +53,7 @@ describe('PortalController', () => {
 
     controller = module.get<PortalController>(PortalController);
     queryBus = module.get<QueryBus>(QueryBus);
+    paymentServiceClient = module.get<PaymentServiceHttpClient>(PaymentServiceHttpClient);
   });
 
   it('should be defined', () => {
@@ -85,6 +93,19 @@ describe('PortalController', () => {
     it('should execute GetPortalPaymentsQuery', async () => {
       await controller.getPayments(mockUser);
       expect(queryBus.execute).toHaveBeenCalledWith(new GetPortalPaymentsQuery(mockUser.userId));
+    });
+  });
+
+  describe('getPaymentMethods', () => {
+    // Regression for M67: an unconfigured brand and a downed payment service
+    // used to be indistinguishable — both returned []. This pins that a
+    // downstream failure now surfaces as a 503, not a silent empty list.
+    it('throws ServiceUnavailableException instead of returning [] when the payment service call fails', async () => {
+      (paymentServiceClient.get as jest.Mock).mockRejectedValueOnce(new Error('payment-service unreachable'));
+
+      await expect(controller.getPaymentMethods(mockUser)).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
     });
   });
 

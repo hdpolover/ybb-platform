@@ -124,7 +124,10 @@ export class ReadinessSnapshotService {
     const newBlockers = blocking.filter((r) => !previousBlocking.has(r.ruleId));
 
     if (newBlockers.length > 0) {
-      this.producer.emit('readiness.regression.detected', {
+      // Fire-and-forget via emitSafe: an internal ops alert, not a
+      // user-visible outcome — a broker hiccup should not fail (or block)
+      // the readiness sweep that produced this diff.
+      void this.producer.emitSafe('readiness.regression.detected', {
         ...eventBase,
         newBlockers: newBlockers.map((r) => ({
           ruleId: r.ruleId,
