@@ -7,10 +7,20 @@ import { CACHE_KEYS } from '@shared/constants/cache-keys';
 describe('CacheService', () => {
     let service: CacheService;
 
+    // Mimics cache-manager v7's shape: stores[0].store.client is the ioredis/
+    // node-redis client CacheService.getRedisClient() unwraps. Only clearAll's
+    // tests below drive this path — every other suite spies out
+    // invalidateByPattern before it can reach getRedisClient.
+    const mockRedisClient = {
+        scan: jest.fn(),
+        del: jest.fn().mockResolvedValue(undefined),
+    };
+
     const mockCacheManager = {
         del: jest.fn().mockResolvedValue(undefined),
         get: jest.fn(),
         set: jest.fn(),
+        stores: [] as Array<{ store: { client: typeof mockRedisClient } }>,
     };
 
     beforeEach(async () => {
@@ -250,6 +260,50 @@ describe('CacheService', () => {
 
             expect(mockCacheManager.del).toHaveBeenCalledWith(CACHE_KEYS.LANDING_OPEN_REGISTRATION_PROGRAMS(brandId));
             expect(mockCacheManager.del).toHaveBeenCalledWith(CACHE_KEYS.LANDING_BRAND_RESOLVE(brandId));
+        });
+    });
+
+    describe('clearAll (M85: DELETE /v1/cache/clear must not un-revoke tokens or reset rate limits)', () => {
+        beforeEach(() => {
+            mockCacheManager.stores = [{ store: { client: mockRedisClient } }];
+        });
+
+        afterEach(() => {
+            mockCacheManager.stores = [];
+        });
+
+        it('deletes ordinary cache keys but never an auth:blacklist:* or throttler:* key', async () => {
+            // A single SCAN batch mixing a revoked-token entry, a throttle counter,
+            // and two ordinary cache keys — the shape a real `SCAN 0 MATCH *` sees,
+            // since clearAll scans the whole db (every namespace lives in one Redis).
+            mockRedisClient.scan.mockResolvedValueOnce({
+                cursor: '0',
+                keys: [
+                    'auth:blacklist:some-jti',
+                    'throttler:default:ip:1.2.3.4',
+                    'program:list:default',
+                    'landing:home:brand-1',
+                ],
+            });
+
+            await service.clearAll();
+
+            expect(mockRedisClient.del).toHaveBeenCalledTimes(1);
+            const deletedKeys = mockRedisClient.del.mock.calls[0][0];
+            expect(deletedKeys).toEqual(['program:list:default', 'landing:home:brand-1']);
+            expect(deletedKeys).not.toContain('auth:blacklist:some-jti');
+            expect(deletedKeys).not.toContain('throttler:default:ip:1.2.3.4');
+        });
+
+        it('issues no DEL when every scanned key is protected', async () => {
+            mockRedisClient.scan.mockResolvedValueOnce({
+                cursor: '0',
+                keys: ['auth:blacklist:jti-1', 'throttler:auth:ip:5.6.7.8'],
+            });
+
+            await service.clearAll();
+
+            expect(mockRedisClient.del).not.toHaveBeenCalled();
         });
     });
 });

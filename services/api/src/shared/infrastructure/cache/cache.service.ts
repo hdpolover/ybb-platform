@@ -312,6 +312,30 @@ export class CacheService implements OnModuleInit {
   }
 
   /**
+   * Prefixes clearAll must never delete, even though they live in the same
+   * Redis db as the general application cache.
+   *
+   * - `auth:blacklist:` (CACHE_KEYS.TOKEN_BLACKLIST) is the SOLE per-request
+   *   revocation check on the auth hot path (see TokenBlacklistService.isBlacklisted).
+   *   Wiping it un-revokes every logged-out or force-logged-out token for the
+   *   rest of its TTL — a SUPER_ADMIN calling DELETE /v1/cache/clear should
+   *   never be able to do that, whether they meant to or not (audit M85).
+   * - `throttler:` is RedisThrottlerStorage's own keyPrefix (a separate
+   *   ioredis client, same Redis instance/db). Wiping it resets every rate
+   *   limit counter and block, which is a free abuse-window grant disguised
+   *   as a cache operation.
+   *
+   * This is namespace SCOPING, not a change to who may call clear — SUPER_ADMIN
+   * still clears everything a "cache" actually is. It just narrows what counts
+   * as cache.
+   */
+  private static readonly PROTECTED_KEY_PREFIXES = ['auth:blacklist:', 'throttler:'];
+
+  private static isProtectedKey(key: string): boolean {
+    return CacheService.PROTECTED_KEY_PREFIXES.some((prefix) => key.startsWith(prefix));
+  }
+
+  /**
    * Clear entire cache
    */
   async clearAll(): Promise<void> {
@@ -321,7 +345,7 @@ export class CacheService implements OnModuleInit {
       // Use SCAN + DEL to clear all keys — avoids flushdb which may not be available
       // on the wrapped client exposed through Keyv/cache-manager. DEL takes an array;
       // spread only deletes the first key on node-redis v4.
-      const keys = await this.scanKeys(client, '*');
+      const keys = (await this.scanKeys(client, '*')).filter((key) => !CacheService.isProtectedKey(key));
       if (keys.length > 0) {
         await client.del(keys);
       }

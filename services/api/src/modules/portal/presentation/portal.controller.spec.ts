@@ -224,4 +224,34 @@ describe('PortalController', () => {
       );
     });
   });
+
+  // M44: a WeasyPrint render is expensive (subprocess + font/layout work per call),
+  // and both PDF routes previously relied on nothing but the global 20 rps throttle.
+  // Asserts the actual @nestjs/throttler metadata, not just that a decorator was
+  // typed somewhere - a decorator with the wrong arg shape leaves this metadata unset.
+  describe('PDF download throttling (M44)', () => {
+    const THROTTLER_LIMIT = 'THROTTLER:LIMIT';
+    const THROTTLER_TTL = 'THROTTLER:TTL';
+
+    it.each([
+      ['downloadReceipt', 'receipt'],
+      ['downloadInvoice', 'invoice'],
+    ])('%s carries the same per-route throttle as loa/download (limit 5 / 60s)', (methodName) => {
+      const handler = (controller as unknown as Record<string, (...args: unknown[]) => unknown>)[methodName];
+
+      expect(Reflect.getMetadata(THROTTLER_LIMIT + 'default', handler)).toBe(5);
+      expect(Reflect.getMetadata(THROTTLER_TTL + 'default', handler)).toBe(60000);
+    });
+
+    it('matches the limit already enforced on loa/download, so the two do not silently drift apart', () => {
+      const asMap = controller as unknown as Record<string, (...args: unknown[]) => unknown>;
+
+      expect(Reflect.getMetadata(THROTTLER_LIMIT + 'default', asMap.downloadReceipt)).toBe(
+        Reflect.getMetadata(THROTTLER_LIMIT + 'default', asMap.downloadLoa),
+      );
+      expect(Reflect.getMetadata(THROTTLER_TTL + 'default', asMap.downloadInvoice)).toBe(
+        Reflect.getMetadata(THROTTLER_TTL + 'default', asMap.downloadLoa),
+      );
+    });
+  });
 });

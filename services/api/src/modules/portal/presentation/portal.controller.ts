@@ -132,6 +132,10 @@ export class PortalController {
         return this.queryBus.execute(new GetPortalPaymentDetailQuery(userId, id));
     }
 
+    // M44: WeasyPrint renders are expensive (subprocess + font/layout work per
+    // call); the global 20 rps throttle alone made this a cheap DoS lever.
+    // Matches the limit already used for loa/download below.
+    @Throttle({ default: { limit: 5, ttl: 60000 } })
     @Get('payments/:id/receipt')
     @ApiOperation({ summary: 'Download a PDF receipt for a paid invoice' })
     @ApiResponse({ status: 200, description: 'PDF receipt' })
@@ -156,6 +160,8 @@ export class PortalController {
         });
     }
 
+    // M44: same WeasyPrint render cost as downloadReceipt above.
+    @Throttle({ default: { limit: 5, ttl: 60000 } })
     @Get('payments/:id/invoice')
     @ApiOperation({ summary: 'Download a PDF invoice for any invoice status' })
     @ApiResponse({ status: 200, description: 'PDF invoice' })
