@@ -17,12 +17,13 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
         programId,
         participant: { userId },
       },
-      include: {
-        // transactions: {
-        //   where: { status: 'paid' },
-        //   include: { pricingTier: true },
-        // },
-        documents: true, // Only if we want to check for doc uploads later
+      // Only status/registrationPaymentStatus/programPaymentStatus are read
+      // below (application itself is otherwise used only as an existence
+      // check). documents was never read here.
+      select: {
+        status: true,
+        registrationPaymentStatus: true,
+        programPaymentStatus: true,
       },
     });
 

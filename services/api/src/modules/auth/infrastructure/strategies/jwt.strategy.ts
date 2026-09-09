@@ -277,8 +277,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     // Verify user still exists and is active
+    // Only isActive is read below; the rest of the payload for the returned
+    // request-user object comes from the JWT claims, not the user row.
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
+      select: { isActive: true },
     });
 
     if (!user || !user.isActive) {

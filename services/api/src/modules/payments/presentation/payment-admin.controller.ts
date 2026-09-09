@@ -632,33 +632,37 @@ export class PaymentAdminController {
         // Guard non-UUID ids (e.g. a gateway timestamp passed as :id) so Prisma's
         // uuid cast doesn't throw an unhandled 500 — surface a clean 404 instead.
         if (!this.isValidUUID(id)) throw new HttpException('Invoice not found', 404);
-        const invoice = await this.prisma.applicationInvoice.findUnique({
-            where: { id },
-            include: {
-                application: {
-                    include: {
-                        participant: {
-                            include: {
-                                user: {
-                                    select: {
-                                        id: true,
-                                        email: true,
-                                        ambassador: { select: { id: true, referralCode: true, isActive: true, programId: true } },
+        // The invoice lookup and the payment-method catalog fetch don't depend
+        // on each other, so run them concurrently instead of back-to-back.
+        const [invoice, paymentMethodCatalog] = await Promise.all([
+            this.prisma.applicationInvoice.findUnique({
+                where: { id },
+                include: {
+                    application: {
+                        include: {
+                            participant: {
+                                include: {
+                                    user: {
+                                        select: {
+                                            id: true,
+                                            email: true,
+                                            ambassador: { select: { id: true, referralCode: true, isActive: true, programId: true } },
+                                        },
                                     },
                                 },
                             },
                         },
                     },
+                    pricingTier: { select: { id: true, name: true, feeType: true, usdPrice: true, idrPrice: true } },
                 },
-                pricingTier: { select: { id: true, name: true, feeType: true, usdPrice: true, idrPrice: true } },
-            },
-        });
+            }),
+            this.getPaymentMethodCatalog(),
+        ]);
 
         if (!invoice) throw new HttpException('Invoice not found', 404);
 
         let transaction: Record<string, unknown> | null = null;
         let transactions: Array<Record<string, unknown>> = [];
-        const paymentMethodCatalog = await this.getPaymentMethodCatalog();
         let resolvedMethod = this.normalizePaymentMethod(invoice.paymentMethod, paymentMethodCatalog);
 
         if (invoice.externalIntentId) {

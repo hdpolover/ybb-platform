@@ -24,11 +24,10 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
         // 1. Fetch Participant Profile
         // If participantId is provided, look it up by ID and verify ownership
         if (participantId) {
+            // No downstream code reads the related user row - participant.userId
+            // (a plain scalar column) covers every use below.
             participant = await this.readPrisma.participant.findUnique({
-                where: { id: participantId },
-                include: {
-                    user: true
-                }
+                where: { id: participantId }
             });
 
             if (!participant) {
@@ -41,10 +40,7 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
         } else {
             // No participantId provided, try to find the one associated with the user
             participant = await this.readPrisma.participant.findUnique({
-                where: { userId },
-                include: {
-                    user: true
-                }
+                where: { userId }
             });
 
             if (!participant) {
@@ -85,7 +81,8 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
                         }
                     }
                 },
-                invoices: true
+                // Only status is read (unpaid/failed alert check below).
+                invoices: { select: { status: true } }
             }
         });
 

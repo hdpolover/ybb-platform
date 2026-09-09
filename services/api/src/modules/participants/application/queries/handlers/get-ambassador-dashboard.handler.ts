@@ -34,7 +34,12 @@ export class GetAmbassadorDashboardHandler implements IQueryHandler<GetAmbassado
                  },
                  program: {
                      include: {
-                         brand: true
+                         // Only websiteUrl is read below (share-link host).
+                         brand: {
+                             select: {
+                                 websiteUrl: true
+                             }
+                         }
                      }
                  }
              }
