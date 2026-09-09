@@ -16,6 +16,12 @@ interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string; adminId?: string };
 }
 
+// Same shape as UUID_REGEX in get-scoring-rubrics.handler.ts's
+// resolveProgramId() — used to route a :id/:programId route param to
+// findById vs findBySlug BEFORE calling either, since Program.id is
+// @db.Uuid and a slug passed to findById throws rather than returning null.
+const PROGRAM_ID_UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 import {
   ProgramPricingTierResponseDto,
   PricingTierAlertsResponseDto,
@@ -400,8 +406,15 @@ export class ProgramApplicationConfigController {
   @ApiOperation({ summary: 'Get shared essay guidelines for a program' })
   @ApiResponse({ status: 200, type: ProgramEssayGuidelinesResponseDto })
   async getEssayGuidelines(@Param('id') programId: string): Promise<ProgramEssayGuidelinesResponseDto> {
-    const byId = await this.programRepository.findById(programId);
-    const program = byId ?? await this.programRepository.findBySlug(programId);
+    // Branch on shape BEFORE picking a lookup, rather than `findById(...) ??
+    // findBySlug(...)`: Program.id is @db.Uuid, so calling findById with a
+    // slug throws `invalid input syntax for type uuid` (a thrown error, not
+    // a falsy return) and the `??` fallback never runs, surfacing as an
+    // unhandled 500 on this @Public() route. Same UUID_REGEX shape as
+    // resolveProgramId() in get-scoring-rubrics.handler.ts.
+    const program = PROGRAM_ID_UUID_REGEX.test(programId)
+      ? await this.programRepository.findById(programId)
+      : await this.programRepository.findBySlug(programId);
     if (!program) {
       throw new NotFoundException(`Program with identifier ${programId} not found`);
     }

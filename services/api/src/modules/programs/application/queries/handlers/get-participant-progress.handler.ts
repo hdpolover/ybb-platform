@@ -11,30 +11,35 @@ export class GetParticipantProgressHandler implements IQueryHandler<GetParticipa
   async execute(query: GetParticipantProgressQuery): Promise<ProgressStepDto[]> {
     const { programId, userId } = query;
 
-    // 1. Get Application with related data
-    const application = await this.prisma.participantApplication.findFirst({
-      where: {
-        programId,
-        participant: { userId },
-      },
-      // Only status/registrationPaymentStatus/programPaymentStatus are read
-      // below (application itself is otherwise used only as an existence
-      // check). documents was never read here.
-      select: {
-        status: true,
-        registrationPaymentStatus: true,
-        programPaymentStatus: true,
-      },
-    });
+    // Application and timeline are independent of each other (neither's
+    // where-clause depends on the other's result), so they run concurrently
+    // instead of as two sequential round trips.
+    const [application, timeline] = await Promise.all([
+      // 1. Get Application with related data
+      this.prisma.participantApplication.findFirst({
+        where: {
+          programId,
+          participant: { userId },
+        },
+        // Only status/registrationPaymentStatus/programPaymentStatus are read
+        // below (application itself is otherwise used only as an existence
+        // check). documents was never read here.
+        select: {
+          status: true,
+          registrationPaymentStatus: true,
+          programPaymentStatus: true,
+        },
+      }),
 
-    // 2. Get Ordered Timeline
-    const timeline = await this.prisma.programTimeline.findMany({
-      where: {
-        programId,
-        isActive: true,
-      },
-      orderBy: { order: 'asc' },
-    });
+      // 2. Get Ordered Timeline
+      this.prisma.programTimeline.findMany({
+        where: {
+          programId,
+          isActive: true,
+        },
+        orderBy: { order: 'asc' },
+      }),
+    ]);
 
     // 3. Map status
     return timeline.map((step, index) => {

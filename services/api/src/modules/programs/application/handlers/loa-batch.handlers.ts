@@ -3,9 +3,7 @@ import { BadRequestException, ConflictException, Inject, Logger, NotFoundExcepti
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
-import { IUserNotificationRepository } from '@core/interfaces/repositories/user-notification.repository.interface';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
-import { UserNotification } from '@core/entities/user-notification.entity';
 import { LoaBatchReleasedPayload, LoaBatchReleasedRecipient } from '../../../../common/types/events';
 import {
   LoaReleaseBatchRepository,
@@ -61,6 +59,11 @@ import { endOfWibDay, startOfWibDay } from '@shared/utils/wib-time';
 // ─── LOA_DOCUMENT_TYPE ────────────────────────────────────────────────────────
 // ParticipantDocument.type is a plain string column — no Prisma enum.
 const LOA_DOCUMENT_TYPE = 'letter_of_acceptance';
+
+// Rows per user_notifications INSERT. Each row binds ~8 parameters and
+// Postgres caps a statement at 65535, so this keeps a large release well
+// clear of that ceiling.
+const NOTIFICATION_INSERT_CHUNK_SIZE = 1000;
 
 // ─── Date window normalization ────────────────────────────────────────────────
 // Admin UI sends whole-day picks (e.g. "12 Jul") as midnight UTC. Without
@@ -159,8 +162,6 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
     private readonly prisma: PrismaService,
     private readonly rabbitmqProducer: RabbitMQProducerService,
     private readonly recipientSendRepo: LoaBatchRecipientSendRepository,
-    @Inject(IUserNotificationRepository)
-    private readonly userNotificationRepository: IUserNotificationRepository,
     @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
     private readonly prismaRead: PrismaReadService,
   ) {}
@@ -223,9 +224,7 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
 
     // In-app notifications are written directly here rather than by
     // services/notification: that service has no database access at all
-    // (no Prisma dependency in its package.json) — it only sends email. This
-    // reuses the one existing path that writes user_notifications today
-    // (IUserNotificationRepository.create), same as list/mark-read use.
+    // (no Prisma dependency in its package.json) — it only sends email.
     await this.createInAppNotifications(batch, recipients);
 
     // Record the intended recipients BEFORE publishing, so "who was supposed
@@ -287,46 +286,53 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
     }
   }
 
+  /**
+   * One INSERT for the whole batch rather than one per recipient — same
+   * shape as recordPendingSends/markPending below, which already writes the
+   * per-batch audit rows via a single createMany instead of N single-row
+   * creates against the same 20-connection pool.
+   *
+   * createMany is all-or-nothing per statement: a single bad row (e.g. an
+   * FK violation) fails the whole call, whereas the previous
+   * Promise.allSettled tolerated per-row failures and logged only the
+   * failed count. Recipients here come from findEligibleRecipients, which
+   * already resolves real participant/user ids, so a mid-batch row-level
+   * failure was never the expected case in practice — this trades that
+   * theoretical per-row tolerance for one round trip instead of N.
+   *
+   * Chunked because one statement binds ~8 parameters per row against
+   * Postgres's 65535-parameter ceiling: a single createMany would start
+   * failing outright somewhere above 8000 recipients. Chunking also limits
+   * the blast radius of the all-or-nothing behaviour above to one chunk.
+   */
   private async createInAppNotifications(
     batch: { id: string; name: string },
     recipients: LoaBatchReleasedRecipient[],
   ): Promise<void> {
     const documentsUrl = this.buildDocumentsUrl();
 
-    const results = await Promise.allSettled(
-      recipients.map((recipient) =>
-        this.userNotificationRepository.create(
-          new UserNotification(
-            '',
-            recipient.userId,
-            'loa_available',
-            'Invitation Letter Ready',
-            `Your Invitation Letter for "${batch.name}" is ready. Log in to download it.`,
-            documentsUrl,
-            null,
-            'loa_release_batch',
-            batch.id,
-            {},
-            false,
-            null,
-            'normal',
-            false,
-            false,
-            null,
-            null,
-            new Date(),
-            null,
-            null,
-          ),
-        ),
-      ),
-    );
+    const rows = recipients.map((recipient) => ({
+      userId: recipient.userId,
+      type: 'loa_available',
+      title: 'Invitation Letter Ready',
+      message: `Your Invitation Letter for "${batch.name}" is ready. Log in to download it.`,
+      actionUrl: documentsUrl,
+      relatedEntityType: 'loa_release_batch',
+      relatedEntityId: batch.id,
+      priority: 'normal' as const,
+    }));
 
-    const failures = results.filter((result) => result.status === 'rejected');
-    if (failures.length > 0) {
-      this.logger.error(
-        `[loa-batch] ${failures.length}/${recipients.length} in-app notification writes failed for batch=${batch.id}`,
-      );
+    for (let offset = 0; offset < rows.length; offset += NOTIFICATION_INSERT_CHUNK_SIZE) {
+      const chunk = rows.slice(offset, offset + NOTIFICATION_INSERT_CHUNK_SIZE);
+      try {
+        await this.prisma.userNotification.createMany({ data: chunk });
+      } catch (error) {
+        this.logger.error(
+          `[loa-batch] in-app notification createMany failed for ${chunk.length} recipient(s) ` +
+            `at offset ${offset} of ${rows.length}, batch=${batch.id}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
     }
   }
 

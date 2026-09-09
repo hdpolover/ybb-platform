@@ -120,6 +120,15 @@ export interface GetPresignedUrlInternalResponse {
   expires_at_unix: number;
 }
 
+// Matches the (request, metadata?, options?) shape the ClientGrpc proxy accepts
+// at runtime: @nestjs/microservices' createUnaryServiceMethod forwards
+// client[method](...args, callback), so trailing arguments reach grpc-js as
+// (metadata, options). Declared only on GetPresignedUrlInternal, the one call
+// that currently passes an option (a deadline). Typed loosely because nothing
+// here inspects them - they are forwarded verbatim.
+type GrpcMeta = unknown;
+type GrpcCallOptions = unknown;
+
 export interface FileService {
   UploadFile(request: Observable<UploadFileRequest>): Observable<UploadFileResponse>;
   DownloadFile(request: DownloadFileRequest): Observable<DownloadFileResponse>;
@@ -128,5 +137,9 @@ export interface FileService {
   GenerateReceipt(request: GenerateReceiptRequest): Observable<GenerateDocumentResponse>;
   GetPresignedUploadUrl(request: GetPresignedUploadUrlRequest): Observable<GetPresignedUploadUrlResponse>;
   ConfirmUpload(request: ConfirmUploadRequest): Observable<ConfirmUploadResponse>;
-  GetPresignedUrlInternal(request: GetPresignedUrlInternalRequest): Observable<GetPresignedUrlInternalResponse>;
+  GetPresignedUrlInternal(
+    request: GetPresignedUrlInternalRequest,
+    metadata?: GrpcMeta,
+    options?: GrpcCallOptions,
+  ): Observable<GetPresignedUrlInternalResponse>;
 }

@@ -198,10 +198,15 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                     // one candidate can come back, so `length === 1` reads as "this
                     // application is eligible" rather than "something in this brand
                     // is".
+                    // {status, submittedAt} are already selected on `application`
+                    // above — passed through so checkEligibility (called inside
+                    // resolveEligibleApplications for this candidate) does not
+                    // re-query the row it just came from.
                     const eligibleCandidates = await this.loaEligibilityService.resolveEligibleApplications(
                         participant.id,
                         brandId ?? '',
                         application.programId,
+                        { id: application.id, status: application.status, submittedAt: application.submittedAt },
                     );
                     const eligibility = { eligible: eligibleCandidates.length === 1 };
                     myDocuments.push({
@@ -243,19 +248,23 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
         );
 
         const maskedProgramResources = await Promise.all(
-            programResources.map(async (item) => ({
-                ...item,
-                fileUrl: await this.resolveDocumentUrl(item.fileUrl, maskMap),
-                signedCopyUrl: await this.resolveDocumentUrl(item.signedCopyUrl, maskMap),
-            })),
+            programResources.map(async (item) => {
+                const [fileUrl, signedCopyUrl] = await Promise.all([
+                    this.resolveDocumentUrl(item.fileUrl, maskMap),
+                    this.resolveDocumentUrl(item.signedCopyUrl, maskMap),
+                ]);
+                return { ...item, fileUrl, signedCopyUrl };
+            }),
         );
 
         const maskedMyDocuments = await Promise.all(
-            myDocuments.map(async (item) => ({
-                ...item,
-                fileUrl: await this.resolveDocumentUrl(item.fileUrl, maskMap),
-                signedCopyUrl: await this.resolveDocumentUrl(item.signedCopyUrl, maskMap),
-            })),
+            myDocuments.map(async (item) => {
+                const [fileUrl, signedCopyUrl] = await Promise.all([
+                    this.resolveDocumentUrl(item.fileUrl, maskMap),
+                    this.resolveDocumentUrl(item.signedCopyUrl, maskMap),
+                ]);
+                return { ...item, fileUrl, signedCopyUrl };
+            }),
         );
 
         const result = { programResources: maskedProgramResources, myDocuments: maskedMyDocuments };

@@ -207,6 +207,7 @@ describe('GetPortalDocumentsHandler — LOA eligibility branch (Task 9)', () => 
             PARTICIPANT_ID,
             expect.any(String),
             PROGRAM_ID,
+            { id: APPLICATION_ID, status: 'accepted', submittedAt: undefined },
         );
     });
 

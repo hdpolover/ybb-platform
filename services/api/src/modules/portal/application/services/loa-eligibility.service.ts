@@ -36,39 +36,81 @@ const ELIGIBLE_APPLICATION_STATUSES = ['submitted', 'accepted'] as const;
 export class LoaEligibilityService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async checkEligibility(applicationId: string, programId: string): Promise<EligibilityResult> {
-    const application = await this.prisma.participantApplication.findFirst({
-      where: { id: applicationId },
-      select: {
-        status: true,
-        submittedAt: true,
-        // Every payment this application has made. A batch covers the
-        // application if its window contains ANY of them - the same `some`
-        // semantics the recipient query uses, so one payment before the window
-        // and another inside it still counts as covered.
-        invoices: {
-          where: { status: 'paid', paidAt: { not: null } },
-          select: { paidAt: true },
-        },
-      },
-    });
+  /**
+   * `knownApplication` lets a caller that already selected {status,
+   * submittedAt} for this exact application (e.g. get-portal-documents.handler
+   * loading its current application row) skip re-fetching them here. Only the
+   * payment dates still need a round trip in that case, via a direct
+   * applicationInvoice query on @@index([applicationId]) instead of a join
+   * through participantApplication for a row the caller no longer needs.
+   * Omit it and this behaves exactly as before (used by
+   * resolveEligibleApplications for every OTHER candidate, and by any caller
+   * that has not already loaded the row).
+   */
+  async checkEligibility(
+    applicationId: string,
+    programId: string,
+    knownApplication?: { status: string; submittedAt: Date | null },
+  ): Promise<EligibilityResult> {
+    let status: string;
+    let submittedAt: Date | null;
+    let paidAts: Date[];
 
-    // No application / wrong status / never submitted → not eligible (spec §11).
-    if (!application) {
-      return { eligible: false };
-    }
-    if (!ELIGIBLE_APPLICATION_STATUSES.includes(application.status as (typeof ELIGIBLE_APPLICATION_STATUSES)[number])) {
-      return { eligible: false };
-    }
-    if (!application.submittedAt) {
-      return { eligible: false };
+    if (knownApplication) {
+      status = knownApplication.status;
+      submittedAt = knownApplication.submittedAt;
+
+      if (!this.isEligibleStatus(status)) {
+        return { eligible: false };
+      }
+      if (!submittedAt) {
+        return { eligible: false };
+      }
+
+      const invoices = await this.prisma.applicationInvoice.findMany({
+        where: { applicationId, status: 'paid', paidAt: { not: null } },
+        select: { paidAt: true },
+      });
+      paidAts = invoices
+        .map((invoice) => invoice.paidAt)
+        .filter((paidAt): paidAt is Date => paidAt !== null);
+    } else {
+      const application = await this.prisma.participantApplication.findFirst({
+        where: { id: applicationId },
+        select: {
+          status: true,
+          submittedAt: true,
+          // Every payment this application has made. A batch covers the
+          // application if its window contains ANY of them - the same `some`
+          // semantics the recipient query uses, so one payment before the window
+          // and another inside it still counts as covered.
+          invoices: {
+            where: { status: 'paid', paidAt: { not: null } },
+            select: { paidAt: true },
+          },
+        },
+      });
+
+      // No application / wrong status / never submitted → not eligible (spec §11).
+      if (!application) {
+        return { eligible: false };
+      }
+      if (!this.isEligibleStatus(application.status)) {
+        return { eligible: false };
+      }
+      if (!application.submittedAt) {
+        return { eligible: false };
+      }
+
+      status = application.status;
+      submittedAt = application.submittedAt;
+      paidAts = application.invoices
+        .map((invoice) => invoice.paidAt)
+        .filter((paidAt): paidAt is Date => paidAt !== null);
     }
 
     // Never paid, so no window can cover them. Checked explicitly because an
     // empty OR list below would match every batch rather than none.
-    const paidAts = application.invoices
-      .map((invoice) => invoice.paidAt)
-      .filter((paidAt): paidAt is Date => paidAt !== null);
     if (paidAts.length === 0) {
       return { eligible: false };
     }
@@ -115,6 +157,7 @@ export class LoaEligibilityService {
     participantId: string,
     brandId: string,
     programId?: string,
+    knownApplication?: { id: string; status: string; submittedAt: Date | null },
   ): Promise<Array<{ application: { id: string; programId: string }; batchId?: string }>> {
     const candidates = await this.prisma.participantApplication.findMany({
       where: {
@@ -129,15 +172,29 @@ export class LoaEligibilityService {
 
     // Concurrent, not sequential: each check is two independent queries and the
     // candidate count is bounded by the participant's programme count.
+    // `knownApplication` (when it matches a candidate) skips that one
+    // candidate's status/submittedAt re-fetch inside checkEligibility.
     const checked = await Promise.all(
       candidates.map(async (application) => ({
         application,
-        result: await this.checkEligibility(application.id, application.programId),
+        result: await this.checkEligibility(
+          application.id,
+          application.programId,
+          knownApplication && knownApplication.id === application.id
+            ? { status: knownApplication.status, submittedAt: knownApplication.submittedAt }
+            : undefined,
+        ),
       })),
     );
 
     return checked
       .filter((entry) => entry.result.eligible)
       .map((entry) => ({ application: entry.application, batchId: entry.result.batchId }));
+  }
+
+  private isEligibleStatus(status: string): boolean {
+    return ELIGIBLE_APPLICATION_STATUSES.includes(
+      status as (typeof ELIGIBLE_APPLICATION_STATUSES)[number],
+    );
   }
 }

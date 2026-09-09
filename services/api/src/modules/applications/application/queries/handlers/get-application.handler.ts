@@ -71,70 +71,104 @@ export class GetApplicationHandler {
     dto.referralCode = coalesceStr(pd['ref_code_ambassador']) ?? coalesceStr(pd['ambassador_referral_code']) ?? null;
     dto.subthemeId = coalesceStr(pd['program_subtheme_id']) ?? null;
 
+    // These five lookups are independent of each other — none reads a value
+    // another one sets — so they run concurrently via Promise.allSettled
+    // instead of six sequential round trips (findById above is the sixth).
+    // Each task keeps its OWN try/catch exactly as before, so one failing
+    // (e.g. a hung payment-service gRPC call) still cannot stop the others
+    // from populating the dto; allSettled is the outer safety net in case a
+    // task ever throws past its own catch.
+    const tasks: Promise<void>[] = [
+      this.attachPaymentStatus(application, dto),
+      this.attachFormStepsAndSubmissionForm(application, dto),
+    ];
     if (query.includeRelations) {
-      try {
-        const participant = await this.prisma.participant.findUnique({
-          where: { id: application.participantId },
-          select: {
-            id: true, fullName: true, nickName: true,
-            birthdate: true, gender: true, nationality: true,
-            phoneCountryCode: true, phoneNumber: true,
-            originCity: true, originCountry: true, originAddress: true,
-            currentCity: true, currentCountry: true, currentAddress: true,
-            emergencyContactPhone: true, emergencyContactCountryCode: true,
-            emergencyContactRelation: true,
-            tshirtSize: true, medicalConditions: true,
-            educationLevel: true, institution: true, major: true, organizations: true,
-            instagramUsername: true, linkedinUrl: true, portfolioUrl: true,
-            knowledgeSource: true, referralCode: true,
-            profilePictureUrl: true, resumeUrl: true,
-            user: { select: { email: true } },
-          },
-        });
-        if (participant) {
-          dto.participant = {
-            id: participant.id,
-            fullName: participant.fullName,
-            nickName: participant.nickName ?? coalesceStr(pd['nickname']) ?? null,
-            email: participant.user?.email ?? '',
-            phoneCountryCode: participant.phoneCountryCode ?? coalesceStr(pd['phone_country_code']) ?? null,
-            phoneNumber: participant.phoneNumber ?? coalesceStr(pd['phone_number']) ?? null,
-            // Onboarding only ever collects a birth year, so participant.birthdate
-            // is stored as Jan 1 of that year for nearly every row in prod.
-            // Prefer the real date the applicant entered on the application form.
-            birthdate: resolveApplicationBirthdate(application.personalData, participant.birthdate),
-            gender: participant.gender ?? coalesceStr(pd['gender']) ?? null,
-            nationality: participant.nationality ?? coalesceStr(pd['nationality']) ?? null,
-            originCity: participant.originCity,
-            originCountry: participant.originCountry,
-            originAddress: participant.originAddress ?? coalesceStr(pd['origin_address']) ?? null,
-            currentCity: participant.currentCity,
-            currentCountry: participant.currentCountry,
-            currentAddress: participant.currentAddress ?? coalesceStr(pd['current_address']) ?? null,
-            emergencyContactName: coalesceStr(pd['emergency_contact_name']) ?? null,
-            emergencyContactPhone: participant.emergencyContactPhone ?? coalesceStr(pd['emergency_phone_number']) ?? null,
-            emergencyContactCountryCode: participant.emergencyContactCountryCode ?? coalesceStr(pd['emergency_country_code']) ?? null,
-            emergencyContactRelation: participant.emergencyContactRelation ?? coalesceStr(pd['contact_relation']) ?? null,
-            tshirtSize: participant.tshirtSize ?? coalesceStr(pd['tshirt_size']) ?? null,
-            medicalConditions: participant.medicalConditions ?? coalesceStr(pd['disease_history']) ?? null,
-            educationLevel: participant.educationLevel ?? coalesceStr(pd['education_level']) ?? null,
-            institution: participant.institution ?? coalesceStr(pd['institution']) ?? null,
-            major: participant.major ?? coalesceStr(pd['major']) ?? null,
-            organizations: participant.organizations ?? coalesceStr(pd['organizations']) ?? null,
-            instagramUsername: participant.instagramUsername ?? coalesceStr(pd['instagram_account']) ?? null,
-            linkedinUrl: participant.linkedinUrl,
-            portfolioUrl: participant.portfolioUrl,
-            knowledgeSource: participant.knowledgeSource ?? coalesceStr(pd['knowledge_source']) ?? null,
-            referralCode: participant.referralCode,
-            profilePictureUrl: participant.profilePictureUrl,
-            resumeUrl: participant.resumeUrl ?? coalesceStr(pd['resume_url']) ?? null,
-          };
-        }
-      } catch (e) {
-        console.error('Failed to fetch participant for application', e);
-      }
+      tasks.push(this.attachParticipant(application, dto, pd));
+      tasks.push(this.attachEssays(application, dto));
+      tasks.push(this.attachSubtheme(dto));
+    }
+    await Promise.allSettled(tasks);
+
+    // Cache for 2 minutes (if applicable)
+    if (cacheKey) {
+      await this.cacheService.set(cacheKey, dto, CACHE_TTL.SHORT);
     }
 
+    return dto;
+  }
+
+  private async attachParticipant(
+    application: ParticipantApplication,
+    dto: ApplicationResponseDto,
+    pd: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const participant = await this.prisma.participant.findUnique({
+        where: { id: application.participantId },
+        select: {
+          id: true, fullName: true, nickName: true,
+          birthdate: true, gender: true, nationality: true,
+          phoneCountryCode: true, phoneNumber: true,
+          originCity: true, originCountry: true, originAddress: true,
+          currentCity: true, currentCountry: true, currentAddress: true,
+          emergencyContactPhone: true, emergencyContactCountryCode: true,
+          emergencyContactRelation: true,
+          tshirtSize: true, medicalConditions: true,
+          educationLevel: true, institution: true, major: true, organizations: true,
+          instagramUsername: true, linkedinUrl: true, portfolioUrl: true,
+          knowledgeSource: true, referralCode: true,
+          profilePictureUrl: true, resumeUrl: true,
+          user: { select: { email: true } },
+        },
+      });
+      if (participant) {
+        dto.participant = {
+          id: participant.id,
+          fullName: participant.fullName,
+          nickName: participant.nickName ?? coalesceStr(pd['nickname']) ?? null,
+          email: participant.user?.email ?? '',
+          phoneCountryCode: participant.phoneCountryCode ?? coalesceStr(pd['phone_country_code']) ?? null,
+          phoneNumber: participant.phoneNumber ?? coalesceStr(pd['phone_number']) ?? null,
+          // Onboarding only ever collects a birth year, so participant.birthdate
+          // is stored as Jan 1 of that year for nearly every row in prod.
+          // Prefer the real date the applicant entered on the application form.
+          birthdate: resolveApplicationBirthdate(application.personalData, participant.birthdate),
+          gender: participant.gender ?? coalesceStr(pd['gender']) ?? null,
+          nationality: participant.nationality ?? coalesceStr(pd['nationality']) ?? null,
+          originCity: participant.originCity,
+          originCountry: participant.originCountry,
+          originAddress: participant.originAddress ?? coalesceStr(pd['origin_address']) ?? null,
+          currentCity: participant.currentCity,
+          currentCountry: participant.currentCountry,
+          currentAddress: participant.currentAddress ?? coalesceStr(pd['current_address']) ?? null,
+          emergencyContactName: coalesceStr(pd['emergency_contact_name']) ?? null,
+          emergencyContactPhone: participant.emergencyContactPhone ?? coalesceStr(pd['emergency_phone_number']) ?? null,
+          emergencyContactCountryCode: participant.emergencyContactCountryCode ?? coalesceStr(pd['emergency_country_code']) ?? null,
+          emergencyContactRelation: participant.emergencyContactRelation ?? coalesceStr(pd['contact_relation']) ?? null,
+          tshirtSize: participant.tshirtSize ?? coalesceStr(pd['tshirt_size']) ?? null,
+          medicalConditions: participant.medicalConditions ?? coalesceStr(pd['disease_history']) ?? null,
+          educationLevel: participant.educationLevel ?? coalesceStr(pd['education_level']) ?? null,
+          institution: participant.institution ?? coalesceStr(pd['institution']) ?? null,
+          major: participant.major ?? coalesceStr(pd['major']) ?? null,
+          organizations: participant.organizations ?? coalesceStr(pd['organizations']) ?? null,
+          instagramUsername: participant.instagramUsername ?? coalesceStr(pd['instagram_account']) ?? null,
+          linkedinUrl: participant.linkedinUrl,
+          portfolioUrl: participant.portfolioUrl,
+          knowledgeSource: participant.knowledgeSource ?? coalesceStr(pd['knowledge_source']) ?? null,
+          referralCode: participant.referralCode,
+          profilePictureUrl: participant.profilePictureUrl,
+          resumeUrl: participant.resumeUrl ?? coalesceStr(pd['resume_url']) ?? null,
+        };
+      }
+    } catch (e) {
+      console.error('Failed to fetch participant for application', e);
+    }
+  }
+
+  private async attachPaymentStatus(
+    application: ParticipantApplication,
+    dto: ApplicationResponseDto,
+  ): Promise<void> {
     try {
         const payments = await this.paymentClient.getIntentsByReference({
             reference_type: 'application',
@@ -164,58 +198,71 @@ export class GetApplicationHandler {
     } catch (error) {
         console.error(`Failed to fetch payment status for app ${application.id}`, error);
     }
+  }
 
-    // Load essays and resolve subtheme for admin view
-    if (query.includeRelations) {
-      try {
-        const programEssays = await this.prisma.programEssay.findMany({
-          where: { programId: application.programId, isActive: true },
-          select: {
-            id: true,
-            question: true,
-            isRequired: true,
-            wordLimit: true,
-            order: true,
-            allowedCategories: true,
-          },
-          orderBy: { order: 'asc' },
-        });
+  // Load essays for admin view. Independent of attachSubtheme below: dto.subthemeId
+  // was already resolved from personalData before either task started.
+  private async attachEssays(
+    application: ParticipantApplication,
+    dto: ApplicationResponseDto,
+  ): Promise<void> {
+    try {
+      const programEssays = await this.prisma.programEssay.findMany({
+        where: { programId: application.programId, isActive: true },
+        select: {
+          id: true,
+          question: true,
+          isRequired: true,
+          wordLimit: true,
+          order: true,
+          allowedCategories: true,
+        },
+        orderBy: { order: 'asc' },
+      });
 
-        const essayAnswers = (application.essayAnswers ?? {}) as Record<string, unknown>;
+      const essayAnswers = (application.essayAnswers ?? {}) as Record<string, unknown>;
 
-        dto.essays = programEssays
-          // Essays scoped to a category the applicant isn't in are hidden, not
-          // deleted — an answer already saved stays in essayAnswers untouched.
-          .filter((essay) => isAllowedForCategory(essay.allowedCategories, application.applicationCategory))
-          .filter((essay) => isRenderableEssayQuestion(essay.question))
-          .map((essay) => ({
-            id: essay.id,
-            question: essay.question.trim().replace(/\s+/g, ' '),
-            answer: coalesceStr(essayAnswers[essay.id]) ?? null,
-            wordLimit: essay.wordLimit ?? null,
-            order: essay.order,
-            isRequired: essay.isRequired,
-          }));
-      } catch (e) {
-        console.error('Failed to load essays for application', e);
-        dto.essays = [];
-      }
-
-      // Resolve subtheme name if we have a subthemeId
-      if (dto.subthemeId) {
-        try {
-          const subtheme = await this.prisma.programSubtheme.findUnique({
-            where: { id: dto.subthemeId },
-            select: { name: true },
-          });
-          dto.subthemeName = subtheme?.name ?? null;
-        } catch (e) {
-          console.error('Failed to resolve subtheme name', e);
-          dto.subthemeName = null;
-        }
-      }
+      dto.essays = programEssays
+        // Essays scoped to a category the applicant isn't in are hidden, not
+        // deleted — an answer already saved stays in essayAnswers untouched.
+        .filter((essay) => isAllowedForCategory(essay.allowedCategories, application.applicationCategory))
+        .filter((essay) => isRenderableEssayQuestion(essay.question))
+        .map((essay) => ({
+          id: essay.id,
+          question: essay.question.trim().replace(/\s+/g, ' '),
+          answer: coalesceStr(essayAnswers[essay.id]) ?? null,
+          wordLimit: essay.wordLimit ?? null,
+          order: essay.order,
+          isRequired: essay.isRequired,
+        }));
+    } catch (e) {
+      console.error('Failed to load essays for application', e);
+      dto.essays = [];
     }
+  }
 
+  // Resolve subtheme name if we have a subthemeId. Independent of attachEssays:
+  // dto.subthemeId comes from personalData, not from the essays result.
+  private async attachSubtheme(dto: ApplicationResponseDto): Promise<void> {
+    if (!dto.subthemeId) {
+      return;
+    }
+    try {
+      const subtheme = await this.prisma.programSubtheme.findUnique({
+        where: { id: dto.subthemeId },
+        select: { name: true },
+      });
+      dto.subthemeName = subtheme?.name ?? null;
+    } catch (e) {
+      console.error('Failed to resolve subtheme name', e);
+      dto.subthemeName = null;
+    }
+  }
+
+  private async attachFormStepsAndSubmissionForm(
+    application: ParticipantApplication,
+    dto: ApplicationResponseDto,
+  ): Promise<void> {
     try {
       const allFields = await this.prisma.applicationFormField.findMany({
         where: { programId: application.programId, isActive: true },
@@ -242,13 +289,6 @@ export class GetApplicationHandler {
     } catch (e) {
       console.error('Error calculating steps:', e);
     }
-
-    // Cache for 2 minutes (if applicable)
-    if (cacheKey) {
-      await this.cacheService.set(cacheKey, dto, CACHE_TTL.SHORT);
-    }
-
-    return dto;
   }
 
   /**

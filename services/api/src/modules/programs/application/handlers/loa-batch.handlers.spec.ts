@@ -249,7 +249,6 @@ describe('ReleaseLoaBatchHandler', () => {
   let mockRepo: jest.Mocked<LoaReleaseBatchRepository>;
   let mockPrisma: any;
   let mockProducer: any;
-  let mockUserNotificationRepo: any;
   let mockRecipientSendRepo: any;
   let mockReadPrisma: any;
 
@@ -262,10 +261,6 @@ describe('ReleaseLoaBatchHandler', () => {
   };
 
   beforeEach(async () => {
-    const { IUserNotificationRepository } = await import(
-      '@core/interfaces/repositories/user-notification.repository.interface'
-    );
-
     mockReadPrisma = mockPrismaRead();
     const module = await Test.createTestingModule({
       providers: [
@@ -282,6 +277,7 @@ describe('ReleaseLoaBatchHandler', () => {
           provide: PrismaService,
           useValue: {
             program: { findUnique: jest.fn() },
+            userNotification: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
           },
         },
         {
@@ -292,10 +288,6 @@ describe('ReleaseLoaBatchHandler', () => {
           provide: LoaBatchRecipientSendRepository,
           useValue: { markPending: jest.fn().mockResolvedValue(undefined) },
         },
-        {
-          provide: IUserNotificationRepository,
-          useValue: { create: jest.fn().mockResolvedValue(undefined) },
-        },
         { provide: 'IProgramRepository', useValue: mockProgramRepo() },
         { provide: PrismaReadService, useValue: mockReadPrisma },
       ],
@@ -304,7 +296,6 @@ describe('ReleaseLoaBatchHandler', () => {
     mockRepo = module.get(LoaReleaseBatchRepository);
     mockPrisma = module.get(PrismaService);
     mockProducer = module.get(RabbitMQProducerService);
-    mockUserNotificationRepo = module.get(IUserNotificationRepository);
     mockRecipientSendRepo = module.get(LoaBatchRecipientSendRepository);
   });
 
@@ -338,7 +329,7 @@ describe('ReleaseLoaBatchHandler', () => {
     expect(mockRepo.release).not.toHaveBeenCalled();
   });
 
-  it('on a real release, creates an in-app notification per eligible recipient and emits loa.batch.released', async () => {
+  it('on a real release, creates in-app notifications in one createMany call and emits loa.batch.released', async () => {
     mockRepo.findById.mockResolvedValue({ ...mockBatch });
     mockRepo.release.mockResolvedValue({ batch: releasedBatch, transitioned: true });
     mockRepo.findEligibleRecipients.mockResolvedValue([recipient]);
@@ -359,7 +350,17 @@ describe('ReleaseLoaBatchHandler', () => {
       where: { id: 'prog-1' },
       select: { name: true, brand: { select: { name: true, websiteUrl: true } } },
     });
-    expect(mockUserNotificationRepo.create).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.userNotification.createMany).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.userNotification.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          userId: 'user-1',
+          type: 'loa_available',
+          relatedEntityType: 'loa_release_batch',
+          relatedEntityId: 'batch-1',
+        }),
+      ],
+    });
     expect(mockProducer.emit).toHaveBeenCalledWith('loa.batch.released', {
       batchId: 'batch-1',
       programId: 'prog-1',
@@ -446,7 +447,7 @@ describe('ReleaseLoaBatchHandler', () => {
     await handler.execute(new ReleaseLoaBatchCommand('batch-1', 'prog-1', actor));
 
     expect(mockRepo.findEligibleRecipients).not.toHaveBeenCalled();
-    expect(mockUserNotificationRepo.create).not.toHaveBeenCalled();
+    expect(mockPrisma.userNotification.createMany).not.toHaveBeenCalled();
     expect(mockProducer.emit).not.toHaveBeenCalled();
   });
 
@@ -458,7 +459,7 @@ describe('ReleaseLoaBatchHandler', () => {
     const { ReleaseLoaBatchCommand } = await import('../commands/loa-batch.commands');
     await handler.execute(new ReleaseLoaBatchCommand('batch-1', 'prog-1', actor));
 
-    expect(mockUserNotificationRepo.create).not.toHaveBeenCalled();
+    expect(mockPrisma.userNotification.createMany).not.toHaveBeenCalled();
     expect(mockProducer.emit).not.toHaveBeenCalled();
   });
 

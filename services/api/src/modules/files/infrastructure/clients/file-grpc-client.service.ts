@@ -65,12 +65,24 @@ async function withGrpcRetry<T>(fn: () => Promise<T>, logger: Logger, retries = 
   throw lastErr;
 }
 
+// Wall-clock budget for a single presign round trip.
+const PRESIGN_DEADLINE_MS = 15_000;
+
 @Injectable()
 export class FileGrpcClient implements OnModuleInit {
   private fileService: FileService;
   private readonly logger = new Logger(FileGrpcClient.name);
 
   constructor(@Inject('FILE_PACKAGE') private client: ClientGrpc) {}
+
+  // Bounds a unary call so a hung or unreachable file service surfaces as
+  // DEADLINE_EXCEEDED instead of hanging the request (and every awaiter behind
+  // it, e.g. /portal/documents) forever. This is the first deadline in the
+  // codebase - there is no existing convention to match - so 15s is chosen to
+  // sit above a cold presign and well under any upstream request timeout.
+  private deadline(): { deadline: Date } {
+    return { deadline: new Date(Date.now() + PRESIGN_DEADLINE_MS) };
+  }
 
   onModuleInit() {
     this.fileService = this.client.getService<FileService>('FileService');
@@ -189,10 +201,14 @@ export class FileGrpcClient implements OnModuleInit {
       return await withGrpcRetry(
         () =>
           lastValueFrom(
-            this.fileService.GetPresignedUrlInternal({
-              storage_path: storagePath,
-              expiry_seconds: expirySeconds ?? 0,
-            }),
+            this.fileService.GetPresignedUrlInternal(
+              {
+                storage_path: storagePath,
+                expiry_seconds: expirySeconds ?? 0,
+              },
+              undefined,
+              this.deadline(),
+            ),
           ),
         this.logger,
       );
