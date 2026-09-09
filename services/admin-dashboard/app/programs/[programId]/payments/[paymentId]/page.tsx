@@ -837,6 +837,13 @@ export default function PaymentDetailPage({
                         // outright — surface its explanation and require a justification.
                         if (err instanceof ApiError && err.errorCode === "MANUAL_OVERRIDE_REQUIRED") {
                           setOverridePrompt(err.message);
+                        } else if (err instanceof ApiError && err.errorCode === "INVOICE_STATUS_CHANGED") {
+                          // Something settled this invoice between the page load and
+                          // this click (a payment webhook, or another admin). The API
+                          // refused rather than overwriting it, so reload to show what
+                          // it actually is now instead of leaving a stale form on screen.
+                          setToast({ text: err.message, ok: false });
+                          await fetchInvoice();
                         } else {
                           setToast({
                             text: err instanceof Error ? err.message : "Couldn't update the status. Please try again.",
