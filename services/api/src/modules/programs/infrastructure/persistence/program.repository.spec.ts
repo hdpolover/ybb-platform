@@ -3,13 +3,14 @@ import { ProgramRepository } from './program.repository';
 
 describe('ProgramRepository', () => {
     let repository: ProgramRepository;
-    let prisma: { program: { count: jest.Mock; findMany: jest.Mock } };
+    let prisma: { program: { count: jest.Mock; findMany: jest.Mock; findUnique: jest.Mock } };
 
     beforeEach(() => {
         prisma = {
             program: {
                 count: jest.fn().mockResolvedValue(0),
                 findMany: jest.fn().mockResolvedValue([]),
+                findUnique: jest.fn().mockResolvedValue(null),
             },
         };
         // Audit M34: findAll's `url` filter now resolves via a cached brand-id
@@ -77,6 +78,56 @@ describe('ProgramRepository', () => {
             const where = prisma.program.count.mock.calls[0][0].where;
             expect(where.isPublished).toBeUndefined();
             expect(where.isVisibleToUsers).toBeUndefined();
+        });
+    });
+
+    // M9: audit claimed findBySlug ignores deletedAt (false — PrismaService's global
+    // $extends already injects deletedAt:null into every findUnique/findFirst for any
+    // model with a deletedAt column, Program included; both branches below get it for
+    // free). The REAL bug: Program only has @@unique([brandId, slug]), not a global-unique
+    // slug constraint, so a no-brandId caller could collide across two brands and the old
+    // findFirst({ where: { slug } }) silently returned whichever row Postgres felt like.
+    describe('M9: findBySlug ambiguity handling', () => {
+        function program(overrides: Partial<{ id: string; brandId: string; slug: string }>) {
+            return { id: 'prog-x', brandId: 'brand-x', slug: 'my-slug', ...overrides };
+        }
+
+        it('returns the program when the slug uniquely matches one program (no brandId)', async () => {
+            prisma.program.findMany.mockResolvedValueOnce([program({ id: 'prog-1', brandId: 'brand-1' })]);
+
+            const result = await repository.findBySlug('my-slug');
+
+            expect(prisma.program.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({ where: { slug: 'my-slug' }, take: 2 }),
+            );
+            expect(result?.id).toBe('prog-1');
+        });
+
+        it('returns null (not an arbitrary pick) when the slug matches programs in two different brands, and does not throw', async () => {
+            prisma.program.findMany.mockResolvedValueOnce([
+                program({ id: 'prog-1', brandId: 'brand-1' }),
+                program({ id: 'prog-2', brandId: 'brand-2' }),
+            ]);
+
+            await expect(repository.findBySlug('my-slug')).resolves.toBeNull();
+        });
+
+        it('returns null when there is no match at all (no brandId)', async () => {
+            prisma.program.findMany.mockResolvedValueOnce([]);
+
+            await expect(repository.findBySlug('my-slug')).resolves.toBeNull();
+        });
+
+        it('resolves via the compound-key path when brandId is provided, regardless of slug collisions elsewhere', async () => {
+            prisma.program.findUnique.mockResolvedValueOnce(program({ id: 'prog-1', brandId: 'brand-1' }));
+
+            const result = await repository.findBySlug('my-slug', 'brand-1');
+
+            expect(prisma.program.findUnique).toHaveBeenCalledWith({
+                where: { brandId_slug: { brandId: 'brand-1', slug: 'my-slug' } },
+            });
+            expect(prisma.program.findMany).not.toHaveBeenCalled();
+            expect(result?.id).toBe('prog-1');
         });
     });
 });

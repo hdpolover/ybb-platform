@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { IProgramRepository, FindAllProgramsParams, FindAllProgramsResult } from '@core/interfaces/repositories/program.repository.interface';
 import { Program } from '@core/entities/program.entity';
@@ -8,6 +8,8 @@ import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 
 @Injectable()
 export class ProgramRepository implements IProgramRepository {
+    private readonly logger = new Logger(ProgramRepository.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
@@ -110,22 +112,38 @@ export class ProgramRepository implements IProgramRepository {
         return program ? this.mapToEntity(program) : null;
     }
 
+    /**
+     * `Program` only has `@@unique([brandId, slug])` - there is no global-unique
+     * constraint on `slug` alone, and two different brands can legitimately
+     * have programs sharing a slug.
+     *
+     * NOTE on deletedAt: PrismaService's global `$extends` block already
+     * auto-injects `deletedAt: null` into every `findUnique`/`findFirst` call
+     * for any model with a `deletedAt` column (Program has one) - both
+     * branches below get this for free. Do NOT add an explicit
+     * `deletedAt: null` here; it would be redundant with the global
+     * extension that every other repository in this codebase already relies
+     * on.
+     *
+     * When brandId IS provided, the compound-key findUnique below is already
+     * correctly brand-scoped.
+     *
+     * When brandId is NOT provided (every current caller: see
+     * list-program-content.handlers.ts, manage-program-content.handlers.ts,
+     * loa-batch.handlers.ts, loa-preview.handler.ts,
+     * program-application.controller.ts - none thread brandId through today),
+     * a bare `findFirst({ where: { slug } })` would silently return whichever
+     * of two brands' colliding-slug programs the database happens to return
+     * first - non-deterministic, and it never surfaces the ambiguity. This
+     * deliberately refuses to guess instead: fetch at most 2 matches: 0 ->
+     * null (unchanged), exactly 1 -> return it (unchanged for the
+     * overwhelmingly common non-colliding case), 2+ -> log a warning and
+     * return null rather than arbitrarily resolving to an arbitrary brand's
+     * data. Callers that need disambiguation must pass brandId, which this
+     * interface already supports - a future reader should NOT "fix" this
+     * back to findFirst.
+     */
     async findBySlug(slug: string, brandId?: string): Promise<Program | null> {
-        const where: Prisma.ProgramWhereInput = { slug };
-        if (brandId) {
-            where.brandId = brandId;
-        }
-
-        // If brandId is provided, we can use the compound unique index if it exists, 
-        // but since slug is usually unique globally or we want to find by slug regardless, 
-        // we might need to adjust. Assuming slug is unique per category or globally.
-        // If slug is unique globally, just { slug } is enough.
-        // If slug is unique per category, we need both.
-
-        // Let's assume we search by slug and optionally filter by category if provided.
-        // But findUnique requires a unique constraint.
-        // If the schema has @@unique([brandId, slug]), we should use that if both are present.
-
         if (brandId) {
             const program = await this.prisma.program.findUnique({
                 where: {
@@ -136,13 +154,21 @@ export class ProgramRepository implements IProgramRepository {
                 },
             });
             return program ? this.mapToEntity(program) : null;
-        } else {
-            // Fallback to findFirst if we don't have the category ID, or if slug is unique globally
-            const program = await this.prisma.program.findFirst({
-                where: { slug },
-            });
-            return program ? this.mapToEntity(program) : null;
         }
+
+        const matches = await this.prisma.program.findMany({
+            where: { slug },
+            take: 2,
+        });
+
+        if (matches.length === 0) return null;
+        if (matches.length === 1) return this.mapToEntity(matches[0]);
+
+        this.logger.warn(
+            `findBySlug("${slug}") is ambiguous across brands with no brandId to disambiguate - ` +
+            `matching programs: ${matches.map((p) => `${p.id} (brand ${p.brandId})`).join(', ')}. Refusing to guess; returning null.`,
+        );
+        return null;
     }
 
     async create(data: Partial<Program>): Promise<Program> {

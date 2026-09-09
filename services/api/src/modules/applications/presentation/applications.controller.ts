@@ -371,6 +371,9 @@ export class ApplicationsController {
     @Query('status') status?: ApplicationStatus,
     @Query('category') category?: ApplicationCategory,
     @Query('search') search?: string,
+    @Query('country') country?: string,
+    @Query('registrationPaymentStatus') registrationPaymentStatus?: PaymentStatus,
+    @Query('programPaymentStatus') programPaymentStatus?: PaymentStatus,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('scoreStatus') scoreStatus?: ScoreStatus,
@@ -378,13 +381,26 @@ export class ApplicationsController {
   ): Promise<StreamableFile> {
     this.logger.log(`Exporting applications: brandId=${brandId}, programId=${programId}`);
     this.validateDateRange(startDate, endDate);
-    this.validateListFilters({ scoreStatus });
+    this.validateListFilters({ scoreStatus, registrationPaymentStatus, programPaymentStatus });
 
     const scoped = await this.resolveScopedFilters(req ?? {}, brandId, programId);
 
     // Handler is injected directly (practical CQRS pattern) because QueryBus
     // generic return type doesn't carry StreamableFile cleanly.
-    const query = new ExportApplicationsQuery(scoped.brandId, scoped.programId, status, category, search, startDate, endDate, scoreStatus, scoped.programIds);
+    const query = new ExportApplicationsQuery(
+      scoped.brandId,
+      scoped.programId,
+      status,
+      category,
+      search,
+      startDate,
+      endDate,
+      scoreStatus,
+      scoped.programIds,
+      country,
+      registrationPaymentStatus,
+      programPaymentStatus,
+    );
     return this.exportApplicationsHandler.execute(query);
   }
 

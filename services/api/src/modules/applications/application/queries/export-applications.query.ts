@@ -1,4 +1,5 @@
 import { ApplicationStatus, ApplicationCategory, ScoreStatus } from '@core/entities/participant-application.entity';
+import { PaymentStatus } from '@prisma/client';
 
 export class ExportApplicationsQuery {
     constructor(
@@ -13,5 +14,8 @@ export class ExportApplicationsQuery {
         public readonly scoreStatus?: ScoreStatus,
         /** Set for callers scoped to specific programs instead of a whole brand. */
         public readonly programIds?: string[],
+        public readonly country?: string,
+        public readonly registrationPaymentStatus?: PaymentStatus,
+        public readonly programPaymentStatus?: PaymentStatus,
     ) { }
 }

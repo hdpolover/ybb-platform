@@ -1017,6 +1017,68 @@ describe('ManageProgramContentHandlers', () => {
                 expect((whenMissing as Error).message).toBe((whenOutOfScope as Error).message);
             });
 
+            // M11: a re-upload (file metadata present, no explicit dto.layoutConfig)
+            // used to REPLACE layoutConfig wholesale with just {fileSize, fileType},
+            // wiping any pre-existing keys (e.g. LOA signature/margin settings) that
+            // lived in the same JSON blob. Without the fix this assertion fails
+            // because `signatureUrl`/`marginTop` are gone from the update payload.
+            it('UpdateDocumentTemplateHandler merges file metadata into the EXISTING layoutConfig instead of replacing it', async () => {
+                repo.findDocumentTemplateById.mockResolvedValue({
+                    id: 'doc-1',
+                    programId: 'prog-1',
+                    sourceType: 'upload',
+                    templateUrl: 'https://cdn.ybbhub.com/prod/brand-x/programs/prog-1/documents/own-file.pdf',
+                    layoutConfig: { signatureUrl: 'x', marginTop: 10 },
+                });
+                repo.updateDocumentTemplate = jest.fn().mockResolvedValue({ id: 'doc-1' });
+                const handler = await build(UpdateDocumentTemplateHandler);
+
+                await handler.execute(new UpdateDocumentTemplateCommand(
+                    'doc-1',
+                    { sourceType: 'upload', fileSize: 2048, fileType: 'application/pdf' } as never,
+                    'user-1',
+                    actor,
+                ));
+
+                expect(repo.updateDocumentTemplate).toHaveBeenCalledWith(
+                    'doc-1',
+                    expect.objectContaining({
+                        layoutConfig: {
+                            signatureUrl: 'x',
+                            marginTop: 10,
+                            fileSize: 2048,
+                            fileType: 'application/pdf',
+                        },
+                    }),
+                );
+            });
+
+            // The reset escape hatch: an EXPLICIT dto.layoutConfig (including `{}`)
+            // must still fully replace the stored value, not merge into it.
+            it('UpdateDocumentTemplateHandler still fully replaces layoutConfig when the dto sends one explicitly', async () => {
+                repo.findDocumentTemplateById.mockResolvedValue({
+                    id: 'doc-1',
+                    programId: 'prog-1',
+                    sourceType: 'upload',
+                    templateUrl: 'https://cdn.ybbhub.com/prod/brand-x/programs/prog-1/documents/own-file.pdf',
+                    layoutConfig: { signatureUrl: 'x', marginTop: 10 },
+                });
+                repo.updateDocumentTemplate = jest.fn().mockResolvedValue({ id: 'doc-1' });
+                const handler = await build(UpdateDocumentTemplateHandler);
+
+                await handler.execute(new UpdateDocumentTemplateCommand(
+                    'doc-1',
+                    { sourceType: 'upload', fileSize: 2048, fileType: 'application/pdf', layoutConfig: {} } as never,
+                    'user-1',
+                    actor,
+                ));
+
+                expect(repo.updateDocumentTemplate).toHaveBeenCalledWith(
+                    'doc-1',
+                    expect.objectContaining({ layoutConfig: {} }),
+                );
+            });
+
             it('CreateProgramFaqHandler refuses a programme outside the caller scope', async () => {
                 prismaRead = outOfScope();
                 repo.createFaq = jest.fn();

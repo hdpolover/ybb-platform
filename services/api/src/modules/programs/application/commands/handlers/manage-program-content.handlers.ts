@@ -2113,9 +2113,20 @@ export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocu
             ...(sourceType === 'link'
                 ? { templateUrl: null, linkUrl: command.dto.linkUrl ?? template.linkUrl }
                 : { linkUrl: null, ...(templateUrl ? { templateUrl } : {}) }),
-            // Only derive layoutConfig from file metadata when no explicit layoutConfig provided (LOA templates pass their own)
+            // Only derive layoutConfig from file metadata when no explicit layoutConfig provided (LOA templates pass their own).
+            // Merge into the EXISTING layoutConfig rather than replacing it wholesale - a
+            // re-upload with no explicit layoutConfig must not wipe unrelated keys already
+            // stored there (e.g. LOA signature/margin settings). An explicit dto.layoutConfig
+            // (including `{}`) still takes the branch above verbatim - that's the intentional
+            // full-reset escape hatch and is untouched here.
             ...((fileSize !== undefined || fileType !== undefined) && !command.dto.layoutConfig
-                ? { layoutConfig: { fileSize, fileType } }
+                ? {
+                      layoutConfig: {
+                          ...((template.layoutConfig as Record<string, unknown> | null) ?? {}),
+                          fileSize,
+                          fileType,
+                      },
+                  }
                 : {}),
         };
         // Remove file-specific helper fields from DTO spread
