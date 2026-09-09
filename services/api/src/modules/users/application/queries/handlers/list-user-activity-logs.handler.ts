@@ -13,12 +13,14 @@ export class ListUserActivityLogsHandler {
 
     async execute(query: ListUserActivityLogsQuery): Promise<{ data: UserActivityLogResponseDto[], total: number, page: number, limit: number }> {
         const skip = (query.page - 1) * query.limit;
-        const logs = await this.userActivityLogRepository.findByUserId(
-            query.userId,
-            skip,
-            query.limit
-        );
-        const total = await this.userActivityLogRepository.countByUserId(query.userId);
+        const [logs, total] = await Promise.all([
+            this.userActivityLogRepository.findByUserId(
+                query.userId,
+                skip,
+                query.limit
+            ),
+            this.userActivityLogRepository.countByUserId(query.userId),
+        ]);
 
         return {
             data: logs.map(this.mapToDto),

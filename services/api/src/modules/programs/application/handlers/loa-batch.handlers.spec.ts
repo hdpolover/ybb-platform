@@ -594,7 +594,7 @@ describe('GetLoaBatchesHandler', () => {
           provide: PrismaService,
           useValue: {
             participantApplication: { count: jest.fn() },
-            participantDocument: { count: jest.fn() },
+            participantDocument: { groupBy: jest.fn() },
           },
         },
         { provide: 'IProgramRepository', useValue: mockProgramRepository },
@@ -609,7 +609,9 @@ describe('GetLoaBatchesHandler', () => {
   it('returns batches with eligible and downloaded counts', async () => {
     mockRepo.findByProgram.mockResolvedValue([{ ...mockBatch }]);
     mockPrisma.participantApplication.count.mockResolvedValue(10);
-    mockPrisma.participantDocument.count.mockResolvedValue(3);
+    mockPrisma.participantDocument.groupBy.mockResolvedValue([
+      { loaReleaseBatchId: mockBatch.id, _count: { _all: 3 } },
+    ]);
 
     const { GetLoaBatchesQuery } = await import('../queries/loa-batch.queries');
     const result = await handler.execute(new GetLoaBatchesQuery('prog-1', actor));
@@ -636,7 +638,7 @@ describe('GetLoaBatchesHandler', () => {
   it('computes eligibleCount from the SAME shared predicate as findEligibleRecipients (M10)', async () => {
     mockRepo.findByProgram.mockResolvedValue([{ ...mockBatch }]);
     mockPrisma.participantApplication.count.mockResolvedValue(10);
-    mockPrisma.participantDocument.count.mockResolvedValue(0);
+    mockPrisma.participantDocument.groupBy.mockResolvedValue([]);
 
     const { GetLoaBatchesQuery } = await import('../queries/loa-batch.queries');
     await handler.execute(new GetLoaBatchesQuery('prog-1', actor));

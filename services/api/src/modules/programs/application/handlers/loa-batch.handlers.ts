@@ -408,30 +408,46 @@ export class GetLoaBatchesHandler implements IQueryHandler<GetLoaBatchesQuery> {
     await assertProgramContentAccess(this.prismaRead, query.actor, programId);
 
     const batches = await this.batchRepo.findByProgram(programId);
+    if (batches.length === 0) return [];
+    const batchIds = batches.map((batch) => batch.id);
 
-    return Promise.all(
-      batches.map(async (batch) => {
-        const [eligibleCount, downloadedCount] = await Promise.all([
-          // Eligible: submitted/accepted applications that PAID within the
-          // batch window. MUST match findEligibleRecipients exactly (audit
-          // M10: this used to be a hand-rolled duplicate missing the
-          // deletedAt/active-participant filters, so the count an admin saw
-          // did not match who actually got notified).
+    const [eligibleCounts, downloadedCountRows] = await Promise.all([
+      // Eligible: submitted/accepted applications that PAID within the
+      // batch window. MUST match findEligibleRecipients exactly (audit
+      // M10: this used to be a hand-rolled duplicate missing the
+      // deletedAt/active-participant filters, so the count an admin saw
+      // did not match who actually got notified). Each batch has its own
+      // payment window, so this can't be collapsed into one grouped query.
+      Promise.all(
+        batches.map((batch) =>
           this.prisma.participantApplication.count({
             where: buildLoaEligibleApplicationWhere(programId, batch.paymentFrom, batch.paymentTo),
           }),
-          // Downloaded: LOA documents linked to this batch with at least one download
-          this.prisma.participantDocument.count({
-            where: {
-              loaReleaseBatchId: batch.id,
-              downloadCount: { gt: 0 },
-            },
-          }),
-        ]);
-
-        return { ...batch, eligibleCount, downloadedCount };
+        ),
+      ),
+      // Downloaded: LOA documents linked to these batches with at least one
+      // download. One grouped query instead of one count() per batch (audit
+      // M40) — participant_documents.loa_release_batch_id is indexed (audit
+      // M18) so this scans once instead of N times.
+      this.prisma.participantDocument.groupBy({
+        by: ['loaReleaseBatchId'],
+        where: {
+          loaReleaseBatchId: { in: batchIds },
+          downloadCount: { gt: 0 },
+        },
+        _count: { _all: true },
       }),
+    ]);
+
+    const downloadedCountByBatch = new Map(
+      downloadedCountRows.map((row) => [row.loaReleaseBatchId, row._count._all]),
     );
+
+    return batches.map((batch, index) => ({
+      ...batch,
+      eligibleCount: eligibleCounts[index],
+      downloadedCount: downloadedCountByBatch.get(batch.id) ?? 0,
+    }));
   }
 }
 
@@ -448,16 +464,27 @@ export class GetLoaDownloadsHandler implements IQueryHandler<GetLoaDownloadsQuer
     if (!programId) return [];
     await assertProgramContentAccess(this.prismaRead, query.actor, programId);
 
+    // Select only the scalar fields the mapper below actually consumes,
+    // instead of a 3-level nested include that hydrates every column of
+    // application, participant, and user (audit M41). No indexes added here:
+    // application_invoices... n/a — participant_documents already has
+    // @@index([type]) and @@index([applicationId]) (see applications.prisma),
+    // which cover this query's type-equality filter and the application join;
+    // the audit's suggested @@index([type, applicationId]) was redundant.
     const docs = await this.prisma.participantDocument.findMany({
       where: {
         type: LOA_DOCUMENT_TYPE,
         application: { programId },
       },
-      include: {
+      select: {
+        documentNumber: true,
+        firstDownloadedAt: true,
+        downloadCount: true,
         application: {
-          include: {
+          select: {
             participant: {
-              include: {
+              select: {
+                fullName: true,
                 user: { select: { email: true } },
               },
             },

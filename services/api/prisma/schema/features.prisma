@@ -125,6 +125,12 @@ model UserNotification {
   @@index([userId, createdAt])
   @@index([userId, priority])
   @@index([type])
+  // Deliberately NO descending twin of @@index([userId, createdAt]) above.
+  // Postgres reads a b-tree backwards for ORDER BY created_at DESC, so a
+  // DESC copy of the same column list adds write amplification and serves no
+  // query the ascending one cannot. Prod bears this out: the ascending index
+  // has idx_scan = 0, as do the other five on this table (audit M205 asked
+  // for the DESC index; M174 in the same batch is about exactly this cost).
   @@map("user_notifications")
 }
 

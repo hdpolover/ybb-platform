@@ -234,6 +234,8 @@ model ParticipantApplication {
   @@index([programId])
   @@index([status])
   @@index([registrationPaymentStatus])
+  @@index([participationCategoryId])
+  @@index([pricingTierId])
   @@map("participant_applications")
 }
 
@@ -286,10 +288,18 @@ model ApplicationInvoice {
   // Partial index in the migration SQL only (Prisma 7 DSL cannot express it):
   //   idx_invoices_status_reconciled_external (status, last_reconciled_at)
   //     WHERE external_intent_id IS NOT NULL OR external_transaction_id IS NOT NULL
+  //
+  // No dedicated @@index([externalIntentId]) / @@index([externalTransactionId]):
+  // idx_invoices_external_intent_status (external_intent_id, status) already
+  // covers exact-match lookups on externalIntentId alone via leftmost-prefix,
+  // and application_invoices_external_transaction_id_key (partial UNIQUE,
+  // WHERE external_transaction_id IS NOT NULL) already covers exact-match
+  // lookups on externalTransactionId alone — Postgres can use a partial index
+  // with an IS NOT NULL predicate for any strict equality clause on that
+  // column. Both plain single-column indexes were pure write-amplification
+  // (audit M174).
   @@index([applicationId])
   @@index([status])
-  @@index([externalIntentId])
-  @@index([externalTransactionId])
   @@index([lastReconciledAt])
   // ReportingService export keyset cursor: ORDER BY created_at DESC, id DESC.
   @@index([createdAt, id])
@@ -440,6 +450,7 @@ model ParticipantDocument {
 
   @@index([applicationId])
   @@index([type])
+  @@index([loaReleaseBatchId])
   @@map("participant_documents")
 }
 

@@ -222,6 +222,7 @@ model UserSecurityLog {
   @@index([createdAt])
   @@index([userId, flagged])
   @@index([riskLevel])
+  @@index([userId, createdAt(sort: Desc)])
   @@map("user_security_logs")
 }
 
@@ -322,6 +323,7 @@ model UserActivityLog {
   @@index([activityType])
   @@index([createdAt])
   @@index([sessionId])
+  @@index([userId, createdAt(sort: Desc)])
   @@map("user_activity_logs")
 }
 
