@@ -113,35 +113,64 @@ export class FirebaseLoginHandler {
    * new-participant branch never runs for them, so without this they lose attribution.
    *
    * Mirrors the attribution logic in complete-onboarding.handler.ts:
-   *  - only attribute if the participant has NO ambassador referral yet (idempotent)
-   *  - validate the ambassador by referralCode + isActive
+   *  - validate the ambassador by referralCode + isActive, scoped to the
+   *    caller's brand (see brandId param doc below)
+   *  - resolve which programme the referral is attributed to
+   *  - only attribute if the participant has no referral for THAT programme yet
    *  - create the link, increment totalReferrals/lastReferralAt, persist the code
    * The create + increment + code-update run in a single $transaction, so the
-   * unique [ambassadorId, participantId] constraint rolls everything back on a
+   * unique [participantId, programId] constraint rolls everything back on a
    * race/retry — never a double-create or double-increment.
    */
   private async attributeExistingParticipantReferral(
     participantId: string,
     referralCode: string,
+    // The brand this login is happening under (resolved once in execute()).
+    // Ambassadors now hold one code per brand, valid for every programme in
+    // it, so the lookup below must be scoped to this brand instead of a
+    // programme - without it a code minted for brand A could attribute a
+    // referral for a participant logging into brand B. Codes are globally
+    // unique strings today so this isn't currently exploitable, but it
+    // becomes load-bearing the moment codes are brand-wide.
+    brandId: string,
   ): Promise<void> {
-    // Idempotency guard: a participant gets at most one referral, ever.
-    const existingReferral = await this.prisma.ambassadorReferral.findFirst({
-      where: { participantId },
-      select: { id: true },
-    });
-    if (existingReferral) {
-      return;
-    }
-
     // Codes are STORED uppercase and the column is a plain VarChar with no
     // citext, so Postgres compares them case-sensitively: a participant who
     // types their code in lower case matches zero rows and the referral is
     // silently dropped. register.handler.ts has always normalised here; the
     // OAuth path never did.
-    const ambassador = await this.prisma.ambassador.findUnique({
-      where: { referralCode: normalizeReferralCode(referralCode), isActive: true },
+    const ambassador = await this.prisma.ambassador.findFirst({
+      where: {
+        referralCode: normalizeReferralCode(referralCode),
+        isActive: true,
+        user: { brandId },
+      },
     });
     if (!ambassador) {
+      return;
+    }
+
+    // Resolve the programme this referral is attributed to. If the
+    // participant has exactly one application, attribute to it; if they have
+    // none or several, the intended programme is genuinely ambiguous, so
+    // fall back to the ambassador's own programId - that preserves the
+    // pre-change behaviour rather than silently dropping a real referral.
+    const applications = await this.prisma.participantApplication.findMany({
+      where: { participantId },
+      select: { programId: true },
+      distinct: ['programId'],
+      take: 2,
+    });
+    const programId = applications.length === 1 ? applications[0].programId : ambassador.programId;
+
+    // Idempotency guard: one referral per participant PER PROGRAMME, not per
+    // participant ever - a participant already attributed for one programme
+    // must still be attributable for a different one.
+    const existingReferral = await this.prisma.ambassadorReferral.findFirst({
+      where: { participantId, programId },
+      select: { id: true },
+    });
+    if (existingReferral) {
       return;
     }
 
@@ -150,6 +179,7 @@ export class FirebaseLoginHandler {
         data: {
           ambassadorId: ambassador.id,
           participantId,
+          programId,
           status: 'referred',
         },
       }),
@@ -340,10 +370,18 @@ export class FirebaseLoginHandler {
             }
 
             // Check for Referral Code
+            //
+            // Brand-scoped, not programme-scoped: an ambassador now holds one
+            // code per brand, valid for every programme in it. Without the
+            // brand check here a code minted for brand A could attribute a
+            // referral for a participant registering under brand B - codes
+            // are globally unique strings today so this isn't currently
+            // exploitable, but it becomes load-bearing the moment codes are
+            // brand-wide instead of programme-wide.
             let ambassador: Ambassador | null = null;
             if (safeReferralCode) {
-                const foundAmbassador = await this.prisma.ambassador.findUnique({
-                    where: { referralCode: safeReferralCode }
+                const foundAmbassador = await this.prisma.ambassador.findFirst({
+                    where: { referralCode: safeReferralCode, user: { brandId } }
                 });
 
                 if (foundAmbassador && foundAmbassador.isActive) {
@@ -383,9 +421,15 @@ export class FirebaseLoginHandler {
 
                 // Link Ambassador Relationship
                 if (ambassador) {
+                    // The participant row was just created in this same
+                    // transaction, so it cannot have any applications yet -
+                    // there is no programme to derive attribution from.
+                    // Fall back to the ambassador's own home programme, same
+                    // as the ambiguous case in complete-onboarding.handler.ts.
                     await repos.createAmbassadorReferral({
                         participantId: newParticipant.id,
                         ambassadorId: ambassador.id,
+                        programId: ambassador.programId,
                         referredAt: new Date(),
                     });
 
@@ -399,7 +443,7 @@ export class FirebaseLoginHandler {
             // branch above never runs, so attribute the referral here. Idempotent +
             // best-effort — a failure must not break login OR the program linking below.
             try {
-                await this.attributeExistingParticipantReferral(participant.id, command.referralCode);
+                await this.attributeExistingParticipantReferral(participant.id, command.referralCode, brandId);
             } catch (e) {
                 this.logger.warn(`Failed to attribute referral for existing participant ${participant.id}: ${e.message}`);
             }

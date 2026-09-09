@@ -23,11 +23,23 @@ export class ReferralFunnelService {
     /**
      * Call after a participant completes onboarding (profile filled).
      * Advances from `referred` → `registered`.
+     *
+     * programId is optional: onboarding happens before a participant
+     * necessarily has an application, so the caller may not know which
+     * programme yet. When known, scope to it — a participant can now hold a
+     * `referred` row per programme (one brand-wide code, one row per
+     * programme applied to), so an unscoped findFirst would pick an
+     * arbitrary one of several candidates. When omitted, fall back to the
+     * old unscoped behaviour rather than doing nothing.
      */
-    async advanceToRegistered(participantId: string): Promise<void> {
+    async advanceToRegistered(participantId: string, programId?: string): Promise<void> {
         try {
             const referral = await this.prisma.ambassadorReferral.findFirst({
-                where: { participantId, status: ReferralStatus.referred },
+                where: {
+                    participantId,
+                    status: ReferralStatus.referred,
+                    ...(programId ? { programId } : {}),
+                },
             });
 
             if (!referral) return;
@@ -194,10 +206,16 @@ export class ReferralFunnelService {
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private async findReferralForProgram(participantId: string, programId: string) {
+        // Match on the referral's OWN programId, not ambassador.programId.
+        // Ambassadors now hold one brand-wide code, so ambassador.programId
+        // is only their home programme — matching on it here would silently
+        // drop advancement for every referral attributed to a different
+        // programme in the same brand, or worse, advance the wrong row.
         return this.prisma.ambassadorReferral.findFirst({
             where: {
                 participantId,
-                ambassador: { programId, isActive: true },
+                programId,
+                ambassador: { isActive: true },
             },
         });
     }

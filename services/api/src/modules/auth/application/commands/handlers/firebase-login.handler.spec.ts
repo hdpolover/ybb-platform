@@ -42,6 +42,7 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
     },
     ambassador: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
     },
     ambassadorReferral: {
@@ -50,6 +51,7 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
     },
     participantApplication: {
       findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     userSession: {
       create: jest.fn(),
@@ -106,6 +108,9 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
     referralCode: 'REFCODE',
     isActive: true,
     totalReferrals: 5,
+    // Home programme — only used as attribution fallback when the
+    // participant's own applications don't unambiguously resolve one.
+    programId: 'ambassador-home-program-id',
   };
 
   beforeEach(async () => {
@@ -158,6 +163,10 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
     // Program-linking utilities are stubbed
     (resolveAuthTargetProgram as jest.Mock).mockResolvedValue(null);
     mockPrismaService.participantApplication.findFirst.mockResolvedValue(null);
+    // Default: no applications yet -> attribution (when it runs) falls back
+    // to the ambassador's own programId. Individual tests override this to
+    // exercise the unambiguous single-application case.
+    mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
     (ensureProgramApplication as jest.Mock).mockResolvedValue({
       status: 'existing',
       program: { id: 'prog-1', name: 'Test Program', slug: 'test-program', year: 2024 },
@@ -209,9 +218,11 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
 
   describe('attributeExistingParticipantReferral', () => {
     it('attributes referral to an existing participant when referralCode is provided and none exists yet', async () => {
-      // No existing referral for this participant
+      // No existing referral for this participant+programme
       mockPrismaService.ambassadorReferral.findFirst.mockResolvedValue(null);
-      mockPrismaService.ambassador.findUnique.mockResolvedValue(existingAmbassador);
+      mockPrismaService.ambassador.findFirst.mockResolvedValue(existingAmbassador);
+      // No applications yet -> falls back to the ambassador's home programme
+      mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
       mockPrismaService.ambassadorReferral.create.mockResolvedValue({ id: 'new-ref-id' });
       mockPrismaService.ambassador.update.mockResolvedValue({
         ...existingAmbassador,
@@ -238,11 +249,23 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
       // Login must still succeed
       expect(result).toHaveProperty('accessToken', 'mock_token');
 
-      // Referral record created with correct data
+      // Ambassador lookup is brand-scoped, not programme-scoped — an
+      // ambassador's code is valid across every programme in their brand.
+      expect(mockPrismaService.ambassador.findFirst).toHaveBeenCalledWith({
+        where: {
+          referralCode: 'REFCODE',
+          isActive: true,
+          user: { brandId: 'brand-id-123' },
+        },
+      });
+
+      // Referral record created with correct data, attributed to the
+      // ambassador's home programme (the only candidate here: 0 applications).
       expect(mockPrismaService.ambassadorReferral.create).toHaveBeenCalledWith({
         data: {
           ambassadorId: existingAmbassador.id,
           participantId: existingParticipant.id,
+          programId: existingAmbassador.programId,
           status: 'referred',
         },
       });
@@ -260,6 +283,41 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
       expect(mockPrismaService.$transaction).toHaveBeenCalledTimes(1);
     });
 
+    it('attributes referral to the participant\'s own programme when they have exactly one application', async () => {
+      mockPrismaService.ambassadorReferral.findFirst.mockResolvedValue(null);
+      mockPrismaService.ambassador.findFirst.mockResolvedValue(existingAmbassador);
+      mockPrismaService.participantApplication.findMany.mockResolvedValue([
+        { programId: 'participant-applied-program-id' },
+      ]);
+      mockPrismaService.ambassadorReferral.create.mockResolvedValue({ id: 'new-ref-id' });
+      mockPrismaService.ambassador.update.mockResolvedValue(existingAmbassador);
+      mockPrismaService.participant.update.mockResolvedValue(existingParticipant);
+
+      const command = new FirebaseLoginCommand(
+        'firebase-id-token',
+        'provider-id-123',
+        '127.0.0.1',
+        'Mozilla/5.0 Chrome/120',
+        'brand-id-123',
+        undefined,
+        undefined,
+        'REFCODE',
+      );
+
+      await handler.execute(command);
+
+      // Attributed to the programme the participant actually applied to,
+      // NOT the ambassador's home programme.
+      expect(mockPrismaService.ambassadorReferral.create).toHaveBeenCalledWith({
+        data: {
+          ambassadorId: existingAmbassador.id,
+          participantId: existingParticipant.id,
+          programId: 'participant-applied-program-id',
+          status: 'referred',
+        },
+      });
+    });
+
     // Audit M134. Codes are stored uppercase and the column is a plain VarChar
     // with no citext, so Postgres compares case-sensitively. register.handler.ts
     // has always normalised the lookup; the OAuth path never did, so a
@@ -267,7 +325,8 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
     // referral was silently dropped - credited to nobody, not misattributed.
     it('normalises a lower-case referral code so the lookup still finds the ambassador', async () => {
       mockPrismaService.ambassadorReferral.findFirst.mockResolvedValue(null);
-      mockPrismaService.ambassador.findUnique.mockResolvedValue(existingAmbassador);
+      mockPrismaService.ambassador.findFirst.mockResolvedValue(existingAmbassador);
+      mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
       mockPrismaService.ambassadorReferral.create.mockResolvedValue({ id: 'new-ref-id' });
       mockPrismaService.ambassador.update.mockResolvedValue(existingAmbassador);
       mockPrismaService.participant.update.mockResolvedValue(existingParticipant);
@@ -286,13 +345,18 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
       await handler.execute(command);
 
       // The lookup must use the canonical form, not what was typed.
-      expect(mockPrismaService.ambassador.findUnique).toHaveBeenCalledWith({
-        where: { referralCode: 'REFCODE', isActive: true },
+      expect(mockPrismaService.ambassador.findFirst).toHaveBeenCalledWith({
+        where: {
+          referralCode: 'REFCODE',
+          isActive: true,
+          user: { brandId: 'brand-id-123' },
+        },
       });
       expect(mockPrismaService.ambassadorReferral.create).toHaveBeenCalledWith({
         data: {
           ambassadorId: existingAmbassador.id,
           participantId: existingParticipant.id,
+          programId: existingAmbassador.programId,
           status: 'referred',
         },
       });
@@ -304,8 +368,10 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
       });
     });
 
-    it('is idempotent: does NOT create or increment when the participant already has a referral', async () => {
-      // Participant already has an ambassador referral
+    it('is idempotent: does NOT create or increment when the participant already has a referral for the resolved programme', async () => {
+      mockPrismaService.ambassador.findFirst.mockResolvedValue(existingAmbassador);
+      mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
+      // Participant already has an ambassador referral for the resolved (fallback) programme
       mockPrismaService.ambassadorReferral.findFirst.mockResolvedValue({
         id: 'existing-ref-id',
       });
@@ -326,9 +392,12 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
       // Login must still succeed (attribution is best-effort, never blocks login)
       expect(result).toHaveProperty('accessToken', 'mock_token');
 
-      // Idempotency guard fired: the existing referral was checked
+      // Idempotency guard fired: the existing referral was checked, scoped
+      // to the resolved programme, not the participant alone.
       expect(mockPrismaService.ambassadorReferral.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { participantId: existingParticipant.id } }),
+        expect.objectContaining({
+          where: { participantId: existingParticipant.id, programId: existingAmbassador.programId },
+        }),
       );
 
       // No create, no update, no transaction
@@ -641,7 +710,7 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
 
       // An unmatchable/too-long code must not even trigger an ambassador
       // lookup with a value that can never fit the column.
-      expect(mockPrismaService.ambassador.findUnique).not.toHaveBeenCalled();
+      expect(mockPrismaService.ambassador.findFirst).not.toHaveBeenCalled();
 
       // The drop must be logged, not silent.
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exceeds 20 chars'));

@@ -70,9 +70,14 @@ describe('GetAmbassadorDashboardHandler', () => {
                     daysToApply: 6,
                     daysToAccept: 8,
                     totalConversionDays: null,
+                    programId: '33333333-3333-4333-8333-333333333333',
                     participant: {
                         id: 'participant-1',
                         fullName: 'Alya Putri',
+                    },
+                    program: {
+                        id: '33333333-3333-4333-8333-333333333333',
+                        name: 'YBB Ambassador 2025',
                     },
                 },
             ],

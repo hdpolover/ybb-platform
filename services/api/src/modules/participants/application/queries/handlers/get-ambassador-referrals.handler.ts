@@ -35,6 +35,13 @@ export class GetAmbassadorReferralsHandler implements IQueryHandler<GetAmbassado
                             },
                         },
                     },
+                    // An ambassador's single brand-wide code can now produce
+                    // referrals across several programmes, so each row must
+                    // say which one it belongs to rather than leaving it
+                    // implicit via ambassador.programId.
+                    program: {
+                        select: { id: true, name: true },
+                    },
                 },
             }),
             this.prisma.ambassadorReferral.count({ where: { ambassadorId } }),
@@ -47,6 +54,8 @@ export class GetAmbassadorReferralsHandler implements IQueryHandler<GetAmbassado
                 participantId: r.participantId,
                 participantName: r.participant.fullName,
                 participantEmail: r.participant.user?.email ?? null,
+                programId: r.programId,
+                programName: r.program.name,
                 referredAt: r.referredAt,
                 registeredAt: r.registeredAt,
                 appliedAt: r.appliedAt,

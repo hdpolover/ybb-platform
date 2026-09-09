@@ -236,6 +236,7 @@ model Program {
   brand                    Brand                          @relation(fields: [brandId], references: [id])
   applications             ParticipantApplication[]
   ambassadors              Ambassador[]
+  ambassadorReferrals      AmbassadorReferral[]
   adminPrograms            AdminProgram[]
   announcements            SystemAnnouncement[]
   faqs                     ProgramFaq[]

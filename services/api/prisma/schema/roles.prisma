@@ -244,8 +244,14 @@ model Ambassador {
   phoneNumber String? @map("phone_number") @db.VarChar(25)
 
   // Ambassador Specific
-  referralCode String  @unique @map("referral_code") @db.VarChar(20)
-  programId    String  @map("program_id") @db.Uuid
+  referralCode String @unique @map("referral_code") @db.VarChar(20)
+  // Home/origin programme this ambassador registered under — display and
+  // backwards-compatibility only. Ambassador.userId is unique and users are
+  // per-brand, so a person has exactly one ambassador record (one code) per
+  // brand; that code is valid for every programme in the brand, not just
+  // this one. Attribution reads must use AmbassadorReferral.programId, never
+  // this field — see that model's doc comment.
+  programId String @map("program_id") @db.Uuid
   institution  String? @db.VarChar(255)
   gender       Gender?
 
@@ -288,6 +294,16 @@ model AmbassadorReferral {
   ambassadorId  String @map("ambassador_id") @db.Uuid
   participantId String @map("participant_id") @db.Uuid
 
+  // The programme this referral is attributed to — the programme the
+  // participant actually applied to, NOT ambassador.programId. An ambassador
+  // now holds one brand-wide code (see Ambassador.programId doc comment), so
+  // the same code can produce a referral row per programme a participant
+  // applies to within that brand. ambassador.programId stays the
+  // ambassador's home/origin programme for display only; every attribution
+  // read (funnel transitions, per-programme analytics) must join on THIS
+  // column, never on ambassador.programId.
+  programId String @map("program_id") @db.Uuid
+
   // Referral Status
   status ReferralStatus @default(referred)
 
@@ -315,11 +331,18 @@ model AmbassadorReferral {
   // Relations
   ambassador  Ambassador  @relation(fields: [ambassadorId], references: [id], onDelete: Cascade)
   participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  program     Program     @relation(fields: [programId], references: [id])
   verifier    Admin?      @relation(fields: [verifiedBy], references: [id])
 
-  @@unique([ambassadorId, participantId])
+  // One referral per participant PER PROGRAMME, not per participant ever —
+  // otherwise a participant referred into MEYS 6th could never be referred
+  // into MEYS 7th by the same brand-wide code. Replaces the old
+  // [ambassadorId, participantId] uniqueness (see migration
+  // 20260909120000_add_ambassador_referral_program_id).
+  @@unique([participantId, programId])
   @@index([ambassadorId])
   @@index([participantId])
+  @@index([programId])
   @@index([status])
   @@index([referredAt, acceptedAt])
   @@map("ambassador_referrals")

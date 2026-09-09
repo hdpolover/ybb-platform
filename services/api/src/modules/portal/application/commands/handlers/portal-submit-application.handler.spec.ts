@@ -41,7 +41,7 @@ describe('PortalSubmitApplicationHandler', () => {
                 create: jest.fn(),
             },
             ambassador: {
-                findUnique: jest.fn(),
+                findFirst: jest.fn(),
                 update: jest.fn(),
             },
             participant: {
@@ -109,6 +109,7 @@ describe('PortalSubmitApplicationHandler', () => {
         formFields?: Array<{ name: string; label: string; validationRules: unknown }>;
         programName?: string;
         applicationDeadline?: Date | null;
+        brandId?: string | null;
     } = {}) => ({
         id: 'app-1',
         status: overrides.status ?? 'draft',
@@ -117,6 +118,11 @@ describe('PortalSubmitApplicationHandler', () => {
         programId: overrides.programId ?? null,
         program: {
             name: overrides.programName ?? 'Test Program',
+            // Default non-null: the referral block's brand-scoping guard
+            // treats a missing brandId as "cannot verify brand, skip
+            // attribution" (fail closed) — see portal-submit-application.handler.ts.
+            // Tests exercising that guard pass brandId: null explicitly.
+            brandId: overrides.brandId === undefined ? 'brand-1' : overrides.brandId,
             applicationDeadline: overrides.applicationDeadline ?? null,
             formFields: overrides.formFields ?? [],
         },
@@ -382,7 +388,7 @@ describe('PortalSubmitApplicationHandler', () => {
                 }),
             );
             mockTx.ambassadorReferral.findFirst.mockResolvedValue(null);
-            mockTx.ambassador.findUnique.mockResolvedValue({ id: 'amb-1', referralCode: 'ABC123', isActive: true });
+            mockTx.ambassador.findFirst.mockResolvedValue({ id: 'amb-1', referralCode: 'ABC123', isActive: true });
             mockTx.ambassadorReferral.create.mockResolvedValue({});
             mockTx.ambassador.update.mockResolvedValue({});
             mockTx.participant.findUnique.mockResolvedValue({ referralCode: null });
@@ -391,10 +397,20 @@ describe('PortalSubmitApplicationHandler', () => {
             const result = await handler.execute(command);
 
             expect(result.success).toBe(true);
+            // Ambassador lookup is brand-scoped, not programme-scoped — a
+            // brand-wide code is valid for every programme in that brand.
+            expect(mockTx.ambassador.findFirst).toHaveBeenCalledWith({
+                where: {
+                    referralCode: 'ABC123',
+                    isActive: true,
+                    user: { brandId: 'brand-1' },
+                },
+            });
             expect(mockTx.ambassadorReferral.create).toHaveBeenCalledWith({
                 data: {
                     ambassadorId: 'amb-1',
                     participantId: 'participant-1',
+                    programId: 'program-123',
                     status: 'referred',
                 },
             });
@@ -409,6 +425,116 @@ describe('PortalSubmitApplicationHandler', () => {
             // no referral row behind it.
             expectNoOuterWrites({ ambassador: mockPrisma.ambassador });
             expect(mockReferralFunnel.advanceToApplied).toHaveBeenCalledWith('participant-1', 'program-123');
+        });
+
+        // Model change (2026-09): an ambassador's code is brand-wide, not
+        // programme-scoped, so the SAME code must attribute referrals for
+        // participants applying to DIFFERENT programmes of the same brand.
+        it('(a) attributes the same code to two participants applying to two different programmes', async () => {
+            mockTx.ambassadorReferral.findFirst.mockResolvedValue(null);
+            mockTx.ambassador.findFirst.mockResolvedValue({ id: 'amb-1', referralCode: 'ABC123', isActive: true });
+            mockTx.ambassadorReferral.create.mockResolvedValue({});
+            mockTx.ambassador.update.mockResolvedValue({});
+            mockTx.participant.findUnique.mockResolvedValue({ referralCode: null });
+            mockTx.participant.update.mockResolvedValue({});
+
+            // Participant 1 submits into program-A using the ambassador's code.
+            mockPrisma.participantApplication.findFirst.mockResolvedValueOnce({
+                ...makeApp({
+                    personalData: { referralCode: 'ABC123' },
+                    programId: 'program-A',
+                    formFields: referralFormFields,
+                }),
+                participantId: 'participant-1',
+            });
+            await handler.execute({ userId: 'user-1', programId: 'program-A' });
+
+            expect(mockTx.ambassadorReferral.create).toHaveBeenNthCalledWith(1, {
+                data: {
+                    ambassadorId: 'amb-1',
+                    participantId: 'participant-1',
+                    programId: 'program-A',
+                    status: 'referred',
+                },
+            });
+
+            // Participant 2 submits into program-B using the SAME code.
+            mockPortalCacheService.getParticipantProfile.mockResolvedValueOnce({
+                id: 'participant-2',
+                userId: 'user-2',
+            });
+            mockPrisma.participantApplication.findFirst.mockResolvedValueOnce({
+                ...makeApp({
+                    personalData: { referralCode: 'ABC123' },
+                    programId: 'program-B',
+                    formFields: referralFormFields,
+                }),
+                participantId: 'participant-2',
+            });
+            await handler.execute({ userId: 'user-2', programId: 'program-B' });
+
+            expect(mockTx.ambassadorReferral.create).toHaveBeenNthCalledWith(2, {
+                data: {
+                    ambassadorId: 'amb-1',
+                    participantId: 'participant-2',
+                    programId: 'program-B',
+                    status: 'referred',
+                },
+            });
+        });
+
+        // (b) Same participant, referred into a second programme: the OLD
+        // [ambassadorId, participantId] unique index would have rejected this
+        // as a duplicate; the new [participantId, programId] index allows it.
+        it('(b) creates a second referral row when the same participant submits into a second programme with the same code', async () => {
+            mockTx.ambassador.findFirst.mockResolvedValue({ id: 'amb-1', referralCode: 'ABC123', isActive: true });
+            mockTx.ambassadorReferral.create.mockResolvedValue({});
+            mockTx.ambassador.update.mockResolvedValue({});
+            mockTx.participant.findUnique.mockResolvedValue({ referralCode: 'ABC123' });
+            mockTx.participant.update.mockResolvedValue({});
+
+            // First submission: program-A, no existing referral for (participant, program-A).
+            mockTx.ambassadorReferral.findFirst.mockResolvedValueOnce(null);
+            mockPrisma.participantApplication.findFirst.mockResolvedValueOnce(
+                makeApp({
+                    personalData: { referralCode: 'ABC123' },
+                    programId: 'program-A',
+                    formFields: referralFormFields,
+                }),
+            );
+            await handler.execute({ userId: 'user-1', programId: 'program-A' });
+
+            expect(mockTx.ambassadorReferral.create).toHaveBeenNthCalledWith(1, {
+                data: {
+                    ambassadorId: 'amb-1',
+                    participantId: 'participant-1',
+                    programId: 'program-A',
+                    status: 'referred',
+                },
+            });
+
+            // Second submission: program-B, same participant, same code. The
+            // dedup check is scoped to (participant, program-B) — a different
+            // key from the first call — so it finds nothing and creates again.
+            mockTx.ambassadorReferral.findFirst.mockResolvedValueOnce(null);
+            mockPrisma.participantApplication.findFirst.mockResolvedValueOnce(
+                makeApp({
+                    personalData: { referralCode: 'ABC123' },
+                    programId: 'program-B',
+                    formFields: referralFormFields,
+                }),
+            );
+            await handler.execute({ userId: 'user-1', programId: 'program-B' });
+
+            expect(mockTx.ambassadorReferral.create).toHaveBeenNthCalledWith(2, {
+                data: {
+                    ambassadorId: 'amb-1',
+                    participantId: 'participant-1',
+                    programId: 'program-B',
+                    status: 'referred',
+                },
+            });
+            expect(mockTx.ambassadorReferral.create).toHaveBeenCalledTimes(2);
         });
 
         it('skips referral creation when participant already has a referral (dedup)', async () => {
@@ -440,11 +566,32 @@ describe('PortalSubmitApplicationHandler', () => {
             );
             mockTx.ambassadorReferral.findFirst.mockResolvedValue(null);
             // Ambassador not found
-            mockTx.ambassador.findUnique.mockResolvedValue(null);
+            mockTx.ambassador.findFirst.mockResolvedValue(null);
 
             const result = await handler.execute(command);
 
             expect(result.success).toBe(true);
+            expect(mockTx.ambassadorReferral.create).not.toHaveBeenCalled();
+        });
+
+        it('skips referral creation when the application has no resolvable brand (fail closed, never cross-brand)', async () => {
+            const command: PortalSubmitApplicationCommand = { userId: 'user-1', programId: 'program-123' };
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                makeApp({
+                    personalData: { referralCode: 'ABC123' },
+                    programId: 'program-123',
+                    formFields: referralFormFields,
+                    brandId: null,
+                }),
+            );
+            mockTx.ambassadorReferral.findFirst.mockResolvedValue(null);
+
+            const result = await handler.execute(command);
+
+            expect(result.success).toBe(true);
+            // Must never fall through to an unscoped ambassador lookup — a
+            // missing brandId is not "no filter", it's "cannot verify, skip".
+            expect(mockTx.ambassador.findFirst).not.toHaveBeenCalled();
             expect(mockTx.ambassadorReferral.create).not.toHaveBeenCalled();
         });
 

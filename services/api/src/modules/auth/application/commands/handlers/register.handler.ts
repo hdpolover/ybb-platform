@@ -164,17 +164,21 @@ export class RegisterHandler {
     const targetProgramId = targetProgram?.id;
 
     // Check Ambassador Referral
+    //
+    // Brand-scoped, not programme-scoped: an ambassador now holds one code
+    // per brand, valid for every programme in it (Ambassador.userId is
+    // unique and users are per-brand). Without the brand check here a code
+    // minted for brand A could attribute a referral for a participant
+    // registering under brand B - codes are globally unique strings today so
+    // this isn't currently exploitable, but it becomes load-bearing the
+    // moment codes are brand-wide instead of programme-wide.
     let ambassador: Ambassador | null = null;
     if (command.referralCode) {
-        // Ambassadors belong to exactly one program, so a code only earns credit for
-        // a referral into that program. Scope the lookup when the target program is
-        // known; when it is not, stay unscoped rather than silently dropping a
-        // legitimate referral (registration must proceed either way).
         ambassador = await this.prisma.ambassador.findFirst({
             where: {
                 referralCode: normalizeReferralCode(command.referralCode),
                 deletedAt: null,
-                ...(targetProgramId ? { programId: targetProgramId } : {}),
+                user: { brandId },
             },
         });
 
@@ -183,11 +187,17 @@ export class RegisterHandler {
         if (!ambassador || !ambassador.isActive) {
             this.logger.warn(
                 `Referral code not applied: ${command.referralCode} `
-                + `(unknown, inactive, or not an ambassador for program ${targetProgramId ?? 'unknown'})`,
+                + `(unknown, inactive, or not an ambassador for brand ${brandId})`,
             );
             ambassador = null;
         }
     }
+
+    // Programme this referral is attributed to. The target programme is
+    // already resolved above (targetProgramId), so use it when known; when
+    // it is not, fall back to the ambassador's own programId, same as the
+    // ambiguous case in complete-onboarding.handler.ts.
+    const referralProgramId = targetProgramId ?? ambassador?.programId;
 
     // Check if user already exists by email + brandId (case-insensitive)
     const user = await this.prisma.user.findFirst({
@@ -322,11 +332,12 @@ export class RegisterHandler {
       });
 
       // Link ambassador referral if valid
-      if (ambassador) {
+      if (ambassador && referralProgramId) {
         try {
           await repos.createAmbassadorReferral({
             participantId: participant.id,
             ambassadorId: ambassador.id,
+            programId: referralProgramId,
             referredAt: new Date(),
           });
 

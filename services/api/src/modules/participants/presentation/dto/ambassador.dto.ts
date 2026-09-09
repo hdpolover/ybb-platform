@@ -139,6 +139,12 @@ export class AmbassadorReferralDto {
     @ApiProperty()
     participantName: string;
 
+    @ApiProperty({ description: 'The programme this referral is attributed to — an ambassador\'s single brand-wide code can produce referrals across several programmes' })
+    programId: string;
+
+    @ApiProperty()
+    programName: string;
+
     @ApiProperty({ enum: ['referred', 'registered', 'applied', 'accepted', 'completed'] })
     status: string;
 

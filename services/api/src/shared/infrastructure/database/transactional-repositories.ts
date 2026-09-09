@@ -84,12 +84,18 @@ export class TransactionalRepositories {
   async createAmbassadorReferral(data: {
     participantId: string;
     ambassadorId: string;
+    // The programme this referral is attributed to. Required: attribution
+    // reads (funnel transitions, per-programme analytics) join on this
+    // column, not on ambassador.programId - see AmbassadorReferral's doc
+    // comment in schema/roles.prisma.
+    programId: string;
     referredAt: Date;
   }) {
     return this.tx.ambassadorReferral.create({
       data: {
         participantId: data.participantId,
         ambassadorId: data.ambassadorId,
+        programId: data.programId,
         referredAt: data.referredAt,
       },
     });

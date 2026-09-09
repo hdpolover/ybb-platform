@@ -17,15 +17,32 @@ export class ResolveReferralAttributionHandler implements IQueryHandler<ResolveR
 
         const programId = query.programId?.trim() || undefined;
 
+        // Ambassadors now hold one code per brand, valid for every programme
+        // in it — not one program each. So a supplied programId scopes to
+        // that programme's BRAND, not to the programme itself; only scope at
+        // all when the caller actually knows the program — scoping to a
+        // guess would hide a legitimate attribution. An unresolvable
+        // programId (unknown program) cannot be scoped to any brand, so it
+        // falls through to the same valid:false outcome as a real
+        // cross-brand mismatch below.
+        let brandId: string | undefined;
+        if (programId) {
+            const program = await this.prisma.program.findUnique({
+                where: { id: programId },
+                select: { brandId: true },
+            });
+            brandId = program?.brandId;
+            if (!brandId) {
+                return { valid: false, referredByName: null };
+            }
+        }
+
         const ambassador = await this.prisma.ambassador.findFirst({
             where: {
                 referralCode,
                 isActive: true,
                 deletedAt: null,
-                // Ambassadors belong to one program; a code from another program is
-                // not usable here. Only scope when the caller actually knows the
-                // program — scoping to a guess would hide a legitimate attribution.
-                ...(programId ? { programId } : {}),
+                ...(brandId ? { user: { brandId } } : {}),
             },
             // Authenticated endpoint (caller is the referred participant), so
             // selecting the ambassador's display name is safe here — unlike the

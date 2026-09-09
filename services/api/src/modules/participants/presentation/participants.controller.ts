@@ -155,7 +155,7 @@ export class ParticipantsController {
     @ApiResponse({ status: 200, type: ReferralCodeValidationDto })
     @ApiResponse({
         status: 404,
-        description: 'Unknown, inactive, or deleted code — or a code belonging to another program',
+        description: 'Unknown, inactive, or deleted code — or a code belonging to another brand',
     })
     async validateReferralCode(
         @Param('code') code: string,

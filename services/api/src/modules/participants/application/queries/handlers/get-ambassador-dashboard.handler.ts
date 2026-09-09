@@ -30,6 +30,15 @@ export class GetAmbassadorDashboardHandler implements IQueryHandler<GetAmbassado
                                  fullName: true,
                              },
                          },
+                         // The ambassador's single brand-wide code can now
+                         // produce referrals across several programmes, so
+                         // each row must say which one rather than leaving
+                         // it implicit via ambassador.programId (which is
+                         // only this ambassador's home programme, shown
+                         // separately as programName below).
+                         program: {
+                             select: { id: true, name: true },
+                         },
                      },
                  },
                  program: {
@@ -71,6 +80,8 @@ export class GetAmbassadorDashboardHandler implements IQueryHandler<GetAmbassado
                 id: referral.id,
                 participantId: referral.participant.id,
                 participantName: referral.participant.fullName || 'Participant',
+                programId: referral.programId,
+                programName: referral.program.name,
                 status: referral.status,
                 referredAt: referral.referredAt,
                 registeredAt: referral.registeredAt,

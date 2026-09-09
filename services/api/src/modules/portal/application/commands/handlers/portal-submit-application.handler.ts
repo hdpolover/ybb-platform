@@ -50,6 +50,7 @@ export class PortalSubmitApplicationHandler {
                 program: {
                     select: {
                         name: true,
+                        brandId: true,
                         applicationDeadline: true,
                         formFields: {
                             select: {
@@ -151,15 +152,44 @@ export class PortalSubmitApplicationHandler {
             if (referralCode) {
                 await this.prisma.$transaction(async (tx) => {
                     const participantId = application.participantId;
+                    // The submitted application's own programme is the
+                    // attribution target — this is the one call site where it
+                    // is never ambiguous, unlike onboarding.
+                    const programId = application.programId;
 
-                    // Dedup: first referral wins
+                    // Dedup: one referral per participant PER PROGRAMME, not
+                    // per participant ever (ambassador_referrals is unique on
+                    // [participantId, programId] as of the brand-wide-code
+                    // model change) - a participant referred into one
+                    // programme must still be attributable when they submit
+                    // into a different one.
                     const existing = await tx.ambassadorReferral.findFirst({
-                        where: { participantId },
+                        where: { participantId, programId },
                     });
                     if (existing) return;
 
-                    const ambassador = await tx.ambassador.findUnique({
-                        where: { referralCode: referralCode, isActive: true },
+                    // Brand of the application being submitted. Must be a real
+                    // value before the ambassador lookup below - if it were
+                    // undefined, spreading it into the Prisma where clause would
+                    // omit the filter entirely (Prisma treats `undefined` as
+                    // "no filter"), silently reopening cross-brand attribution.
+                    const brandId = application.program?.brandId;
+                    if (!brandId) return;
+
+                    // Brand-scoped, not programme-scoped: an ambassador now
+                    // holds one code per brand, valid across every programme
+                    // in that brand. Without the brand check here a code
+                    // minted for brand A could attribute a referral for a
+                    // participant applying under brand B - codes are globally
+                    // unique strings today so this isn't currently
+                    // exploitable, but it becomes load-bearing the moment
+                    // codes are brand-wide instead of programme-wide.
+                    const ambassador = await tx.ambassador.findFirst({
+                        where: {
+                            referralCode,
+                            isActive: true,
+                            user: { brandId },
+                        },
                     });
                     if (!ambassador) return;
 
@@ -167,6 +197,7 @@ export class PortalSubmitApplicationHandler {
                         data: {
                             ambassadorId: ambassador.id,
                             participantId,
+                            programId,
                             status: 'referred',
                         },
                     });

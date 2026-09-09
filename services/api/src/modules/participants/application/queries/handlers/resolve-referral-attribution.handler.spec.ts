@@ -11,6 +11,9 @@ describe('ResolveReferralAttributionHandler', () => {
         ambassador: {
             findFirst: jest.fn(),
         },
+        program: {
+            findUnique: jest.fn(),
+        },
     };
 
     beforeEach(async () => {
@@ -55,27 +58,34 @@ describe('ResolveReferralAttributionHandler', () => {
         );
     });
 
-    describe('program scoping', () => {
+    describe('brand scoping (via programId)', () => {
         const PROGRAM_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+        const BRAND_ID = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
 
-        it('resolves the ambassador name when scoped to the matching program', async () => {
+        it('resolves the ambassador name when scoped to the matching brand', async () => {
+            mockPrismaService.program.findUnique.mockResolvedValue({ brandId: BRAND_ID });
             mockPrismaService.ambassador.findFirst.mockResolvedValue({ fullName: 'Jane Ambassador' });
 
             const result = await handler.execute(new ResolveReferralAttributionQuery('URO19948', PROGRAM_ID));
 
+            expect(mockPrismaService.program.findUnique).toHaveBeenCalledWith({
+                where: { id: PROGRAM_ID },
+                select: { brandId: true },
+            });
             expect(mockPrismaService.ambassador.findFirst).toHaveBeenCalledWith(
                 expect.objectContaining({
                     where: expect.objectContaining({
                         referralCode: 'URO19948',
-                        programId: PROGRAM_ID,
+                        user: { brandId: BRAND_ID },
                     }),
                 }),
             );
             expect(result).toEqual({ valid: true, referredByName: 'Jane Ambassador' });
         });
 
-        it('returns valid:false when the code belongs to a different program', async () => {
-            // The scoped query finds nothing even though the code exists elsewhere.
+        it('returns valid:false when the code belongs to a different brand', async () => {
+            mockPrismaService.program.findUnique.mockResolvedValue({ brandId: BRAND_ID });
+            // The brand-scoped query finds nothing even though the code exists elsewhere.
             mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
 
             const result = await handler.execute(new ResolveReferralAttributionQuery('URO19948', PROGRAM_ID));
@@ -83,13 +93,23 @@ describe('ResolveReferralAttributionHandler', () => {
             expect(result).toEqual({ valid: false, referredByName: null });
         });
 
+        it('returns valid:false when the supplied program does not exist, without calling ambassador.findFirst', async () => {
+            mockPrismaService.program.findUnique.mockResolvedValue(null);
+
+            const result = await handler.execute(new ResolveReferralAttributionQuery('URO19948', PROGRAM_ID));
+
+            expect(result).toEqual({ valid: false, referredByName: null });
+            expect(mockPrismaService.ambassador.findFirst).not.toHaveBeenCalled();
+        });
+
         it('stays unscoped when no program is supplied, rather than guessing one', async () => {
             mockPrismaService.ambassador.findFirst.mockResolvedValue({ fullName: 'Jane Ambassador' });
 
             await handler.execute(new ResolveReferralAttributionQuery('URO19948'));
 
+            expect(mockPrismaService.program.findUnique).not.toHaveBeenCalled();
             const [[arg]] = mockPrismaService.ambassador.findFirst.mock.calls;
-            expect(arg.where.programId).toBeUndefined();
+            expect(arg.where.user).toBeUndefined();
         });
 
         it('ignores a blank program instead of scoping to an empty string', async () => {
@@ -97,8 +117,9 @@ describe('ResolveReferralAttributionHandler', () => {
 
             await handler.execute(new ResolveReferralAttributionQuery('URO19948', '   '));
 
+            expect(mockPrismaService.program.findUnique).not.toHaveBeenCalled();
             const [[arg]] = mockPrismaService.ambassador.findFirst.mock.calls;
-            expect(arg.where.programId).toBeUndefined();
+            expect(arg.where.user).toBeUndefined();
         });
     });
 

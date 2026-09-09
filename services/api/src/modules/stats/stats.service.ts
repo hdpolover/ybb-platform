@@ -353,13 +353,18 @@ export class StatsService {
       this.readPrisma.ambassador.count({
         where: { programId, isActive: true, deletedAt: null },
       }),
+      // Counts referrals ATTRIBUTED TO this program (referral.programId), not
+      // referrals made by ambassadors whose home programme happens to be
+      // this one. An ambassador's brand-wide code can be used by
+      // participants applying to a different programme in the same brand,
+      // so joining through ambassador.programId here would both miss
+      // referrals attributed to this program by an ambassador homed
+      // elsewhere and wrongly include this ambassador's referrals to OTHER
+      // programmes.
       this.readPrisma.ambassadorReferral.count({
         where: {
           deletedAt: null,
-          ambassador: {
-            programId,
-            deletedAt: null,
-          },
+          programId,
         },
       }),
       this.readPrisma.ambassador.findMany({
@@ -369,9 +374,15 @@ export class StatsService {
           institution: true,
           successfulReferrals: true,
           totalReferrals: true,
+          // successfulReferrals/totalReferrals above stay ambassador-level
+          // aggregates across every programme (by design — an ambassador's
+          // brand-wide performance). This _count is scoped to THIS
+          // program's referrals specifically, so it can stand in as a floor
+          // for the leaderboard below without pulling in referrals this
+          // ambassador made for a different programme.
           _count: {
             select: {
-              referrals: true,
+              referrals: { where: { programId } },
             },
           },
           user: {

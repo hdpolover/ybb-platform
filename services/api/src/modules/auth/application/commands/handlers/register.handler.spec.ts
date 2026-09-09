@@ -153,11 +153,12 @@ describe('RegisterHandler', () => {
             create: mockPrismaService.participant.create,
           },
         },
-        createAmbassadorReferral: async ({ participantId, ambassadorId }: { participantId: string; ambassadorId: string }) =>
+        createAmbassadorReferral: async ({ participantId, ambassadorId, programId }: { participantId: string; ambassadorId: string; programId: string }) =>
           mockPrismaService.ambassadorReferral.create({
             data: {
               ambassadorId,
               participantId,
+              programId,
               status: 'referred',
             },
           }),
@@ -263,17 +264,20 @@ describe('RegisterHandler', () => {
         expect(createArgs.data.email).toBe('test@example.com');
         
         // Verify Referral Lookup skips soft-deleted ambassadors and is scoped to the
-        // program being registered for — an ambassador must not earn credit for a
-        // referral into a program they are not an ambassador of.
+        // BRAND being registered under — an ambassador holds one brand-wide code, so
+        // a referral must not earn credit for a participant registering under a
+        // different brand.
         expect(mockPrismaService.ambassador.findFirst).toHaveBeenCalledWith({
-            where: { referralCode: 'REFCODE', deletedAt: null, programId: 'program-id-123' },
+            where: { referralCode: 'REFCODE', deletedAt: null, user: { brandId: 'category-id-123' } },
         });
 
-        // Verify Referral Tracking
+        // Verify Referral Tracking — attributed to the target program resolved for
+        // this registration.
         expect(mockPrismaService.ambassadorReferral.create).toHaveBeenCalledWith({
             data: {
                 ambassadorId: 'ambassador-id-123',
                 participantId: 'participant-id-123',
+                programId: 'program-id-123',
                 status: 'referred',
             }
         });

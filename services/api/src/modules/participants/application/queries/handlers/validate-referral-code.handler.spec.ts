@@ -12,6 +12,9 @@ describe('ValidateReferralCodeHandler', () => {
         ambassador: {
             findFirst: jest.fn(),
         },
+        program: {
+            findUnique: jest.fn(),
+        },
     };
 
     beforeEach(async () => {
@@ -76,26 +79,33 @@ describe('ValidateReferralCodeHandler', () => {
         expect(JSON.stringify(result)).not.toContain('amb-1');
     });
 
-    describe('program scoping', () => {
+    describe('brand scoping (via programId)', () => {
         const PROGRAM_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+        const BRAND_ID = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
 
-        it('scopes the lookup to the program when one is supplied', async () => {
+        it('resolves the program to its brand and scopes the lookup to it', async () => {
+            mockPrismaService.program.findUnique.mockResolvedValue({ brandId: BRAND_ID });
             mockPrismaService.ambassador.findFirst.mockResolvedValue({ id: 'amb-1' });
 
             await handler.execute(new ValidateReferralCodeQuery('URO19948', PROGRAM_ID));
 
+            expect(mockPrismaService.program.findUnique).toHaveBeenCalledWith({
+                where: { id: PROGRAM_ID },
+                select: { brandId: true },
+            });
             expect(mockPrismaService.ambassador.findFirst).toHaveBeenCalledWith(
                 expect.objectContaining({
                     where: expect.objectContaining({
                         referralCode: 'URO19948',
-                        programId: PROGRAM_ID,
+                        user: { brandId: BRAND_ID },
                     }),
                 }),
             );
         });
 
-        it('rejects a real code that belongs to a different program', async () => {
-            // The scoped query finds nothing even though the code exists elsewhere.
+        it('rejects a real code that belongs to a different brand', async () => {
+            mockPrismaService.program.findUnique.mockResolvedValue({ brandId: BRAND_ID });
+            // The brand-scoped query finds nothing even though the code exists elsewhere.
             mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
 
             await expect(
@@ -103,13 +113,23 @@ describe('ValidateReferralCodeHandler', () => {
             ).rejects.toThrow(NotFoundException);
         });
 
+        it('rejects when the supplied program does not exist, without calling ambassador.findFirst', async () => {
+            mockPrismaService.program.findUnique.mockResolvedValue(null);
+
+            await expect(
+                handler.execute(new ValidateReferralCodeQuery('URO19948', PROGRAM_ID)),
+            ).rejects.toThrow(NotFoundException);
+            expect(mockPrismaService.ambassador.findFirst).not.toHaveBeenCalled();
+        });
+
         it('stays unscoped when no program is supplied, rather than guessing one', async () => {
             mockPrismaService.ambassador.findFirst.mockResolvedValue({ id: 'amb-1' });
 
             await handler.execute(new ValidateReferralCodeQuery('URO19948'));
 
+            expect(mockPrismaService.program.findUnique).not.toHaveBeenCalled();
             const [[arg]] = mockPrismaService.ambassador.findFirst.mock.calls;
-            expect(arg.where.programId).toBeUndefined();
+            expect(arg.where.user).toBeUndefined();
         });
 
         it('ignores a blank program instead of scoping to an empty string', async () => {
@@ -117,8 +137,9 @@ describe('ValidateReferralCodeHandler', () => {
 
             await handler.execute(new ValidateReferralCodeQuery('URO19948', '   '));
 
+            expect(mockPrismaService.program.findUnique).not.toHaveBeenCalled();
             const [[arg]] = mockPrismaService.ambassador.findFirst.mock.calls;
-            expect(arg.where.programId).toBeUndefined();
+            expect(arg.where.user).toBeUndefined();
         });
     });
 });
