@@ -1,0 +1,34 @@
+-- Audit 2026-09-02 backlog: Correctness: races (M59 / M48)
+--
+-- ensure-portal-payment-invoice.handler.ts does findFirst-then-create on
+-- (application_id, pricing_tier_id) with no unique constraint backing it, so
+-- two concurrent clicks on the same payment option (double-tap, double tab)
+-- can both pass the findFirst check and both create an 'unpaid' invoice for
+-- the same tier.
+--
+-- Predicate choice - WHERE status IN ('unpaid', 'processing'), 'paid'
+-- deliberately excluded:
+--   The other unguarded creator of an ApplicationInvoice row is
+--   payment-events.controller.ts processApplicationPayment (the create
+--   branch around line 740), which inserts a 'paid' row for
+--   (application.id, application.pricingTierId) when a payment.succeeded
+--   event carries no existingInvoiceId/existingByRef match. If the index
+--   covered 'paid' as well, that is a live payment-settlement code path,
+--   not a rare double-click - a duplicate real payment there (rare, but
+--   real: two gateway captures settling for the same tier) would abort the
+--   webhook transaction with P2002 instead of recording the money. Excluding
+--   'paid' keeps the constraint scoped to the actual race (concurrent
+--   ensure-invoice calls minting duplicate UNPAID rows) without touching the
+--   payment-settlement path at all.
+--
+-- NULL pricing_tier_id: application_invoices.pricing_tier_id is NOT NULL at
+-- the DB level (see 20260125131457_restructure_applications_payments_v2 and
+-- the FK added in the same migration; never altered nullable since) and the
+-- Prisma schema agrees (`pricingTierId String`, no `?`). There is therefore
+-- no NULL-pricing-tier-id case for this index to special-case - a plain
+-- composite partial index is sufficient, and Postgres's "NULL is never equal
+-- to NULL" unique-index behavior is moot here since the column cannot be
+-- NULL in the first place.
+CREATE UNIQUE INDEX IF NOT EXISTS "application_invoices_application_tier_unpaid_key"
+ON "application_invoices" ("application_id", "pricing_tier_id")
+WHERE "status" IN ('unpaid', 'processing');

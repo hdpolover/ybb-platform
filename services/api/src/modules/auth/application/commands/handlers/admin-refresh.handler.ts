@@ -179,14 +179,38 @@ export class AdminRefreshHandler {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    await this.prisma.userSession.update({
-      where: { id: session.id },
+    // Rotate atomically, guarded on the refreshToken this request presented
+    // (not just the session id): find-then-update let two tabs refreshing at
+    // nearly the same instant both pass the findFirst above and both write,
+    // last write wins, so the loser silently carried a now-dead refreshToken
+    // until it happened to refresh again. updateMany + a refreshToken guard
+    // in the where clause makes only ONE of the two writes succeed.
+    //
+    // count === 0 means someone else already rotated this session between
+    // our findFirst read and this write - fail closed with the same
+    // "Refresh session is not valid" 401 as any other invalid/reused refresh
+    // token. There is no reuse-detection / session-revocation cascade
+    // elsewhere in this codebase for this to weaken (grep confirms this is
+    // the only userSession refresh-token rotation site); sibling writers
+    // (reset-password.handler.ts, logout.handler.ts) already guard their
+    // updateMany with a predicate the same way. Tolerating count===0 instead
+    // (silently returning the OLD tokens) would let the loser keep operating
+    // on a refreshToken the DB no longer recognizes, deferring the same
+    // logout to its own next refresh with no way for the client to tell the
+    // difference from a genuine expiry - deterministic-now is strictly
+    // better than probabilistic-later for an auth surface.
+    const rotated = await this.prisma.userSession.updateMany({
+      where: { id: session.id, refreshToken },
       data: {
         refreshToken: nextRefreshToken,
         expiresAt,
         lastActivity: new Date(),
       },
     });
+
+    if (rotated.count === 0) {
+      throw new UnauthorizedException('Refresh session is not valid');
+    }
 
     const accessScope = getAdminProgramAccessScope(user.admin);
     const accessiblePrograms = accessScope === 'assigned'

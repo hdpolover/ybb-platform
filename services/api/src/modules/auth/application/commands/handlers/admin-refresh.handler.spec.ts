@@ -76,3 +76,105 @@ describe('AdminRefreshHandler - only a refresh token may refresh', () => {
     expect(prisma.userSession.findFirst).not.toHaveBeenCalled();
   });
 });
+
+describe('AdminRefreshHandler - rotation is a guarded updateMany, not find-then-update (M132)', () => {
+  let handler: AdminRefreshHandler;
+
+  const fullSession = {
+    id: 'session-row-1',
+    sessionToken: 'session-token-1',
+    user: {
+      id: 'user-1',
+      email: 'admin@example.com',
+      brandId: 'brand-1',
+      isActive: true,
+      isOnboardingCompleted: true,
+      admin: {
+        id: 'admin-1',
+        fullName: 'Admin One',
+        avatarUrl: null,
+        roleId: null,
+        role: null,
+        // accessLevel 5 -> 'platform' scope, the branch that queries
+        // program.findMany rather than mapping adminPrograms — keeps this
+        // fixture minimal (see ADMIN_SCOPE_FIXTURES for why the 'assigned'
+        // scope needs a much heavier fixture this test does not need).
+        accessLevel: 5,
+        customPermissions: null,
+        canManageAdmins: false,
+        canAssignRoles: false,
+        adminBrands: [],
+        adminPrograms: [],
+      },
+    },
+  };
+
+  const prisma = {
+    userSession: { findFirst: jest.fn(), updateMany: jest.fn() },
+    program: { findMany: jest.fn() },
+  };
+  const jwtService = { verify: jest.fn(), sign: jest.fn(() => 'signed-token') };
+  const configService = { get: jest.fn((_key: string, fallback?: string) => fallback) };
+
+  const validClaims = {
+    sub: 'user-1',
+    email: 'admin@example.com',
+    brandId: 'brand-1',
+    adminId: 'admin-1',
+    sid: 'session-token-1',
+    isAdmin: true,
+    type: 'refresh' as const,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jwtService.verify.mockReturnValue(validClaims);
+    prisma.userSession.findFirst.mockResolvedValue(fullSession);
+    prisma.program.findMany.mockResolvedValue([]);
+    handler = new AdminRefreshHandler(
+      prisma as unknown as PrismaService,
+      jwtService as unknown as JwtService,
+      configService as unknown as ConfigService,
+    );
+  });
+
+  it('rotates via updateMany guarded on BOTH session id and the presented refreshToken', async () => {
+    prisma.userSession.updateMany.mockResolvedValue({ count: 1 });
+
+    await handler.execute('presented-refresh-token');
+
+    expect(prisma.userSession.updateMany).toHaveBeenCalledWith({
+      where: { id: 'session-row-1', refreshToken: 'presented-refresh-token' },
+      data: expect.objectContaining({ refreshToken: 'signed-token' }),
+    });
+    // A plain update-by-id (no refreshToken predicate) is exactly the bug:
+    // it would let a second concurrent refresh silently overwrite the first.
+    expect(prisma.userSession.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'session-row-1' } }),
+    );
+  });
+
+  it('takes the count===0 path (fails closed with 401) when a concurrent refresh already rotated the token', async () => {
+    // Simulates two tabs refreshing at once: this request's updateMany finds
+    // zero matching rows because the OTHER request's write already changed
+    // refreshToken out from under the where clause's guard.
+    prisma.userSession.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(handler.execute('presented-refresh-token')).rejects.toThrow(
+      'Refresh session is not valid',
+    );
+
+    // Must not proceed to build/return a token pair off a rotation that lost
+    // the race — no accessible-programs lookup, no successful response.
+    expect(prisma.program.findMany).not.toHaveBeenCalled();
+  });
+
+  it('proceeds normally and returns a token pair when the rotation wins the race (count===1)', async () => {
+    prisma.userSession.updateMany.mockResolvedValue({ count: 1 });
+
+    const result = await handler.execute('presented-refresh-token');
+
+    expect(result.accessToken).toBe('signed-token');
+    expect(result.refreshToken).toBe('signed-token');
+  });
+});

@@ -92,14 +92,32 @@ export class PortalSubmitApplicationHandler {
         // Validate registration fee via shared gate (applies to all categories).
         await this.registrationFeeGate.assertRegistrationFeePaid(application.id);
 
-        // Submit the application
-        await this.prisma.participantApplication.update({
-            where: { id: application.id },
+        // Submit the application. Guarded on status: 'draft' so a double-tapped
+        // Submit (or two tabs) can't both pass the draft check above and both
+        // write - only the first writer's updateMany actually matches a row.
+        const submitResult = await this.prisma.participantApplication.updateMany({
+            where: { id: application.id, status: 'draft' },
             data: {
                 status: 'submitted',
                 submittedAt: new Date(),
             },
         });
+
+        if (submitResult.count === 0) {
+            // Someone else (the other half of the double-tap/two-tab race)
+            // already flipped this application to submitted between our status
+            // check above and this write. The application genuinely IS
+            // submitted - the existing contract for a double-submit is "both
+            // requests report success" (see M69 audit note), not an error - so
+            // return the same success shape without re-stamping submittedAt or
+            // re-running the referral/funnel side effects a second time.
+            await this.invalidateCaches(userId, participant.id);
+            return {
+                success: true,
+                applicationId: application.id,
+                status: 'submitted',
+            };
+        }
 
         await this.invalidateCaches(userId, participant.id);
 

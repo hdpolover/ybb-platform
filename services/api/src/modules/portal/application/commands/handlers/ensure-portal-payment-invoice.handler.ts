@@ -3,7 +3,7 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
-import { ApplicationCategory } from '@prisma/client';
+import { ApplicationCategory, Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
@@ -12,6 +12,22 @@ import { EnsurePortalPaymentInvoiceCommand } from '../../queries/portal-queries'
 import { EnsurePortalPaymentInvoiceResponseDto } from '../../../presentation/dto/portal-payment.dto';
 import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
+import { targetFieldsOf } from '@shared/utils/prisma-error.util';
+
+/**
+ * True when `error` is the P2002 raised by
+ * application_invoices_application_tier_unpaid_key (Audit M59/M48 - see the
+ * migration for the full predicate rationale) specifically, i.e. two
+ * concurrent ensure-invoice calls for the same (applicationId, pricingTierId)
+ * both passed the findFirst check above and lost the race to insert first.
+ * Any other P2002 is a different constraint and must propagate.
+ */
+function isDuplicateTierInvoiceConflict(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+    if (error.code !== 'P2002') return false;
+    const fields = targetFieldsOf(error);
+    return fields.includes('application_id') && fields.includes('pricing_tier_id');
+}
 
 @Injectable()
 export class EnsurePortalPaymentInvoiceHandler {
@@ -165,19 +181,48 @@ export class EnsurePortalPaymentInvoiceHandler {
             exchangeRateSnapshot = resolveUsdInIdrRate({ programRate: brandSettings?.usdInIdr });
         }
 
-        const invoice = await this.prisma.applicationInvoice.create({
-            data: {
-                applicationId: application.id,
-                pricingTierId: tier.id,
-                amount: canonicalAmount,
-                currency: canonicalCurrency,
-                amountUsd: usdSnapshot,
-                amountIdr: idrSnapshot,
-                status: 'unpaid',
-                exchangeRateSnapshot,
-            },
-            select: { id: true },
-        });
+        // Concurrent clicks/tabs both pass the findFirst above and both reach
+        // this create — that's the M59/M48 race. The partial unique index
+        // application_invoices_application_tier_unpaid_key (application_id,
+        // pricing_tier_id) WHERE status IN ('unpaid', 'processing') makes the
+        // loser's insert fail with P2002 instead of minting a duplicate row;
+        // re-read here and hand the loser the winner's invoice so both callers
+        // get the same, single invoice back rather than one of them 500ing.
+        let invoice: { id: string };
+        try {
+            invoice = await this.prisma.applicationInvoice.create({
+                data: {
+                    applicationId: application.id,
+                    pricingTierId: tier.id,
+                    amount: canonicalAmount,
+                    currency: canonicalCurrency,
+                    amountUsd: usdSnapshot,
+                    amountIdr: idrSnapshot,
+                    status: 'unpaid',
+                    exchangeRateSnapshot,
+                },
+                select: { id: true },
+            });
+        } catch (error) {
+            if (!isDuplicateTierInvoiceConflict(error)) throw error;
+
+            const winner = await this.prisma.applicationInvoice.findFirst({
+                where: {
+                    applicationId: application.id,
+                    pricingTierId: tier.id,
+                },
+                orderBy: { createdAt: 'desc' },
+                select: { id: true },
+            });
+            if (!winner) throw error;
+
+            await this.invalidatePortalPaymentCaches(userId, application.programId, winner.id);
+            return {
+                invoice_id: winner.id,
+                source: 'existing',
+                message: 'Invoice is ready',
+            };
+        }
 
         await this.invalidatePortalPaymentCaches(userId, application.programId, invoice.id);
 

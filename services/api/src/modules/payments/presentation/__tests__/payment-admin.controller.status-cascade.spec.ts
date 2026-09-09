@@ -20,7 +20,7 @@ describe('PaymentAdminController.updateInvoiceStatus — Go cascade parity', () 
     let controller: PaymentAdminController;
     let mockGatewayClient: { voidTransaction: jest.Mock };
     let mockPrisma: {
-        applicationInvoice: { findUnique: jest.Mock; findFirst: jest.Mock; update: jest.Mock };
+        applicationInvoice: { findUnique: jest.Mock; findFirst: jest.Mock; updateMany: jest.Mock };
         participantApplication: { update: jest.Mock };
         $transaction: jest.Mock;
     };
@@ -40,13 +40,22 @@ describe('PaymentAdminController.updateInvoiceStatus — Go cascade parity', () 
         mockGatewayClient = { voidTransaction: jest.fn().mockResolvedValue({ outcome: 'voided', detail: 'ok' }) };
         mockPrisma = {
             applicationInvoice: {
-                findUnique: jest.fn().mockResolvedValue(invoiceRow),
+                // findUnique is called twice: once for the pre-write guard read
+                // (returns invoiceRow, the pre-update status), once inside the
+                // transaction for the post-write refetch (returns the updated
+                // shape) — see updateInvoiceStatus's compare-and-set rewrite.
+                findUnique: jest.fn()
+                    .mockResolvedValueOnce(invoiceRow)
+                    .mockResolvedValue({ ...invoiceRow, status: 'cancelled' }),
                 // No paid sibling by default - see the supersede guard in updateInvoiceStatus.
                 findFirst: jest.fn().mockResolvedValue(null),
-                update: jest.fn().mockResolvedValue({ ...invoiceRow, status: 'cancelled' }),
+                updateMany: jest.fn().mockResolvedValue({ count: 1 }),
             },
             participantApplication: { update: jest.fn().mockResolvedValue({}) },
-            $transaction: jest.fn().mockImplementation((ops: unknown[]) => Promise.all(ops)),
+            // updateInvoiceStatus uses the interactive callback form so it can
+            // read updateMany's count before deciding whether to also write
+            // participantApplication — see the M160 compare-and-set fix.
+            $transaction: jest.fn().mockImplementation((cb: (tx: unknown) => unknown) => cb(mockPrisma)),
         };
 
         const module: TestingModule = await Test.createTestingModule({
@@ -113,7 +122,7 @@ describe('PaymentAdminController.updateInvoiceStatus — Go cascade parity', () 
 
     it('passes isManual=true to voidTransaction for a manual_transfer invoice, allowing a settled manual approval to be reversed', async () => {
         const manualInvoice = { ...invoiceRow, status: 'paid', paymentMethod: 'manual_transfer' };
-        mockPrisma.applicationInvoice.findUnique.mockResolvedValue(manualInvoice);
+        mockPrisma.applicationInvoice.findUnique.mockReset().mockResolvedValue(manualInvoice);
         mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'voided', detail: 'ok' });
 
         await expect(
@@ -125,7 +134,7 @@ describe('PaymentAdminController.updateInvoiceStatus — Go cascade parity', () 
 
     it('still throws BadRequestException for a real gateway (non-manual) SUCCESS transaction (danger_settled) — regression guard', async () => {
         const gatewayInvoice = { ...invoiceRow, status: 'paid', paymentMethod: 'xendit_va' };
-        mockPrisma.applicationInvoice.findUnique.mockResolvedValue(gatewayInvoice);
+        mockPrisma.applicationInvoice.findUnique.mockReset().mockResolvedValue(gatewayInvoice);
         mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'danger_settled', detail: 'SUCCESS at gateway' });
 
         await expect(
@@ -143,7 +152,7 @@ describe('PaymentAdminController.updateInvoiceStatus — Go cascade parity', () 
     // stays SUCCESS (un-enrolling a paid participant).
     it('passes isManual=false for a real gateway bank_transfer SUCCESS (must not be treated as manual)', async () => {
         const bankTransferInvoice = { ...invoiceRow, status: 'paid', paymentMethod: 'bank_transfer' };
-        mockPrisma.applicationInvoice.findUnique.mockResolvedValue(bankTransferInvoice);
+        mockPrisma.applicationInvoice.findUnique.mockReset().mockResolvedValue(bankTransferInvoice);
         mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'danger_settled', detail: 'SUCCESS at gateway' });
 
         await expect(
@@ -161,7 +170,7 @@ describe('PaymentAdminController.updateInvoiceStatus — receipt email on non-pa
     let mockRabbitmq: { emit: jest.Mock };
     let loggerWarnSpy: jest.SpyInstance;
     let mockPrisma: {
-        applicationInvoice: { findUnique: jest.Mock; findFirst: jest.Mock; update: jest.Mock };
+        applicationInvoice: { findUnique: jest.Mock; findFirst: jest.Mock; updateMany: jest.Mock };
         participantApplication: { update: jest.Mock };
         $transaction: jest.Mock;
     };
@@ -213,13 +222,19 @@ describe('PaymentAdminController.updateInvoiceStatus — receipt email on non-pa
         mockRabbitmq = { emit: jest.fn() };
         mockPrisma = {
             applicationInvoice: {
-                findUnique: jest.fn().mockResolvedValue(baseInvoiceRow),
+                // First call = the pre-write guard read (pre-update status).
+                // Second call = the post-updateMany refetch inside the
+                // transaction, which needs the deep include shape the email
+                // logic below reads from.
+                findUnique: jest.fn()
+                    .mockResolvedValueOnce(baseInvoiceRow)
+                    .mockResolvedValue(buildUpdatedInvoice('participant@example.com')),
                 // No paid sibling by default - see the supersede guard in updateInvoiceStatus.
                 findFirst: jest.fn().mockResolvedValue(null),
-                update: jest.fn().mockResolvedValue(buildUpdatedInvoice('participant@example.com')),
+                updateMany: jest.fn().mockResolvedValue({ count: 1 }),
             },
             participantApplication: { update: jest.fn().mockResolvedValue({}) },
-            $transaction: jest.fn().mockImplementation((ops: unknown[]) => Promise.all(ops)),
+            $transaction: jest.fn().mockImplementation((cb: (tx: unknown) => unknown) => cb(mockPrisma)),
         };
 
         const module: TestingModule = await Test.createTestingModule({
@@ -266,7 +281,10 @@ describe('PaymentAdminController.updateInvoiceStatus — receipt email on non-pa
     });
 
     it('emits nothing on a paid -> paid (redundant/no-op) transition', async () => {
-        mockPrisma.applicationInvoice.findUnique.mockResolvedValue({ ...baseInvoiceRow, status: 'paid' });
+        // Both the guard read AND the refetch must report 'paid' here — the
+        // no-op assertion is specifically about priorStatus (from the guard
+        // read) already being 'paid', not about the refetch shape.
+        mockPrisma.applicationInvoice.findUnique.mockReset().mockResolvedValue({ ...baseInvoiceRow, status: 'paid' });
 
         await controller.updateInvoiceStatus(
             baseInvoiceRow.id,
@@ -278,7 +296,11 @@ describe('PaymentAdminController.updateInvoiceStatus — receipt email on non-pa
     });
 
     it('does not throw, does not emit, and logs a warn when the participant has no email', async () => {
-        mockPrisma.applicationInvoice.update.mockResolvedValue(buildUpdatedInvoice(null));
+        // Guard read keeps the beforeEach default (baseInvoiceRow, 'processing');
+        // only the post-write refetch needs the no-email shape.
+        mockPrisma.applicationInvoice.findUnique.mockReset()
+            .mockResolvedValueOnce(baseInvoiceRow)
+            .mockResolvedValue(buildUpdatedInvoice(null));
 
         await expect(
             controller.updateInvoiceStatus(

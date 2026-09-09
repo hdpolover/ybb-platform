@@ -4,10 +4,19 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { normalizePhoneCountryCode } from '@shared/utils/phone-country-code';
 import { extractAndSanitizePhone } from '@shared/utils/phone-e164';
+import { PrismaTransactionClient } from '@shared/types/prisma-transaction.type';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { SaveSubmissionSectionCommand } from '../../queries/portal-queries';
 import { SubmissionSection } from '../../../presentation/dto/save-submission-section.dto';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
+
+interface LockedApplicationRow {
+    id: string;
+    status: string;
+    personalData: unknown;
+    essayAnswers: unknown;
+    uploadedFiles: unknown;
+}
 
 /**
  * Save Submission Section Handler
@@ -31,35 +40,56 @@ export class SaveSubmissionSectionHandler {
         const participant = await this.portalCacheService.getParticipantProfile(userId);
         if (!participant) throw new NotFoundException('Participant not found');
 
+        // Resolve WHICH application this save targets. The row lock below is
+        // taken by id, so this findFirst only needs to identify the row - the
+        // actual personalData/essayAnswers/uploadedFiles/status used for the
+        // merge come from the locked read inside the transaction, not this one.
         const application = await this.prisma.participantApplication.findFirst({
             where: currentApplicationWhere(participant.id, programId),
             orderBy: currentApplicationOrderBy,
-            select: {
-                id: true,
-                programId: true,
-                status: true,
-                applicationCategory: true,
-                participationCategoryId: true,
-                personalData: true,
-                essayAnswers: true,
-                uploadedFiles: true,
-            },
+            select: { id: true, programId: true },
         });
 
         if (!application) throw new NotFoundException('No active application found');
 
-        if (application.status !== 'draft') {
-            throw new BadRequestException(
-                `Cannot edit application in "${application.status}" status. Only drafts can be edited.`,
-            );
-        }
+        await this.prisma.$transaction(async (tx) => {
+            // Row lock: personalData/essayAnswers/uploadedFiles are @db.Json
+            // columns (not Jsonb), so there is no atomic `jsonb ||` merge
+            // available without a cast that silently reorders keys and drops
+            // duplicates (see audit M4/M61 note on the cast trap). SELECT ...
+            // FOR UPDATE instead: it serializes concurrent saves on the SAME
+            // application row, so the second save's in-memory merge starts
+            // from what the first save just committed, not from its own
+            // now-stale pre-save copy. That stale copy is exactly what
+            // silently dropped fields under two-tab / two-device concurrent
+            // saves before this fix - the merge logic itself is unchanged.
+            const rows = await tx.$queryRaw<LockedApplicationRow[]>`
+                SELECT
+                    id,
+                    status,
+                    personal_data AS "personalData",
+                    essay_answers AS "essayAnswers",
+                    uploaded_files AS "uploadedFiles"
+                FROM participant_applications
+                WHERE id = ${application.id}::uuid
+                FOR UPDATE
+            `;
+            const current = rows[0];
+            if (!current) throw new NotFoundException('No active application found');
 
-        const updateData = this.buildUpdatePayload(section, application, data);
-        await this.applyCategorySelection(updateData, application.programId, data);
+            if (current.status !== 'draft') {
+                throw new BadRequestException(
+                    `Cannot edit application in "${current.status}" status. Only drafts can be edited.`,
+                );
+            }
 
-        await this.prisma.participantApplication.update({
-            where: { id: application.id },
-            data: updateData,
+            const updateData = this.buildUpdatePayload(section, current, data);
+            await this.applyCategorySelection(tx, updateData, application.programId, data);
+
+            await tx.participantApplication.update({
+                where: { id: current.id },
+                data: updateData,
+            });
         });
 
         await this.invalidateCaches(userId);
@@ -223,6 +253,7 @@ export class SaveSubmissionSectionHandler {
     }
 
     private async applyCategorySelection(
+        tx: PrismaTransactionClient,
         updateData: Record<string, unknown>,
         programId: string,
         data: Record<string, unknown>,
@@ -252,7 +283,7 @@ export class SaveSubmissionSectionHandler {
             return;
         }
 
-        const category = await this.prisma.programParticipationCategory.findFirst({
+        const category = await tx.programParticipationCategory.findFirst({
             where: {
                 id: rawCategory,
                 programId,

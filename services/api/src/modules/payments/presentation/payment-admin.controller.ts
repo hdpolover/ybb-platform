@@ -1537,42 +1537,76 @@ export class PaymentAdminController {
             ? { registrationPaymentStatus: body.status }
             : { programPaymentStatus: body.status };
 
-        const [updatedInvoice] = await this.prisma.$transaction([
-            this.prisma.applicationInvoice.update({
-                where: { id },
-                data: updatePayload,
+        // Include shape for the post-write refetch below — kept as one constant
+        // so the compare-and-set write and the read that follows it can't drift
+        // apart into two different invoice shapes.
+        const invoiceInclude = {
+            application: {
                 include: {
-                    application: {
+                    participant: {
                         include: {
-                            participant: {
-                                include: {
-                                    user: {
-                                        select: {
-                                            id: true,
-                                            email: true,
-                                            ambassador: { select: { id: true, referralCode: true, isActive: true, programId: true } },
-                                        },
-                                    },
+                            user: {
+                                select: {
+                                    id: true,
+                                    email: true,
+                                    ambassador: { select: { id: true, referralCode: true, isActive: true, programId: true } },
                                 },
                             },
-                            // Brand needed to build the receipt email's invoice/payments
-                            // links and letterhead when this update transitions to paid —
-                            // see the notification.payment_succeeded emit below.
-                            program: { include: { brand: { include: { settings: true } } } },
                         },
                     },
-                    pricingTier: { select: { id: true, name: true, feeType: true, usdPrice: true, idrPrice: true } },
+                    // Brand needed to build the receipt email's invoice/payments
+                    // links and letterhead when this update transitions to paid —
+                    // see the notification.payment_succeeded emit below.
+                    program: { include: { brand: { include: { settings: true } } } },
                 },
-            }),
-            ...(paidSibling
-                ? []
-                : [
-                      this.prisma.participantApplication.update({
-                          where: { id: invoice.application.id },
-                          data: appPaymentPatch,
-                      }),
-                  ]),
-        ]);
+            },
+            pricingTier: { select: { id: true, name: true, feeType: true, usdPrice: true, idrPrice: true } },
+        } satisfies Prisma.ApplicationInvoiceInclude;
+
+        // Compare-and-set: `invoice.status` above is a read from BEFORE the
+        // gateway void call and the paidSibling lookup, both of which are
+        // awaited network/DB round-trips. A concurrent payment.succeeded event
+        // (or a second admin tab) can settle this invoice in that window; an
+        // unconditional write here would silently clobber whatever that
+        // concurrent writer just set — the M160 bug. Guarding the update on the
+        // status this request actually observed turns that into a detectable
+        // no-op instead. This does not touch which states are terminal or the
+        // manual-transfer void guard above — only the write itself becomes
+        // conditional. Array-form $transaction can't do this: updateMany's
+        // `count` is only known after the whole array has already committed, so
+        // the interactive callback form is required to check it before deciding
+        // whether to also write participantApplication in the same transaction.
+        const updatedInvoice = await this.prisma.$transaction(async (tx) => {
+            const invoiceUpdateResult = await tx.applicationInvoice.updateMany({
+                where: { id, status: invoice.status },
+                data: updatePayload,
+            });
+
+            if (invoiceUpdateResult.count === 0) {
+                return null;
+            }
+
+            if (!paidSibling) {
+                await tx.participantApplication.update({
+                    where: { id: invoice.application.id },
+                    data: appPaymentPatch,
+                });
+            }
+
+            return tx.applicationInvoice.findUnique({ where: { id }, include: invoiceInclude });
+        });
+
+        if (!updatedInvoice) {
+            throw new HttpException(
+                {
+                    message:
+                        'This invoice was changed by another process just now (e.g. a payment just settled).'
+                        + ' Refresh and try again.',
+                    errorCode: 'INVOICE_STATUS_CHANGED',
+                },
+                409,
+            );
+        }
 
         const participantUserId = invoice.application?.participant?.userId;
         if (participantUserId) {

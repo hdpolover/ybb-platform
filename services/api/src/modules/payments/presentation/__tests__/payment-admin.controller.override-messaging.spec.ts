@@ -40,21 +40,29 @@ function invoiceWithNoTransaction() {
 }
 
 function buildMockPrisma(invoice: unknown) {
-    return {
+    const mockPrisma = {
         $queryRaw: jest.fn().mockResolvedValue([]),
         applicationInvoice: {
+            // Called twice by updateInvoiceStatus: the pre-write guard read, and
+            // the post-updateMany refetch inside the transaction. Every test in
+            // this file only asserts on the thrown/resolved shape of the OUTER
+            // error response, not on the refetched invoice's fields, so the same
+            // fixture answering both calls is sufficient here.
             findUnique: jest.fn().mockResolvedValue(invoice),
             // No paid sibling by default - see the supersede guard in updateInvoiceStatus.
             findFirst: jest.fn().mockResolvedValue(null),
-            update: jest.fn().mockResolvedValue(invoice),
+            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
             findMany: jest.fn().mockResolvedValue([]),
         },
         participantApplication: { update: jest.fn().mockResolvedValue({}) },
-        // updateInvoiceStatus uses the array form: const [updatedInvoice] = await $transaction([...])
-        $transaction: jest.fn().mockImplementation(async (ops: unknown) =>
-            Array.isArray(ops) ? ops.map(() => invoice) : [invoice],
+        // updateInvoiceStatus uses the interactive callback form so it can read
+        // updateMany's count before deciding whether to also write
+        // participantApplication — see the M160 compare-and-set fix.
+        $transaction: jest.fn((cb: unknown) =>
+            typeof cb === 'function' ? (cb as (tx: unknown) => unknown)(mockPrisma) : Promise.resolve(cb),
         ),
     };
+    return mockPrisma;
 }
 
 async function buildController(mockPrisma: ReturnType<typeof buildMockPrisma>) {

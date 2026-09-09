@@ -9,11 +9,25 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 describe('SaveSubmissionSectionHandler', () => {
     let handler: SaveSubmissionSectionHandler;
 
+    // tx is a disjoint object from mockPrisma (never `cb(mockPrisma)`) so that
+    // "was this call routed through the row-locked transaction" and "did the
+    // outer client see this call" stay independently observable - see
+    // test/utils/prisma-tx-mock.ts's docstring for why that separation matters.
+    const mockTx = {
+        $queryRaw: jest.fn(),
+        participantApplication: {
+            update: jest.fn(),
+        },
+        programParticipationCategory: {
+            findFirst: jest.fn(),
+        },
+    };
+
     const mockPrisma = {
         participantApplication: {
             findFirst: jest.fn(),
-            update: jest.fn(),
         },
+        $transaction: jest.fn((cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx)),
     };
 
     const mockCacheService = {
@@ -24,6 +38,31 @@ describe('SaveSubmissionSectionHandler', () => {
     const mockPortalCacheService = {
         getParticipantProfile: jest.fn(),
     };
+
+    /**
+     * Wires the locked-row read (`tx.$queryRaw ... FOR UPDATE`) to return the
+     * given personalData/essayAnswers/uploadedFiles/status. This is the row
+     * the merge and the guard-rail checks actually operate on post-fix, so
+     * every test that used to seed `findFirst` with these fields now seeds
+     * this instead.
+     */
+    function mockLockedRow(row: {
+        id?: string;
+        status?: string;
+        personalData?: unknown;
+        essayAnswers?: unknown;
+        uploadedFiles?: unknown;
+    }) {
+        mockTx.$queryRaw.mockResolvedValue([
+            {
+                id: row.id ?? 'app-1',
+                status: row.status ?? 'draft',
+                personalData: row.personalData ?? {},
+                essayAnswers: row.essayAnswers ?? {},
+                uploadedFiles: row.uploadedFiles ?? {},
+            },
+        ]);
+    }
 
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
@@ -37,6 +76,8 @@ describe('SaveSubmissionSectionHandler', () => {
 
         handler = module.get<SaveSubmissionSectionHandler>(SaveSubmissionSectionHandler);
         jest.clearAllMocks();
+        mockPrisma.$transaction.mockImplementation((cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx));
+        mockTx.participantApplication.update.mockResolvedValue({});
     });
 
     // The rule itself is unit-tested in current-application.query.spec.ts, but
@@ -72,15 +113,8 @@ describe('SaveSubmissionSectionHandler', () => {
             userId: 'user-1',
         });
 
-        mockPrisma.participantApplication.findFirst.mockResolvedValue({
-            id: 'app-1',
-            status: 'draft',
-            personalData: { country: 'Indonesia' },
-            essayAnswers: {},
-            uploadedFiles: {},
-        });
-
-        mockPrisma.participantApplication.update.mockResolvedValue({});
+        mockPrisma.participantApplication.findFirst.mockResolvedValue({ id: 'app-1', programId: null });
+        mockLockedRow({ personalData: { country: 'Indonesia' } });
 
         const result = await handler.execute(
             new SaveSubmissionSectionCommand('user-1', 'personal_info', {
@@ -93,7 +127,7 @@ describe('SaveSubmissionSectionHandler', () => {
         expect(result.section).toBe('personal_info');
 
         // Verify merge behavior — existing country should be preserved
-        expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+        expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
             where: { id: 'app-1' },
             data: {
                 personalData: {
@@ -111,15 +145,8 @@ describe('SaveSubmissionSectionHandler', () => {
             userId: 'user-1',
         });
 
-        mockPrisma.participantApplication.findFirst.mockResolvedValue({
-            id: 'app-1',
-            status: 'draft',
-            personalData: {},
-            essayAnswers: { 'essay-1': 'Previous answer' },
-            uploadedFiles: {},
-        });
-
-        mockPrisma.participantApplication.update.mockResolvedValue({});
+        mockPrisma.participantApplication.findFirst.mockResolvedValue({ id: 'app-1', programId: null });
+        mockLockedRow({ essayAnswers: { 'essay-1': 'Previous answer' } });
 
         const result = await handler.execute(
             new SaveSubmissionSectionCommand('user-1', 'essays', {
@@ -128,7 +155,7 @@ describe('SaveSubmissionSectionHandler', () => {
         );
 
         expect(result.success).toBe(true);
-        expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+        expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
             where: { id: 'app-1' },
             data: {
                 essayAnswers: {
@@ -156,19 +183,15 @@ describe('SaveSubmissionSectionHandler', () => {
             id: 'participant-1',
         });
 
-        mockPrisma.participantApplication.findFirst.mockResolvedValue({
-            id: 'app-1',
-            status: 'submitted',
-            personalData: {},
-            essayAnswers: {},
-            uploadedFiles: {},
-        });
+        mockPrisma.participantApplication.findFirst.mockResolvedValue({ id: 'app-1', programId: null });
+        mockLockedRow({ status: 'submitted' });
 
         await expect(
             handler.execute(
                 new SaveSubmissionSectionCommand('user-1', 'personal_info', {}),
             ),
         ).rejects.toThrow(BadRequestException);
+        expect(mockTx.participantApplication.update).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when no participant found', async () => {
@@ -186,15 +209,8 @@ describe('SaveSubmissionSectionHandler', () => {
             id: 'participant-1',
         });
 
-        mockPrisma.participantApplication.findFirst.mockResolvedValue({
-            id: 'app-1',
-            status: 'draft',
-            personalData: {},
-            essayAnswers: {},
-            uploadedFiles: {},
-        });
-
-        mockPrisma.participantApplication.update.mockResolvedValue({});
+        mockPrisma.participantApplication.findFirst.mockResolvedValue({ id: 'app-1', programId: null });
+        mockLockedRow({});
 
         await handler.execute(
             new SaveSubmissionSectionCommand('user-1', 'personal_info', {}),
@@ -211,15 +227,8 @@ describe('SaveSubmissionSectionHandler', () => {
             userId: 'user-1',
         });
 
-        mockPrisma.participantApplication.findFirst.mockResolvedValue({
-            id: 'app-1',
-            status: 'draft',
-            personalData: {},
-            essayAnswers: {},
-            uploadedFiles: {},
-        });
-
-        mockPrisma.participantApplication.update.mockResolvedValue({});
+        mockPrisma.participantApplication.findFirst.mockResolvedValue({ id: 'app-1', programId: null });
+        mockLockedRow({});
 
         await handler.execute(
             new SaveSubmissionSectionCommand('user-1', 'contact_information', {
@@ -228,7 +237,7 @@ describe('SaveSubmissionSectionHandler', () => {
             }),
         );
 
-        expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+        expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
             where: { id: 'app-1' },
             data: {
                 personalData: {
@@ -239,6 +248,82 @@ describe('SaveSubmissionSectionHandler', () => {
         });
     });
 
+    // ── the race this handler exists to close ─────────────────────────────
+
+    describe('concurrent-save row lock (M61)', () => {
+        it('takes the row lock via SELECT ... FOR UPDATE inside the transaction, scoped to the resolved application id', async () => {
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+                id: 'participant-1',
+                userId: 'user-1',
+            });
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({ id: 'app-1', programId: null });
+            mockLockedRow({});
+
+            await handler.execute(new SaveSubmissionSectionCommand('user-1', 'personal_info', {}));
+
+            expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+            expect(mockTx.$queryRaw).toHaveBeenCalledTimes(1);
+            // Tagged-template call: first arg is the strings array, remaining args
+            // are the interpolated values — the locked application id must be one
+            // of them, and the query text must carry FOR UPDATE.
+            const [strings, ...values] = mockTx.$queryRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+            expect(strings.join('')).toContain('FOR UPDATE');
+            expect(values).toContain('app-1');
+        });
+
+        // This is the regression test for the bug itself: it proves the merge
+        // uses the value the row lock just read, not a stale value captured
+        // before the lock. Without the fix (findFirst outside any transaction,
+        // no lock), a handler reading `application.personalData` from an EARLIER
+        // snapshot would merge against `{ nationality: 'stale-snapshot' }` here
+        // and silently drop whatever the concurrent save had just written.
+        it('merges against the value read under the row lock, not any earlier snapshot', async () => {
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+                id: 'participant-1',
+                userId: 'user-1',
+            });
+            // The outer, pre-lock findFirst only resolves the application id in
+            // the fixed implementation — it must carry no personalData for this
+            // test to be meaningful, so if the handler regressed to merging
+            // against THIS call's data instead of the locked read, the assertion
+            // below would fail loudly instead of passing by coincidence.
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({ id: 'app-1', programId: null });
+            // The locked read reflects a concurrent save that landed between the
+            // outer findFirst and this transaction acquiring the lock.
+            mockLockedRow({ personalData: { nationality: 'ID', institution: 'Written by concurrent save' } });
+
+            await handler.execute(
+                new SaveSubmissionSectionCommand('user-1', 'personal_info', { full_name: 'Late Writer' }),
+            );
+
+            expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
+                where: { id: 'app-1' },
+                data: {
+                    personalData: {
+                        nationality: 'ID',
+                        institution: 'Written by concurrent save',
+                        full_name: 'Late Writer',
+                    },
+                },
+            });
+        });
+
+        it('runs the update on the tx client, never on the outer (non-transactional) prisma client', async () => {
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+                id: 'participant-1',
+                userId: 'user-1',
+            });
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({ id: 'app-1', programId: null });
+            mockLockedRow({});
+
+            await handler.execute(new SaveSubmissionSectionCommand('user-1', 'personal_info', {}));
+
+            expect(mockTx.participantApplication.update).toHaveBeenCalled();
+            expect((mockPrisma as unknown as { participantApplication: { update?: jest.Mock } })
+                .participantApplication.update).toBeUndefined();
+        });
+    });
+
     describe('save-time phone normalization', () => {
         it('normalizes a valid national-format phone to E.164 using nationality as the region hint', async () => {
             mockPortalCacheService.getParticipantProfile.mockResolvedValue({
@@ -246,15 +331,8 @@ describe('SaveSubmissionSectionHandler', () => {
                 userId: 'user-1',
             });
 
-            mockPrisma.participantApplication.findFirst.mockResolvedValue({
-                id: 'app-1',
-                status: 'draft',
-                personalData: { nationality: 'PK', full_name: 'Existing Name' },
-                essayAnswers: {},
-                uploadedFiles: {},
-            });
-
-            mockPrisma.participantApplication.update.mockResolvedValue({});
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({ id: 'app-1', programId: null });
+            mockLockedRow({ personalData: { nationality: 'PK', full_name: 'Existing Name' } });
 
             await handler.execute(
                 new SaveSubmissionSectionCommand('user-1', 'contact_information', {
@@ -262,7 +340,7 @@ describe('SaveSubmissionSectionHandler', () => {
                 }),
             );
 
-            expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+            expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
                 where: { id: 'app-1' },
                 data: {
                     personalData: {
@@ -280,15 +358,8 @@ describe('SaveSubmissionSectionHandler', () => {
                 userId: 'user-1',
             });
 
-            mockPrisma.participantApplication.findFirst.mockResolvedValue({
-                id: 'app-1',
-                status: 'draft',
-                personalData: {},
-                essayAnswers: {},
-                uploadedFiles: {},
-            });
-
-            mockPrisma.participantApplication.update.mockResolvedValue({});
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({ id: 'app-1', programId: null });
+            mockLockedRow({});
 
             const result = await handler.execute(
                 new SaveSubmissionSectionCommand('user-1', 'contact_information', {
@@ -297,7 +368,7 @@ describe('SaveSubmissionSectionHandler', () => {
             );
 
             expect(result.success).toBe(true);
-            expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+            expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
                 where: { id: 'app-1' },
                 data: {
                     personalData: { phone: 'abc123' },
@@ -311,15 +382,8 @@ describe('SaveSubmissionSectionHandler', () => {
                 userId: 'user-1',
             });
 
-            mockPrisma.participantApplication.findFirst.mockResolvedValue({
-                id: 'app-1',
-                status: 'draft',
-                personalData: { nationality: 'KZ', country: 'Kazakhstan', institution: 'ABC University' },
-                essayAnswers: {},
-                uploadedFiles: {},
-            });
-
-            mockPrisma.participantApplication.update.mockResolvedValue({});
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({ id: 'app-1', programId: null });
+            mockLockedRow({ personalData: { nationality: 'KZ', country: 'Kazakhstan', institution: 'ABC University' } });
 
             await handler.execute(
                 new SaveSubmissionSectionCommand('user-1', 'contact_information', {
@@ -328,7 +392,7 @@ describe('SaveSubmissionSectionHandler', () => {
                 }),
             );
 
-            expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+            expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
                 where: { id: 'app-1' },
                 data: {
                     personalData: {
@@ -348,15 +412,8 @@ describe('SaveSubmissionSectionHandler', () => {
                 userId: 'user-1',
             });
 
-            mockPrisma.participantApplication.findFirst.mockResolvedValue({
-                id: 'app-1',
-                status: 'draft',
-                personalData: { phone: '+77012345678' },
-                essayAnswers: {},
-                uploadedFiles: {},
-            });
-
-            mockPrisma.participantApplication.update.mockResolvedValue({});
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({ id: 'app-1', programId: null });
+            mockLockedRow({ personalData: { phone: '+77012345678' } });
 
             await handler.execute(
                 new SaveSubmissionSectionCommand('user-1', 'contact_information', {
@@ -364,7 +421,7 @@ describe('SaveSubmissionSectionHandler', () => {
                 }),
             );
 
-            expect(mockPrisma.participantApplication.update).toHaveBeenCalledWith({
+            expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
                 where: { id: 'app-1' },
                 data: {
                     personalData: {

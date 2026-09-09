@@ -18,14 +18,14 @@ describe('PortalSubmitApplicationHandler', () => {
     // `mockPrisma` (outside the transaction's rollback boundary), the
     // `expectNoOuterWrites({ ambassador: mockPrisma.ambassador })` guard below
     // catches it instead of passing either way. Scoped to `ambassador` only
-    // (not the full `mockPrisma`) because `participantApplication.update` is a
-    // *legitimate* outer write here -- the submit-status update happens
+    // (not the full `mockPrisma`) because `participantApplication.updateMany`
+    // is a *legitimate* outer write here -- the submit-status update happens
     // outside the referral transaction by design.
     const { prisma: mockPrisma, tx: mockTx } = makePrismaTxMock(
         {
             participantApplication: {
                 findFirst: jest.fn(),
-                update: jest.fn(),
+                updateMany: jest.fn(),
             },
             applicationInvoice: {
                 findFirst: jest.fn(),
@@ -88,6 +88,9 @@ describe('PortalSubmitApplicationHandler', () => {
         jest.clearAllMocks();
         // Default: gate allows
         mockGateService.assertRegistrationFeePaid.mockResolvedValue(undefined);
+        // Default: the submit write wins the race (count 1) - individual tests
+        // override to {count: 0} to exercise the double-submit path.
+        mockPrisma.participantApplication.updateMany.mockResolvedValue({ count: 1 });
         // Default: $transaction calls the callback with the disjoint tx mock (never
         // the outer mockPrisma -- see makePrismaTxMock's docstring for why).
         mockPrisma.$transaction.mockImplementation((cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx));
@@ -132,7 +135,6 @@ describe('PortalSubmitApplicationHandler', () => {
         it('queries WITHOUT programId scope when command carries no programId', async () => {
             const command: PortalSubmitApplicationCommand = { userId: 'user-1' };
             mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
-            mockPrisma.participantApplication.update.mockResolvedValue({});
 
             await handler.execute(command);
 
@@ -151,7 +153,6 @@ describe('PortalSubmitApplicationHandler', () => {
         it('scopes the query to the given programId when provided', async () => {
             const command: PortalSubmitApplicationCommand = { userId: 'user-1', programId: 'prog-42' };
             mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
-            mockPrisma.participantApplication.update.mockResolvedValue({});
 
             await handler.execute(command);
 
@@ -169,7 +170,6 @@ describe('PortalSubmitApplicationHandler', () => {
             const scopedApp = { ...makeApp(), id: 'app-prog42' };
             // Return the scoped app — the mock honors the where clause we validated above.
             mockPrisma.participantApplication.findFirst.mockResolvedValue(scopedApp);
-            mockPrisma.participantApplication.update.mockResolvedValue({});
 
             const result = await handler.execute(command);
 
@@ -204,7 +204,6 @@ describe('PortalSubmitApplicationHandler', () => {
             mockPrisma.participantApplication.findFirst.mockResolvedValue(
                 makeApp({ applicationDeadline: new Date('2026-08-30T17:00:00.000Z') }),
             );
-            mockPrisma.participantApplication.update.mockResolvedValue({});
             jest.useFakeTimers().setSystemTime(new Date('2026-08-31T16:59:59.999Z'));
 
             const result = await handler.execute({ userId: 'user-1' });
@@ -216,7 +215,6 @@ describe('PortalSubmitApplicationHandler', () => {
             mockPrisma.participantApplication.findFirst.mockResolvedValue(
                 makeApp({ applicationDeadline: null }),
             );
-            mockPrisma.participantApplication.update.mockResolvedValue({});
 
             const result = await handler.execute({ userId: 'user-1' });
 
@@ -230,7 +228,6 @@ describe('PortalSubmitApplicationHandler', () => {
         it('calls the shared gate service for every submission', async () => {
             const command: PortalSubmitApplicationCommand = { userId: 'user-1' };
             mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
-            mockPrisma.participantApplication.update.mockResolvedValue({});
 
             await handler.execute(command);
 
@@ -254,7 +251,6 @@ describe('PortalSubmitApplicationHandler', () => {
             mockGateService.assertRegistrationFeePaid.mockResolvedValue(undefined);
             const command: PortalSubmitApplicationCommand = { userId: 'user-1' };
             mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
-            mockPrisma.participantApplication.update.mockResolvedValue({});
 
             const result = await handler.execute(command);
 
@@ -304,13 +300,59 @@ describe('PortalSubmitApplicationHandler', () => {
         });
     });
 
+    // ── double-submit race (M69) ────────────────────────────────────────────
+
+    describe('double-submit race guard', () => {
+        it('writes the submit transition with a status: draft guard in the where clause', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
+
+            await handler.execute({ userId: 'user-1' });
+
+            expect(mockPrisma.participantApplication.updateMany).toHaveBeenCalledWith({
+                where: { id: 'app-1', status: 'draft' },
+                data: expect.objectContaining({ status: 'submitted' }),
+            });
+        });
+
+        it('treats count===0 as an already-done double-submit: returns success without re-running referral side effects', async () => {
+            // The status check above read 'draft' (a stale read); the write's
+            // guard proves someone else already flipped it to submitted between
+            // that read and this write - the concurrent-submit race itself.
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                makeApp({
+                    personalData: { referralCode: 'ABC123' },
+                    programId: 'program-123',
+                    formFields: [{ name: 'referralCode', label: 'Referral Code', validationRules: {} }],
+                }),
+            );
+            mockPrisma.participantApplication.updateMany.mockResolvedValue({ count: 0 });
+
+            const result = await handler.execute({ userId: 'user-1', programId: 'program-123' });
+
+            // Existing contract for a double-submit: success, not an error.
+            expect(result).toEqual({ success: true, applicationId: 'app-1', status: 'submitted' });
+            // The loser must not re-run the referral transaction or the funnel
+            // advance a second time - the M69 bug was exactly this re-running.
+            expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+            expect(mockReferralFunnel.advanceToApplied).not.toHaveBeenCalled();
+        });
+
+        it('still invalidates caches on the count===0 (already-submitted) path', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
+            mockPrisma.participantApplication.updateMany.mockResolvedValue({ count: 0 });
+
+            await handler.execute({ userId: 'user-1' });
+
+            expect(mockCacheService.invalidatePortalCache).toHaveBeenCalledWith('user-1');
+        });
+    });
+
     // ── cache invalidation ────────────────────────────────────────────────────
 
     describe('cache invalidation', () => {
         it('invalidates all relevant cache keys on success', async () => {
             const command: PortalSubmitApplicationCommand = { userId: 'user-1' };
             mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
-            mockPrisma.participantApplication.update.mockResolvedValue({});
 
             await handler.execute(command);
 
@@ -339,7 +381,6 @@ describe('PortalSubmitApplicationHandler', () => {
                     formFields: referralFormFields,
                 }),
             );
-            mockPrisma.participantApplication.update.mockResolvedValue({});
             mockTx.ambassadorReferral.findFirst.mockResolvedValue(null);
             mockTx.ambassador.findUnique.mockResolvedValue({ id: 'amb-1', referralCode: 'ABC123', isActive: true });
             mockTx.ambassadorReferral.create.mockResolvedValue({});
@@ -379,7 +420,6 @@ describe('PortalSubmitApplicationHandler', () => {
                     formFields: referralFormFields,
                 }),
             );
-            mockPrisma.participantApplication.update.mockResolvedValue({});
             // Existing referral present
             mockTx.ambassadorReferral.findFirst.mockResolvedValue({ id: 'ref-existing' });
 
@@ -398,7 +438,6 @@ describe('PortalSubmitApplicationHandler', () => {
                     formFields: referralFormFields,
                 }),
             );
-            mockPrisma.participantApplication.update.mockResolvedValue({});
             mockTx.ambassadorReferral.findFirst.mockResolvedValue(null);
             // Ambassador not found
             mockTx.ambassador.findUnique.mockResolvedValue(null);
@@ -418,7 +457,6 @@ describe('PortalSubmitApplicationHandler', () => {
                     formFields: [{ name: 'fullName', label: 'Full Name', validationRules: {} }],
                 }),
             );
-            mockPrisma.participantApplication.update.mockResolvedValue({});
 
             const result = await handler.execute(command);
 
@@ -435,7 +473,6 @@ describe('PortalSubmitApplicationHandler', () => {
                     formFields: referralFormFields,
                 }),
             );
-            mockPrisma.participantApplication.update.mockResolvedValue({});
 
             const result = await handler.execute(command);
 
@@ -452,7 +489,6 @@ describe('PortalSubmitApplicationHandler', () => {
                     formFields: referralFormFields,
                 }),
             );
-            mockPrisma.participantApplication.update.mockResolvedValue({});
             // Make $transaction reject to simulate referral linking failure
             mockPrisma.$transaction.mockRejectedValue(new Error('DB error'));
 

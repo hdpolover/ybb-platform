@@ -289,6 +289,14 @@ model ApplicationInvoice {
   //   idx_invoices_status_reconciled_external (status, last_reconciled_at)
   //     WHERE external_intent_id IS NOT NULL OR external_transaction_id IS NOT NULL
   //
+  //   application_invoices_application_tier_unpaid_key
+  //     (application_id, pricing_tier_id) WHERE status IN ('unpaid', 'processing')
+  //     Audit M59/M48: blocks concurrent ensure-invoice calls from minting two
+  //     UNPAID/PROCESSING rows for the same (application, tier). Deliberately
+  //     excludes 'paid' so a real payment-settlement create in
+  //     payment-events.controller.ts can't P2002 on a legitimate duplicate
+  //     capture. See the migration file for the full rationale.
+  //
   // No dedicated @@index([externalIntentId]) / @@index([externalTransactionId]):
   // idx_invoices_external_intent_status (external_intent_id, status) already
   // covers exact-match lookups on externalIntentId alone via leftmost-prefix,

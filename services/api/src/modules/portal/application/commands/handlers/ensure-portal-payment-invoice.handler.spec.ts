@@ -1,9 +1,26 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { EnsurePortalPaymentInvoiceHandler } from './ensure-portal-payment-invoice.handler';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { EnsurePortalPaymentInvoiceCommand } from '../../queries/portal-queries';
+
+// Shape actually observed against this project's real database (Prisma 7.3.0
+// + @prisma/adapter-pg + Postgres, see prisma-error.util.ts's own docstring):
+// meta.driverAdapterError.cause.constraint.fields carries the exact DB column
+// names straight from Postgres's error detail.
+function makeDuplicateTierInvoiceP2002(): Prisma.PrismaClientKnownRequestError {
+    return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+        meta: {
+            driverAdapterError: {
+                cause: { constraint: { fields: ['application_id', 'pricing_tier_id'] } },
+            },
+        } as unknown as Record<string, unknown>,
+    });
+}
 
 describe('EnsurePortalPaymentInvoiceHandler', () => {
     let handler: EnsurePortalPaymentInvoiceHandler;
@@ -149,5 +166,88 @@ describe('EnsurePortalPaymentInvoiceHandler', () => {
             },
             select: { id: true },
         });
+    });
+
+    // M59/M48: this handler is findFirst-then-create with no lock, so two
+    // concurrent clicks/tabs both pass the findFirst above and both reach
+    // create(). Without the partial unique index + this catch, the LOSER's
+    // create() would throw P2002 straight out of execute() as an unhandled
+    // 500 (or, before the index existed at all, would have silently minted a
+    // second 'unpaid' invoice for the same tier). This test pins the fix: a
+    // P2002 on the (application_id, pricing_tier_id) constraint must be
+    // swallowed and resolved to the winner's invoice instead of propagating.
+    it('resolves to the winner\'s invoice when create() loses the unique-index race (P2002)', async () => {
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'participant-1',
+            userId: 'user-1',
+        });
+        mockPrisma.participantApplication.findFirst.mockResolvedValue({
+            id: 'app-1',
+            programId: 'program-1',
+            applicationCategory: 'self_funded',
+            program: { usdInIdr: '17580' },
+        });
+        mockPrisma.programPricingTier.findFirst.mockResolvedValue({
+            id: 'tier-1',
+            name: 'Registration Fee',
+            price: '15',
+            currency: 'USD',
+            usdPrice: null,
+            idrPrice: null,
+            allowedCategories: [],
+        });
+        // Pre-create findFirst (the TOCTOU read) sees nothing — this request
+        // is genuinely racing another, not just re-reading a row that was
+        // already there.
+        mockPrisma.applicationInvoice.findFirst
+            .mockResolvedValueOnce(null)
+            // Post-P2002 re-read: the concurrent request's row won the race.
+            .mockResolvedValueOnce({ id: 'invoice-winner' });
+        mockPrisma.applicationInvoice.create.mockRejectedValue(makeDuplicateTierInvoiceP2002());
+
+        const result = await handler.execute(
+            new EnsurePortalPaymentInvoiceCommand('user-1', 'tier-1', 'program-1'),
+        );
+
+        expect(result).toEqual({
+            invoice_id: 'invoice-winner',
+            source: 'existing',
+            message: 'Invoice is ready',
+        });
+    });
+
+    it('re-throws a P2002 on an unrelated constraint instead of masking it as "existing"', async () => {
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'participant-1',
+            userId: 'user-1',
+        });
+        mockPrisma.participantApplication.findFirst.mockResolvedValue({
+            id: 'app-1',
+            programId: 'program-1',
+            applicationCategory: 'self_funded',
+            program: { usdInIdr: '17580' },
+        });
+        mockPrisma.programPricingTier.findFirst.mockResolvedValue({
+            id: 'tier-1',
+            name: 'Registration Fee',
+            price: '15',
+            currency: 'USD',
+            usdPrice: null,
+            idrPrice: null,
+            allowedCategories: [],
+        });
+        mockPrisma.applicationInvoice.findFirst.mockResolvedValueOnce(null);
+        const unrelatedConflict = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+            code: 'P2002',
+            clientVersion: 'test',
+            meta: {
+                driverAdapterError: { cause: { constraint: { fields: ['external_transaction_id'] } } },
+            } as unknown as Record<string, unknown>,
+        });
+        mockPrisma.applicationInvoice.create.mockRejectedValue(unrelatedConflict);
+
+        await expect(
+            handler.execute(new EnsurePortalPaymentInvoiceCommand('user-1', 'tier-1', 'program-1')),
+        ).rejects.toBe(unrelatedConflict);
     });
 });
