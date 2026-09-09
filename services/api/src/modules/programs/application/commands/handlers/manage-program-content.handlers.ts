@@ -10,6 +10,7 @@ import { CacheService } from '../../../../../shared/infrastructure/cache/cache.s
 import { CACHE_KEYS } from '../../../../../shared/constants/cache-keys';
 import { LandingCacheInvalidationService } from '../../../../brands/application/services/landing-cache-invalidation.service';
 import { snapEarliestPeriodStart } from '@shared/utils/tier-period.util';
+import { deriveStorageKeyFromUrl, storageKeyBelongsToProgram } from '@shared/utils/private-file-key';
 import {
     assertValidPeriodRange,
     assertNoDuplicatePeriod,
@@ -2005,6 +2006,19 @@ export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocu
             throw new BadRequestException('linkUrl is required when sourceType is "link"');
         }
 
+        // Audit M17: templateUrl reaches ListDocumentTemplatesHandler's presigner
+        // with no ownership check of its own (it just presigns whatever key it's
+        // handed). When no file was uploaded here, the client supplied templateUrl
+        // directly - reject it unless it already points at a file scoped under
+        // THIS program, or a scoped admin could paste another program's/brand's
+        // private document url and have it silently presigned every list call.
+        if (sourceType === 'upload' && !command.file && templateUrl) {
+            const storageKey = deriveStorageKeyFromUrl(templateUrl);
+            if (!storageKey || !storageKeyBelongsToProgram(storageKey, command.dto.programId)) {
+                throw new BadRequestException('templateUrl must reference a file already uploaded to this program');
+            }
+        }
+
         const data = {
             programId: command.dto.programId,
             name: command.dto.name,
@@ -2080,6 +2094,17 @@ export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocu
 
         if (sourceType === 'link' && !command.dto.linkUrl && !template.linkUrl) {
             throw new BadRequestException('linkUrl is required when sourceType is "link"');
+        }
+
+        // Audit M17: same ownership check as CreateDocumentTemplateHandler - only
+        // applies when the client supplied a NEW templateUrl without uploading a
+        // file (the "keep existing" and "just uploaded" paths are already scoped
+        // to this program by construction).
+        if (sourceType === 'upload' && !command.file && command.dto.templateUrl) {
+            const storageKey = deriveStorageKeyFromUrl(command.dto.templateUrl);
+            if (!storageKey || !storageKeyBelongsToProgram(storageKey, template.programId)) {
+                throw new BadRequestException('templateUrl must reference a file already uploaded to this program');
+            }
         }
 
         const data: Record<string, unknown> = {

@@ -41,6 +41,7 @@ import type { AdminPaymentMethod } from '../../payments/common/proto/payment.int
 import { LoaDownloadService } from '../application/services/loa-download.service';
 import { multerLimits } from '@common/constants';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../application/utils/current-application.query';
+import { isUUID } from 'class-validator';
 
 // Subset of the Go payment service's ProgramMethodView (merged, fallback-aware
 // per-program payment methods response) needed to project onto PortalPaymentMethodDto.
@@ -330,9 +331,13 @@ export class PortalController {
         @CurrentUser() user: CurrentUserData,
         @Query('programId') queryProgramId?: string,
     ): Promise<PortalPaymentMethodDto[]> {
-        try {
-            const programId = queryProgramId?.trim() || (await this.resolveCurrentProgramId(user.userId));
+        // Audit M47: resolved (and, for a client-supplied id, validated + ownership
+        // checked) BEFORE the try/catch below, so a bad/foreign programId comes
+        // back as its own 400/404 instead of being swallowed into the generic
+        // "payment methods unavailable" 503 that catch block produces.
+        const programId = await this.resolveScopedProgramId(user.userId, queryProgramId);
 
+        try {
             if (programId) {
                 try {
                     return await this.getProgramPaymentMethods(programId);
@@ -385,6 +390,41 @@ export class PortalController {
         return application?.programId ?? null;
     }
 
+    // Audit M47: ?programId= used to reach getProgramPaymentMethods() completely
+    // unvalidated - not even checked as a UUID - and unscoped to the caller,
+    // then interpolated straight into an internal-key-authenticated Go service
+    // URL. Two checks before it's trusted: (1) shape - a UUID cannot contain
+    // '/', '..' or anything else that would change which path segment this
+    // becomes once interpolated, and (2) ownership - the same
+    // currentApplicationWhere() rule GET /portal/payments already uses, so a
+    // participant can only ask for payment methods on a program they actually
+    // have an application in. A missing/absent query param still falls back to
+    // resolveCurrentProgramId(), unchanged.
+    private async resolveScopedProgramId(userId: string, queryProgramId?: string): Promise<string | null> {
+        const trimmed = queryProgramId?.trim();
+        if (!trimmed) {
+            return this.resolveCurrentProgramId(userId);
+        }
+
+        if (!isUUID(trimmed)) {
+            throw new BadRequestException('programId must be a valid UUID');
+        }
+
+        const participant = await this.prisma.participant.findUnique({
+            where: { userId },
+            select: { id: true },
+        });
+        if (!participant) throw new NotFoundException('Program not found');
+
+        const application = await this.prisma.participantApplication.findFirst({
+            where: currentApplicationWhere(participant.id, trimmed),
+            select: { id: true },
+        });
+        if (!application) throw new NotFoundException('Program not found');
+
+        return trimmed;
+    }
+
     private async getGlobalPaymentMethods(): Promise<PortalPaymentMethodDto[]> {
         const internalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
         const headers = internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
@@ -423,9 +463,12 @@ export class PortalController {
     private async getProgramPaymentMethods(programId: string): Promise<PortalPaymentMethodDto[]> {
         const internalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
         const headers = internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
+        // programId is already UUID-validated by resolveScopedProgramId() before this is
+        // ever called, but encodeURIComponent here too: belt-and-suspenders against this
+        // becoming a second, un-validated call site later.
         const { data } = await this.paymentServiceClient.get<
             ProgramMergedPaymentMethod[] | { data: ProgramMergedPaymentMethod[] }
-        >(`/api/v1/programs/${programId}/payment-methods`, { params: { available_only: true }, headers });
+        >(`/api/v1/programs/${encodeURIComponent(programId)}/payment-methods`, { params: { available_only: true }, headers });
         const methods: ProgramMergedPaymentMethod[] = Array.isArray(data)
             ? data
             : ((data as { data?: ProgramMergedPaymentMethod[] })?.data ?? []);

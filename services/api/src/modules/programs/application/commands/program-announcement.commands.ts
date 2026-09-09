@@ -7,6 +7,10 @@ export class ListProgramAnnouncementsCommand {
     public readonly targetAudience?: string,
     public readonly page: number = 1,
     public readonly limit: number = 20,
+    // Audit M14: resolved server-side from OptionalJwtAuthGuard, never from a
+    // client-supplied flag. Gates whether the handler enforces the
+    // isActive/publishDate/targetAudience visibility filter below.
+    public readonly isAdmin: boolean = false,
   ) {}
 }
 

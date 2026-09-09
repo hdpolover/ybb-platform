@@ -5,10 +5,13 @@ import {
 import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../../auth/infrastructure/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { Public } from '../../../shared/decorators/public.decorator';
+import { isAdminCaller } from './programs.controller';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { ChangeType } from '@prisma/client';
@@ -55,6 +58,7 @@ export class ProgramAnnouncementsController {
 
   @Get(':id/announcements')
   @Public()
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'List program announcements' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
@@ -64,6 +68,7 @@ export class ProgramAnnouncementsController {
   async list(
     @Param('id') programId: string,
     @Query() query: ListProgramAnnouncementsQueryDto,
+    @CurrentUser() user?: CurrentUserData,
   ) {
     return this.listHandler.execute(
       new ListProgramAnnouncementsCommand(
@@ -72,6 +77,11 @@ export class ProgramAnnouncementsController {
         query.targetAudience,
         query.page ?? 1,
         query.limit ?? 20,
+        // Audit M14: OptionalJwtAuthGuard resolves an admin bearer token
+        // without rejecting an absent/invalid one, so this route stays
+        // @Public() for participants while still letting an admin see
+        // draft/scheduled/audience-restricted announcements for management.
+        isAdminCaller(user),
       ),
     );
   }

@@ -1235,6 +1235,85 @@ describe('ManageProgramContentHandlers', () => {
                 expect(repo.createDocumentTemplate).toHaveBeenCalled();
             });
 
+            // Audit M17: CreateDocumentTemplateHandler used to store command.dto.templateUrl
+            // verbatim when no file was attached, and ListDocumentTemplatesHandler's
+            // presigner (PrivateFileUrlResolver) presigns whatever key it derives from
+            // that url with no ownership check of its own. An admin IN scope for prog-1
+            // could therefore paste another programme's private document url and have
+            // it silently presigned on every list call for prog-1.
+            it('CreateDocumentTemplateHandler rejects a templateUrl scoped to a different programme, even though the caller is in scope for THIS programme', async () => {
+                repo.createDocumentTemplate = jest.fn();
+                const handler = await build(CreateDocumentTemplateHandler);
+
+                const err = await captureError(handler.execute(new CreateDocumentTemplateCommand(
+                    {
+                        programId: 'prog-1',
+                        name: 'Agreement',
+                        type: 'agreement_letter',
+                        sourceType: 'upload',
+                        templateUrl: 'https://cdn.ybbhub.com/prod/brand-x/programs/someone-elses-program/documents/leaked.pdf',
+                    } as never,
+                    'user-1',
+                    actor,
+                )));
+
+                expect(err).toBeInstanceOf(BadRequestException);
+                expect(repo.createDocumentTemplate).not.toHaveBeenCalled();
+            });
+
+            it('CreateDocumentTemplateHandler accepts a templateUrl already scoped to this programme', async () => {
+                repo.createDocumentTemplate = jest.fn().mockResolvedValue({ id: 'doc-1', programId: 'prog-1' });
+                const handler = await build(CreateDocumentTemplateHandler);
+
+                await handler.execute(new CreateDocumentTemplateCommand(
+                    {
+                        programId: 'prog-1',
+                        name: 'Agreement',
+                        type: 'agreement_letter',
+                        sourceType: 'upload',
+                        templateUrl: 'https://cdn.ybbhub.com/prod/brand-x/programs/prog-1/documents/own-file.pdf',
+                    } as never,
+                    'user-1',
+                    actor,
+                ));
+
+                expect(repo.createDocumentTemplate).toHaveBeenCalled();
+            });
+
+            it('UpdateDocumentTemplateHandler rejects a new templateUrl scoped to a different programme than the target row', async () => {
+                repo.findDocumentTemplateById.mockResolvedValue({ id: 'doc-1', programId: 'prog-1', sourceType: 'upload' });
+                repo.updateDocumentTemplate = jest.fn();
+                const handler = await build(UpdateDocumentTemplateHandler);
+
+                const err = await captureError(handler.execute(new UpdateDocumentTemplateCommand(
+                    'doc-1',
+                    {
+                        sourceType: 'upload',
+                        templateUrl: 'https://cdn.ybbhub.com/prod/brand-x/programs/someone-elses-program/documents/leaked.pdf',
+                    } as never,
+                    'user-1',
+                    actor,
+                )));
+
+                expect(err).toBeInstanceOf(BadRequestException);
+                expect(repo.updateDocumentTemplate).not.toHaveBeenCalled();
+            });
+
+            it('UpdateDocumentTemplateHandler keeps working when no new templateUrl is supplied (metadata-only edit)', async () => {
+                repo.findDocumentTemplateById.mockResolvedValue({ id: 'doc-1', programId: 'prog-1', sourceType: 'upload', templateUrl: 'https://cdn.ybbhub.com/prod/brand-x/programs/prog-1/documents/own-file.pdf' });
+                repo.updateDocumentTemplate = jest.fn().mockResolvedValue({ id: 'doc-1' });
+                const handler = await build(UpdateDocumentTemplateHandler);
+
+                await handler.execute(new UpdateDocumentTemplateCommand(
+                    'doc-1',
+                    { name: 'Renamed' } as never,
+                    'user-1',
+                    actor,
+                ));
+
+                expect(repo.updateDocumentTemplate).toHaveBeenCalled();
+            });
+
             it('UpdateDocumentTemplateHandler refuses, resolving the programme from the target row', async () => {
                 prismaRead = outOfScope();
                 repo.findDocumentTemplateById.mockResolvedValue({ id: 'doc-1', programId: 'prog-1' });

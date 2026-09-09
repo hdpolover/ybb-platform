@@ -15,12 +15,31 @@ export class ListProgramAnnouncementsHandler {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(command: ListProgramAnnouncementsCommand) {
-    const { programId, category, targetAudience, page, limit } = command;
+    const { programId, category, targetAudience, page, limit, isAdmin } = command;
     const skip = (page - 1) * limit;
 
-    const where: Record<string, unknown> = { programId };
+    // deletedAt is explicit here (not just relying on PrismaService's
+    // auto-inject) because count() below does NOT get the auto-inject that
+    // findMany() does, and both must share this where clause.
+    const where: Record<string, unknown> = { programId, deletedAt: null };
     if (category) where.category = category;
-    if (targetAudience) where.targetAudience = targetAudience;
+
+    if (isAdmin) {
+      // Audit M14: admins manage announcements before they go live, so they
+      // legitimately need to see drafts, future-scheduled and
+      // audience-restricted announcements. Let them filter explicitly.
+      if (targetAudience) where.targetAudience = targetAudience;
+    } else {
+      // Audit M14: this route is @Public()+OptionalJwtAuthGuard, so an
+      // anonymous or non-admin caller must only ever see announcements that
+      // are genuinely live — matching the filter get-program-detail.handler
+      // already applies to its own announcements include. targetAudience is
+      // force-set (not just defaulted) so a caller can't bypass this by
+      // passing ?targetAudience=participants explicitly.
+      where.isActive = true;
+      where.publishDate = { lte: new Date() };
+      where.targetAudience = 'all';
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.programAnnouncement.findMany({

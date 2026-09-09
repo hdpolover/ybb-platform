@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PortalController } from './portal.controller';
 import { QueryBus, CommandBus } from '@nestjs/cqrs';
 import { ConfigService } from '@nestjs/config';
-import { ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PortalReceiptService } from '../application/services/portal-receipt.service';
@@ -22,6 +22,7 @@ describe('PortalController', () => {
   let controller: PortalController;
   let queryBus: QueryBus;
   let paymentServiceClient: PaymentServiceHttpClient;
+  let prismaService: PrismaService;
 
   const mockUser = { userId: 'user-123', email: 'test@test.com', brandId: 'brand-id' } as import('@shared/decorators/current-user.decorator').CurrentUserData;
 
@@ -41,6 +42,7 @@ describe('PortalController', () => {
           useValue: {
             applicationInvoice: { findUnique: jest.fn() },
             participant: { findUnique: jest.fn().mockResolvedValue(null) },
+            participantApplication: { findFirst: jest.fn() },
           },
         },
         { provide: PortalReceiptService, useValue: { generate: jest.fn() } },
@@ -54,6 +56,7 @@ describe('PortalController', () => {
     controller = module.get<PortalController>(PortalController);
     queryBus = module.get<QueryBus>(QueryBus);
     paymentServiceClient = module.get<PaymentServiceHttpClient>(PaymentServiceHttpClient);
+    prismaService = module.get<PrismaService>(PrismaService);
   });
 
   it('should be defined', () => {
@@ -106,6 +109,46 @@ describe('PortalController', () => {
       await expect(controller.getPaymentMethods(mockUser)).rejects.toBeInstanceOf(
         ServiceUnavailableException,
       );
+    });
+
+    // Audit M47: ?programId= used to reach the payment-service call completely
+    // unvalidated and unscoped to the caller. These three pin the fix: shape
+    // validation, ownership validation, and that a legitimate caller with a
+    // real application in that programme still gets through.
+    describe('M47: programId validation and ownership scoping', () => {
+      it('rejects a non-UUID programId before ever calling the payment service', async () => {
+        await expect(
+          controller.getPaymentMethods(mockUser, 'not-a-uuid; DROP TABLE'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+
+        expect(paymentServiceClient.get).not.toHaveBeenCalled();
+      });
+
+      it('rejects a well-formed UUID the caller has no application in', async () => {
+        const foreignProgramId = '11111111-1111-4111-8111-111111111111';
+        (prismaService.participant.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'participant-1' });
+        (prismaService.participantApplication.findFirst as jest.Mock).mockResolvedValueOnce(null);
+
+        await expect(
+          controller.getPaymentMethods(mockUser, foreignProgramId),
+        ).rejects.toBeInstanceOf(NotFoundException);
+
+        expect(paymentServiceClient.get).not.toHaveBeenCalled();
+      });
+
+      it('allows a well-formed UUID the caller DOES have an application in, and encodes it into the upstream url', async () => {
+        const ownProgramId = '22222222-2222-4222-8222-222222222222';
+        (prismaService.participant.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'participant-1' });
+        (prismaService.participantApplication.findFirst as jest.Mock).mockResolvedValueOnce({ id: 'app-1' });
+        (paymentServiceClient.get as jest.Mock).mockResolvedValueOnce({ data: [] });
+
+        await controller.getPaymentMethods(mockUser, ownProgramId);
+
+        expect(paymentServiceClient.get).toHaveBeenCalledWith(
+          `/api/v1/programs/${ownProgramId}/payment-methods`,
+          expect.anything(),
+        );
+      });
     });
   });
 

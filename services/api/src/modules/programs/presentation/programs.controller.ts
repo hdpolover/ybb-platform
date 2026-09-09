@@ -89,7 +89,7 @@ interface ProgramLike {
  * used throughout this controller) rather than inventing a second notion of
  * "admin" — same roles, same array-or-string handling.
  */
-function isAdminCaller(user: CurrentUserData | undefined): boolean {
+export function isAdminCaller(user: CurrentUserData | undefined): boolean {
   if (!user?.role) {
     return false;
   }

@@ -1513,6 +1513,7 @@ export class CreateDocumentTemplateDto {
 
     @ApiProperty({ required: false, description: 'Pre-uploaded file URL' })
     @IsString()
+    @IsUrl()
     @IsOptional()
     templateUrl?: string;
 
@@ -1593,6 +1594,7 @@ export class UpdateDocumentTemplateDto {
 
     @ApiProperty({ required: false })
     @IsString()
+    @IsUrl()
     @IsOptional()
     templateUrl?: string;
 

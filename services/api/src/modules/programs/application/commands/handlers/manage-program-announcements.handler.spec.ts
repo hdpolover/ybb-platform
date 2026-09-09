@@ -2,11 +2,13 @@ import {
   CreateProgramAnnouncementHandler,
   UpdateProgramAnnouncementHandler,
   DeleteProgramAnnouncementHandler,
+  ListProgramAnnouncementsHandler,
 } from './manage-program-announcements.handler';
 import {
   CreateProgramAnnouncementCommand,
   UpdateProgramAnnouncementCommand,
   DeleteProgramAnnouncementCommand,
+  ListProgramAnnouncementsCommand,
 } from '../program-announcement.commands';
 
 const homeAndSettingsOptions = {
@@ -24,8 +26,10 @@ describe('Program announcement handlers', () => {
     programAnnouncement: {
       create: jest.fn(),
       findUnique: jest.fn(),
+      findMany: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      count: jest.fn(),
     },
   };
 
@@ -90,6 +94,77 @@ describe('Program announcement handlers', () => {
         }),
       }),
     );
+  });
+
+  // Audit M14: ListProgramAnnouncementsHandler.execute previously built `where`
+  // from only programId/category/targetAudience — all client-supplied — with
+  // no isActive/publishDate/targetAudience safety net, so an anonymous caller
+  // could read unpublished, future-scheduled, or participant-only
+  // announcements. The route (@Public + OptionalJwtAuthGuard) now resolves
+  // isAdmin server-side and passes it through the command.
+  describe('ListProgramAnnouncementsHandler', () => {
+    it('forces the live-only filter for a non-admin caller and ignores a client-supplied targetAudience', async () => {
+      const handler = new ListProgramAnnouncementsHandler(mockPrisma as never);
+      mockPrisma.programAnnouncement.findMany.mockResolvedValue([]);
+      mockPrisma.programAnnouncement.count.mockResolvedValue(0);
+
+      await handler.execute(
+        new ListProgramAnnouncementsCommand(
+          'program-1',
+          undefined,
+          'participants', // attempted bypass: ask for the restricted audience directly
+          1,
+          20,
+          false,
+        ),
+      );
+
+      const expectedWhere = {
+        programId: 'program-1',
+        deletedAt: null,
+        isActive: true,
+        publishDate: { lte: expect.any(Date) },
+        targetAudience: 'all',
+      };
+      expect(mockPrisma.programAnnouncement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expectedWhere }),
+      );
+      expect(mockPrisma.programAnnouncement.count).toHaveBeenCalledWith({ where: expectedWhere });
+      // The naive "default targetAudience to 'all' only when absent" reading
+      // of the audit fix would have let this explicit value through:
+      expect(mockPrisma.programAnnouncement.findMany.mock.calls[0][0].where.targetAudience).not.toBe(
+        'participants',
+      );
+    });
+
+    it('lets an admin caller see drafts, future-scheduled and audience-restricted announcements', async () => {
+      const handler = new ListProgramAnnouncementsHandler(mockPrisma as never);
+      mockPrisma.programAnnouncement.findMany.mockResolvedValue([]);
+      mockPrisma.programAnnouncement.count.mockResolvedValue(0);
+
+      await handler.execute(
+        new ListProgramAnnouncementsCommand(
+          'program-1',
+          undefined,
+          'participants',
+          1,
+          20,
+          true,
+        ),
+      );
+
+      const expectedWhere = {
+        programId: 'program-1',
+        deletedAt: null,
+        targetAudience: 'participants',
+      };
+      expect(mockPrisma.programAnnouncement.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expectedWhere }),
+      );
+      // No isActive/publishDate filter forced on the admin path.
+      expect(mockPrisma.programAnnouncement.findMany.mock.calls[0][0].where.isActive).toBeUndefined();
+      expect(mockPrisma.programAnnouncement.findMany.mock.calls[0][0].where.publishDate).toBeUndefined();
+    });
   });
 
   // Audit: AnnouncementsStrategy (landing/strategies/announcements.strategy.ts)

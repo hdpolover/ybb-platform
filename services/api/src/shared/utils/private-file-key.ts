@@ -44,3 +44,26 @@ export function isPrivateCategoryKey(storageKey: string): boolean {
 export function looksLikePrivateCategoryUrl(url: string): boolean {
   return PRIVATE_CATEGORY_SEGMENT_PATTERN.test(url);
 }
+
+/**
+ * True iff a storage key (as returned by deriveStorageKeyFromUrl) was minted
+ * under this program's own path segment:
+ *   '{env}/{brandId}/programs/{programId}/{category}/{filename}'
+ * (see services/file's FilePathService.get_storage_path "Program Global" case).
+ *
+ * Audit M17: the presigner (PrivateFileUrlResolver) presigns whatever key it's
+ * handed with no ownership check of its own - it's a dumb "derive key, ask the
+ * file service to sign it" helper reused for every stored-url field in the
+ * codebase, so ownership can't live there without threading program/brand
+ * context through every one of its callers. Instead, any write path that lets
+ * a caller submit an arbitrary templateUrl (rather than always deriving it
+ * from an uploaded file) must call this before persisting the url, or an
+ * admin scoped to one program could reference another program's/brand's
+ * private document by pasting its CDN url.
+ */
+export function storageKeyBelongsToProgram(storageKey: string, programId: string): boolean {
+  const segments = storageKey.split('/').filter(Boolean);
+  const programsIndex = segments.indexOf('programs');
+  if (programsIndex === -1) return false;
+  return segments[programsIndex + 1] === programId;
+}
