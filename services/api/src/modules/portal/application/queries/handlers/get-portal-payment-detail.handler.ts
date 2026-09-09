@@ -87,7 +87,17 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
             throw new ForbiddenException('Access denied');
         }
 
-        const pendingContext = await this.resolvePendingTransactionContext(invoice.externalTransactionId);
+        // Audit M49: this cross-service HTTP call to the payment microservice
+        // is only ever READ below inside the 'processing' branches (pending
+        // history entry + pendingSubmission). For every paid/failed/unpaid
+        // invoice — the majority as invoice volume grows — this was a wasted
+        // network round trip on every cache miss. {} is exactly what
+        // resolvePendingTransactionContext already returns when there's
+        // nothing to resolve, so skipping the call changes no downstream
+        // behavior for those statuses.
+        const pendingContext = invoice.status === 'processing'
+            ? await this.resolvePendingTransactionContext(invoice.externalTransactionId)
+            : {};
         const history: PaymentHistoryEntryDto[] = [];
 
         if (invoice.status === 'paid' && invoice.paidAt) {
@@ -229,6 +239,17 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
             history,
         };
 
+        // Deliberately ONE short TTL for every status, including paid.
+        //
+        // "paid is terminal" is not true here: PaymentReconciliationService
+        // reverts settled invoices back to unpaid (its `revertedUnpaid`
+        // counter) and voids drifted transactions, and that service does not
+        // invalidate this cache at all — it holds no CacheService reference.
+        // A long TTL on `paid` would therefore keep showing a participant
+        // "Paid" for up to a day after their payment was reverted, which is
+        // the worst thing this page can be wrong about. The saved round trip
+        // is not worth stale money state; see the backlog item on giving the
+        // reconciler cache invalidation before revisiting this.
         await this.cacheService.set(cacheKey, result, CACHE_TTL.SHORT);
         return result;
     }

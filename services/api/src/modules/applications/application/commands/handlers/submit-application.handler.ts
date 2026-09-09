@@ -6,11 +6,11 @@ import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
-import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { formatSubmissionDeadlineMessage, isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
+import { invalidateParticipantPortalCache } from '@shared/utils/invalidate-participant-portal-cache.util';
 
 /**
  * Submit Application Handler
@@ -91,21 +91,20 @@ export class SubmitApplicationHandler {
     // Record metric
     this.metricsService.applicationSubmittedTotal.inc({ brand: application.applicationCategory || 'unknown' });
 
-    // Invalidate participant latest app cache
-    await this.invalidateParticipantCache(application.participantId);
+    // Invalidate participant caches. This route (POST /applications/:id/submit)
+    // is admin-only (participants submit via /portal/submissions/submit), so
+    // the participant's portal cache must be busted by looking up their real
+    // userId rather than via the (removed)
+    // @CacheInvalidate(['portal:*:${userId}']) decorator, which resolved to
+    // the acting admin's own JWT id and never matched a real key (audit
+    // M103/M120). PARTICIPANT_LATEST_APP alone was not enough: portal:* is
+    // where the dashboard/submissions status change actually shows up.
+    await invalidateParticipantPortalCache(this.prisma, this.cacheService, application.participantId);
 
     // Advance referral funnel: → applied
     await this.referralFunnel.advanceToApplied(application.participantId, application.programId);
 
     // Return DTO
     return this.applicationMapper.toDto(updated);
-  }
-
-  private async invalidateParticipantCache(participantId: string): Promise<void> {
-    try {
-      await this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId));
-    } catch (error) {
-      this.logger.error(`Failed to invalidate cache for participant ${participantId}:`, error);
-    }
   }
 }

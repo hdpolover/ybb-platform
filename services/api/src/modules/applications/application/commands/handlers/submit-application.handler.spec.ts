@@ -50,6 +50,8 @@ describe('SubmitApplicationHandler (admin path)', () => {
 
     const mockCacheService = {
         invalidateKey: jest.fn().mockResolvedValue(undefined),
+        invalidateKeys: jest.fn().mockResolvedValue(undefined),
+        invalidatePortalCache: jest.fn().mockResolvedValue(undefined),
     };
 
     const mockReferralFunnel = {
@@ -62,6 +64,9 @@ describe('SubmitApplicationHandler (admin path)', () => {
 
     const mockPrisma = {
         program: {
+            findUnique: jest.fn(),
+        },
+        participant: {
             findUnique: jest.fn(),
         },
     };
@@ -89,6 +94,7 @@ describe('SubmitApplicationHandler (admin path)', () => {
             name: 'Test Program',
             applicationDeadline: null,
         });
+        mockPrisma.participant.findUnique.mockResolvedValue({ userId: 'participant-user-1' });
     });
 
     // ── guard rails ───────────────────────────────────────────────────────────
@@ -266,11 +272,33 @@ describe('SubmitApplicationHandler (admin path)', () => {
             expect(app.addStatusToHistory).toHaveBeenCalled();
             expect(mockAppRepository.update).toHaveBeenCalledWith(app);
             expect(mockMetrics.applicationSubmittedTotal.inc).toHaveBeenCalled();
-            expect(mockCacheService.invalidateKey).toHaveBeenCalled();
+            expect(mockCacheService.invalidatePortalCache).toHaveBeenCalledWith('participant-user-1');
             expect(mockReferralFunnel.advanceToApplied).toHaveBeenCalledWith(
                 'participant-1',
                 'program-1',
             );
+        });
+
+        // Audit M103/M120: this route is admin-only (participants submit via
+        // /portal/submissions/submit). The removed @CacheInvalidate decorator
+        // resolved ${userId} from the acting ADMIN's JWT, so the pattern never
+        // matched a real portal:* key. Prove the fix resolves and invalidates
+        // the owning PARTICIPANT's key, looked up from participantId, not any
+        // id an acting admin might carry.
+        it("invalidates the PARTICIPANT's portal cache, not the acting admin's", async () => {
+            const app = makeDomainApp({ participantId: 'participant-1' });
+            mockAppRepository.findById.mockResolvedValue(app);
+            mockAppRepository.update.mockResolvedValue(app);
+            mockPrisma.participant.findUnique.mockResolvedValue({ userId: 'participant-user-1' });
+
+            await handler.execute(new SubmitApplicationCommand('app-1', 'participant-1'));
+
+            expect(mockPrisma.participant.findUnique).toHaveBeenCalledWith({
+                where: { id: 'participant-1' },
+                select: { userId: true },
+            });
+            expect(mockCacheService.invalidatePortalCache).toHaveBeenCalledWith('participant-user-1');
+            expect(mockCacheService.invalidatePortalCache).not.toHaveBeenCalledWith('admin-user-999');
         });
     });
 });

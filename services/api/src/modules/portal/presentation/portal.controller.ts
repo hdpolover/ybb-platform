@@ -42,6 +42,9 @@ import { LoaDownloadService } from '../application/services/loa-download.service
 import { multerLimits } from '@common/constants';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../application/utils/current-application.query';
 import { isUUID } from 'class-validator';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
+import { PortalCacheService } from '../application/services/portal-cache.service';
 
 // Subset of the Go payment service's ProgramMethodView (merged, fallback-aware
 // per-program payment methods response) needed to project onto PortalPaymentMethodDto.
@@ -77,6 +80,8 @@ export class PortalController {
         private readonly prisma: PrismaService,
         private readonly receiptService: PortalReceiptService,
         private readonly loaDownloadService: LoaDownloadService,
+        private readonly cacheService: CacheService,
+        private readonly portalCacheService: PortalCacheService,
     ) {}
 
     @Get('dashboard')
@@ -376,10 +381,18 @@ export class PortalController {
     // whichever row Postgres returned, so a multi-program participant could be
     // offered another program's payment methods.
     private async resolveCurrentProgramId(userId: string): Promise<string | null> {
-        const participant = await this.prisma.participant.findUnique({
-            where: { userId },
-            select: { id: true },
-        });
+        // Audit M50: this participant lookup was a bare, uncached query on
+        // every call. portalCacheService.getParticipantProfile(userId) is the
+        // same participant row (15-minute TTL) every other portal endpoint
+        // already reads through — reusing it here removes one of the two
+        // uncached queries this route made per request. The application
+        // lookup below is NOT swapped for a cached equivalent: it uses
+        // currentApplicationWhere/currentApplicationOrderBy, a different
+        // (and deliberately more specific) selection rule than the
+        // "most recently updated application" cached by
+        // PortalCacheService.getLatestApplicationId, so substituting that
+        // cache would silently change which program is resolved.
+        const participant = await this.portalCacheService.getParticipantProfile(userId);
         if (!participant) return null;
 
         const application = await this.prisma.participantApplication.findFirst({
@@ -410,10 +423,8 @@ export class PortalController {
             throw new BadRequestException('programId must be a valid UUID');
         }
 
-        const participant = await this.prisma.participant.findUnique({
-            where: { userId },
-            select: { id: true },
-        });
+        // Same M50 substitution as resolveCurrentProgramId() above.
+        const participant = await this.portalCacheService.getParticipantProfile(userId);
         if (!participant) throw new NotFoundException('Program not found');
 
         const application = await this.prisma.participantApplication.findFirst({
@@ -425,7 +436,21 @@ export class PortalController {
         return trimmed;
     }
 
+    // Audit M50: this used to call the Go payment service on EVERY request
+    // with no cache at all, even though the admin-side listMethods() already
+    // caches the equivalent lookup under CACHE_KEYS.PAYMENT_METHODS(params).
+    // Reuse that same key builder/TTL: PAYMENT_METHODS(params) already varies
+    // its key by the params string, so this route's fixed
+    // {is_active, available_only} params naturally land on their OWN key,
+    // never colliding with the admin console's params — and the admin CRUD
+    // routes already call invalidateByPattern('payment:methods:*'), which
+    // covers this key too since it shares the 'payment:methods:' prefix.
     private async getGlobalPaymentMethods(): Promise<PortalPaymentMethodDto[]> {
+        const params = { is_active: true, available_only: true };
+        const cacheKey = CACHE_KEYS.PAYMENT_METHODS(JSON.stringify(params));
+        const cached = await this.cacheService.get<PortalPaymentMethodDto[]>(cacheKey);
+        if (cached) return cached;
+
         const internalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
         const headers = internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
         const { data } = await this.paymentServiceClient.get<AdminPaymentMethod[] | { data: AdminPaymentMethod[] }>(
@@ -433,10 +458,10 @@ export class PortalController {
             // `available_only=true` makes the Go service drop automatic methods whose
             // gateway provider isn't registered, so participants don't see options that
             // would fail at confirm-time.
-            { params: { is_active: true, available_only: true }, headers },
+            { params, headers },
         );
         const methods: AdminPaymentMethod[] = Array.isArray(data) ? data : ((data as { data?: AdminPaymentMethod[] })?.data ?? []);
-        return methods
+        const result = methods
             .filter(m => m.is_active)
             .map(m => ({
                 id: m.id,
@@ -450,6 +475,9 @@ export class PortalController {
                 requires_proof: m.requires_proof,
                 type: m.type,
             }));
+
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
+        return result;
     }
 
     // Merged (fallback-aware) per-program list. Already filtered server-side to
@@ -460,7 +488,20 @@ export class PortalController {
     // methods are always included, automatic methods only if their gateway
     // provider is registered/live, so participants don't see options that
     // would fail at confirm-time.
+    // Audit M50: had no cache at all, unlike the admin console's
+    // listProgramMethods() (CACHE_KEYS.PROGRAM_PAYMENT_METHODS(programId)).
+    // Uses its OWN key — PROGRAM_PAYMENT_METHODS_PORTAL(programId), see the
+    // key builder's comment in cache-keys.ts — rather than that same key,
+    // because the admin console reads with include_disabled=true and this
+    // route reads with available_only=true: two genuinely different
+    // payloads that must not overwrite each other in the same cache slot.
+    // The admin program-methods write routes explicitly invalidate both
+    // keys, so this one still never outlives an admin edit.
     private async getProgramPaymentMethods(programId: string): Promise<PortalPaymentMethodDto[]> {
+        const cacheKey = CACHE_KEYS.PROGRAM_PAYMENT_METHODS_PORTAL(programId);
+        const cached = await this.cacheService.get<PortalPaymentMethodDto[]>(cacheKey);
+        if (cached) return cached;
+
         const internalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
         const headers = internalKey ? { 'X-Internal-Service-Key': internalKey } : {};
         // programId is already UUID-validated by resolveScopedProgramId() before this is
@@ -472,7 +513,7 @@ export class PortalController {
         const methods: ProgramMergedPaymentMethod[] = Array.isArray(data)
             ? data
             : ((data as { data?: ProgramMergedPaymentMethod[] })?.data ?? []);
-        return methods.map(m => ({
+        const result = methods.map(m => ({
             id: m.id,
             code: m.code,
             display_name: m.display_name,
@@ -484,6 +525,9 @@ export class PortalController {
             requires_proof: m.requires_proof,
             type: m.type,
         }));
+
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
+        return result;
     }
 
     @Get('documents')

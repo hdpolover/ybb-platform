@@ -60,16 +60,13 @@ export class MetadataService {
     return City.getCitiesOfState(countryCode, stateCode);
   }
 
-  getTimezones(search?: string) {
+  // Always returns the full unfiltered list. The `search` filter is applied
+  // by the controller AFTER this result is cached under one fixed key
+  // (METADATA_TIMEZONES()), not before — see MetadataController.getTimezones
+  // for why (audit M221: unbounded cache-key cardinality on a public route).
+  getTimezones(): string[] {
     // Use built-in Internationalization API to get all valid IANA timezones
-    const timezones = (Intl as typeof Intl & { supportedValuesOf(key: string): string[] }).supportedValuesOf('timeZone');
-
-    if (search) {
-      const lowerSearch = search.toLowerCase();
-      return timezones.filter((tz: string) => tz.toLowerCase().includes(lowerSearch));
-    }
-
-    return timezones;
+    return (Intl as typeof Intl & { supportedValuesOf(key: string): string[] }).supportedValuesOf('timeZone');
   }
 
   getCurrencies() {

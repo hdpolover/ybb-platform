@@ -325,7 +325,18 @@ export class ApplicationsController {
   @ApiOperation({ summary: 'Create a new application (admin)' })
   @ApiResponse({ status: 201, description: 'Application created successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 409, description: 'Application already exists' })
-  @CacheInvalidate(['portal:*:${userId}'])
+  // No @CacheInvalidate(['portal:*:${userId}']) here: this route is
+  // admin-only (Roles ADMIN/SUPER_ADMIN below), so the decorator's
+  // ${userId} would resolve to the acting ADMIN's own JWT id (see
+  // cache-invalidation.interceptor.ts), never the participant's — the
+  // pattern would never match a real key (audit M103/M120). The handler
+  // invalidates the owning participant's portal cache directly instead.
+  //
+  // application:list:* IS still correct here (unlike portal:*:${userId}):
+  // it carries no userId, so the interceptor's admin/participant mismatch
+  // does not apply. Without it a newly created draft stays invisible in a
+  // cached admin list page for up to 5 minutes (audit M106).
+  @CacheInvalidate(['application:list:*'])
   @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.create })
   async create(@Body() dto: CreateApplicationRequestDto): Promise<ApplicationResponseDto> {
     this.logger.log(`Creating application for participant ${dto.participantId} in program ${dto.programId}`);
@@ -633,7 +644,13 @@ export class ApplicationsController {
   @ApiResponse({ status: 200, description: 'Application updated successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Cannot edit non-draft application' })
   @ApiResponse({ status: 404, description: 'Application not found' })
-  @CacheInvalidate(['portal:*:${userId}'])
+  // See create() above: admin-only route, so @CacheInvalidate's ${userId}
+  // would resolve to the acting admin, not the participant (M103/M120).
+  // UpdateApplicationHandler invalidates the participant's cache directly.
+  // application:list:* is still invalidated here (audit M106) — this is the
+  // one route that can change applicationCategory/pricingTierId, both of
+  // which surface in the cached admin list.
+  @CacheInvalidate(['application:list:*'])
   @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.update })
   async update(
     @Param('id') id: string,
@@ -682,7 +699,14 @@ export class ApplicationsController {
   @ApiResponse({ status: 200, description: 'Application submitted successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Application cannot be submitted' })
   @ApiResponse({ status: 404, description: 'Application not found' })
-  @CacheInvalidate(['portal:*:${userId}'])
+  // See create() above: admin-only route, so @CacheInvalidate's ${userId}
+  // would resolve to the acting admin, not the participant (M103/M120).
+  // SubmitApplicationHandler invalidates the participant's cache directly.
+  // application:list:* is still invalidated here (audit M106): this is a
+  // status change (draft -> submitted) and only upsertReview busted this
+  // cache before, so an admin's list page showed the pre-submit status for
+  // up to 5 minutes.
+  @CacheInvalidate(['application:list:*'])
   @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.status_change })
   async submit(
     @Param('id') id: string,
@@ -726,6 +750,13 @@ export class ApplicationsController {
   })
   @ApiResponse({ status: 404, description: 'Application not found' })
   @ApiResponse({ status: 400, description: 'Validation error in payload' })
+  // AdminUpdateSubmissionHandler already invalidates the participant's own
+  // portal cache correctly (it resolves userId from the application row, not
+  // the JWT), so no @CacheInvalidate(['portal:*:${userId}']) was ever needed
+  // here. application:list:* is new (audit M106): personalData edits here can
+  // change participantName/country, which the admin list caches and filters
+  // on, and nothing previously busted that cache for this route.
+  @CacheInvalidate(['application:list:*'])
   @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.update })
   async adminUpdateSubmission(
     @Param('id') id: string,
@@ -755,7 +786,12 @@ export class ApplicationsController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create Registration Payment Intent (admin; participants use /portal/payments)' })
   @ApiResponse({ status: 201, description: 'Payment Intent created' })
-  @CacheInvalidate(['portal:*:${userId}'])
+  // See create() above: admin-only route, so @CacheInvalidate's ${userId}
+  // would resolve to the acting admin, not the participant (M103/M120).
+  // Also note the @Body('userId') below is actually a Participant.id, not a
+  // users.id — see the handler's own comment on that distinction.
+  // CreateRegistrationPaymentIntentHandler invalidates the participant's
+  // cache directly using the users.id it already resolves.
   async createPaymentIntent(
     @Param('id') id: string,
     @Body('userId') userId: string
@@ -847,6 +883,12 @@ export class ApplicationsController {
   @ApiResponse({ status: 200, description: 'Application reviewed successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Application cannot be reviewed' })
   @ApiResponse({ status: 404, description: 'Application not found' })
+  // ReviewApplicationHandler already invalidates the participant's own
+  // portal cache correctly (it resolves userId from application.participantId,
+  // not the JWT). application:list:* is new (audit M106): accept/reject/
+  // waitlist is a status change, the exact case upsertReview's own comment
+  // above warns about, but this route never carried the invalidation.
+  @CacheInvalidate(['application:list:*'])
   @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.status_change })
   async review(
     @Param('id') id: string,
@@ -902,7 +944,14 @@ export class ApplicationsController {
   @ApiResponse({ status: 200, description: 'Application withdrawn successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Application cannot be withdrawn' })
   @ApiResponse({ status: 404, description: 'Application not found' })
-  @CacheInvalidate(['portal:*:${userId}'])
+  // See create() above: admin-only route, so @CacheInvalidate's ${userId}
+  // would resolve to the acting admin, not the participant (M103/M120).
+  // WithdrawApplicationHandler invalidates the participant's cache directly.
+  // application:list:* is still invalidated here (audit M106): withdraw is a
+  // status change and only upsertReview busted this cache before, so an
+  // admin's list page showed the application as active for up to 5 minutes
+  // after a withdrawal.
+  @CacheInvalidate(['application:list:*'])
   @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.status_change })
   async withdraw(
     @Param('id') id: string,

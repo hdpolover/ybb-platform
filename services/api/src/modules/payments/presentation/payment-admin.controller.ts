@@ -1887,7 +1887,14 @@ export class PaymentAdminController {
 
             // Program-scoped writes only ever affect this program's merged view —
             // never touch the global `payment:methods:*` cache.
-            await this.cacheService.invalidateKey(CACHE_KEYS.PROGRAM_PAYMENT_METHODS(programId));
+            // Also invalidate the portal's own view of this program (audit M50):
+            // PROGRAM_PAYMENT_METHODS_PORTAL is a separate key (different payload:
+            // available_only=true vs this endpoint's include_disabled=true), so a
+            // single-key delete of PROGRAM_PAYMENT_METHODS above does not reach it.
+            await Promise.all([
+                this.cacheService.invalidateKey(CACHE_KEYS.PROGRAM_PAYMENT_METHODS(programId)),
+                this.cacheService.invalidateKey(CACHE_KEYS.PROGRAM_PAYMENT_METHODS_PORTAL(programId)),
+            ]);
 
             return data;
         } catch (error) {
@@ -1913,7 +1920,12 @@ export class PaymentAdminController {
                 { headers: this.buildInternalHeaders() },
             );
 
-            await this.cacheService.invalidateKey(CACHE_KEYS.PROGRAM_PAYMENT_METHODS(programId));
+            // See upsertProgramMethod above: also bust the portal's separate
+            // cached view (audit M50).
+            await Promise.all([
+                this.cacheService.invalidateKey(CACHE_KEYS.PROGRAM_PAYMENT_METHODS(programId)),
+                this.cacheService.invalidateKey(CACHE_KEYS.PROGRAM_PAYMENT_METHODS_PORTAL(programId)),
+            ]);
 
             return data;
         } catch (error) {

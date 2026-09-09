@@ -80,14 +80,12 @@ const ALLOWLIST_HANDLER_FILES: Set<string> = new Set([
   // Program announcements: the controller carries @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   // on every mutation endpoint (POST/PUT/DELETE), so handlers don't also invalidate.
   'modules/programs/application/commands/handlers/manage-program-announcements.handler.ts',
-  // Application mutations below DRAFT status are handled by handlers without
-  // cache invalidation — the applications controller carries @CacheInvalidate
-  // on every mutation endpoint. Handlers for: update, switch-category, withdraw,
-  // create-registration-payment-intent (intent creation only, no state change).
-  'modules/applications/application/commands/handlers/update-application.handler.ts',
+  // switch-application-category.handler.ts invalidates directly via
+  // cacheService.invalidateKeys/invalidateByPatterns (matched below), but is
+  // kept allowlisted defensively since it also predates
+  // invalidateParticipantPortalCache and may not always hit that code path
+  // for every early-return branch.
   'modules/applications/application/commands/handlers/switch-application-category.handler.ts',
-  'modules/applications/application/commands/handlers/withdraw-application.handler.ts',
-  'modules/applications/application/commands/handlers/create-registration-payment-intent.handler.ts',
 ]);
 
 /**
@@ -154,7 +152,7 @@ const ALLOWLIST_CONTROLLER_PREFIXES: string[] = [
 ];
 
 const INVALIDATION_RE =
-  /(?:cacheService|portalCacheService|cache)\.(invalidateKey|invalidateKeys|invalidateByPattern|invalidateByPatterns|invalidateBrandLandingCaches|invalidateInvoiceCache)\b/;
+  /(?:(?:cacheService|portalCacheService|cache)\.(?:invalidateKey|invalidateKeys|invalidateByPattern|invalidateByPatterns|invalidateBrandLandingCaches|invalidateInvoiceCache|invalidatePortalCache)\b|invalidateParticipantPortalCache\()/;
 
 function isAllowedHandlerPath(rel: string): boolean {
   if (ALLOWLIST_HANDLER_FILES.has(rel)) return true;

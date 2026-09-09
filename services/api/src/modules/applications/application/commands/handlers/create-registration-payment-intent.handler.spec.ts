@@ -10,6 +10,7 @@ import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tok
 import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/payment-grpc.client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
 
 /** Minimal application stub returned by the repository. */
 const makeApp = (overrides: Record<string, unknown> = {}) => ({
@@ -32,6 +33,10 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
     brandSetting: { findFirst: jest.fn() },
   };
   const mockRegistrationFeeGate = { isRegistrationFeePaid: jest.fn() };
+  const mockCacheService = {
+    invalidatePortalCache: jest.fn().mockResolvedValue(undefined),
+    invalidateKeys: jest.fn().mockResolvedValue(undefined),
+  };
 
   const command = new CreateRegistrationPaymentIntentCommand('app-1', 'participant-1');
 
@@ -43,6 +48,7 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
         { provide: PaymentGrpcClient, useValue: mockPaymentClient },
         { provide: PrismaService, useValue: mockPrisma },
         { provide: RegistrationFeeGateService, useValue: mockRegistrationFeeGate },
+        { provide: CacheService, useValue: mockCacheService },
       ],
     }).compile();
 
@@ -212,5 +218,22 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
     expect(mockPaymentClient.createIntent).toHaveBeenCalledWith(
       expect.objectContaining({ exchange_rate: 15500 }),
     );
+  });
+
+  // ── portal cache invalidation (audit M103/M120) ─────────────────────────────
+  //
+  // This route is admin-only. The removed @CacheInvalidate(['portal:*:${userId}'])
+  // decorator on the controller would have resolved ${userId} from the acting
+  // admin's JWT — never the participant's — so it never matched a real key. Also,
+  // the command's own `userId` param is a Participant.id, not a users.id, so even
+  // a "correct" decorator resolution couldn't have built a valid key from it. Prove
+  // the handler busts the cache using the participant's REAL users.id ('user-1'),
+  // resolved via the participant lookup, not the admin and not the raw participant id.
+  it("invalidates the PARTICIPANT's portal cache using their real users.id, not an admin id or the participant id", async () => {
+    await handler.execute(command);
+
+    expect(mockCacheService.invalidatePortalCache).toHaveBeenCalledWith('user-1');
+    expect(mockCacheService.invalidatePortalCache).not.toHaveBeenCalledWith('participant-1');
+    expect(mockCacheService.invalidatePortalCache).not.toHaveBeenCalledWith('admin-999');
   });
 });

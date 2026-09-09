@@ -87,6 +87,19 @@ export const CACHE_KEYS = {
   // prefix from PAYMENT_METHODS so program-scoped writes never touch/invalidate
   // the global payment methods cache.
   PROGRAM_PAYMENT_METHODS: (programId: string) => `payment:methods:program:${programId}`,
+  // Portal (participant-facing) view of the same program-scoped list. A
+  // DIFFERENT key from PROGRAM_PAYMENT_METHODS on purpose (audit M50): the
+  // admin console reads with include_disabled=true, the portal reads with
+  // available_only=true — two different payloads. Sharing one key would mean
+  // whichever request populates it last silently overwrites the other view
+  // (participants could see disabled methods, or the admin console could
+  // lose them from sight, until the TTL expires). Still under the same
+  // `payment:methods:program:*`-style prefix so it rides the existing
+  // invalidateByPattern('payment:methods:*') global-method-CRUD bust; the
+  // program-scoped single-key invalidateKey(PROGRAM_PAYMENT_METHODS(...))
+  // calls in payment-admin.controller.ts additionally invalidate this key
+  // explicitly, since a single-key delete does not.
+  PROGRAM_PAYMENT_METHODS_PORTAL: (programId: string) => `payment:methods:program:${programId}:portal`,
 
   // Participant analytics cache keys
   ANALYTICS_KNOWLEDGE_SOURCE: (programId: string) => `analytics:knowledge-source:${programId}`,

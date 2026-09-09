@@ -7,11 +7,12 @@ import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
-import { CACHE_KEYS } from '@shared/constants/cache-keys';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { invalidateParticipantPortalCache } from '@shared/utils/invalidate-participant-portal-cache.util';
 
 /**
  * Create Application Handler
- * 
+ *
  * Application Layer - Command Handler
  * Handles business logic for creating applications
  */
@@ -23,6 +24,7 @@ export class CreateApplicationHandler {
     private readonly applicationMapper: ApplicationMapper,
     private readonly metricsService: MetricsService,
     private readonly cacheService: CacheService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async execute(command: CreateApplicationCommand): Promise<ApplicationResponseDto> {
@@ -63,25 +65,18 @@ export class CreateApplicationHandler {
     // Record metric
     this.metricsService.applicationStartedTotal.inc({ brand: command.applicationCategory });
 
-    // Invalidate participant caches
-    // Note: We need to fetch userId separately or pass it in the command
-    await this.invalidateParticipantCaches(command.participantId);
+    // Invalidate participant caches. This route is admin-only (POST
+    // /applications), so the participant's actual users.id is never the JWT
+    // principal — resolve it from the participant row rather than relying on
+    // the (removed) @CacheInvalidate(['portal:*:${userId}']) decorator, which
+    // resolved to the acting admin's own id (audit M103/M120). A newly
+    // created application can already be reflected in a cached
+    // portal:submissions list the participant loaded before this admin
+    // action, so the portal cache — not just PARTICIPANT_LATEST_APP/STATS —
+    // needs busting too.
+    await invalidateParticipantPortalCache(this.prisma, this.cacheService, command.participantId);
 
     // Return DTO
     return this.applicationMapper.toDto(saved);
-  }
-
-  /**
-   * Invalidate participant caches when application is created
-   */
-  private async invalidateParticipantCaches(participantId: string): Promise<void> {
-    try {
-      await Promise.all([
-        this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_LATEST_APP(participantId)),
-        this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_STATS(participantId)),
-      ]);
-    } catch (error) {
-      console.error(`Failed to invalidate caches for participant ${participantId}:`, error);
-    }
   }
 }

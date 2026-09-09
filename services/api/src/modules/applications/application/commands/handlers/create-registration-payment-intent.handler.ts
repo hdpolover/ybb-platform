@@ -12,6 +12,8 @@ import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/pay
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { resolveUsdInIdrRate } from '@modules/portal/application/utils/resolve-usd-in-idr-rate';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { invalidateParticipantPortalCache } from '@shared/utils/invalidate-participant-portal-cache.util';
 
 type CreateIntentResponse = Awaited<ReturnType<PaymentGrpcClient['createIntent']>>;
 
@@ -36,6 +38,7 @@ export class CreateRegistrationPaymentIntentHandler {
     private readonly paymentClient: PaymentGrpcClient,
     private readonly prisma: PrismaService,
     private readonly registrationFeeGate: RegistrationFeeGateService,
+    private readonly cacheService: CacheService,
   ) {}
 
   async execute(command: CreateRegistrationPaymentIntentCommand): Promise<CreateIntentResponse> {
@@ -147,6 +150,22 @@ export class CreateRegistrationPaymentIntentHandler {
       },
       exchange_rate: exchangeRate,
     });
+
+    // This route (POST /applications/:id/payment-intent) is admin-only, and
+    // the @Body('userId') it receives is actually a Participant.id (asserted
+    // against application.participantId above), not a users.id — so the
+    // (removed) @CacheInvalidate(['portal:*:${userId}']) decorator could
+    // never have built a valid portal:*:<usersId> key even before accounting
+    // for it resolving to the acting admin's JWT id instead (audit
+    // M103/M120). Use the real users.id already resolved above so the
+    // participant's portal:payments view picks up the new pending intent
+    // instead of serving a stale cached list for the TTL.
+    await invalidateParticipantPortalCache(
+      this.prisma,
+      this.cacheService,
+      application.participantId,
+      participant.userId,
+    );
 
     return intent;
   }

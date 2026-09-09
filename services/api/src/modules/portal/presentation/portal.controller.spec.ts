@@ -11,6 +11,8 @@ import { CancelPortalPaymentHandler } from '../application/commands/handlers/can
 import { EnsurePortalPaymentInvoiceHandler } from '../application/commands/handlers/ensure-portal-payment-invoice.handler';
 import { PaymentServiceHttpClient } from '../../payments/infrastructure/services/payment-service-http.client';
 import { LoaDownloadService } from '../application/services/loa-download.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { PortalCacheService } from '../application/services/portal-cache.service';
 import {
   GetPortalDashboardQuery,
   GetPortalSubmissionsQuery,
@@ -23,6 +25,8 @@ describe('PortalController', () => {
   let queryBus: QueryBus;
   let paymentServiceClient: PaymentServiceHttpClient;
   let prismaService: PrismaService;
+  let portalCacheService: PortalCacheService;
+  let cacheService: CacheService;
 
   const mockUser = { userId: 'user-123', email: 'test@test.com', brandId: 'brand-id' } as import('@shared/decorators/current-user.decorator').CurrentUserData;
 
@@ -47,6 +51,14 @@ describe('PortalController', () => {
         },
         { provide: PortalReceiptService, useValue: { generate: jest.fn() } },
         { provide: LoaDownloadService, useValue: { downloadLoa: jest.fn() } },
+        {
+          provide: CacheService,
+          useValue: { get: jest.fn().mockResolvedValue(undefined), set: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: PortalCacheService,
+          useValue: { getParticipantProfile: jest.fn().mockResolvedValue(null) },
+        },
       ],
     })
     .overrideGuard(JwtAuthGuard)
@@ -57,6 +69,8 @@ describe('PortalController', () => {
     queryBus = module.get<QueryBus>(QueryBus);
     paymentServiceClient = module.get<PaymentServiceHttpClient>(PaymentServiceHttpClient);
     prismaService = module.get<PrismaService>(PrismaService);
+    portalCacheService = module.get<PortalCacheService>(PortalCacheService);
+    cacheService = module.get<CacheService>(CacheService);
   });
 
   it('should be defined', () => {
@@ -126,7 +140,7 @@ describe('PortalController', () => {
 
       it('rejects a well-formed UUID the caller has no application in', async () => {
         const foreignProgramId = '11111111-1111-4111-8111-111111111111';
-        (prismaService.participant.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'participant-1' });
+        (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValueOnce({ id: 'participant-1' });
         (prismaService.participantApplication.findFirst as jest.Mock).mockResolvedValueOnce(null);
 
         await expect(
@@ -138,7 +152,7 @@ describe('PortalController', () => {
 
       it('allows a well-formed UUID the caller DOES have an application in, and encodes it into the upstream url', async () => {
         const ownProgramId = '22222222-2222-4222-8222-222222222222';
-        (prismaService.participant.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'participant-1' });
+        (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValueOnce({ id: 'participant-1' });
         (prismaService.participantApplication.findFirst as jest.Mock).mockResolvedValueOnce({ id: 'app-1' });
         (paymentServiceClient.get as jest.Mock).mockResolvedValueOnce({ data: [] });
 
@@ -148,6 +162,46 @@ describe('PortalController', () => {
           `/api/v1/programs/${ownProgramId}/payment-methods`,
           expect.anything(),
         );
+      });
+    });
+
+    // Audit M50: the route had no cache at all. These pin that it now reads
+    // through CacheService before ever calling the payment service, and that
+    // a cache hit skips the network call entirely.
+    describe('M50: caching', () => {
+      it('returns a cached global payment-methods response without calling the payment service', async () => {
+        const cachedResult = [{ id: 'pm-1', code: 'manual_transfer' }];
+        (cacheService.get as jest.Mock).mockResolvedValueOnce(cachedResult);
+
+        const result = await controller.getPaymentMethods(mockUser);
+
+        expect(result).toBe(cachedResult);
+        expect(paymentServiceClient.get).not.toHaveBeenCalled();
+      });
+
+      it('caches the global payment-methods response on a miss', async () => {
+        (paymentServiceClient.get as jest.Mock).mockResolvedValueOnce({ data: [] });
+
+        await controller.getPaymentMethods(mockUser);
+
+        expect(cacheService.set).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.anything(),
+          expect.any(Number),
+        );
+      });
+
+      it('returns a cached program-scoped payment-methods response without calling the payment service', async () => {
+        const ownProgramId = '22222222-2222-4222-8222-222222222222';
+        const cachedResult = [{ id: 'pm-2', code: 'manual_transfer' }];
+        (portalCacheService.getParticipantProfile as jest.Mock).mockResolvedValueOnce({ id: 'participant-1' });
+        (prismaService.participantApplication.findFirst as jest.Mock).mockResolvedValueOnce({ id: 'app-1' });
+        (cacheService.get as jest.Mock).mockResolvedValueOnce(cachedResult);
+
+        const result = await controller.getPaymentMethods(mockUser, ownProgramId);
+
+        expect(result).toBe(cachedResult);
+        expect(paymentServiceClient.get).not.toHaveBeenCalled();
       });
     });
   });
