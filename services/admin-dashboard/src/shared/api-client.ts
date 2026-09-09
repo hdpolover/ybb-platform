@@ -3978,6 +3978,7 @@ export type Ambassador = {
   updatedAt: string;
   user?: { email: string };
   program?: { id: string; name: string; slug: string } | null;
+  shareLink?: string | null;
 };
 
 export type AmbassadorListMeta = { total: number; page: number; limit: number; lastPage: number };
@@ -3985,7 +3986,6 @@ export type AmbassadorListMeta = { total: number; page: number; limit: number; l
 export type AmbassadorDetail = Ambassador & {
   activatedAt?: string | null;
   deactivatedAt?: string | null;
-  shareLink?: string | null;
   programName?: string;
   analytics?: {
     statusCounts: {

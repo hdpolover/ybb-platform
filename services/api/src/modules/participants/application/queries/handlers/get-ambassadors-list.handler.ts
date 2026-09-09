@@ -3,6 +3,7 @@ import { ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { GetAmbassadorsListQuery } from '../../commands/ambassador-admin.commands'; // Corrected path
 import { Prisma } from '@prisma/client';
+import { createAmbassadorShareToken } from '../../utils/ambassador-share-token.util';
 
 @QueryHandler(GetAmbassadorsListQuery)
 export class GetAmbassadorsListHandler implements IQueryHandler<GetAmbassadorsListQuery> {
@@ -73,14 +74,41 @@ export class GetAmbassadorsListHandler implements IQueryHandler<GetAmbassadorsLi
                 orderBy,
                 include: {
                     user: { select: { email: true } },
-                    program: { select: { name: true, slug: true } }
+                    program: {
+                        select: {
+                            name: true,
+                            slug: true,
+                            brand: { select: { websiteUrl: true } },
+                        },
+                    },
                 }
             }),
             this.prisma.ambassador.count({ where })
         ]);
 
+        // The share link is minted here so the ambassadors list can offer a
+        // copyable link per row. It mirrors the detail endpoint's format
+        // (ambassador-admin.controller.ts findOne) — token minting is cheap and
+        // the token is opaque, so no extra query is needed.
+        const items = data.map((ambassador) => {
+            const brandUrl = ambassador.program?.brand?.websiteUrl || 'ybb.co';
+            const cleanBrandUrl = brandUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+            const slug = ambassador.program?.slug;
+            // A missing share-token secret must not take the whole list down —
+            // the row degrades to no link instead of a 500.
+            let shareLink: string | null = null;
+            if (slug) {
+                try {
+                    shareLink = `https://${cleanBrandUrl}/programs/${slug}?r=${createAmbassadorShareToken(ambassador.id)}`;
+                } catch {
+                    shareLink = null;
+                }
+            }
+            return { ...ambassador, shareLink };
+        });
+
         return {
-            data,
+            data: items,
             meta: {
                 total,
                 page,

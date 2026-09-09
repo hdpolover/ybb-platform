@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
-import { ChevronDown, ChevronUp, ChevronsUpDown, Eye, Mail, Pencil, RefreshCw, Trash2, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Eye, Mail, Pencil, RefreshCw, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
@@ -248,6 +248,16 @@ export default function AmbassadorsPage() {
     }
   }
 
+  async function handleCopyLink(ambassador: Ambassador) {
+    if (!ambassador.shareLink) return;
+    try {
+      await navigator.clipboard.writeText(ambassador.shareLink);
+      toast.success("Referral link copied");
+    } catch {
+      toast.error("Could not copy referral link");
+    }
+  }
+
   function handleSort(key: SortByType) {
     if (key === sortBy) {
       void setFilters({ sortOrder: sortOrder === 'asc' ? 'desc' : 'asc', page: 1 });
@@ -414,6 +424,7 @@ export default function AmbassadorsPage() {
                   )}
                 </button>
               </TableHead>
+              <TableHead>Referral Link</TableHead>
               <TableHead
                 className="cursor-pointer select-none hover:bg-muted/50"
                 onClick={() => handleSort('totalReferrals')}
@@ -459,14 +470,14 @@ export default function AmbassadorsPage() {
           <TableBody>
             {loading && (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-zinc-400">
+                <TableCell colSpan={7} className="py-10 text-center text-zinc-400">
                   Loading ambassadors…
                 </TableCell>
               </TableRow>
             )}
             {!loading && items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-sm text-zinc-400">
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-zinc-400">
                   No ambassadors found.
                 </TableCell>
               </TableRow>
@@ -482,6 +493,33 @@ export default function AmbassadorsPage() {
                     <code className="rounded bg-zinc-100 px-2 py-1 font-mono text-xs">
                       {ambassador.referralCode}
                     </code>
+                  </TableCell>
+                  <TableCell>
+                    {ambassador.shareLink ? (
+                      <div className="flex items-center gap-1">
+                        <code
+                          className="block max-w-[220px] truncate rounded bg-zinc-100 px-2 py-1 font-mono text-xs"
+                          title={ambassador.shareLink}
+                        >
+                          {ambassador.shareLink}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => void handleCopyLink(ambassador)}
+                          aria-label={`Copy referral link for ${ambassador.fullName}`}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" asChild aria-label={`Open referral link for ${ambassador.fullName}`}>
+                          <a href={ambassador.shareLink} target="_blank" rel="noreferrer noopener">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-zinc-400">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="font-medium text-zinc-900">{ambassador.totalReferrals}</div>
