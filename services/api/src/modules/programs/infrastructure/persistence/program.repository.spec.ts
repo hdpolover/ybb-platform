@@ -12,7 +12,10 @@ describe('ProgramRepository', () => {
                 findMany: jest.fn().mockResolvedValue([]),
             },
         };
-        repository = new ProgramRepository(prisma as any);
+        // Audit M34: findAll's `url` filter now resolves via a cached brand-id
+        // lookup. No existing test here exercises `url`, so a stub is enough.
+        const cacheService = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) };
+        repository = new ProgramRepository(prisma as any, cacheService as any);
     });
 
     // Audit M13: findAll applied whatever isPublished/isActive/isVisibleToUsers/status

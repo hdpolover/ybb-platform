@@ -108,6 +108,38 @@ export async function resolveMaskedFileUrl(prisma: PrismaService, url: string): 
   return getMaskedDownloadUrl(fileId);
 }
 
+/**
+ * Resolve a single raw url against a map already built by buildFileUrlMaskMap,
+ * reproducing resolveMaskedFileUrl's exact resolution order without a DB
+ * round-trip per call (audit M189):
+ *   1. Already a masked `/v1/files/:id/download` url -> trust the id, rebuild
+ *      the url (buildFileUrlMaskMap only confirms rows that resolved a real
+ *      file; resolveFileIdFromRawUrl never re-checked this branch against the
+ *      DB either).
+ *   2. A raw uuid appears in the url -> use the map's entry for that id, which
+ *      only exists if buildFileUrlMaskMap's `id: { in: candidateIds }` query
+ *      found a matching row (same guarantee resolveFileIdFromRawUrl's
+ *      findUnique gave).
+ *   3. Otherwise fall through to an exact stored-url match, then the original
+ *      url unchanged — same fallback order as resolveMaskedFileUrl.
+ */
+export function resolveUrlFromMaskMap(url: string, maskMap: Map<string, string>): string {
+  const maskedId = extractFileIdFromDownloadUrl(url);
+  if (maskedId) {
+    return maskMap.get(maskedId) ?? getMaskedDownloadUrl(maskedId);
+  }
+
+  const rawId = extractFileUuidFromUrl(url);
+  if (rawId) {
+    const byId = maskMap.get(rawId);
+    if (byId) {
+      return byId;
+    }
+  }
+
+  return maskMap.get(url) ?? url;
+}
+
 export async function buildFileUrlMaskMap(prisma: PrismaService, urls: string[]): Promise<Map<string, string>> {
   const sanitizedUrls = urls.filter((url) => typeof url === 'string' && url.trim().length > 0);
   if (sanitizedUrls.length === 0) {
@@ -132,6 +164,13 @@ export async function buildFileUrlMaskMap(prisma: PrismaService, urls: string[])
       ],
     },
     select: { id: true, url: true },
+    // Ascending so that when two rows share a url the NEWEST one wins the
+    // maskMap entry below (last write wins), matching resolveMaskedFileUrl's
+    // findFirst({ orderBy: { createdAt: 'desc' } }). Without an explicit order
+    // the winner is whatever Postgres returns first, so the two resolution
+    // paths could disagree. No duplicate urls exist in production today - this
+    // keeps them agreeing if that changes.
+    orderBy: { createdAt: 'asc' },
   });
 
   const maskMap = new Map<string, string>();

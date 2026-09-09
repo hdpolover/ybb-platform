@@ -10,7 +10,7 @@ import { Prisma, ProgramResource } from '@prisma/client';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
-import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
+import { buildFileUrlMaskMap, resolveUrlFromMaskMap } from '@shared/utils/masked-file-url';
 import { ACTIVE_PROGRAM_ORDER_BY } from '@shared/utils/active-program-resolver';
 import { isProgramRegistrationOpen } from '@modules/auth/application/services/auth-program-linking.util';
 
@@ -132,19 +132,32 @@ export async function fetchOpenRegistrationPrograms(
   return reviveProgramDates(programs);
 }
 
-export async function resolveEditionGuidebooks(prisma: PrismaService, resources: ProgramResource[]) {
-  return Promise.all(
-    (resources ?? []).map(async (resource) => {
-      const activeUrl = resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl;
-      const resolvedUrl = activeUrl ? await resolveMaskedFileUrl(prisma, activeUrl) : null;
-      return {
-        id: resource.id,
-        title: resource.title,
-        type: resource.type,
-        url: resolvedUrl ?? (resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl),
-      };
-    }),
-  );
+/** Every source url a set of resources could need masked, in the exact
+ * per-resource precedence resolveEditionGuidebooks/resolveUrlFromMaskMap
+ * use (link -> linkUrl, else fileUrl). Callers batch these across every
+ * resource in one rebuild into a single buildFileUrlMaskMap call (audit
+ * M189) instead of one resolveMaskedFileUrl query per resource. */
+export function collectGuidebookUrls(resources: ProgramResource[] | undefined): string[] {
+  return (resources ?? [])
+    .map((resource) => (resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl))
+    .filter((url): url is string => Boolean(url));
+}
+
+/** Synchronous now that masking is pre-resolved into `maskMap` (audit M189)
+ * — build `maskMap` once per rebuild via collectGuidebookUrls +
+ * buildFileUrlMaskMap and pass it in here, instead of this function issuing
+ * its own DB query per resource. Output shape/values are unchanged. */
+export function resolveEditionGuidebooks(resources: ProgramResource[] | undefined, maskMap: Map<string, string>) {
+  return (resources ?? []).map((resource) => {
+    const activeUrl = resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl;
+    const resolvedUrl = activeUrl ? resolveUrlFromMaskMap(activeUrl, maskMap) : null;
+    return {
+      id: resource.id,
+      title: resource.title,
+      type: resource.type,
+      url: resolvedUrl ?? (resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl),
+    };
+  });
 }
 
 /** Whether an edition's registration is currently open, given `now`. Shared
@@ -215,10 +228,13 @@ export async function buildRegistrationEditions(
   editionPrograms: OpenRegistrationProgram[],
   now: Date,
 ) {
+  // Audit M189: one buildFileUrlMaskMap call across every edition's
+  // resources instead of one resolveMaskedFileUrl query per resource.
+  const allGuidebookUrls = editionPrograms.flatMap((p) => collectGuidebookUrls(p.resources));
+  const maskMap = await buildFileUrlMaskMap(prisma, allGuidebookUrls);
+
   const guidelinesByProgramId = new Map(
-    await Promise.all(
-      editionPrograms.map(async (p) => [p.id, await resolveEditionGuidebooks(prisma, p.resources)] as const),
-    ),
+    editionPrograms.map((p) => [p.id, resolveEditionGuidebooks(p.resources, maskMap)] as const),
   );
 
   return editionPrograms.map((editionProgram) => ({

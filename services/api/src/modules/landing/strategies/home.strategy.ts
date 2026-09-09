@@ -15,10 +15,12 @@ import { PlatformSettingRepository } from '@modules/platform-settings/infrastruc
 import { buildImpactStatsSection } from './impact-stats-section.util';
 import {
   buildRegistrationEditions,
+  collectGuidebookUrls,
   fetchOpenRegistrationPrograms,
   mapPricingTiersToRegistrationTypes,
   resolveEditionGuidebooks,
 } from './registration-editions.util';
+import { buildFileUrlMaskMap } from '@shared/utils/masked-file-url';
 
 const FULLY_FUNDED_PROCESS_COPY =
   'Complete the registration fee, submit the required documents and essay, and participate in the interview process.';
@@ -371,7 +373,10 @@ export class HomeStrategy implements ILandingPageStrategy {
 
     // Shared with each edition's own `guidelines` in `programs[]` below (via
     // buildRegistrationEditions, which resolves guidebooks the same way).
-    const guidebookResources = await resolveEditionGuidebooks(this.prisma, program?.resources ?? []);
+    // Audit M189: one buildFileUrlMaskMap call for this program's resources
+    // instead of one resolveMaskedFileUrl query per resource.
+    const guidebookMaskMap = await buildFileUrlMaskMap(this.prisma, collectGuidebookUrls(program?.resources));
+    const guidebookResources = resolveEditionGuidebooks(program?.resources ?? [], guidebookMaskMap);
 
     // Group the brand's Instagram posts by edition (programId), plus a
     // separate brand-wide bucket (programId === null) used as a fallback.

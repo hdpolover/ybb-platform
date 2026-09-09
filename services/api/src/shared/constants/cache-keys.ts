@@ -5,6 +5,14 @@
 export const CACHE_KEYS = {
   PROGRAM_DETAIL: (identifier: string) => `program:detail:${identifier}`,
   PROGRAM_LIST: (params: string) => `program:list:${params}`,
+  // GET /programs?url= brand-by-host resolution cache (audit M34). Prefixed
+  // `program:` (not `landing:brand-resolve:`, which caches a full Brand
+  // object with different not-found/no-url semantics — see
+  // program.repository.ts's resolveBrandIdByUrl) so it rides the existing
+  // `invalidateByPattern('program:*')` bust that LandingCacheInvalidationService
+  // already runs on every brand write (bustProgramCache defaults to true),
+  // with no separate invalidation wiring needed.
+  PROGRAM_BRAND_URL_RESOLVE: (key: string) => `program:brand-url-resolve:${key}`,
   USER: (id: string) => `user:${id}`,
   USER_LIST: (brandId: string | null | undefined, skip: number, take: number, role?: string) => `user:list:${brandId || 'all'}:${skip}:${take}:${role || 'all'}`,
   CATEGORY: (id: string) => `category:${id}`,

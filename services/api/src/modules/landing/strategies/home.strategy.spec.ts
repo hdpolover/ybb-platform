@@ -34,6 +34,7 @@ describe('HomeStrategy', () => {
         },
         file: {
             findFirst: jest.fn().mockResolvedValue(null),
+            findMany: jest.fn().mockResolvedValue([]),
         },
     };
 

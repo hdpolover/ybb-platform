@@ -4,9 +4,9 @@ import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.serv
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand } from '@prisma/client';
-import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
+import { buildFileUrlMaskMap, resolveUrlFromMaskMap } from '@shared/utils/masked-file-url';
 import { startOfWibDay } from '@shared/utils/wib-time';
-import { buildRegistrationEditions, fetchOpenRegistrationPrograms } from './registration-editions.util';
+import { buildRegistrationEditions, collectGuidebookUrls, fetchOpenRegistrationPrograms } from './registration-editions.util';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -295,15 +295,19 @@ export class ProgramsStrategy implements ILandingPageStrategy {
                 }
             });
 
-            const guidebookResources = await Promise.all(
-                currentProgram.resources.map(async (resource) => {
-                    const activeUrl = resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl;
-                    return {
-                        id: resource.id,
-                        resolvedUrl: activeUrl ? await resolveMaskedFileUrl(this.prisma, activeUrl) : null,
-                    };
-                }),
+            // Audit M189: one buildFileUrlMaskMap call for this program's
+            // resources instead of one resolveMaskedFileUrl query per resource.
+            const guidebookMaskMap = await buildFileUrlMaskMap(
+                this.prisma,
+                collectGuidebookUrls(currentProgram.resources),
             );
+            const guidebookResources = currentProgram.resources.map((resource) => {
+                const activeUrl = resource.sourceType === 'link' ? resource.linkUrl : resource.fileUrl;
+                return {
+                    id: resource.id,
+                    resolvedUrl: activeUrl ? resolveUrlFromMaskMap(activeUrl, guidebookMaskMap) : null,
+                };
+            });
             const guidebookUrlById = new Map(guidebookResources.map((resource) => [resource.id, resource.resolvedUrl]));
 
             // Section 2: Program Details (Description, Theme, Subthemes, Summary)

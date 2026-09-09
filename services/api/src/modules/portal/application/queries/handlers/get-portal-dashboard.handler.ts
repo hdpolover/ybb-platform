@@ -48,7 +48,11 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
             return this.buildOnboardingDashboard();
         }
 
-        const latestApplication = await this.prisma.participantApplication.findFirst({
+        // Audit M55: latestApplication and baseStats are independent reads (both
+        // only need participant.id) that used to run as two sequential awaits.
+        // Run them concurrently instead.
+        const [latestApplication, baseStatsResult] = await Promise.all([
+            this.prisma.participantApplication.findFirst({
             where: currentApplicationWhere(participant.id, programId),
             orderBy: currentApplicationOrderBy,
             select: {
@@ -161,10 +165,12 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                             }
                         }
             }
-        });
+        }),
+            // 2. Stats (using cached lookup)
+            this.portalCacheService.getParticipantStats(participant.id),
+        ]);
 
-        // 2. Stats (using cached lookup)
-        const baseStats = await this.portalCacheService.getParticipantStats(participant.id) || {
+        const baseStats = baseStatsResult || {
             applicationsCount: 0,
             completedProgramsCount: 0,
             certificatesCount: 0,

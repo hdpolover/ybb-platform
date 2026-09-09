@@ -93,6 +93,152 @@ export class AuditTrailInterceptor implements NestInterceptor {
             paymentMethod: true,
             updatedAt: true,
         },
+        // Audit M81: every entity below narrowed from the full-row fallback
+        // after enumerating every write path that can touch it (its DTO(s) +
+        // repository/service update methods) — see the M81 report for the
+        // per-entity grep evidence. Entities deliberately LEFT on the
+        // full-row fallback (not added here) and why:
+        //   - Brand: 4 separate update endpoints/handlers (details, settings,
+        //     metadata) with overlapping field sets, one of which
+        //     (updateBrandMetadata) does an arbitrary JSON-patch merge into
+        //     `metadata` — no static field list can bound that.
+        //   - Program: UpdateProgramHandler spreads the entire UpdateProgramDto
+        //     (`{ ...updateProgramDto }`) straight into the Prisma update with
+        //     no field whitelist, and branding/publish/exchange-rate handlers
+        //     add more fields on top — the DTO shape IS the only bound, and it
+        //     is broad and evolves independently of this file.
+        //   - AdminBrand: not narrowed because there is nothing to narrow — a
+        //     7-column junction row (adminId, brandId, roleInBrand, permissions,
+        //     assignedAt, assignedBy, legacyId) with only create/delete actions;
+        //     full-row IS the minimal complete select.
+        //   - GatewayConfig, PaymentMethod, ProgramPaymentMethod: proxied to the
+        //     Go payment service over HTTP — no local Prisma model exists for
+        //     any of them, so fetchEntityState's `model` lookup already returns
+        //     undefined and no full-row fetch ever happens regardless of this
+        //     map. Adding a select here would be dead code.
+        Ambassador: {
+            id: true,
+            fullName: true,
+            phoneNumber: true,
+            institution: true,
+            gender: true,
+            notes: true,
+            isActive: true,
+            activatedAt: true,
+            deactivatedAt: true,
+            deletedAt: true,
+        },
+        EmailTemplate: {
+            id: true,
+            name: true,
+            type: true,
+            subject: true,
+            body: true,
+            variables: true,
+            isActive: true,
+            deletedAt: true,
+        },
+        Signature: {
+            id: true,
+            name: true,
+            title: true,
+            imageUrl: true,
+            sortOrder: true,
+            isActive: true,
+            deletedAt: true,
+        },
+        Sponsor: {
+            id: true,
+            name: true,
+            type: true,
+            tier: true,
+            websiteUrl: true,
+            description: true,
+            order: true,
+            isActive: true,
+            logoUrl: true,
+        },
+        BrandSocialFeed: {
+            id: true,
+            programId: true,
+            platform: true,
+            postId: true,
+            permalink: true,
+            imageUrl: true,
+            caption: true,
+            postedAt: true,
+            isActive: true,
+        },
+        Admin: {
+            id: true,
+            fullName: true,
+            roleId: true,
+            updatedAt: true,
+            deletedAt: true,
+            deletedBy: true,
+        },
+        ProgramAnnouncement: {
+            id: true,
+            title: true,
+            content: true,
+            category: true,
+            targetAudience: true,
+            tags: true,
+            sendEmail: true,
+            isPinned: true,
+            imageUrl: true,
+            publishDate: true,
+            isActive: true,
+        },
+        SupportTicket: {
+            id: true,
+            status: true,
+            priority: true,
+            assignedTo: true,
+            resolution: true,
+            resolvedAt: true,
+            resolvedBy: true,
+            closedAt: true,
+            closedBy: true,
+            closedReason: true,
+            deletedAt: true,
+        },
+        PartnershipEnquiry: {
+            id: true,
+            status: true,
+            notes: true,
+            handledBy: true,
+            handledAt: true,
+            deletedAt: true,
+        },
+        AiChatBotConfig: {
+            id: true,
+            brandId: true,
+            name: true,
+            type: true,
+            botConfig: true,
+            isActive: true,
+            displayOnWeb: true,
+            allowedDomains: true,
+        },
+        LegalDocument: {
+            id: true,
+            title: true,
+            slug: true,
+            content: true,
+            version: true,
+            description: true,
+            isRequired: true,
+            isActive: true,
+            deletedAt: true,
+        },
+        User: {
+            id: true,
+            email: true,
+            isActive: true,
+            emailVerified: true,
+            updatedAt: true,
+        },
     };
 
     constructor(

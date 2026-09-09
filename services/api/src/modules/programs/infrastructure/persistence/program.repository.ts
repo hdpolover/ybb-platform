@@ -3,10 +3,15 @@ import { Prisma } from '@prisma/client';
 import { IProgramRepository, FindAllProgramsParams, FindAllProgramsResult } from '@core/interfaces/repositories/program.repository.interface';
 import { Program } from '@core/entities/program.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 
 @Injectable()
 export class ProgramRepository implements IProgramRepository {
-    constructor(private readonly prisma: PrismaService) { }
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly cacheService: CacheService,
+    ) { }
 
     async findAll(params: FindAllProgramsParams): Promise<FindAllProgramsResult> {
         const { brandId, url, year, isPublished, isActive, isVisibleToUsers, status, page = 1, limit = 10, isAdmin } = params;
@@ -17,13 +22,25 @@ export class ProgramRepository implements IProgramRepository {
         };
 
         if (url) {
-            where.brand = {
-                isActive: true,
-                OR: [
-                    { websiteUrl: url },
-                    { websiteUrl: { contains: url, mode: 'insensitive' } },
-                ],
-            };
+            // Audit M34: this used to be an unindexed `brand: { OR: [websiteUrl
+            // equals, websiteUrl ILIKE %url% ] }` join filter, evaluated twice per
+            // request (count() + findMany() both apply `where`). Resolved once
+            // here instead, through a cached id lookup (audit M34), so a repeat
+            // host within the TTL costs zero brand queries instead of two.
+            //
+            // NOT reusing LandingService.resolveBrand(): it throws NotFoundException
+            // on no match (this endpoint must return an empty page instead), and
+            // it falls back to the platform's default active brand when `url` is
+            // falsy (this endpoint must apply no brand filter at all in that case,
+            // matching the original `if (url)` guard). Both would change this
+            // public endpoint's response contract, so this mirrors resolveBrand's
+            // cache pattern (same CacheService, same ~5min CACHE_TTL.MEDIUM, same
+            // exact-then-contains resolution) as its own helper instead.
+            const resolvedBrandId = await this.resolveBrandIdByUrl(url);
+            if (!resolvedBrandId || (brandId && brandId !== resolvedBrandId)) {
+                return { programs: [], total: 0 };
+            }
+            where.brandId = resolvedBrandId;
         }
 
         if (year !== undefined) {
@@ -258,6 +275,53 @@ export class ProgramRepository implements IProgramRepository {
                 isActive: false,
             },
         });
+    }
+
+    /**
+     * Resolve an active brand's id from a host/url string, cached (audit
+     * M34). Mirrors LandingService.resolveBrand()'s exact-match-then-ILIKE
+     * resolution and cache pattern (CacheService, CACHE_TTL.MEDIUM ~5min) —
+     * see the comment at the findAll() call site for why that method itself
+     * isn't reused directly. Only successful resolutions are cached, same as
+     * resolveBrand, so a newly-added brand domain isn't stuck behind a stale
+     * miss.
+     *
+     * This resolves to ONE brand, where the previous join filter matched every
+     * brand whose websiteUrl contained the host. That is equivalent only while
+     * no active brand's websiteUrl is a substring of another's - checked in
+     * production (8 active brands, zero such pairs). If that ever stops being
+     * true, a host like ybb.co alongside events.ybb.co becomes ambiguous, and
+     * the contains-branch would silently drop the other brand's programmes.
+     * orderBy createdAt keeps the choice deterministic rather than arbitrary,
+     * so the failure would at least be stable and reproducible.
+     */
+    private async resolveBrandIdByUrl(url: string): Promise<string | null> {
+        const cacheKey = CACHE_KEYS.PROGRAM_BRAND_URL_RESOLVE(url.trim().toLowerCase());
+        const cached = await this.cacheService.get<string>(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        let brand = await this.prisma.brand.findFirst({
+            where: { websiteUrl: url, isActive: true },
+            select: { id: true },
+            orderBy: { createdAt: 'asc' },
+        });
+
+        if (!brand) {
+            brand = await this.prisma.brand.findFirst({
+                where: { websiteUrl: { contains: url, mode: 'insensitive' }, isActive: true },
+                select: { id: true },
+                orderBy: { createdAt: 'asc' },
+            });
+        }
+
+        if (!brand) {
+            return null;
+        }
+
+        await this.cacheService.set(cacheKey, brand.id, CACHE_TTL.MEDIUM);
+        return brand.id;
     }
 
     private mapToEntity(prismaEntity: Prisma.ProgramGetPayload<{ include: { brand: { select: { name: true } } } }> | Prisma.ProgramGetPayload<Record<string, never>>): Program {
