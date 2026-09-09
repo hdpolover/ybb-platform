@@ -62,12 +62,13 @@ export class PricingTierCoverageAlertService {
 
     const lapsedCount = results.reduce((n, r) => n + r.alerts.lapsed.length, 0);
     const expiringCount = results.reduce((n, r) => n + r.alerts.expiring.length, 0);
+    const uncoveredCount = results.reduce((n, r) => n + r.alerts.uncoveredCategories.length, 0);
 
     // Always log the scan counts, even clean, so a dead cron (no line at all)
     // is distinguishable in the logs from a quiet one (a line with zeros).
     this.logger.log(
       `[pricing-tier-coverage-alert] scanned=${results.length} programsWithAlerts ` +
-        `lapsedTiers=${lapsedCount} expiringTiers=${expiringCount}`,
+        `lapsedTiers=${lapsedCount} expiringTiers=${expiringCount} uncoveredCategories=${uncoveredCount}`,
     );
 
     if (results.length === 0) return;
@@ -78,9 +79,9 @@ export class PricingTierCoverageAlertService {
       // detection fires, nobody is told. Never silently return here.
       this.logger.error(
         `[pricing-tier-coverage-alert] ${results.length} program(s) have pricing-tier coverage ` +
-          `alerts (lapsedTiers=${lapsedCount} expiringTiers=${expiringCount}) but OPS_ALERT_EMAILS ` +
-          `is missing or empty - no email can be delivered. Set OPS_ALERT_EMAILS to a comma-separated ` +
-          `recipient list.`,
+          `alerts (lapsedTiers=${lapsedCount} expiringTiers=${expiringCount} uncoveredCategories=${uncoveredCount}) ` +
+          `but OPS_ALERT_EMAILS is missing or empty - no email can be delivered. Set OPS_ALERT_EMAILS to a ` +
+          `comma-separated recipient list.`,
       );
       return;
     }
@@ -106,6 +107,22 @@ export class PricingTierCoverageAlertService {
             coverageEndDate: t.coverageEndDate.toISOString(),
           })),
         ],
+        // Additive field, deliberately kept OUT of `tiers` above: the
+        // notification consumer's getPricingTierAlertPrograms() hard-filters
+        // that array to state 'lapsed' | 'expiring' (events.controller.ts)
+        // and would silently drop any 'uncovered' entry mixed into it -
+        // exactly the "consumer exists, check its bindings first" trap this
+        // fix was warned about. A NEW field on the program object is inert
+        // to that parser (unknown keys are ignored), so this event stays
+        // backward compatible on the existing ops.pricing_tier_coverage_alert
+        // routing key with no consumer changes required to ship this alert.
+        // The notification service does not yet render this field in the
+        // ops email - see the N-2026-09-09-E report for that follow-up.
+        uncoveredCategories: r.alerts.uncoveredCategories.map((c) => ({
+          category: c.category,
+          tierId: c.tierId,
+          tierName: c.tierName,
+        })),
       })),
     });
 

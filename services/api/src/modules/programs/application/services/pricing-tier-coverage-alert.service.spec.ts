@@ -9,6 +9,11 @@ import { CronLockService } from '@shared/infrastructure/database/cron-lock.servi
 
 const now = new Date('2027-01-10T01:00:00Z');
 
+// isActive/feeType/allowedCategories now travel with every tier row (see
+// N-2026-09-09-E: the scan query no longer filters isActive at the DB level,
+// so the caller filters in JS instead) - these fixtures are pinned to
+// feeType !== 'registration_fee' so the new uncovered-category check stays a
+// no-op for them and this spec keeps testing exactly what its names say.
 const lapsedProgram = {
   id: 'prog-1',
   name: 'China Youth Summit 2027',
@@ -18,6 +23,9 @@ const lapsedProgram = {
     {
       id: 'tier-1',
       name: 'Fully Funded',
+      isActive: true,
+      feeType: 'full_fee',
+      allowedCategories: [],
       validityPeriods: [{ startDate: new Date('2026-12-01T00:00:00Z'), endDate: new Date('2027-01-05T00:00:00Z') }],
     },
   ],
@@ -32,7 +40,39 @@ const cleanProgram = {
     {
       id: 'tier-2',
       name: 'Standard',
+      isActive: true,
+      feeType: 'full_fee',
+      allowedCategories: [],
       validityPeriods: [{ startDate: new Date('2026-12-01T00:00:00Z'), endDate: new Date('2027-06-01T00:00:00Z') }],
+    },
+  ],
+};
+
+// The real MEYS 6th shape (2026-09-08): self_funded still has a live
+// registration_fee tier, but the only tier that ever allowed fully_funded
+// was deactivated. Before N-2026-09-09-E the scan query filtered isActive at
+// the DB level, so this program produced NO alert and NO email at all.
+const meysUncoveredCategoryProgram = {
+  id: 'prog-3',
+  name: 'Middle East Youth Summit 6th',
+  registrationCloseDate: new Date('2027-03-01T00:00:00Z'),
+  brand: { name: 'MEYS' },
+  pricingTiers: [
+    {
+      id: 'tier-self-funded',
+      name: 'Registration Fee (Self Funded)',
+      isActive: true,
+      feeType: 'registration_fee',
+      allowedCategories: ['self_funded'],
+      validityPeriods: [{ startDate: new Date('2026-08-01T00:00:00Z'), endDate: new Date('2027-06-01T00:00:00Z') }],
+    },
+    {
+      id: 'tier-fully-funded',
+      name: 'Registration Fee (Fully Funded)',
+      isActive: false,
+      feeType: 'registration_fee',
+      allowedCategories: ['fully_funded'],
+      validityPeriods: [{ startDate: new Date('2026-08-01T00:00:00Z'), endDate: new Date('2027-06-01T00:00:00Z') }],
     },
   ],
 };
@@ -88,6 +128,31 @@ describe('PricingTierCoverageAlertService', () => {
             tierName: 'Fully Funded',
             state: 'lapsed',
           }),
+        ],
+      }),
+    ]);
+  });
+
+  // Pins N-2026-09-09-E end to end: the MEYS 6th shape must reach the emitted
+  // event, not just the pure detector unit test. Fails before the fix because
+  // scanProgramsForPricingTierAlerts filtered isActive at the query level, so
+  // the deactivated fully_funded tier - and the whole program - never reached
+  // this service's results at all.
+  it('emits an uncoveredCategories entry for a category whose only registration_fee tier was deactivated', async () => {
+    mockPrisma = { program: { findMany: jest.fn().mockResolvedValue([meysUncoveredCategoryProgram]) } };
+    service = await build('ops1@ybb.id');
+
+    await service.scanAndAlert(now);
+
+    expect(mockRabbitmq.emit).toHaveBeenCalledTimes(1);
+    const [, payload] = mockRabbitmq.emit.mock.calls[0];
+    expect(payload.programs).toEqual([
+      expect.objectContaining({
+        programId: 'prog-3',
+        programName: 'Middle East Youth Summit 6th',
+        tiers: [],
+        uncoveredCategories: [
+          { category: 'fully_funded', tierId: 'tier-fully-funded', tierName: 'Registration Fee (Fully Funded)' },
         ],
       }),
     ]);

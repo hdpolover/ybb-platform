@@ -44,6 +44,31 @@ type SnapshotValidator<T> = (payload: Prisma.JsonValue) => T | null;
 
 @Injectable()
 export class LandingSnapshotService {
+  /**
+   * M192: in-process single-flight for the rebuild-and-persist step below,
+   * keyed by the same versioned cache key a request already computes.
+   * Without this, every concurrent request that misses at the same moment
+   * (the normal shape of TTL expiry on a busy page: N requests arrive
+   * before the first rebuild finishes, not one at a time) independently ran
+   * `build()` - which can itself be several DB queries / other services -
+   * and independently upserted brand_landing_snapshots. N simultaneous
+   * misses cost N builds for one page.
+   *
+   * IN-PROCESS ONLY, deliberately not distributed. This collapses
+   * concurrent requests landing on the SAME replica. There are 2 API
+   * replicas, so a miss that lands on both at once still runs build() twice
+   * - once per process - and this map cannot see across that boundary. That
+   * residual duplication is bounded by replica count, not request count,
+   * which is the actual problem this fixes (unbounded fan-out at TTL
+   * expiry). A distributed lock (Redis SETNX or similar) would close the
+   * cross-replica gap too, but was deliberately not added: this is a
+   * cache-warming path that already fails safe (worst case on a miss is a
+   * redundant rebuild, never wrong data), so trading that for a new failure
+   * mode - a stuck lock stalling every replica's rebuild if a lock-holder
+   * dies mid-build - is not a trade worth making here.
+   */
+  private readonly inFlightBuilds = new Map<string, Promise<unknown>>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService,
@@ -205,33 +230,75 @@ export class LandingSnapshotService {
       }
     }
 
-    const payload = await build();
-    const payloadJson: Prisma.InputJsonValue = JSON.parse(JSON.stringify(payload));
-    await this.prisma.brandLandingSnapshot.upsert({
-      where: {
-        brandId_page_slug: {
+    return this.rebuildAndPersist(cacheKey, brand, page, normalizedSlug, build, ttl);
+  }
+
+  /**
+   * The actual rebuild, single-flighted per cacheKey - see inFlightBuilds
+   * above for why. A concurrent caller that finds an in-flight promise for
+   * this exact key awaits THAT instead of starting its own build()/upsert().
+   */
+  private rebuildAndPersist<T>(
+    cacheKey: string,
+    brand: Brand,
+    page: string,
+    normalizedSlug: string,
+    build: SnapshotBuilder<T>,
+    ttl: number,
+  ): Promise<T> {
+    const inFlight = this.inFlightBuilds.get(cacheKey) as Promise<T> | undefined;
+    if (inFlight) return inFlight;
+
+    const promise = (async (): Promise<T> => {
+      const payload = await build();
+      const payloadJson: Prisma.InputJsonValue = JSON.parse(JSON.stringify(payload));
+      await this.prisma.brandLandingSnapshot.upsert({
+        where: {
+          brandId_page_slug: {
+            brandId: brand.id,
+            page,
+            slug: normalizedSlug,
+          },
+        },
+        create: {
           brandId: brand.id,
           page,
           slug: normalizedSlug,
+          payloadJson,
+          schemaVersion: SNAPSHOT_SCHEMA_VERSION,
+          publishedAt: new Date(),
         },
-      },
-      create: {
-        brandId: brand.id,
-        page,
-        slug: normalizedSlug,
-        payloadJson,
-        schemaVersion: SNAPSHOT_SCHEMA_VERSION,
-        publishedAt: new Date(),
-      },
-      update: {
-        payloadJson,
-        schemaVersion: SNAPSHOT_SCHEMA_VERSION,
-        publishedAt: new Date(),
-      },
-    });
+        update: {
+          payloadJson,
+          schemaVersion: SNAPSHOT_SCHEMA_VERSION,
+          publishedAt: new Date(),
+        },
+      });
 
-    await this.cacheService.set(cacheKey, payload, ttl);
-    return payload;
+      await this.cacheService.set(cacheKey, payload, ttl);
+      return payload;
+    })();
+
+    this.inFlightBuilds.set(cacheKey, promise);
+
+    // Cleared on settle either way - success or failure - so a failed build
+    // does not wedge this key forever and the next miss gets to try again.
+    // Guarded against clobbering a NEWER entry: cleanup running after this
+    // key has already been reused (only possible once this promise has
+    // itself settled, but ordering of async cleanup is never guaranteed)
+    // must not delete someone else's in-flight build.
+    // .catch() here is only to keep this cleanup-only derived promise from
+    // becoming a second, unhandled rejection - `promise` itself, returned
+    // below, still rejects normally for whoever actually awaits it.
+    void promise
+      .finally(() => {
+        if (this.inFlightBuilds.get(cacheKey) === promise) {
+          this.inFlightBuilds.delete(cacheKey);
+        }
+      })
+      .catch(() => undefined);
+
+    return promise;
   }
 
   private isSnapshotFresh(publishedAt: Date, ttl: number): boolean {

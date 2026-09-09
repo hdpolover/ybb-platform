@@ -1,5 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { ChangeType } from '@prisma/client';
+import { AUDIT_TRAIL_KEY, AuditTrailMetadata } from '@shared/decorators/audit-trail.decorator';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { ProgramApplicationConfigController } from './program-application.controller';
@@ -478,6 +481,68 @@ describe('Pricing tier dual-price validation', () => {
             const dto = plainToInstance(UpdateProgramPricingTierDto, { idrPrice: 100.5 });
             const errors = await validate(dto);
             expect(errors.some((e) => e.property === 'idrPrice')).toBe(true);
+        });
+    });
+});
+
+// N-2026-09-09-D: none of these six endpoints carried @AuditTrail at all,
+// which is why nobody could say who deactivated MEYS 6th's only
+// fully_funded registration_fee tier on 2026-09-08 - DataChangeLog simply
+// had no row for it. AuditTrailInterceptor is wired app-wide (audit.module.ts)
+// off this metadata alone, so asserting the metadata IS the assertion that
+// every pricing-tier/validity-period write is now audited. Read straight off
+// the class prototype - no controller instance needed, since @AuditTrail
+// attaches metadata to the method itself.
+describe('pricing-tier and validity-period audit trail coverage', () => {
+    const reflector = new Reflector();
+    const metadataOf = (handler: (...args: never[]) => unknown): AuditTrailMetadata | undefined =>
+        reflector.get<AuditTrailMetadata>(AUDIT_TRAIL_KEY, handler);
+    const proto = ProgramApplicationConfigController.prototype;
+
+    it('audits creating a pricing tier', () => {
+        expect(metadataOf(proto.addPricingTier)).toEqual({
+            entityType: 'ProgramPricingTier',
+            action: ChangeType.create,
+        });
+    });
+
+    it('audits updating a pricing tier, keyed off the itemId route param', () => {
+        expect(metadataOf(proto.updatePricingTier)).toEqual({
+            entityType: 'ProgramPricingTier',
+            action: ChangeType.update,
+            idParam: 'itemId',
+        });
+    });
+
+    it('audits deleting a pricing tier, keyed off the itemId route param', () => {
+        expect(metadataOf(proto.deletePricingTier)).toEqual({
+            entityType: 'ProgramPricingTier',
+            action: ChangeType.delete,
+            idParam: 'itemId',
+        });
+    });
+
+    it('audits creating a validity period, keyed off the parent tierId route param', () => {
+        expect(metadataOf(proto.addValidityPeriod)).toEqual({
+            entityType: 'PricingTierValidityPeriod',
+            action: ChangeType.create,
+            idParam: 'tierId',
+        });
+    });
+
+    it('audits updating a validity period, keyed off the periodId route param', () => {
+        expect(metadataOf(proto.updateValidityPeriod)).toEqual({
+            entityType: 'PricingTierValidityPeriod',
+            action: ChangeType.update,
+            idParam: 'periodId',
+        });
+    });
+
+    it('audits deleting a validity period, keyed off the periodId route param', () => {
+        expect(metadataOf(proto.deleteValidityPeriod)).toEqual({
+            entityType: 'PricingTierValidityPeriod',
+            action: ChangeType.delete,
+            idParam: 'periodId',
         });
     });
 });

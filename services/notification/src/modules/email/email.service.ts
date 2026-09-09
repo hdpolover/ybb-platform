@@ -1036,10 +1036,11 @@ export class EmailService {
    */
   async sendPricingTierCoverageAlertEmail(
     to: string,
-    data: { programs: Array<{ programId: string; programName: string; brandName: string; tiers: Array<{ tierId: string; tierName: string; state: 'lapsed' | 'expiring'; sinceDate?: string; daysDark?: number; coverageEndDate?: string }> }> },
+    data: { programs: Array<{ programId: string; programName: string; brandName: string; tiers: Array<{ tierId: string; tierName: string; state: 'lapsed' | 'expiring'; sinceDate?: string; daysDark?: number; coverageEndDate?: string }>; uncoveredCategories?: string[] }> },
   ) {
     const lapsedRows: string[] = [];
     const expiringRows: string[] = [];
+    const uncoveredRows: string[] = [];
 
     for (const program of data.programs) {
       for (const tier of program.tiers) {
@@ -1056,14 +1057,31 @@ export class EmailService {
         if (tier.state === 'lapsed') lapsedRows.push(row);
         else expiringRows.push(row);
       }
+
+      // An uncovered category means participants in it cannot pay the
+      // mandatory registration fee, so they cannot submit at all. This is
+      // listed FIRST in the email because it is the most severe of the three
+      // and, unlike a lapsed tier, it can be caused by a deactivation that
+      // leaves no tier row to report.
+      for (const category of program.uncoveredCategories ?? []) {
+        uncoveredRows.push(`
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(program.brandName)} / ${escapeHtml(program.programName)}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(category)}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">No purchasable registration tier - participants in this category cannot pay or submit</td>
+          </tr>`);
+      }
     }
 
     const lapsedCount = lapsedRows.length;
     const expiringCount = expiringRows.length;
+    const uncoveredCount = uncoveredRows.length;
     const subject =
-      lapsedCount > 0
-        ? `[Action Required] ${lapsedCount} pricing tier(s) unpurchasable right now`
-        : `[Heads Up] ${expiringCount} pricing tier(s) losing coverage soon`;
+      uncoveredCount > 0
+        ? `[Action Required] ${uncoveredCount} participation categor(y/ies) cannot be paid for`
+        : lapsedCount > 0
+          ? `[Action Required] ${lapsedCount} pricing tier(s) unpurchasable right now`
+          : `[Heads Up] ${expiringCount} pricing tier(s) losing coverage soon`;
 
     const table = (title: string, rows: string[]) =>
       rows.length === 0
@@ -1085,9 +1103,10 @@ export class EmailService {
       <div style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto;padding:24px;color:#111827;">
         <h2 style="margin:0 0 8px;font-size:20px;">Pricing tier coverage alert</h2>
         <p style="margin:0 0 16px;color:#4b5563;">
-          Daily scan found ${lapsedCount} lapsed and ${expiringCount} expiring pricing tier(s) across published programs.
-          Lapsed tiers are currently unpurchasable by participants.
+          Daily scan found ${uncoveredCount} uncovered categor(y/ies), ${lapsedCount} lapsed and ${expiringCount} expiring pricing tier(s)
+          across published programs. An uncovered category blocks registration entirely; lapsed tiers are currently unpurchasable.
         </p>
+        ${table('Uncovered categories (registration blocked)', uncoveredRows)}
         ${table('Lapsed (active outage)', lapsedRows)}
         ${table('Expiring soon', expiringRows)}
       </div>`;

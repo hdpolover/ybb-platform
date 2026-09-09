@@ -59,6 +59,11 @@ type PricingTierAlertProgram = {
   programName: string;
   brandName: string;
   tiers: PricingTierAlertTier[];
+  // A participation category with NO purchasable registration tier right now.
+  // Carried separately from `tiers` because the cause may be that the only
+  // tier serving the category was DEACTIVATED, in which case there is no
+  // lapsed/expiring tier row to hang the alert on at all.
+  uncoveredCategories: string[];
 };
 type ReadinessRegressionBlocker = {
   ruleId: string;
@@ -1630,13 +1635,22 @@ function getPricingTierAlertPrograms(
         coverageEndDate: getString(tier, 'coverageEndDate'),
       });
     }
-    if (tiers.length === 0) continue;
+    const uncoveredCategories = getArray(program, 'uncoveredCategories')
+      .map((value) => (typeof value === 'string' ? value : ''))
+      .filter((value) => value.length > 0);
+
+    // A programme whose ONLY problem is an uncovered category has no
+    // lapsed/expiring tier rows, so dropping on `tiers.length === 0` here is
+    // what made the 2026-09-08 MEYS outage silent end to end: the API detected
+    // it, emitted it, and this parser threw it away before anyone was emailed.
+    if (tiers.length === 0 && uncoveredCategories.length === 0) continue;
 
     normalized.push({
       programId,
       programName,
       brandName: getString(program, 'brandName') || 'Unknown Brand',
       tiers,
+      uncoveredCategories,
     });
   }
 

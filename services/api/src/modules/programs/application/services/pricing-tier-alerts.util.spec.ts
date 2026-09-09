@@ -1,5 +1,5 @@
 // services/api/src/modules/programs/application/services/pricing-tier-alerts.util.spec.ts
-import { detectPricingTierAlerts } from './pricing-tier-alerts.util';
+import { detectPricingTierAlerts, detectUncoveredCategories, CoverageTierInput } from './pricing-tier-alerts.util';
 
 const NOW = new Date('2026-08-30T04:00:00.000Z'); // 11:00 WIB, 30 Aug 2026
 
@@ -135,5 +135,112 @@ describe('detectPricingTierAlerts', () => {
         const { lapsed } = detectPricingTierAlerts(tiers, null, NOW);
 
         expect(lapsed).toEqual([]);
+    });
+});
+
+describe('detectUncoveredCategories', () => {
+    function coverageTier(overrides: Partial<CoverageTierInput> & { id: string }): CoverageTierInput {
+        return {
+            name: overrides.name ?? overrides.id,
+            isActive: true,
+            feeType: 'registration_fee',
+            allowedCategories: [],
+            validityPeriods: [{ startDate: new Date('2026-08-01'), endDate: new Date('2026-12-31') }],
+            ...overrides,
+        };
+    }
+
+    // The MEYS 6th shape exactly (2026-09-08): two participation categories,
+    // self_funded still has a live registration_fee tier, but the only tier
+    // that ever allowed fully_funded was deactivated. Before N-2026-09-09-E
+    // this fixture produces NO alert at all: scanProgramsForPricingTierAlerts
+    // fetched only isActive tiers, so the deactivated one was invisible, and
+    // detectPricingTierAlerts never runs against a category it never saw.
+    it('flags a category whose only registration_fee tier was deactivated (MEYS 6th, 2026-09-08)', () => {
+        const tiers = [
+            coverageTier({
+                id: 'tier-self-funded',
+                name: 'Registration Fee (Self Funded)',
+                allowedCategories: ['self_funded'],
+                isActive: true,
+            }),
+            coverageTier({
+                id: 'tier-fully-funded',
+                name: 'Registration Fee (Fully Funded)',
+                allowedCategories: ['fully_funded'],
+                isActive: false, // deactivated by the admin on 2026-09-08
+            }),
+        ];
+
+        const alerts = detectUncoveredCategories(tiers, NOW);
+
+        expect(alerts).toEqual([
+            { category: 'fully_funded', tierId: 'tier-fully-funded', tierName: 'Registration Fee (Fully Funded)' },
+        ]);
+    });
+
+    // The China Youth Summit shape (21-30 Aug 2026): the tier stayed ACTIVE
+    // the whole time, but its chain of validity periods just stopped, so no
+    // period covers `now`. Already caught by detectPricingTierAlerts as
+    // "lapsed", but the uncovered-category check must independently catch
+    // it too - it is the same real-world outage this whole detector exists
+    // for, and this fixture is what proves the new condition subsumes it
+    // rather than only catching the deactivation half.
+    it('flags a category whose only registration_fee tier is active but its coverage lapsed (China Youth Summit)', () => {
+        const tiers = [
+            coverageTier({
+                id: 'tier-fully-funded',
+                name: 'Fully Funded',
+                allowedCategories: ['fully_funded'],
+                isActive: true,
+                validityPeriods: [{ startDate: new Date('2026-08-01'), endDate: new Date('2026-08-20') }],
+            }),
+        ];
+
+        const alerts = detectUncoveredCategories(tiers, NOW);
+
+        expect(alerts).toEqual([
+            { category: 'fully_funded', tierId: 'tier-fully-funded', tierName: 'Fully Funded' },
+        ]);
+    });
+
+    it('does not alert when every configured category has a covering active tier', () => {
+        const tiers = [
+            coverageTier({ id: 't1', allowedCategories: ['self_funded'] }),
+            coverageTier({ id: 't2', allowedCategories: ['fully_funded'] }),
+        ];
+
+        expect(detectUncoveredCategories(tiers, NOW)).toEqual([]);
+    });
+
+    it('does not alert a program with zero registration_fee tiers ever configured', () => {
+        // Genuinely nothing configured - must not be indistinguishable from
+        // the MEYS-shape defect above.
+        expect(detectUncoveredCategories([], NOW)).toEqual([]);
+    });
+
+    it('ignores non-registration_fee tiers entirely, active or not', () => {
+        const tiers = [
+            coverageTier({ id: 't1', feeType: 'program_fee_1', allowedCategories: ['fully_funded'], isActive: false }),
+        ];
+
+        expect(detectUncoveredCategories(tiers, NOW)).toEqual([]);
+    });
+
+    it('treats an empty allowedCategories tier as covering every category (matches isAllowedForCategory convention)', () => {
+        const tiers = [coverageTier({ id: 't1', allowedCategories: [] })];
+
+        expect(detectUncoveredCategories(tiers, NOW)).toEqual([]);
+    });
+
+    it('flags a category that is configured (a tier once listed it) but no active tier lists it any more', () => {
+        const tiers = [
+            coverageTier({ id: 't1', allowedCategories: ['self_funded'] }),
+            coverageTier({ id: 't2', allowedCategories: ['fully_funded'], isActive: false }),
+        ];
+
+        expect(detectUncoveredCategories(tiers, NOW)).toEqual([
+            { category: 'fully_funded', tierId: 't2', tierName: 't2' },
+        ]);
     });
 });

@@ -239,6 +239,46 @@ export class AuditTrailInterceptor implements NestInterceptor {
             emailVerified: true,
             updatedAt: true,
         },
+        // N-2026-09-09-D: pricing-tier writes had NO audit trail at all (no
+        // @AuditTrail on any of the addPricingTier/updatePricingTier/
+        // deletePricingTier/*ValidityPeriod endpoints in
+        // program-application.controller.ts) - which is why nobody could say
+        // who deactivated MEYS 6th's only fully_funded registration_fee tier
+        // on 2026-09-08. Selects below enumerate every field UpdateProgram
+        // PricingTierHandler / UpdateValidityPeriodHandler can actually write
+        // (see manage-program-content.handlers.ts: the update handler drops
+        // `validFrom`/`validUntil`/legacy `price`/`currency` from its DTO
+        // spread and re-derives `price`/`currency` from `usdPrice`, so those
+        // four are covered via the fields they actually land in, not via the
+        // DTO's own field names).
+        ProgramPricingTier: {
+            id: true,
+            programId: true,
+            name: true,
+            description: true,
+            price: true,
+            currency: true,
+            usdPrice: true,
+            idrPrice: true,
+            capacity: true,
+            benefits: true,
+            requirements: true,
+            feeType: true,
+            allowedCategories: true,
+            icon: true,
+            order: true,
+            isActive: true,
+            updatedAt: true,
+            deletedAt: true,
+        },
+        PricingTierValidityPeriod: {
+            id: true,
+            pricingTierId: true,
+            startDate: true,
+            endDate: true,
+            description: true,
+            updatedAt: true,
+        },
     };
 
     constructor(

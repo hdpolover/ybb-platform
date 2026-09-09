@@ -1,5 +1,6 @@
-import { resolveAuditActor } from './audit-trail.interceptor';
-import { ChangedByType } from '@prisma/client';
+import { resolveAuditActor, AuditTrailInterceptor } from './audit-trail.interceptor';
+import { ChangedByType, ChangeType } from '@prisma/client';
+import { of } from 'rxjs';
 
 describe('resolveAuditActor', () => {
     it('attributes an ordinary admin action to the admin', () => {
@@ -87,5 +88,82 @@ describe('audit trail client address', () => {
                 ip: '10.0.0.5',
             }),
         ).toBe('203.0.113.9');
+    });
+});
+
+/**
+ * N-2026-09-09-D: pricing-tier writes had no @AuditTrail at all, so nobody
+ * could say who deactivated MEYS 6th's only fully_funded registration_fee
+ * tier on 2026-09-08. program-application.controller.spec.ts pins that the
+ * decorator is now wired to every pricing-tier/validity-period endpoint;
+ * this pins the OTHER half - that DEFAULT_ENTITY_SELECTS actually narrows
+ * the before-state fetch for those two entity types, the way M81 did for
+ * the entities already in the map, rather than falling through to a
+ * full-row snapshot.
+ */
+describe('AuditTrailInterceptor before-state select (N-2026-09-09-D)', () => {
+    function buildContext(params: Record<string, string>) {
+        const request = { params, method: 'PUT', route: { path: '/mock' }, url: '/mock', headers: {}, user: undefined };
+        return {
+            getHandler: () => function mockHandler() { /* noop */ },
+            switchToHttp: () => ({ getRequest: () => request }),
+        } as any;
+    }
+
+    async function runIntercept(entityType: string, entityId: string, findUnique: jest.Mock) {
+        const reflector = { get: jest.fn().mockReturnValue({ entityType, action: ChangeType.update, idParam: 'id' }) };
+        const modelName = entityType.charAt(0).toLowerCase() + entityType.slice(1);
+        const prisma = { [modelName]: { findUnique } };
+        const dataChangeLogService = { logWithDiff: jest.fn().mockResolvedValue(undefined) };
+        const interceptor = new AuditTrailInterceptor(reflector as any, prisma as any, dataChangeLogService as any);
+        const next = { handle: () => of({ id: entityId }) };
+
+        await interceptor.intercept(buildContext({ id: entityId }), next as any);
+    }
+
+    it('narrows the ProgramPricingTier before-state fetch to every field a write path can change', async () => {
+        const findUnique = jest.fn().mockResolvedValue({ id: 't1', isActive: false });
+        await runIntercept('ProgramPricingTier', 't1', findUnique);
+
+        expect(findUnique).toHaveBeenCalledWith({
+            where: { id: 't1' },
+            select: {
+                id: true,
+                programId: true,
+                name: true,
+                description: true,
+                price: true,
+                currency: true,
+                usdPrice: true,
+                idrPrice: true,
+                capacity: true,
+                benefits: true,
+                requirements: true,
+                feeType: true,
+                allowedCategories: true,
+                icon: true,
+                order: true,
+                isActive: true,
+                updatedAt: true,
+                deletedAt: true,
+            },
+        });
+    });
+
+    it('narrows the PricingTierValidityPeriod before-state fetch to every field a write path can change', async () => {
+        const findUnique = jest.fn().mockResolvedValue({ id: 'p1' });
+        await runIntercept('PricingTierValidityPeriod', 'p1', findUnique);
+
+        expect(findUnique).toHaveBeenCalledWith({
+            where: { id: 'p1' },
+            select: {
+                id: true,
+                pricingTierId: true,
+                startDate: true,
+                endDate: true,
+                description: true,
+                updatedAt: true,
+            },
+        });
     });
 });

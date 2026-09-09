@@ -11,8 +11,6 @@ const constructorOptions: Array<Record<string, unknown>> = [];
 const fakeRedis = {
   ttl: jest.fn(),
   multi: jest.fn(),
-  pexpire: jest.fn(),
-  setex: jest.fn(),
   quit: jest.fn(),
   disconnect: jest.fn(),
   on: jest.fn(),
@@ -28,9 +26,16 @@ jest.mock('ioredis', () => ({
 
 import { RedisThrottlerStorage } from './redis-throttler.storage';
 
+// M72: pexpire/setex are now issued through a SECOND this.redis.multi() call
+// (pipelined together, see redis-throttler.storage.ts), not as direct
+// this.redis.pexpire()/this.redis.setex() calls - so the chain object this
+// mock hands back for every multi() call needs both, even though the
+// original incr/pttl call site never touches them.
 const healthyMulti = () => ({
   incr: jest.fn().mockReturnThis(),
   pttl: jest.fn().mockReturnThis(),
+  pexpire: jest.fn().mockReturnThis(),
+  setex: jest.fn().mockReturnThis(),
   exec: jest.fn().mockResolvedValue([
     [null, 1],
     [null, 5000],
@@ -45,8 +50,6 @@ describe('RedisThrottlerStorage', () => {
     constructorOptions.length = 0;
     fakeRedis.ttl.mockResolvedValue(-2);
     fakeRedis.multi.mockImplementation(healthyMulti);
-    fakeRedis.pexpire.mockResolvedValue(1);
-    fakeRedis.setex.mockResolvedValue('OK');
     storage = new RedisThrottlerStorage('localhost', 6379, '');
   });
 
@@ -184,19 +187,74 @@ describe('RedisThrottlerStorage', () => {
     });
 
     it('arms a block once the limit is exceeded', async () => {
-      fakeRedis.multi.mockImplementation(() => ({
+      const incrChain = {
         incr: jest.fn().mockReturnThis(),
         pttl: jest.fn().mockReturnThis(),
         exec: jest.fn().mockResolvedValue([
           [null, 6],
-          [null, 5000],
+          [null, 5000], // TTL already set - only the block write is needed
         ]),
-      }));
+      };
+      const followUpChain = { pexpire: jest.fn().mockReturnThis(), setex: jest.fn().mockReturnThis(), exec: jest.fn().mockResolvedValue([[null, 'OK']]) };
+      fakeRedis.multi.mockImplementationOnce(() => incrChain).mockImplementationOnce(() => followUpChain);
 
       const record = await storage.increment('k', 60_000, 5, 900_000, 'default');
 
       expect(record.isBlocked).toBe(true);
-      expect(fakeRedis.setex).toHaveBeenCalledWith('default:k:blocked', 900, '1');
+      expect(followUpChain.setex).toHaveBeenCalledWith('default:k:blocked', 900, '1');
+      expect(followUpChain.pexpire).not.toHaveBeenCalled(); // TTL was already live, nothing to (re)set
+    });
+  });
+
+  // M72: the storage performed up to 4 sequential round trips per increment()
+  // call (ttl, incr+pttl MULTI, pexpire, setex) - across the 3 configured
+  // throttlers (short/medium/long) that is the 6-9-per-request finding. The
+  // two trailing writes are independent of each other and can both be needed
+  // at once (a tier with limit 0: the very first hit both needs its TTL set
+  // AND immediately crosses the block threshold), so they should be one
+  // pipelined round trip, not two.
+  describe('M72: pipelines the trailing writes into one round trip', () => {
+    it('pipelines a first-hit TTL and a newly-armed block together instead of as two sequential writes', async () => {
+      const incrChain = {
+        incr: jest.fn().mockReturnThis(),
+        pttl: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([
+          [null, 1],
+          [null, -2], // first hit ever - no TTL set yet
+        ]),
+      };
+      const followUpChain = {
+        pexpire: jest.fn().mockReturnThis(),
+        setex: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([
+          [null, 1],
+          [null, 'OK'],
+        ]),
+      };
+      fakeRedis.multi.mockImplementationOnce(() => incrChain).mockImplementationOnce(() => followUpChain);
+
+      // limit 0: the very first hit is already over limit.
+      const record = await storage.increment('k', 60_000, 0, 900_000, 'default');
+
+      expect(record.isBlocked).toBe(true);
+      expect(record.timeToExpire).toBe(60_000);
+      // Both writes went through the SAME follow-up pipeline...
+      expect(followUpChain.pexpire).toHaveBeenCalledWith('default:k', 60_000);
+      expect(followUpChain.setex).toHaveBeenCalledWith('default:k:blocked', 900, '1');
+      // ...as exactly one exec() call, not two.
+      expect(followUpChain.exec).toHaveBeenCalledTimes(1);
+      // Total round trips for this increment(): ttl() + incr/pttl MULTI +
+      // ONE follow-up MULTI = multi() called twice, not three separate
+      // command round trips for the trailing writes.
+      expect(fakeRedis.multi).toHaveBeenCalledTimes(2);
+    });
+
+    it('does no follow-up round trip at all when neither a TTL nor a block is needed', async () => {
+      // healthyMulti's default exec (totalHits 1, pttl 5000) means: TTL
+      // already set, and 1 is not over the default limit passed below.
+      await storage.increment('k', 60_000, 5, 0, 'default');
+
+      expect(fakeRedis.multi).toHaveBeenCalledTimes(1); // only the incr/pttl MULTI
     });
   });
 

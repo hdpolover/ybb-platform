@@ -34,6 +34,94 @@ export type ExpiringTierAlert = {
 
 export type PricingTierAlerts = { lapsed: LapsedTierAlert[]; expiring: ExpiringTierAlert[] };
 
+/**
+ * The two ApplicationCategory enum values, duplicated here (rather than
+ * imported from @prisma/client) so this pure detection util stays free of a
+ * Prisma dependency - see PricingTierAlertInput for the same reasoning.
+ * Matches isAllowedForCategory's convention in category-scope.util.ts: an
+ * empty allowedCategories array means "applies to every category".
+ */
+const ALL_APPLICATION_CATEGORIES = ['fully_funded', 'self_funded'] as const;
+
+export type CoverageTierInput = {
+    id: string;
+    name: string;
+    isActive: boolean;
+    feeType: string;
+    allowedCategories: string[];
+    validityPeriods: TierValidityPeriod[];
+};
+
+export type UncoveredCategoryAlert = {
+    category: string;
+    tierId: string;
+    tierName: string;
+};
+
+const expandCategories = (allowed: string[]): readonly string[] =>
+    allowed.length === 0 ? ALL_APPLICATION_CATEGORIES : allowed;
+
+const tierCoversNow = (tier: CoverageTierInput, now: Date): boolean => {
+    if (!tier.isActive) return false;
+    const periods = tier.validityPeriods;
+    if (periods.length === 0) return false;
+    return periods.some((p) => effectiveStart(p, periods) <= now && !hasTierPeriodEnded(p, now));
+};
+
+/**
+ * The MEYS 6th incident (2026-09-08): an admin deactivated
+ * `Registration Fee (Fully Funded)`, the only registration_fee tier allowing
+ * the fully_funded category. detectPricingTierAlerts above never saw it -
+ * its caller only fetches isActive tiers in the first place, so a
+ * deactivated tier is simply absent from the array, not a "lapsed" entry.
+ * And when deactivation empties a program down to zero *active* tiers, the
+ * old scan short-circuited on `pricingTiers.length === 0` and emitted
+ * nothing at all.
+ *
+ * This checks the thing that actually matters instead of any one failure
+ * mode of it: does every participation category this program's
+ * registration_fee tiers were ever configured for still have a tier that is
+ * active, not soft-deleted (deletedAt: null is enforced by the caller's
+ * query, same as everywhere else in this codebase), and covers `now`. That
+ * single condition catches deactivation (this incident), a lapsed validity
+ * period with no active tier picking up the category (the China Youth
+ * Summit incident this whole module exists for), and a misconfigured
+ * allowedCategories that silently drops a category from every active tier.
+ *
+ * `tiers` must include INACTIVE registration_fee tiers too (not just active
+ * ones) - that is what lets "configured for" be answered at all; a program
+ * with only an active tier and nothing else correctly reports zero
+ * candidates to be missing.
+ *
+ * A program with zero registration_fee tiers ever configured produces zero
+ * alerts here (configuredCategories stays empty) - that is the "genuinely
+ * no categories configured" case, and it must not be indistinguishable from
+ * a real defect.
+ */
+export function detectUncoveredCategories(tiers: CoverageTierInput[], now: Date): UncoveredCategoryAlert[] {
+    const registrationTiers = tiers.filter((t) => t.feeType === 'registration_fee');
+
+    const configuredCategories = new Set<string>();
+    for (const tier of registrationTiers) {
+        for (const category of expandCategories(tier.allowedCategories)) {
+            configuredCategories.add(category);
+        }
+    }
+
+    const alerts: UncoveredCategoryAlert[] = [];
+    for (const category of configuredCategories) {
+        const matchingTiers = registrationTiers.filter((t) => expandCategories(t.allowedCategories).includes(category));
+        if (matchingTiers.some((t) => tierCoversNow(t, now))) continue;
+
+        // matchingTiers is never empty here: `category` only entered the set
+        // by coming off one of these tiers' own (expanded) allowedCategories.
+        const candidate = matchingTiers[0];
+        alerts.push({ category, tierId: candidate.id, tierName: candidate.name });
+    }
+
+    return alerts;
+}
+
 const maxPeriodEnd = (periods: TierValidityPeriod[]): Date =>
     periods.reduce(
         (latest, p) => (endOfWibDay(p.endDate) > latest ? endOfWibDay(p.endDate) : latest),

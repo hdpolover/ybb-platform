@@ -35,13 +35,24 @@ describe('GetPricingTierAlertsSummaryHandler', () => {
         jest.restoreAllMocks();
     });
 
-    it('scopes the query to published+active+status=published programs and non-deleted active tiers', async () => {
+    it('scopes the query to published+active+status=published programs and fetches every non-deleted tier (active or not)', async () => {
         readPrisma.program.findMany.mockResolvedValue([]);
         await handler.execute(new GetPricingTierAlertsSummaryQuery({ userId: 'u1' } as any));
 
         const args = readPrisma.program.findMany.mock.calls[0][0];
         expect(args.where).toMatchObject({ isPublished: true, isActive: true, status: 'published' });
-        expect(args.select.pricingTiers.where).toEqual({ isActive: true, deletedAt: null });
+        // N-2026-09-09-E: no `isActive` filter on pricingTiers any more - a
+        // deactivated tier has to be visible to this query so the
+        // uncovered-category check can tell "configured but deactivated"
+        // apart from "never configured". `deletedAt: null` is still applied,
+        // just no longer expressible as an explicit `where` here: it comes
+        // from PrismaService auto-injecting it into every findMany.
+        expect(args.select.pricingTiers.where).toBeUndefined();
+        expect(args.select.pricingTiers.select).toMatchObject({
+            isActive: true,
+            feeType: true,
+            allowedCategories: true,
+        });
     });
 
     it('groups lapsed, expiring, clean, and no-tier programs correctly, omitting the ones with no alerts', async () => {
@@ -53,7 +64,14 @@ describe('GetPricingTierAlertsSummaryHandler', () => {
                 brand: { name: 'Brand A' },
                 registrationCloseDate: null,
                 pricingTiers: [
-                    { id: 't1', name: 'Fully Funded', validityPeriods: [period('2026-08-01', '2026-08-20')] },
+                    {
+                        id: 't1',
+                        name: 'Fully Funded',
+                        isActive: true,
+                        feeType: 'full_fee',
+                        allowedCategories: [],
+                        validityPeriods: [period('2026-08-01', '2026-08-20')],
+                    },
                 ],
             },
             {
@@ -63,7 +81,14 @@ describe('GetPricingTierAlertsSummaryHandler', () => {
                 brand: { name: 'Brand B' },
                 registrationCloseDate: new Date('2026-11-02T17:00:00.000Z'),
                 pricingTiers: [
-                    { id: 't2', name: 'Regular', validityPeriods: [period('2026-08-25', '2026-09-01')] },
+                    {
+                        id: 't2',
+                        name: 'Regular',
+                        isActive: true,
+                        feeType: 'full_fee',
+                        allowedCategories: [],
+                        validityPeriods: [period('2026-08-25', '2026-09-01')],
+                    },
                 ],
             },
             {
@@ -73,26 +98,61 @@ describe('GetPricingTierAlertsSummaryHandler', () => {
                 brand: { name: 'Brand C' },
                 registrationCloseDate: new Date('2026-09-05T17:00:00.000Z'),
                 pricingTiers: [
-                    { id: 't3', name: 'Regular', validityPeriods: [period('2026-08-25', '2026-09-10')] },
+                    {
+                        id: 't3',
+                        name: 'Regular',
+                        isActive: true,
+                        feeType: 'full_fee',
+                        allowedCategories: [],
+                        validityPeriods: [period('2026-08-25', '2026-09-10')],
+                    },
                 ],
             },
             {
-                // its only offending tier was soft-deleted, so the `where` on
-                // pricingTiers already excludes it — this program reaches the
-                // handler with an empty tiers array, same as one with none configured.
+                // its only offending tier was soft-deleted, so PrismaService's
+                // auto-injected deletedAt:null already excludes it - this
+                // program reaches the handler with an empty tiers array,
+                // same as one with none configured.
                 id: 'prog-soft-deleted-tier-only',
                 name: 'Soft Deleted Tier Only',
                 brand: { name: 'Brand D' },
                 registrationCloseDate: null,
                 pricingTiers: [],
             },
+            {
+                // MEYS 6th shape (N-2026-09-09-E): self_funded covered, the
+                // only fully_funded registration_fee tier is deactivated.
+                id: 'prog-uncovered-category',
+                name: 'MEYS 6th',
+                brand: { name: 'MEYS' },
+                registrationCloseDate: null,
+                pricingTiers: [
+                    {
+                        id: 't4',
+                        name: 'Registration Fee (Self Funded)',
+                        isActive: true,
+                        feeType: 'registration_fee',
+                        allowedCategories: ['self_funded'],
+                        validityPeriods: [period('2026-08-01', '2026-12-31')],
+                    },
+                    {
+                        id: 't5',
+                        name: 'Registration Fee (Fully Funded)',
+                        isActive: false,
+                        feeType: 'registration_fee',
+                        allowedCategories: ['fully_funded'],
+                        validityPeriods: [period('2026-08-01', '2026-12-31')],
+                    },
+                ],
+            },
         ]);
 
         const result = await handler.execute(new GetPricingTierAlertsSummaryQuery({ userId: 'u1' } as any));
 
         expect(result).toEqual([
-            { programId: 'prog-lapsed', lapsedCount: 1, expiringCount: 0 },
-            { programId: 'prog-expiring', lapsedCount: 0, expiringCount: 1 },
+            { programId: 'prog-lapsed', lapsedCount: 1, expiringCount: 0, uncoveredCount: 0 },
+            { programId: 'prog-expiring', lapsedCount: 0, expiringCount: 1, uncoveredCount: 0 },
+            { programId: 'prog-uncovered-category', lapsedCount: 0, expiringCount: 0, uncoveredCount: 1 },
         ]);
     });
 });

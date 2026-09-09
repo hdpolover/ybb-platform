@@ -1,7 +1,7 @@
 // src/modules/programs/application/services/scan-pricing-tier-alerts.util.ts
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
-import { detectPricingTierAlerts, PricingTierAlerts } from './pricing-tier-alerts.util';
+import { detectPricingTierAlerts, detectUncoveredCategories, PricingTierAlerts, UncoveredCategoryAlert } from './pricing-tier-alerts.util';
 
 /**
  * Single query + detection pass shared by GetPricingTierAlertsSummaryHandler
@@ -16,7 +16,7 @@ export type ProgramPricingTierAlerts = {
     programName: string;
     brandName: string;
     registrationCloseDate: Date | null;
-    alerts: PricingTierAlerts;
+    alerts: PricingTierAlerts & { uncoveredCategories: UncoveredCategoryAlert[] };
 };
 
 export async function scanProgramsForPricingTierAlerts(
@@ -38,12 +38,21 @@ export async function scanProgramsForPricingTierAlerts(
             registrationCloseDate: true,
             brand: { select: { name: true } },
             pricingTiers: {
-                // Soft-deleted tiers stay is_active=true in this database, so
-                // isActive alone would fire on tiers deleted months ago.
-                where: { isActive: true, deletedAt: null },
+                // No `isActive` filter here (unlike before N-2026-09-09-E): an
+                // inactive tier is exactly what the uncovered-category check
+                // below needs to see, both to know a category was configured
+                // at all and to confirm nothing currently covers it - the
+                // MEYS 6th incident was an admin deactivating the only
+                // fully_funded registration_fee tier. `deletedAt: null` is
+                // still applied - PrismaService auto-injects it on findMany,
+                // and this is a findMany - so a soft-deleted tier still
+                // cannot resurrect a category or mask a real gap.
                 select: {
                     id: true,
                     name: true,
+                    isActive: true,
+                    feeType: true,
+                    allowedCategories: true,
                     validityPeriods: { select: { startDate: true, endDate: true } },
                 },
             },
@@ -52,15 +61,21 @@ export async function scanProgramsForPricingTierAlerts(
 
     const results: ProgramPricingTierAlerts[] = [];
     for (const program of programs) {
+        // A program with literally zero pricing-tier rows (active or not) has
+        // nothing configured to alert on - this is the ONLY case that should
+        // produce silence, not "all tiers happen to be inactive right now".
         if (program.pricingTiers.length === 0) continue;
-        const alerts = detectPricingTierAlerts(program.pricingTiers, program.registrationCloseDate, now);
-        if (alerts.lapsed.length === 0 && alerts.expiring.length === 0) continue;
+
+        const activeTiers = program.pricingTiers.filter((t) => t.isActive);
+        const alerts = detectPricingTierAlerts(activeTiers, program.registrationCloseDate, now);
+        const uncoveredCategories = detectUncoveredCategories(program.pricingTiers, now);
+        if (alerts.lapsed.length === 0 && alerts.expiring.length === 0 && uncoveredCategories.length === 0) continue;
         results.push({
             programId: program.id,
             programName: program.name,
             brandName: program.brand.name,
             registrationCloseDate: program.registrationCloseDate,
-            alerts,
+            alerts: { ...alerts, uncoveredCategories },
         });
     }
     return results;

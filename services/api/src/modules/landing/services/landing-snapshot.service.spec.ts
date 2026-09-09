@@ -105,4 +105,73 @@ describe('LandingSnapshotService', () => {
 
         expect(prisma.brandLandingSnapshot.upsert.mock.calls[0][0].create.slug).toBe('');
     });
+
+    // M192: concurrent misses at TTL expiry previously each ran build() and
+    // each upserted brand_landing_snapshots independently - N simultaneous
+    // requests for one page cost N full rebuilds. Fails before the fix
+    // because there is no dedup at all: both calls below would see build
+    // called twice and upsert called twice.
+    describe('single-flight (M192)', () => {
+        it('collapses concurrent misses on the same snapshot into one build and one upsert', async () => {
+            prisma.brandLandingSnapshot.findUnique.mockResolvedValue(null);
+            let resolveBuild!: (value: unknown) => void;
+            const deferred = new Promise((resolve) => {
+                resolveBuild = resolve;
+            });
+            const build = jest.fn().mockImplementation(() => deferred);
+
+            const call1 = service.getOrBuildHomeSnapshot(brand, build as never);
+            const call2 = service.getOrBuildHomeSnapshot(brand, build as never);
+
+            resolveBuild(validPayload('shared'));
+            const [result1, result2]: any = await Promise.all([call1, call2]);
+
+            expect(build).toHaveBeenCalledTimes(1);
+            expect(prisma.brandLandingSnapshot.upsert).toHaveBeenCalledTimes(1);
+            expect(result1.sections[0].content.marker).toBe('shared');
+            expect(result2.sections[0].content.marker).toBe('shared');
+        });
+
+        it('does not dedupe across DIFFERENT snapshots (different page/slug)', async () => {
+            prisma.brandLandingSnapshot.findUnique.mockResolvedValue(null);
+            const homeBuild = jest.fn().mockResolvedValue(validPayload('home'));
+            const aboutBuild = jest.fn().mockResolvedValue(validPayload('about'));
+
+            await Promise.all([
+                service.getOrBuildHomeSnapshot(brand, homeBuild as never),
+                service.getOrBuildAboutSnapshot(brand, aboutBuild as never),
+            ]);
+
+            expect(homeBuild).toHaveBeenCalledTimes(1);
+            expect(aboutBuild).toHaveBeenCalledTimes(1);
+        });
+
+        it('starts a fresh build for a later miss once the in-flight one has settled', async () => {
+            prisma.brandLandingSnapshot.findUnique.mockResolvedValue(null);
+            const build = jest
+                .fn()
+                .mockResolvedValueOnce(validPayload('first'))
+                .mockResolvedValueOnce(validPayload('second'));
+
+            await service.getOrBuildHomeSnapshot(brand, build as never);
+            await service.getOrBuildHomeSnapshot(brand, build as never);
+
+            expect(build).toHaveBeenCalledTimes(2);
+        });
+
+        it('does not wedge the key when a build fails - a later miss can retry', async () => {
+            prisma.brandLandingSnapshot.findUnique.mockResolvedValue(null);
+            const build = jest
+                .fn()
+                .mockRejectedValueOnce(new Error('build blew up'))
+                .mockResolvedValueOnce(validPayload('retried'));
+
+            await expect(service.getOrBuildHomeSnapshot(brand, build as never)).rejects.toThrow('build blew up');
+
+            const result: any = await service.getOrBuildHomeSnapshot(brand, build as never);
+
+            expect(build).toHaveBeenCalledTimes(2);
+            expect(result.sections[0].content.marker).toBe('retried');
+        });
+    });
 });

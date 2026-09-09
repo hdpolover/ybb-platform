@@ -13,6 +13,7 @@ export type PricingTierAlertsSummaryItem = {
     programId: string;
     lapsedCount: number;
     expiringCount: number;
+    uncoveredCount: number;
 };
 
 /**
@@ -40,6 +41,7 @@ export class GetPricingTierAlertsSummaryHandler {
             programId: r.programId,
             lapsedCount: r.alerts.lapsed.length,
             expiringCount: r.alerts.expiring.length,
+            uncoveredCount: r.alerts.uncoveredCategories.length,
         }));
     }
 }

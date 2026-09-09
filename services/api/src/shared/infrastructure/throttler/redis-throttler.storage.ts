@@ -194,15 +194,31 @@ export class RedisThrottlerStorage implements ThrottlerStorage, OnModuleDestroy 
         const totalHits = (results?.[0]?.[1] as number) || 0;
         let timeToExpire = (results?.[1]?.[1] as number) || -1;
 
-        // Set TTL if not set (first hit)
-        if (timeToExpire === -1 || timeToExpire === -2) {
-            await this.redis.pexpire(fullKey, ttl);
+        const needsExpire = timeToExpire === -1 || timeToExpire === -2; // first hit (no TTL set yet)
+        const willBlock = totalHits > limit && blockDuration > 0;
+
+        // M72: these two writes are independent of each other - nothing in
+        // either depends on the other's result - and both can be true at
+        // once (limit 0's very first hit both needs its TTL set AND crosses
+        // the block threshold). They used to be two sequential awaits, i.e.
+        // two more round trips on top of the ttl() check and the incr/pttl
+        // MULTI above (3 throttlers x up to 4 round trips each was the
+        // 6-9-per-request finding). Pipelining them the same way incr+pttl
+        // already are drops that worst case by one round trip per
+        // throttler, with zero change to what gets written or when a block
+        // gets set - only how many network round trips it costs to write it.
+        if (needsExpire || willBlock) {
+            const followUp = this.redis.multi();
+            if (needsExpire) followUp.pexpire(fullKey, ttl);
+            if (willBlock) followUp.setex(blockKey, Math.floor(blockDuration / 1000), '1');
+            await followUp.exec();
+        }
+
+        if (needsExpire) {
             timeToExpire = ttl;
         }
 
-        // Check if should block
-        if (totalHits > limit && blockDuration > 0) {
-            await this.redis.setex(blockKey, Math.floor(blockDuration / 1000), '1');
+        if (willBlock) {
             return {
                 totalHits,
                 timeToExpire,

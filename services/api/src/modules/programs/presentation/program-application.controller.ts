@@ -11,6 +11,8 @@ import { IProgramRepository } from '@core/interfaces/repositories/program.reposi
 import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
 import { AdminScopeGuard, ScopedBy, assertProgramAccess, getRequestAdminScope, orNotFound } from '@shared/guards/admin-scope.guard';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 
 interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string; adminId?: string };
@@ -269,6 +271,7 @@ export class ProgramApplicationConfigController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add pricing tier' })
+  @AuditTrail({ entityType: 'ProgramPricingTier', action: ChangeType.create })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addPricingTier(
     @Param('id') programId: string,
@@ -288,6 +291,7 @@ export class ProgramApplicationConfigController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update pricing tier' })
+  @AuditTrail({ entityType: 'ProgramPricingTier', action: ChangeType.update, idParam: 'itemId' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updatePricingTier(@Param('itemId') itemId: string, @Body() dto: UpdateProgramPricingTierDto, @Request() req: AuthenticatedRequest) {
     await this.assertPricingTierScope(req, itemId);
@@ -299,6 +303,7 @@ export class ProgramApplicationConfigController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete pricing tier' })
+  @AuditTrail({ entityType: 'ProgramPricingTier', action: ChangeType.delete, idParam: 'itemId' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deletePricingTier(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
     await this.assertPricingTierScope(req, itemId);
@@ -311,6 +316,7 @@ export class ProgramApplicationConfigController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Add validity period to a pricing tier' })
+  @AuditTrail({ entityType: 'PricingTierValidityPeriod', action: ChangeType.create, idParam: 'tierId' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async addValidityPeriod(@Param('tierId') tierId: string, @Body() dto: CreateValidityPeriodDto, @Request() req: AuthenticatedRequest) {
     await this.assertPricingTierScope(req, tierId);
@@ -322,6 +328,7 @@ export class ProgramApplicationConfigController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update a validity period' })
+  @AuditTrail({ entityType: 'PricingTierValidityPeriod', action: ChangeType.update, idParam: 'periodId' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async updateValidityPeriod(@Param('periodId') periodId: string, @Body() dto: UpdateValidityPeriodDto, @Request() req: AuthenticatedRequest) {
     await this.assertValidityPeriodScope(req, periodId);
@@ -333,6 +340,7 @@ export class ProgramApplicationConfigController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete a validity period' })
+  @AuditTrail({ entityType: 'PricingTierValidityPeriod', action: ChangeType.delete, idParam: 'periodId' })
   @CacheInvalidate(MUTABLE_CONTENT_CACHE_PATTERNS)
   async deleteValidityPeriod(@Param('periodId') periodId: string, @Request() req: AuthenticatedRequest) {
     await this.assertValidityPeriodScope(req, periodId);
