@@ -27,6 +27,7 @@ process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) =>
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions } from '@nestjs/microservices';
 import { ValidationPipe, VersioningType, INestMicroservice, Type } from '@nestjs/common';
+import { createCompressionMiddleware } from './shared/infrastructure/http/compression.config';
 import { AckDropRmqServer } from './shared/rmq/ack-drop-rmq.server';
 import { RoutingKeyDeserializer } from './shared/infrastructure/rabbitmq/routing-key-deserializer';
 import { AuditConsumerModule } from './bootstrap/audit-consumer.module';
@@ -173,6 +174,15 @@ async function bootstrap() {
       routingKey: 'reminder.participant.send_result',
     },
   });
+
+  // HTTP response compression (audit M170/M176). Cloudflare already compresses
+  // the client-facing hop (client -> Cloudflare -> Traefik -> API, documented
+  // above at the trust-proxy note), so this does not change what a browser
+  // receives. It does compress the one hop Cloudflare can't reach: server-side
+  // fetches that land on the API directly (Traefik -> API, and any same-DC
+  // caller), and it is cheap insurance if that chain is ever reconfigured. See
+  // compression.config.ts for the threshold and the streaming-download filter.
+  app.use(createCompressionMiddleware());
 
   // Use Winston Logger
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));

@@ -16,6 +16,7 @@ import {
     Logger
 } from '@nestjs/common';
 import { Response } from 'express';
+import { Readable } from 'stream';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -70,6 +71,12 @@ interface PaymentsByCountryResponse {
     totalPaidCount: number;
     unknownCount: number;
 }
+
+// notify-payment-issue (audit M154): concurrent publish count per chunk. Bounds
+// how many confirm-channel round trips are in flight at once against a single
+// RabbitMQ channel/connection, while still processing well ahead of one strictly
+// sequential await per invoice. See notifyPaymentIssue below.
+const NOTIFY_PAYMENT_ISSUE_BATCH_SIZE = 50;
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -781,9 +788,34 @@ export class PaymentAdminController {
 
         res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        // Forward Content-Length when the upstream sent one, so the client gets
+        // a download progress bar instead of an unknown-length stream.
+        const contentLength = upstream.headers.get('content-length');
+        if (contentLength) {
+            res.setHeader('Content-Length', contentLength);
+        }
 
-        const buf = Buffer.from(await upstream.arrayBuffer());
-        res.send(buf);
+        // Stream straight through instead of buffering the whole proof file into
+        // memory (audit M153: Buffer.from(await upstream.arrayBuffer())). A
+        // proof file can be a multi-MB photo/PDF; buffering the entire thing per
+        // concurrent download multiplies with concurrent admin requests, none of
+        // which is necessary — Node's fetch() already gives back a streamable
+        // Web ReadableStream body.
+        if (!upstream.body) {
+            // Some responses (e.g. a HEAD-like 204, or a runtime that doesn't
+            // populate .body for a given body type) legitimately have none.
+            res.end();
+            return;
+        }
+        const upstreamStream = Readable.fromWeb(upstream.body as import('stream/web').ReadableStream);
+        upstreamStream.on('error', (err) => {
+            this.logger.warn(`Proof stream for invoice ${id} errored mid-transfer: ${err.message}`);
+            // Headers are already sent by the time a mid-stream error can happen;
+            // destroying the response is the only way left to signal failure to
+            // the client rather than silently truncating the download.
+            res.destroy(err);
+        });
+        upstreamStream.pipe(res);
     }
 
     private findProofUrlInPayload(payload: unknown, keys: string[], depth = 0): string | null {
@@ -1151,17 +1183,20 @@ export class PaymentAdminController {
         let sent = 0;
         const triggeredAt = new Date().toISOString();
 
-        for (const invoiceId of body.invoiceIds) {
+        // One invoice's publish: pure per-item work, no shared mutable state
+        // touched inside it, so it's safe to run many of these concurrently
+        // within a chunk (see the chunked loop below).
+        const notifyOne = async (invoiceId: string): Promise<void> => {
             const invoice = invoiceById.get(invoiceId);
             if (!invoice) {
                 skipped.push({ invoiceId, reason: 'invoice_not_found' });
-                continue;
+                return;
             }
 
             const email = invoice.application?.participant?.user?.email;
             if (!email) {
                 skipped.push({ invoiceId, reason: 'missing_email' });
-                continue;
+                return;
             }
 
             const rawBrand = invoice.application?.program?.brand ?? null;
@@ -1218,6 +1253,20 @@ export class PaymentAdminController {
                 );
                 skipped.push({ invoiceId, reason: 'emit_failed' });
             }
+        };
+
+        // Chunked, not sequential and not unbounded (audit M154). One await per
+        // invoice in a plain for-of loop meant up to 500 sequential confirm-channel
+        // round trips end-to-end for a single admin action. Firing all 500 publishes
+        // at once would trade that for the opposite bug (the M38 pattern, reversed):
+        // unbounded concurrency against one RabbitMQ channel/connection. Chunking to
+        // NOTIFY_PAYMENT_ISSUE_BATCH_SIZE concurrent publishes per batch, batches run
+        // one after another, bounds the in-flight publish count while still cutting
+        // wall-clock time roughly by that factor. Promise.allSettled per chunk so one
+        // invoice's publish failure doesn't stop the rest of its chunk.
+        for (let offset = 0; offset < body.invoiceIds.length; offset += NOTIFY_PAYMENT_ISSUE_BATCH_SIZE) {
+            const chunk = body.invoiceIds.slice(offset, offset + NOTIFY_PAYMENT_ISSUE_BATCH_SIZE);
+            await Promise.allSettled(chunk.map((invoiceId) => notifyOne(invoiceId)));
         }
 
         return { sent, skipped };

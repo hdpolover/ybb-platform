@@ -682,7 +682,17 @@ export class CreateProgramGalleryHandler implements ICommandHandler<CreateProgra
             imageUrl: imageUrl || ''
         };
         const result = await this.repository.createGallery(dto);
-        await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
+        // Fire-and-forget (audit M214): this clears a Redis `program:*` SCAN
+        // plus up to two synchronous HTTP revalidate calls to the participant
+        // frontend. Awaiting it here held the admin's upload request open for
+        // that entire round trip for no reason the caller can observe — the
+        // write already committed. Safe to drop the await: like emitSafe()
+        // (rabbitmq-producer.service.ts), invalidateLandingCacheByProgramId
+        // already wraps its body in try/catch and never rejects, so `void`
+        // here can never produce an unhandled rejection; a failure still logs
+        // (console.error inside LandingCacheInvalidationService), it just no
+        // longer blocks the response.
+        void invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
         return result;
     }
 }
@@ -741,7 +751,8 @@ export class UpdateProgramGalleryHandler implements ICommandHandler<UpdateProgra
             imageUrl
         };
         const result = await this.repository.updateGallery(command.id, dto);
-        await invalidateLandingCacheByProgramId(galleryItem.programId, this.prisma, this.landingCacheInvalidation);
+        // Fire-and-forget (audit M214) — see CreateProgramGalleryHandler above.
+        void invalidateLandingCacheByProgramId(galleryItem.programId, this.prisma, this.landingCacheInvalidation);
         return result;
     }
 }
@@ -776,7 +787,8 @@ export class DeleteProgramGalleryHandler implements ICommandHandler<DeleteProgra
         );
 
         const result = await this.repository.deleteGallery(command.id);
-        await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
+        // Fire-and-forget (audit M214) — see CreateProgramGalleryHandler above.
+        void invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
         return result;
     }
 }

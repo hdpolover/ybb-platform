@@ -123,6 +123,13 @@ async function captureError(promise: Promise<unknown>): Promise<any> {
     throw new Error('expected promise to reject');
 }
 
+// Lets any already-scheduled microtasks (including a fire-and-forget `void`
+// call's internal awaits) run to completion before assertions inspect their
+// side effects. Used by the M214 gallery cache-invalidation tests below.
+async function flushMicrotasks(): Promise<void> {
+    await new Promise((resolve) => setImmediate(resolve));
+}
+
 const homeAndSettingsOptions = {
     clearSnapshot: true,
     bustProgramCache: true,
@@ -1454,8 +1461,75 @@ describe('ManageProgramContentHandlers', () => {
                 'user-1',
                 { userId: 'user-1', email: 'a@b.c', brandId: 'brand-1', adminId: 'adm-1' } as any,
             ));
+            // M214: invalidation is now fire-and-forget (void, not await), so it
+            // may still be mid-flight (past its own internal prisma.program
+            // lookup await) when execute() resolves. Flush the microtask queue
+            // before asserting it landed.
+            await flushMicrotasks();
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-x', homeAndSettingsOptions);
+        });
+
+        // Audit M214: gallery writes used to await a full Redis `program:*` SCAN
+        // plus up to two synchronous HTTP revalidate calls before returning to
+        // the caller. These three tests pin that the write now resolves without
+        // waiting for invalidateLandingCacheByProgramId to finish, by making the
+        // shared service hang and asserting execute() still resolves promptly.
+        describe('Gallery writes do not block on cache invalidation (M214)', () => {
+            function hangInvalidation() {
+                let release!: () => void;
+                const gate = new Promise<void>((resolve) => { release = resolve; });
+                landingCacheInvalidation.invalidate = jest.fn().mockImplementation(() => gate);
+                return release;
+            }
+
+            it('CreateProgramGalleryHandler resolves even while invalidation is still pending', async () => {
+                const release = hangInvalidation();
+                repo.createGallery.mockResolvedValue({ id: 'gal-1' });
+                const handler = await build(CreateProgramGalleryHandler);
+
+                const result = await handler.execute(new CreateProgramGalleryCommand(
+                    { programId: 'prog-1', imageUrl: 'https://x.example/img.png' } as any,
+                    'user-1',
+                    { userId: 'user-1', email: 'a@b.c', brandId: 'brand-1', adminId: 'adm-1' } as any,
+                ));
+
+                expect(result).toEqual({ id: 'gal-1' });
+                release();
+            });
+
+            it('UpdateProgramGalleryHandler resolves even while invalidation is still pending', async () => {
+                const release = hangInvalidation();
+                repo.findGalleryById = jest.fn().mockResolvedValue({ id: 'gal-1', programId: 'prog-1' });
+                repo.updateGallery = jest.fn().mockResolvedValue({ id: 'gal-1' });
+                const handler = await build(UpdateProgramGalleryHandler);
+
+                const result = await handler.execute(new UpdateProgramGalleryCommand(
+                    'gal-1',
+                    { imageUrl: 'https://x.example/img2.png' } as any,
+                    'user-1',
+                    { userId: 'user-1', email: 'a@b.c', brandId: 'brand-x', adminId: 'adm-1' } as any,
+                ));
+
+                expect(result).toEqual({ id: 'gal-1' });
+                release();
+            });
+
+            it('DeleteProgramGalleryHandler resolves even while invalidation is still pending', async () => {
+                const release = hangInvalidation();
+                repo.findGalleryById = jest.fn().mockResolvedValue({ id: 'gal-1', programId: 'prog-1' });
+                repo.deleteGallery = jest.fn().mockResolvedValue(undefined);
+                const handler = await build(DeleteProgramGalleryHandler);
+
+                await handler.execute(new DeleteProgramGalleryCommand(
+                    'gal-1',
+                    'user-1',
+                    { userId: 'user-1', email: 'a@b.c', brandId: 'brand-x', adminId: 'adm-1' } as any,
+                ));
+
+                expect(repo.deleteGallery).toHaveBeenCalledWith('gal-1');
+                release();
+            });
         });
 
         it('UpdateProgramFaqHandler invalidates via the shared service after updating', async () => {
