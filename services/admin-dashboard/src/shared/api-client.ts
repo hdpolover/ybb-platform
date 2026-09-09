@@ -3995,6 +3995,20 @@ export type AmbassadorDetail = Ambassador & {
       accepted: number;
       completed: number;
     };
+    // Per-programme breakdown of the same counts. An ambassador's code is
+    // brand-wide, so statusCounts above is their whole-brand performance
+    // while this is what a programme-scoped page should show. Computed
+    // server-side over every referral, so it is not limited by the paginated
+    // referrals list this page renders.
+    statusCountsByProgram?: Array<{
+      programId: string;
+      programName: string;
+      referred: number;
+      registered: number;
+      applied: number;
+      accepted: number;
+      completed: number;
+    }>;
     averageConversionDays: number | null;
   };
 };
@@ -4005,6 +4019,8 @@ export type AmbassadorReferral = {
   participantId: string;
   participantName: string | null;
   participantEmail?: string | null;
+  programId: string;
+  programName: string;
   referredAt: string;
   registeredAt?: string | null;
   appliedAt?: string | null;

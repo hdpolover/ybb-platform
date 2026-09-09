@@ -85,13 +85,36 @@ export default function AmbassadorDetailPage({
     void loadReferrals();
   }, [loadAmbassador, loadReferrals]);
 
-  const stageCounts = ambassador?.analytics?.statusCounts ?? {
-    referred: 0,
-    registered: 0,
-    applied: 0,
-    accepted: 0,
-    completed: 0,
-  };
+  // Referrals now span every programme of the brand an ambassador's code touches
+  // (not just this ambassador's home programme), so the ambassador-wide totals from
+  // `ambassador.analytics.statusCounts` would mix in other programmes here. This page
+  // is already scoped to one programme via the [programId] route param, so the stage
+  // counts are scoped to match: filtered to referrals for the current programId.
+  const currentProgramReferrals = useMemo(
+    () => referrals.filter((referral) => referral.programId === programId),
+    [referrals, programId],
+  );
+
+  // Counts come from the API's per-programme aggregate, NOT from the referral
+  // rows this page renders. That table is paginated at 20, so counting the
+  // loaded rows would silently undercount any ambassador with more referrals
+  // than one page — numbers that look authoritative and are quietly wrong.
+  // The aggregate is computed server-side over every referral the ambassador
+  // has, then narrowed to the programme this page is scoped to.
+  const stageCounts = useMemo(() => {
+    const empty = { referred: 0, registered: 0, applied: 0, accepted: 0, completed: 0 };
+    const forProgram = ambassador?.analytics?.statusCountsByProgram?.find(
+      (entry) => entry.programId === programId,
+    );
+    if (!forProgram) return empty;
+    return {
+      referred: forProgram.referred,
+      registered: forProgram.registered,
+      applied: forProgram.applied,
+      accepted: forProgram.accepted,
+      completed: forProgram.completed,
+    };
+  }, [ambassador, programId]);
 
   const avgConversionDays = ambassador?.analytics?.averageConversionDays ?? null;
 
@@ -219,7 +242,11 @@ export default function AmbassadorDetailPage({
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Referred Participants</CardTitle>
-                  <CardDescription>Audit the participant funnel linked to this ambassador.</CardDescription>
+                  <CardDescription>
+                    Stage counts below are scoped to {ambassador.programName ?? program?.programName ?? "this programme"}. The
+                    same referral code can bring participants into other programmes of this brand — see the
+                    Programme column below for the full list.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-5">
@@ -241,6 +268,7 @@ export default function AmbassadorDetailPage({
                     <TableHeader>
                       <TableRow>
                         <TableHead>Participant</TableHead>
+                        <TableHead>Programme</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Referred</TableHead>
                         <TableHead>Applied</TableHead>
@@ -251,13 +279,13 @@ export default function AmbassadorDetailPage({
                     <TableBody>
                       {referralLoading ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="py-10 text-center text-zinc-400">
+                          <TableCell colSpan={7} className="py-10 text-center text-zinc-400">
                             Loading referrals…
                           </TableCell>
                         </TableRow>
                       ) : referrals.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="py-10 text-center text-zinc-400">
+                          <TableCell colSpan={7} className="py-10 text-center text-zinc-400">
                             No referrals recorded for this ambassador yet.
                           </TableCell>
                         </TableRow>
@@ -269,6 +297,7 @@ export default function AmbassadorDetailPage({
                               <div className="text-xs text-zinc-500">{referral.participantEmail || "No email"}</div>
                               <div className="text-xs text-zinc-400">{referral.participantId}</div>
                             </TableCell>
+                            <TableCell className="text-zinc-700">{referral.programName || "—"}</TableCell>
                             <TableCell>
                               <StatusBadge status={referral.status} context="generic" />
                             </TableCell>

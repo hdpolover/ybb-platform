@@ -119,6 +119,14 @@ export class AmbassadorAdminController {
       select: {
         status: true,
         totalConversionDays: true,
+        // programId so the per-programme breakdown below can be computed
+        // here, where EVERY referral is in hand. The admin detail page needs
+        // counts scoped to the programme being viewed, and it cannot derive
+        // them from the referrals table it renders: that table is paginated
+        // at 20, so counting client-side silently undercounts any ambassador
+        // with more referrals than one page.
+        programId: true,
+        program: { select: { name: true } },
       },
     });
 
@@ -132,6 +140,15 @@ export class AmbassadorAdminController {
     let conversionTotal = 0;
     let conversionCount = 0;
 
+    // Same shape as statusCounts, but keyed by programme. An ambassador's
+    // brand-wide code can bring participants into several programmes, so the
+    // aggregate above is their whole-brand performance while this is what the
+    // per-programme detail page shows.
+    const statusCountsByProgram: Record<
+      string,
+      { programId: string; programName: string; referred: number; registered: number; applied: number; accepted: number; completed: number }
+    > = {};
+
     referrals.forEach((referral) => {
       if (referral.status in statusCounts) {
         statusCounts[referral.status as keyof typeof statusCounts] += 1;
@@ -139,6 +156,19 @@ export class AmbassadorAdminController {
       if (typeof referral.totalConversionDays === 'number') {
         conversionTotal += referral.totalConversionDays;
         conversionCount += 1;
+      }
+
+      const bucket = (statusCountsByProgram[referral.programId] ??= {
+        programId: referral.programId,
+        programName: referral.program?.name ?? 'Unknown programme',
+        referred: 0,
+        registered: 0,
+        applied: 0,
+        accepted: 0,
+        completed: 0,
+      });
+      if (referral.status in bucket) {
+        bucket[referral.status as 'referred' | 'registered' | 'applied' | 'accepted' | 'completed'] += 1;
       }
     });
 
@@ -153,6 +183,7 @@ export class AmbassadorAdminController {
       programName: ambassador.program.name,
       analytics: {
         statusCounts,
+        statusCountsByProgram: Object.values(statusCountsByProgram),
         averageConversionDays: conversionCount > 0 ? Math.round(conversionTotal / conversionCount) : null,
       },
     };
