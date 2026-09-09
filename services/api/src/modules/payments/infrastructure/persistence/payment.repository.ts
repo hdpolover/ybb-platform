@@ -63,7 +63,12 @@ export class PaymentRepository implements IPaymentRepository {
 
     async findById(id: string): Promise<Payment | null> {
         try {
-            const { data } = await this.paymentServiceClient.get<PaymentDto>(`/api/v1/payments/${id}`, {
+            // Audit M148: id is already UUID-validated by payments.controller.ts's
+            // ParseUUIDPipe before this is ever called, but encodeURIComponent
+            // here too — belt-and-suspenders against this becoming a second,
+            // un-validated call site later (same pattern as M47's fix on
+            // portal.controller.ts's getProgramPaymentMethods).
+            const { data } = await this.paymentServiceClient.get<PaymentDto>(`/api/v1/payments/${encodeURIComponent(id)}`, {
                 headers: this.buildInternalHeaders(),
             });
             return this.mapToEntity(data);

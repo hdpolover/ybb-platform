@@ -9,6 +9,7 @@ import { ListProgramsQuery } from '../application/queries/list-programs.query';
 import { ListProgramsHandler } from '../application/queries/handlers/list-programs.handler';
 import { ProgramDetailResponseDto } from './dto/program-detail-response.dto';
 import { GetProgramDetailQuery } from '../application/queries/get-program-detail.query';
+import { GetProgramDetailQueryDto } from './dto/get-program-detail.dto';
 import { GetProgramDetailHandler } from '../application/queries/handlers/get-program-detail.handler';
 import { CreateProgramDto } from './dto/create-program.dto';
 import { CreateProgramCommand } from '../application/commands/create-program.command';
@@ -159,21 +160,21 @@ export class ProgramsController {
   @ApiResponse({ status: 404, description: 'Program not found' })
   async findOne(
     @Param('identifier') identifier: string,
+    @Query() query: GetProgramDetailQueryDto,
     @CurrentUser() user?: CurrentUserData,
-    @Query('include') include?: string,
-    @Query('testimonialsLimit') testimonialsLimit?: number,
-    @Query('announcementsLimit') announcementsLimit?: number,
-    @Query('resourcesLimit') resourcesLimit?: number,
   ): Promise<ProgramDetailResponseDto> {
-    const query = new GetProgramDetailQuery(
+    // Audit M33: query is validated/clamped by GetProgramDetailQueryDto's
+    // @Min/@Max before it ever reaches the handler, so the Redis cache key
+    // (built from these same values) can't be sprayed with unbounded junk.
+    const detailQuery = new GetProgramDetailQuery(
       identifier,
-      include,
-      testimonialsLimit,
-      announcementsLimit,
-      resourcesLimit,
+      query.include,
+      query.testimonialsLimit,
+      query.announcementsLimit,
+      query.resourcesLimit,
       isAdminCaller(user),
     );
-    return this.getProgramDetailHandler.execute(query) as Promise<ProgramDetailResponseDto>;
+    return this.getProgramDetailHandler.execute(detailQuery) as Promise<ProgramDetailResponseDto>;
   }
 
   @Post()

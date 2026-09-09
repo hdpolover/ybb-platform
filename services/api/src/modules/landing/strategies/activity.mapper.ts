@@ -40,7 +40,19 @@ export function maskFullName(fullName: string): string | null {
 
   const parts = trimmed.split(/\s+/).filter(Boolean);
   if (parts.length === 0) return null;
-  if (parts.length === 1) return parts[0];
+  if (parts.length === 1) {
+    // Audit M188: this used to return parts[0] verbatim -- the raw, unmasked
+    // full name -- for any mononymous applicant (common on this Indonesia-
+    // heavy platform), right next to their country and admission outcome on
+    // a @Public() route. Mask to a single initial, consistent with the
+    // multi-token branch below masking its LAST token to an initial.
+    // Deliberately never return null here: activity.strategy.ts drops any
+    // row this returns null for, and on a mononym-heavy brand that can push
+    // the sampled pool under MIN_ACTIVITY_POOL_SIZE, silently disabling the
+    // whole public activity ticker.
+    const onlyInitial = Array.from(parts[0])[0];
+    return `${onlyInitial}.`;
+  }
 
   const first = parts[0];
   // Array.from splits by code point so surrogate pairs are not cut in half.

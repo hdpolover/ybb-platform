@@ -288,4 +288,99 @@ describe('AdminUpdateSubmissionHandler', () => {
       expect(prisma.$transaction.mock.calls[0][0]).toHaveLength(3);
     });
   });
+
+  // Audit M99: AdminParticipantPatchDto.fullName/nickName/displayName already
+  // carry @MaxLength, but the personalData mirror path (only `personalData`
+  // supplied, no `participant` patch) bypasses that DTO entirely -- it is a
+  // free-form JSON blob validated only for ASCII/English content, not length.
+  // On the pre-fix handler these oversized values sailed straight into the
+  // participant.update() call below and would only fail once Postgres raised
+  // an unnamed 22001. This is the regression guard: it fails on old code
+  // because the pre-fix handler never threw here at all.
+  describe('personalData mirror length guard (M99)', () => {
+    it('rejects an oversized full_name mirrored from personalData with a named 400, before any write', async () => {
+      const { prisma, updateParticipant, createEditHistory } = buildPrismaMock();
+      const handler = makeHandler(prisma);
+
+      const command = new AdminUpdateSubmissionCommand(
+        'app-uuid-1',
+        'admin-user-id',
+        'Mirror path abuse',
+        { full_name: 'A'.repeat(256) }, // over participants.full_name VarChar(255)
+      );
+
+      await expect(handler.execute(command)).rejects.toThrow(/fullName/);
+      expect(updateParticipant).not.toHaveBeenCalled();
+      expect(createEditHistory).not.toHaveBeenCalled();
+    });
+
+    it('rejects an oversized nick_name mirrored from personalData', async () => {
+      const { prisma, updateParticipant } = buildPrismaMock();
+      const handler = makeHandler(prisma);
+
+      const command = new AdminUpdateSubmissionCommand(
+        'app-uuid-1',
+        'admin-user-id',
+        'Mirror path abuse',
+        { nick_name: 'B'.repeat(101) }, // over participants.nick_name VarChar(100)
+      );
+
+      await expect(handler.execute(command)).rejects.toThrow(/nickName/);
+      expect(updateParticipant).not.toHaveBeenCalled();
+    });
+
+    it('rejects an oversized display_name mirrored from personalData', async () => {
+      const { prisma, updateParticipant } = buildPrismaMock();
+      const handler = makeHandler(prisma);
+
+      const command = new AdminUpdateSubmissionCommand(
+        'app-uuid-1',
+        'admin-user-id',
+        'Mirror path abuse',
+        { display_name: 'C'.repeat(101) }, // over participants.display_name VarChar(100)
+      );
+
+      await expect(handler.execute(command)).rejects.toThrow(/displayName/);
+      expect(updateParticipant).not.toHaveBeenCalled();
+    });
+
+    it('still accepts a within-bounds full_name mirrored from personalData', async () => {
+      const { prisma, updateParticipant } = buildPrismaMock();
+      const handler = makeHandler(prisma);
+
+      const command = new AdminUpdateSubmissionCommand(
+        'app-uuid-1',
+        'admin-user-id',
+        'Legit mirror update',
+        { full_name: 'Jane Doe' },
+      );
+
+      const result = await handler.execute(command);
+
+      expect(result.success).toBe(true);
+      expect(updateParticipant).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ fullName: 'Jane Doe' }) }),
+      );
+    });
+
+    it('does not re-check the participant patch path, which already has its own DTO-level MaxLength', async () => {
+      // Sanity check: an oversized value supplied via `participant.fullName` is
+      // caught the same way (same helper, same field), so both entry points
+      // into the mirror logic are covered by the one guard.
+      const { prisma, updateParticipant } = buildPrismaMock();
+      const handler = makeHandler(prisma);
+
+      const command = new AdminUpdateSubmissionCommand(
+        'app-uuid-1',
+        'admin-user-id',
+        'Direct participant patch abuse',
+        undefined,
+        undefined,
+        { fullName: 'D'.repeat(256) },
+      );
+
+      await expect(handler.execute(command)).rejects.toThrow(/fullName/);
+      expect(updateParticipant).not.toHaveBeenCalled();
+    });
+  });
 });

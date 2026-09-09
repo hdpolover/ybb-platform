@@ -4,6 +4,7 @@ import {
     Post,
     Body,
     Param,
+    ParseUUIDPipe,
     Query,
     UseGuards,
     UnauthorizedException,
@@ -77,7 +78,12 @@ export class PaymentsController {
     @ApiResponse({ status: 200, description: 'Return payment detail', type: PaymentResponseDto })
     @ApiResponse({ status: 404, description: 'Payment not found' })
     async getPaymentDetail(
-        @Param('id') id: string,
+        // Audit M148: id used to be interpolated into the Go payment service's
+        // internal GET path with no shape check. ParseUUIDPipe (same pattern
+        // as M47's fix on portal.controller.ts) means a traversal/encoded
+        // segment 400s here instead of ever reaching payment.repository.ts's
+        // interpolation.
+        @Param('id', new ParseUUIDPipe()) id: string,
         @CurrentUser() user: CurrentUserData,
     ): Promise<PaymentResponseDto> {
         if (!user?.userId) throw new UnauthorizedException();

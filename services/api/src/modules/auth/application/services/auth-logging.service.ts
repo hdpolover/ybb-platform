@@ -229,4 +229,52 @@ export class AuthLoggingService {
       },
     });
   }
+
+  // Audit M125: resend-verification now returns one constant response
+  // regardless of whether the email is registered or already verified (no
+  // enumeration oracle), which means the handler can no longer log via
+  // logResendVerification's userId-only signature on the miss path — there is
+  // no user to attach it to. This mirrors logForgotPasswordRequest's shape:
+  // looked up by email, logged on the hit AND miss/already-verified paths, so
+  // an enumeration sweep against this endpoint stays visible in
+  // userSecurityLog even though the HTTP response no longer reveals it.
+  async logResendVerificationRequest(
+    email: string,
+    outcome: 'sent' | 'already-verified' | 'not-found',
+    ipAddress: string = '0.0.0.0',
+    userAgent: string = 'unknown',
+  ) {
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' }, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    const agentInfo = this.parseUserAgent(userAgent);
+
+    if (user) {
+      await this.prisma.userActivityLog.create({
+        data: {
+          userId: user.id,
+          activityType: 'RESEND_VERIFICATION',
+          activityCategory: 'AUTH',
+          activityData: { email, outcome },
+          ipAddress,
+          userAgent,
+          deviceType: agentInfo.deviceType,
+        },
+      });
+    }
+
+    await this.prisma.userSecurityLog.create({
+      data: {
+        userId: user?.id,
+        eventType: 'RESEND_VERIFICATION',
+        eventStatus: 'SUCCESS',
+        eventDescription: `Verification email resend requested for ${email} (${outcome})`,
+        ipAddress,
+        userAgent,
+        riskLevel: RiskLevel.medium,
+      },
+    });
+  }
 }

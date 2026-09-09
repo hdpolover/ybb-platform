@@ -148,7 +148,7 @@ describe('ProgramsController', () => {
         // does — see get-program-detail.handler.spec.ts for the 404/resources
         // filtering that isAdmin drives downstream.
         it('sets query.isAdmin to false for an anonymous caller', async () => {
-            await controller.findOne('some-slug', undefined);
+            await controller.findOne('some-slug', {}, undefined);
 
             const query = mockExecute.execute.mock.calls[0][0];
             expect(query.isAdmin).toBe(false);
@@ -157,7 +157,7 @@ describe('ProgramsController', () => {
         it('sets query.isAdmin to true for an ADMIN-role caller', async () => {
             const adminUser = { userId: 'u-2', email: 'a@example.com', brandId: 'b-1', role: [UserRole.ADMIN] } as any;
 
-            await controller.findOne('some-slug', adminUser);
+            await controller.findOne('some-slug', {}, adminUser);
 
             const query = mockExecute.execute.mock.calls[0][0];
             expect(query.isAdmin).toBe(true);

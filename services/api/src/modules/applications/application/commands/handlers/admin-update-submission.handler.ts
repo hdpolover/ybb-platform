@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
@@ -141,6 +141,17 @@ export class AdminUpdateSubmissionHandler {
       nextDisplayName = command.personalData['display_name'];
     }
 
+    // Audit M99: AdminParticipantPatchDto (fullName/nickName/displayName)
+    // already carries @MaxLength matching these Participant columns, but the
+    // personalData mirror path above (`command.personalData['full_name']` etc.,
+    // used when only the JSON blob is patched) bypasses that DTO entirely — a
+    // free-form field validated only for ASCII/English content, not length.
+    // Guard it here so an oversized value gets a named 400 instead of reaching
+    // Postgres as an unnamed 22001/500 on the participant.update below.
+    this.assertParticipantColumnLength('fullName', nextFullName, 255);
+    this.assertParticipantColumnLength('nickName', nextNickName, 100);
+    this.assertParticipantColumnLength('displayName', nextDisplayName, 100);
+
     // ── 5. Build changes diff (before/after for changed keys only) ───────────
     const changes: Record<string, { old: unknown; new: unknown }> = {};
 
@@ -252,6 +263,22 @@ export class AdminUpdateSubmissionHandler {
    *   - portal:submission-detail:<userId>:* (pattern)
    *   - portal:payments:<userId>:* (pattern)
    */
+  /**
+   * Guards a value about to be written to a VarChar-bounded Participant
+   * column. Only checks strings — undefined (field left unchanged) is fine.
+   */
+  private assertParticipantColumnLength(
+    field: string,
+    value: string | undefined,
+    maxLength: number,
+  ): void {
+    if (typeof value === 'string' && value.length > maxLength) {
+      throw new BadRequestException(
+        `${field} must be ${maxLength} characters or fewer (got ${value.length}).`,
+      );
+    }
+  }
+
   private async invalidateParticipantCache(
     participantId: string,
     userId: string,

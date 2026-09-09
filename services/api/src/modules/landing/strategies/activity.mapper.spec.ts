@@ -30,15 +30,30 @@ describe('maskFullName', () => {
     expect(maskFullName('Maria Clara Santos')).toBe('Maria S.');
   });
 
-  it('returns a legitimate single-word name unchanged', () => {
-    expect(maskFullName('Sukarno')).toBe('Sukarno');
+  // Audit M188: this used to return parts[0] verbatim -- the raw, unmasked
+  // full name. On the pre-fix code this assertion (`toBe('M.')`) fails
+  // because the actual return value was the literal string 'Madonna'.
+  it('masks a single-token (mononymous) name to its initial instead of returning it raw', () => {
+    expect(maskFullName('Madonna')).toBe('M.');
+  });
+
+  it('masks a single-token non-Latin name to a whole code point, not a raw byte', () => {
+    expect(maskFullName('田中')).toBe('田.');
+  });
+
+  it('reduces a two-word name to first name and last initial', () => {
+    expect(maskFullName('Yuki Tanaka')).toBe('Yuki T.');
+  });
+
+  it('uses the final word for the initial on three-word names', () => {
+    expect(maskFullName('Maria Clara Santos')).toBe('Maria S.');
   });
 
   it('collapses irregular whitespace before masking', () => {
     expect(maskFullName('  Yuki   Tanaka  ')).toBe('Yuki T.');
   });
 
-  it('takes a whole code point for the initial on non-Latin names', () => {
+  it('takes a whole code point for the initial on non-Latin multi-token names', () => {
     expect(maskFullName('Yuki 田中')).toBe('Yuki 田.');
   });
 
@@ -117,9 +132,13 @@ describe('mapRowToActivityItem', () => {
     );
   });
 
-  it('accepts a legitimate single-word name', () => {
+  // Audit M188: on the pre-fix mapper this resolved to the raw 'Sukarno' --
+  // a real applicant's full legal name, unmasked, next to their country and
+  // admission outcome on a @Public() route. This is the end-to-end
+  // regression guard: it fails on old code because item?.name was 'Sukarno'.
+  it('masks a legitimate single-word name to an initial instead of emitting it raw', () => {
     const item = mapRowToActivityItem(buildRow({ full_name: 'Sukarno' }));
-    expect(item?.name).toBe('Sukarno');
+    expect(item?.name).toBe('S.');
   });
 
   it('drops a row with a blank name', () => {

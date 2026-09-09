@@ -1,9 +1,21 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { ResendVerificationEmailCommand } from '../resend-verification-email.command';
 import * as crypto from 'crypto';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
+
+// Audit M125: returned for a non-existent email, an already-verified email,
+// and a genuine send — a single constant response so the endpoint can't be
+// used to enumerate which addresses have accounts or their verification
+// state. Mirrors forgot-password.handler.ts's FORGOT_PASSWORD_RESPONSE
+// pattern. NOTE this is a deliberate UX regression versus the old three-way
+// response: the participant frontend (ybb-program-next
+// lib/auth/resendVerification.ts) used to tell an already-verified user
+// "you're verified, just sign in" instead of leaving them to wait on an email
+// that will never arrive. That distinction is gone until the frontend is
+// updated to stop relying on it — see the audit report for the tradeoff.
+const RESEND_VERIFICATION_RESPONSE = 'If an account exists for this email and needs verification, a verification email has been sent.';
 
 @Injectable()
 export class ResendVerificationEmailHandler {
@@ -59,12 +71,23 @@ export class ResendVerificationEmailHandler {
     });
 
     if (!user) {
-      // User explicitly asked to check first - so we fail if not found
-      throw new NotFoundException(`User with email ${command.email} not found.`);
+      await this.authLoggingService.logResendVerificationRequest(
+        command.email,
+        'not-found',
+        command.ipAddress || '0.0.0.0',
+        command.userAgent || 'unknown',
+      );
+      return { success: true, message: RESEND_VERIFICATION_RESPONSE };
     }
 
     if (user.emailVerified) {
-      throw new BadRequestException('Email is already verified.');
+      await this.authLoggingService.logResendVerificationRequest(
+        command.email,
+        'already-verified',
+        command.ipAddress || '0.0.0.0',
+        command.userAgent || 'unknown',
+      );
+      return { success: true, message: RESEND_VERIFICATION_RESPONSE };
     }
 
     // Generate new token
@@ -99,8 +122,13 @@ await this.authLoggingService.logResendVerification(
         command.ipAddress || '0.0.0.0',
         command.userAgent || 'unknown',
     );
+    await this.authLoggingService.logResendVerificationRequest(
+        command.email,
+        'sent',
+        command.ipAddress || '0.0.0.0',
+        command.userAgent || 'unknown',
+    );
 
-    
-    return { success: true, message: 'Verification email sent successfully.' };
+    return { success: true, message: RESEND_VERIFICATION_RESPONSE };
   }
 }

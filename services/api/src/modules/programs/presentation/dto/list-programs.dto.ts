@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsUUID, IsOptional, IsInt, Min, IsBoolean, IsString } from 'class-validator';
+import { IsUUID, IsOptional, IsInt, Min, Max, IsBoolean, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ListProgramsDto {
@@ -83,6 +83,7 @@ export class ListProgramsDto {
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(100)
   @Type(() => Number)
   limit?: number = 10;
 }

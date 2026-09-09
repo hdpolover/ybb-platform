@@ -3,23 +3,31 @@ import { IsDateString, IsEmail, IsEnum, IsOptional, IsString, IsBoolean, IsUrl, 
 import { Type } from 'class-transformer';
 import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
 
+// MaxLength decorators below mirror roles.prisma's Participant columns exactly
+// (audit M99 defect class). This DTO is written wholesale
+// (`{ ...updateDto }`, update-participant-profile.handler.ts:37), so every
+// VarChar-backed field here needs its own guard — an oversized value has no
+// other choke point before it reaches Postgres as an unnamed 22001/500.
 export class UpdateParticipantProfileDto {
     @ApiPropertyOptional({ example: 'John Doe' })
     @IsOptional()
     @IsString()
     @IsEnglishName()
+    @MaxLength(255)
     fullName?: string;
 
     @ApiPropertyOptional({ example: 'Johnny' })
     @IsOptional()
     @IsString()
     @IsEnglishName()
+    @MaxLength(100)
     nickName?: string;
 
     @ApiPropertyOptional({ example: 'John' })
     @IsOptional()
     @IsString()
     @IsEnglishName()
+    @MaxLength(100)
     displayName?: string;
 
     @ApiPropertyOptional({ example: '1995-05-20' })
@@ -35,6 +43,7 @@ export class UpdateParticipantProfileDto {
     @ApiPropertyOptional({ example: '+84' })
     @IsOptional()
     @IsString()
+    @MaxLength(10)
     phoneCountryCode?: string;
 
     @ApiPropertyOptional({ example: '912345678' })
@@ -47,51 +56,60 @@ export class UpdateParticipantProfileDto {
     @IsOptional()
     @IsString()
     @IsEnglishText()
+    @MaxLength(100)
     nationality?: string;
 
     @ApiPropertyOptional({ example: 'City' })
     @IsOptional()
     @IsString()
     @IsEnglishText()
+    @MaxLength(100)
     currentCity?: string;
 
     @ApiPropertyOptional({ example: 'Country' })
     @IsOptional()
     @IsString()
     @IsEnglishText()
+    @MaxLength(100)
     currentCountry?: string;
 
     @ApiPropertyOptional({ example: 'University of Technology' })
     @IsOptional()
     @IsString()
     @IsEnglishText()
+    @MaxLength(200)
     institution?: string;
 
     @ApiPropertyOptional({ example: 'Computer Science' })
     @IsOptional()
     @IsString()
     @IsEnglishText()
+    @MaxLength(200)
     major?: string;
 
     @ApiPropertyOptional({ example: 'Software Engineer' })
     @IsOptional()
     @IsString()
     @IsEnglishText()
+    @MaxLength(100)
     occupation?: string;
 
     @ApiPropertyOptional({ example: 'john_doe_insta' })
     @IsOptional()
     @IsString()
+    @MaxLength(50)
     instagramUsername?: string;
 
     @ApiPropertyOptional({ example: 'https://linkedin.com/in/johndoe' })
     @IsOptional()
     @IsUrl()
+    @MaxLength(500)
     linkedinUrl?: string;
 
     @ApiPropertyOptional({ example: 'L' })
     @IsOptional()
     @IsString()
+    @MaxLength(10)
     tshirtSize?: string;
 
     @ApiPropertyOptional({ example: 'None' })
@@ -110,17 +128,20 @@ export class UpdateParticipantProfileDto {
     @IsOptional()
     @IsString()
     @IsEnglishName()
+    @MaxLength(255)
     emergencyContactName?: string;
 
     @ApiPropertyOptional({ example: 'Mother', description: 'Relation to emergency contact' })
     @IsOptional()
     @IsString()
     @IsEnglishText()
+    @MaxLength(50)
     emergencyContactRelation?: string;
 
     @ApiPropertyOptional({ example: '62', description: 'Country code for emergency contact phone' })
     @IsOptional()
     @IsString()
+    @MaxLength(10)
     emergencyContactCountryCode?: string;
 
     @ApiPropertyOptional({ example: '81234567890', description: 'Emergency contact phone number' })
@@ -132,6 +153,7 @@ export class UpdateParticipantProfileDto {
     @ApiPropertyOptional({ example: 'https://cdn.ybbhub.com/participants/profile.jpg' })
     @IsOptional()
     @IsUrl()
+    @MaxLength(500)
     profilePictureUrl?: string;
 
     // Add other fields as needed based on schema

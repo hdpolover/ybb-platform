@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsDateString, IsEnum, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
 import { KNOWLEDGE_SOURCES } from '../../../metadata/metadata.constants';
 
@@ -10,10 +10,14 @@ export enum Gender {
 }
 
 export class OnboardingDto {
+    // MaxLength mirrors roles.prisma: participants.full_name VarChar(255),
+    // origin_country/origin_city VarChar(100) — audit M99 defect class (an
+    // oversized value reaches Postgres as 22001 instead of a named 400).
     @ApiProperty({ example: 'John Doe', description: 'Full name of the participant' })
     @IsString()
     @IsNotEmpty()
     @IsEnglishName()
+    @MaxLength(255)
     fullName: string;
 
     @ApiProperty({ example: 'male', enum: Gender, description: 'Gender of the participant' })
@@ -25,12 +29,14 @@ export class OnboardingDto {
     @IsString()
     @IsNotEmpty()
     @IsEnglishText()
+    @MaxLength(100)
     originCountry: string;
 
     @ApiProperty({ example: 'Jakarta', description: 'Origin city' })
     @IsString()
     @IsNotEmpty()
     @IsEnglishText()
+    @MaxLength(100)
     originCity: string;
 
     @ApiProperty({ example: '2000-01-01', description: 'Date of birth (YYYY-MM-DD)' })
