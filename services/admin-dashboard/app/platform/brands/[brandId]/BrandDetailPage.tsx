@@ -2763,9 +2763,17 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
   const [brand, setBrand] = useState<PlatformBrandDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
-  const [readinessLoading, setReadinessLoading] = useState(true);
-  const [readinessError, setReadinessError] = useState<string | null>(null);
+  // The result carries the brand id it was fetched for, so "loading" is derived
+  // from that id no longer matching the one being shown rather than held as its
+  // own flag: setting a loading flag synchronously inside the effect is what
+  // react-hooks/set-state-in-effect rejects.
+  const [readinessResult, setReadinessResult] = useState<{
+    brandId: string;
+    report: ReadinessReport | null;
+    error: string | null;
+  } | null>(null);
+
+  const readinessLoading = readinessResult?.brandId !== brandId;
 
   const load = useCallback((silent = false) => {
     getPlatformBrand(brandId)
@@ -2781,13 +2789,19 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    setReadinessLoading(true);
     getBrandReadiness(brandId)
-      .then((data) => { if (!cancelled) { setReadiness(data); setReadinessError(null); } })
-      .catch((err) => {
-        if (!cancelled) setReadinessError(err instanceof Error ? err.message : "Failed to load readiness.");
+      .then((data) => {
+        if (!cancelled) setReadinessResult({ brandId, report: data, error: null });
       })
-      .finally(() => { if (!cancelled) setReadinessLoading(false); });
+      .catch((err) => {
+        if (!cancelled) {
+          setReadinessResult({
+            brandId,
+            report: null,
+            error: err instanceof Error ? err.message : "Failed to load readiness.",
+          });
+        }
+      });
     return () => { cancelled = true; };
   }, [brandId]);
 
@@ -2941,10 +2955,10 @@ export default function BrandDetailPage({ brandId }: { brandId: string }) {
             <Skeleton className="h-5 w-1/2" />
             <Skeleton className="h-5 w-3/5" />
           </div>
-        ) : readinessError ? (
-          <p className="text-sm text-red-700">{readinessError}</p>
+        ) : readinessResult?.error ? (
+          <p className="text-sm text-red-700">{readinessResult.error}</p>
         ) : (
-          <ReadinessList results={readiness?.results ?? []} />
+          <ReadinessList results={readinessResult?.report?.results ?? []} />
         )}
       </Card>
     </div>

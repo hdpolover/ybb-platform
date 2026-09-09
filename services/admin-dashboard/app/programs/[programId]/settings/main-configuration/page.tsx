@@ -24,27 +24,41 @@ export default function MainConfigurationPage({
   // Resolve to the canonical id the same way MainConfigurationSettings does.
   const resolvedProgramId = useResolvedProgramId(programId);
 
-  const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
-  const [readinessLoading, setReadinessLoading] = useState(true);
-  const [readinessError, setReadinessError] = useState<string | null>(null);
+  // The result carries the program id it was fetched for, so "loading" is
+  // derived from that id no longer matching the one being shown rather than
+  // held as its own flag. Setting a loading flag synchronously inside the
+  // effect is what react-hooks/set-state-in-effect rejects, and the key also
+  // does the stale-response guarding the flag used to need a `cancelled`
+  // latch for.
+  const [readinessResult, setReadinessResult] = useState<{
+    programId: string;
+    report: ReadinessReport | null;
+    error: string | null;
+  } | null>(null);
+
+  // accessiblePrograms loads asynchronously, so resolvedProgramId can still be
+  // the raw slug on the first render. Wait for auth to settle before firing;
+  // until a result lands for the current id the panel keeps its loading
+  // affordance instead of falling through to the empty state.
+  const readinessLoading = readinessResult?.programId !== resolvedProgramId;
 
   useEffect(() => {
-    // accessiblePrograms loads asynchronously, so resolvedProgramId can still
-    // be the raw slug on the first render. Wait for auth to settle before
-    // firing, and only ever apply the response matching the id currently in
-    // flight so a slow, now-stale request can't clobber a newer one. Leaving
-    // readinessLoading untouched here keeps the panel showing its loading
-    // affordance instead of the empty state while auth is still settling.
     if (authLoading) return;
 
     let cancelled = false;
-    setReadinessLoading(true);
     getProgramReadiness(resolvedProgramId)
-      .then((data) => { if (!cancelled) { setReadiness(data); setReadinessError(null); } })
-      .catch((err) => {
-        if (!cancelled) setReadinessError(err instanceof Error ? err.message : "Failed to load readiness.");
+      .then((data) => {
+        if (!cancelled) setReadinessResult({ programId: resolvedProgramId, report: data, error: null });
       })
-      .finally(() => { if (!cancelled) setReadinessLoading(false); });
+      .catch((err) => {
+        if (!cancelled) {
+          setReadinessResult({
+            programId: resolvedProgramId,
+            report: null,
+            error: err instanceof Error ? err.message : "Failed to load readiness.",
+          });
+        }
+      });
     return () => { cancelled = true; };
   }, [resolvedProgramId, authLoading]);
 
@@ -58,10 +72,10 @@ export default function MainConfigurationPage({
           <div className="rounded-md border border-zinc-200 bg-white px-5 py-8 text-center text-xs text-zinc-400 shadow-sm">
             Loading readiness…
           </div>
-        ) : readinessError ? (
-          <p className="text-sm text-red-700">{readinessError}</p>
+        ) : readinessResult?.error ? (
+          <p className="text-sm text-red-700">{readinessResult.error}</p>
         ) : (
-          <ReadinessList results={readiness?.results ?? []} />
+          <ReadinessList results={readinessResult?.report?.results ?? []} />
         )}
       </Card>
     </div>
