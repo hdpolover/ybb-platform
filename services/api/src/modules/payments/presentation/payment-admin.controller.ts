@@ -1986,9 +1986,21 @@ export class PaymentAdminController {
 
     private async getPaymentMethodCatalog(): Promise<Array<{ value: string; label: string }>> {
         try {
-            const { data } = await this.paymentServiceClient.get('/api/v1/payment-methods', {
+            // Same cache key/TTL as listMethods() above for the identical
+            // no-filter call (query === {}) — this endpoint was fetched
+            // uncached on every listInvoices/getInvoice (audit M149) even
+            // though listMethods and the per-program overlay both cache it.
+            const cacheKey = CACHE_KEYS.PAYMENT_METHODS(JSON.stringify({}));
+
+            const cached = await this.cacheService.get(cacheKey);
+            const data = cached ?? (await this.paymentServiceClient.get('/api/v1/payment-methods', {
                 headers: this.buildInternalHeaders(),
-            });
+            })).data;
+
+            if (!cached) {
+                await this.cacheService.set(cacheKey, data, CACHE_TTL.MEDIUM);
+            }
+
             const payload = data as {
                 data?: Array<Record<string, unknown>>;
             } | Array<Record<string, unknown>>;
