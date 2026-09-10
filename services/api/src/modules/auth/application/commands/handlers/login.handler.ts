@@ -15,6 +15,7 @@ import {
   toProgramRegistrationInfo,
 } from '../../services/auth-program-linking.util';
 import { recordFailedAttempt, isLockedOut, LOCKED_OUT_MESSAGE } from '../../services/account-lockout.util';
+import { hashToken } from '@shared/utils/hash-token.util';
 import { MetaCapiService } from '@modules/meta/meta-capi.service';
 
 @Injectable()
@@ -344,11 +345,16 @@ export class LoginHandler {
 
     const geoCtx = this.geoIpService.lookup(command.ipAddress);
 
+    // Audit M144 (widened): userSession.refreshToken is stored hashed, not
+    // as the raw JWT. admin-refresh.handler.ts is the only place that looks
+    // this column up, and it dual-reads (hash first, plaintext fallback) so
+    // sessions created before this deploy keep working and self-migrate on
+    // their next refresh - see that handler for the migration path.
     await this.prisma.userSession.create({
       data: {
         userId: user.id,
         sessionToken,
-        refreshToken,
+        refreshToken: hashToken(refreshToken),
         deviceType: agentInfo.deviceType,
         deviceName: `${agentInfo.browser} on ${agentInfo.os}`,
         browser: agentInfo.browser,

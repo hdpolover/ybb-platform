@@ -5,6 +5,7 @@ import { ResetPasswordHandler } from './reset-password.handler';
 import { ResetPasswordCommand } from '../reset-password.command';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { hashToken } from '@shared/utils/hash-token.util';
 
 describe('ResetPasswordHandler - no reactivation, no surviving sessions', () => {
   let handler: ResetPasswordHandler;
@@ -88,6 +89,18 @@ describe('ResetPasswordHandler - no reactivation, no surviving sessions', () => 
     );
     expect(prisma.user.update).not.toHaveBeenCalled();
     expect(prisma.userSession.updateMany).not.toHaveBeenCalled();
+  });
+
+  // Audit M144: passwordResetToken is stored hashed, so the lookup must hash
+  // the incoming raw token the same way before comparing, not compare it raw.
+  it('hashes the incoming token before looking the user up', async () => {
+    await handler.execute(command());
+
+    expect(prisma.user.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ passwordResetToken: hashToken('reset-token') }),
+      }),
+    );
   });
 
   it('revokes every live session for the user on a successful reset', async () => {

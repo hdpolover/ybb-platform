@@ -17,6 +17,7 @@ import {
     normalizePermissions,
 } from '../../../../../shared/admin-access-response';
 import { recordFailedAttempt, isLockedOut, LOCKED_OUT_MESSAGE } from '../../services/account-lockout.util';
+import { hashToken } from '@shared/utils/hash-token.util';
 
 @Injectable()
 export class AdminLoginHandler {
@@ -214,11 +215,13 @@ export class AdminLoginHandler {
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
 
+        // Audit M144 (widened): stored hashed, dual-read/migrated on refresh
+        // in admin-refresh.handler.ts - see the comment there.
         await this.prisma.userSession.create({
             data: {
                 userId: user.id,
                 sessionToken: sessionId,
-                refreshToken,
+                refreshToken: hashToken(refreshToken),
                 deviceName: command.userAgent.slice(0, 100),
                 browser: command.userAgent.slice(0, 100),
                 ipAddress: command.ipAddress,

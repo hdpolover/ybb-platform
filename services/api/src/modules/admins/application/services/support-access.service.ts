@@ -7,11 +7,12 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { createHash, randomBytes, randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { ChangeType, ChangedByType } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { hashToken } from '@shared/utils/hash-token.util';
 import {
   CreateSupportImpersonationDto,
   UpdateSupportAccessConfigDto,
@@ -156,7 +157,7 @@ export class SupportAccessService {
     }
 
     const rawToken = `${randomUUID()}.${randomBytes(16).toString('hex')}`;
-    const tokenHash = this.hashToken(rawToken);
+    const tokenHash = hashToken(rawToken);
     const expiresAt = new Date(Date.now() + SupportAccessService.TICKET_TTL_MS);
 
     const ticket = await this.prisma.supportAccessImpersonationTicket.create({
@@ -209,7 +210,7 @@ export class SupportAccessService {
     ipAddress: string,
     userAgent: string,
   ): Promise<ImpersonationExchangeResponse> {
-    const tokenHash = this.hashToken(token);
+    const tokenHash = hashToken(token);
     const now = new Date();
 
     const ticket = await this.prisma.supportAccessImpersonationTicket.findUnique({
@@ -515,10 +516,6 @@ export class SupportAccessService {
       updatedByAdminId: config?.updatedByAdminId ?? null,
       participantPortalOrigin: this.resolveParticipantPortalOrigin(null, null),
     };
-  }
-
-  private hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
   }
 
   private resolveParticipantPortalOrigin(

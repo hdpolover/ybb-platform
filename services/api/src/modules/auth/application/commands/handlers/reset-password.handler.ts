@@ -3,6 +3,7 @@ import { ResetPasswordCommand } from '../reset-password.command';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import * as bcrypt from 'bcrypt';
+import { hashToken } from '@shared/utils/hash-token.util';
 
 @Injectable()
 export class ResetPasswordHandler {
@@ -22,9 +23,12 @@ export class ResetPasswordHandler {
     // APPROVED account-deletion request pending its 30-day purge. The error
     // below is deliberately the same one an unknown token gets, so this leaks
     // nothing about which accounts are deactivated.
+    // Audit M144: passwordResetToken is stored hashed (see
+    // forgot-password.handler.ts), so the incoming raw token has to be
+    // hashed the same way before it can match the stored value.
     const user = await this.prisma.user.findFirst({
       where: {
-        passwordResetToken: token,
+        passwordResetToken: hashToken(token),
         passwordResetExpires: {
           gt: new Date(), // Token must not be expired
         },

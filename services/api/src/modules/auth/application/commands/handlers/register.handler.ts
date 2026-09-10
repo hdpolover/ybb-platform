@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AuthLoggingService } from '../../services/auth-logging.service';
+import { hashToken } from '@shared/utils/hash-token.util';
 import { normalizeReferralCode } from '@modules/participants/application/utils/referral-code.util';
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
@@ -361,7 +362,11 @@ export class RegisterHandler {
           isActive: true,
           isOnboardingCompleted: false,
           emailVerified: emailVerified,
-          emailVerificationToken,
+          // Audit M144: only the hash is persisted; emailVerificationToken
+          // itself stays the raw value so it can still go out in the
+          // verification email below. verify-email.handler.ts hashes the
+          // incoming token the same way before the lookup.
+          emailVerificationToken: emailVerificationToken ? hashToken(emailVerificationToken) : null,
           emailVerificationExpires,
           identities: {
             create: {
@@ -503,11 +508,13 @@ export class RegisterHandler {
         
         try {
           const geoCtx = this.geoIpService.lookup(command.ipAddress);
+          // Audit M144 (widened): stored hashed, dual-read/migrated on
+          // refresh in admin-refresh.handler.ts - see the comment there.
           await this.prisma.userSession.create({
               data: {
                   userId: newUser.id,
                   sessionToken,
-                  refreshToken,
+                  refreshToken: hashToken(refreshToken),
                   deviceType: agentInfo.deviceType,
                   deviceName: `${agentInfo.browser} on ${agentInfo.os}`,
                   browser: agentInfo.browser,

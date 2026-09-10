@@ -6,6 +6,7 @@ import { ResendVerificationEmailCommand } from '../resend-verification-email.com
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
+import { hashToken } from '@shared/utils/hash-token.util';
 
 describe('ResendVerificationEmailHandler - account enumeration hardening (M125)', () => {
   let handler: ResendVerificationEmailHandler;
@@ -155,6 +156,20 @@ describe('ResendVerificationEmailHandler - account enumeration hardening (M125)'
       'user.verify-email',
       expect.objectContaining({ email: unverifiedUser.email }),
     );
+  });
+
+  // Audit M144: only the hash goes to the DB; the raw token still goes out
+  // in the emitted event so the email link keeps working.
+  it('persists only the sha256 hash of the verification token, while the emitted event carries the matching raw token', async () => {
+    mockPrismaService.user.findFirst.mockResolvedValue(unverifiedUser);
+
+    await handler.execute(new ResendVerificationEmailCommand('unverified@example.com', 'brand-id-123'));
+
+    const persistedHash: string = mockPrismaService.user.update.mock.calls[0][0].data.emailVerificationToken;
+    const rawToken: string = mockRabbitmqProducer.emit.mock.calls[0][1].token;
+
+    expect(persistedHash).toBe(hashToken(rawToken));
+    expect(persistedHash).not.toBe(rawToken);
   });
 
   it('logs the security event on the non-existent-account path too, so an enumeration sweep is still visible server-side', async () => {

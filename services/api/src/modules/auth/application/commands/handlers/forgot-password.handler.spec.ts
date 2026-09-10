@@ -6,6 +6,7 @@ import { ForgotPasswordCommand } from '../forgot-password.command';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
+import { hashToken } from '@shared/utils/hash-token.util';
 
 describe('ForgotPasswordHandler - account enumeration hardening', () => {
   let handler: ForgotPasswordHandler;
@@ -198,6 +199,26 @@ describe('ForgotPasswordHandler - account enumeration hardening', () => {
       'unknown',
       null,
     );
+  });
+
+  // Audit M144: the DB must never hold the raw reset token, only its hash -
+  // a leaked users table should not be directly usable as working reset
+  // links. The email/event still needs the raw token to build the link.
+  it('persists only the sha256 hash of the reset token, while the emitted event carries the matching raw token', async () => {
+    mockPrismaService.user.findFirst.mockResolvedValue(existingUser);
+
+    await handler.execute(new ForgotPasswordCommand('existing@example.com', 'brand-id-123'));
+
+    expect(mockPrismaService.user.update).toHaveBeenCalledTimes(1);
+    const updateArgs = mockPrismaService.user.update.mock.calls[0][0];
+    const persistedHash: string = updateArgs.data.passwordResetToken;
+
+    expect(mockRabbitmqProducer.emit).toHaveBeenCalledTimes(1);
+    const emittedPayload = mockRabbitmqProducer.emit.mock.calls[0][1];
+    const rawToken: string = emittedPayload.token;
+
+    expect(persistedHash).toBe(hashToken(rawToken));
+    expect(persistedHash).not.toBe(rawToken);
   });
 
   it('logs a warning server-side when the account does not exist', async () => {

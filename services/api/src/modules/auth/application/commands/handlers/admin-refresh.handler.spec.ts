@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AdminRefreshHandler } from './admin-refresh.handler';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { hashToken } from '@shared/utils/hash-token.util';
 
 describe('AdminRefreshHandler - only a refresh token may refresh', () => {
   let handler: AdminRefreshHandler;
@@ -80,9 +81,13 @@ describe('AdminRefreshHandler - only a refresh token may refresh', () => {
 describe('AdminRefreshHandler - rotation is a guarded updateMany, not find-then-update (M132)', () => {
   let handler: AdminRefreshHandler;
 
+  // Audit M144 (widened): a legacy row that has not migrated to hashed
+  // storage yet still holds the raw refreshToken value. The dual-read in
+  // the handler matches this via the plaintext arm of the findFirst OR.
   const fullSession = {
     id: 'session-row-1',
     sessionToken: 'session-token-1',
+    refreshToken: 'presented-refresh-token',
     user: {
       id: 'user-1',
       email: 'admin@example.com',
@@ -138,20 +143,54 @@ describe('AdminRefreshHandler - rotation is a guarded updateMany, not find-then-
     );
   });
 
-  it('rotates via updateMany guarded on BOTH session id and the presented refreshToken', async () => {
+  it('rotates via updateMany guarded on BOTH session id and the matched refreshToken value, and stores the new token hashed', async () => {
     prisma.userSession.updateMany.mockResolvedValue({ count: 1 });
 
     await handler.execute('presented-refresh-token');
 
+    // The where guard is session.refreshToken (whatever value the findFirst
+    // actually matched on - here the legacy plaintext value), not the raw
+    // presented token or its hash directly, so a still-unmigrated row's
+    // concurrency guard keeps working. The stored value for the NEW token
+    // is always the hash, never the raw JWT (Audit M144 widened).
     expect(prisma.userSession.updateMany).toHaveBeenCalledWith({
       where: { id: 'session-row-1', refreshToken: 'presented-refresh-token' },
-      data: expect.objectContaining({ refreshToken: 'signed-token' }),
+      data: expect.objectContaining({ refreshToken: hashToken('signed-token') }),
     });
     // A plain update-by-id (no refreshToken predicate) is exactly the bug:
     // it would let a second concurrent refresh silently overwrite the first.
     expect(prisma.userSession.updateMany).not.toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'session-row-1' } }),
     );
+  });
+
+  it('looks up the session by hash first, falling back to plaintext, so an already-migrated row is matched by hash', async () => {
+    // Once a row has rotated once post-deploy it holds a hash, not the raw
+    // JWT. The findFirst's OR clause must include the hash of the presented
+    // token so a migrated row is still found without ever falling through
+    // to (and needlessly exposing) the plaintext arm.
+    prisma.userSession.findFirst.mockResolvedValue({
+      ...fullSession,
+      refreshToken: hashToken('presented-refresh-token'),
+    });
+    prisma.userSession.updateMany.mockResolvedValue({ count: 1 });
+
+    await handler.execute('presented-refresh-token');
+
+    expect(prisma.userSession.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: [
+            { refreshToken: hashToken('presented-refresh-token') },
+            { refreshToken: 'presented-refresh-token' },
+          ],
+        }),
+      }),
+    );
+    expect(prisma.userSession.updateMany).toHaveBeenCalledWith({
+      where: { id: 'session-row-1', refreshToken: hashToken('presented-refresh-token') },
+      data: expect.objectContaining({ refreshToken: hashToken('signed-token') }),
+    });
   });
 
   it('takes the count===0 path (fails closed with 401) when a concurrent refresh already rotated the token', async () => {

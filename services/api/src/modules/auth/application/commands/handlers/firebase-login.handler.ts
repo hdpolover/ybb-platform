@@ -12,6 +12,7 @@ import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 import { MetricsService } from '@shared/infrastructure/monitoring/metrics.service';
 import { isLockedOut } from '../../services/account-lockout.util';
+import { hashToken } from '@shared/utils/hash-token.util';
 import {
   ensureProgramApplication,
   resolveAuthTargetProgram,
@@ -551,11 +552,13 @@ export class FirebaseLoginHandler {
     expiresAt.setDate(expiresAt.getDate() + 7);
     const geoCtx = this.geoIpService.lookup(command.ipAddress);
 
+    // Audit M144 (widened): stored hashed, dual-read/migrated on refresh in
+    // admin-refresh.handler.ts - see the comment there.
     await this.prisma.userSession.create({
       data: {
         userId: user.id,
         sessionToken,
-        refreshToken,
+        refreshToken: hashToken(refreshToken),
         deviceType: agentInfo.deviceType,
         deviceName: `${agentInfo.browser} on ${agentInfo.os}`,
         browser: agentInfo.browser,

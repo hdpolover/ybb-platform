@@ -5,6 +5,7 @@ import { randomBytes } from 'crypto';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { resolveActiveProgramContact } from '@shared/utils/resolve-active-program-contact';
+import { hashToken } from '@shared/utils/hash-token.util';
 
 // Returned for both existing and non-existent accounts. Must stay a single
 // constant: any divergence between the two paths re-opens account enumeration.
@@ -120,11 +121,16 @@ export class ForgotPasswordHandler {
         const expires = new Date();
         expires.setHours(expires.getHours() + 1); // Token valid for 1 hour
 
-        // Save token to database
+        // Audit M144: only the sha256 hash is persisted. The raw token below
+        // still goes out in the email link (and to the emitted event) - it's
+        // never written to the DB, so a leaked users table can't be turned
+        // into working reset links. reset-password.handler.ts hashes the
+        // token it receives before doing the lookup, using the same
+        // hashToken() helper as support-access.service.ts.
         await this.prisma.user.update({
             where: { id: user.id },
             data: {
-                passwordResetToken: token,
+                passwordResetToken: hashToken(token),
                 passwordResetExpires: expires,
             },
         });

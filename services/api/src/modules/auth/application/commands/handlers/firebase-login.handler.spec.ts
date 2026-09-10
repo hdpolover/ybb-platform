@@ -13,6 +13,7 @@ import { GeoIpService } from '../../../../../shared/infrastructure/geoip/geoip.s
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
 import { resolveAuthTargetProgram, ensureProgramApplication } from '../../services/auth-program-linking.util';
 import { ApplicationCategory } from '@prisma/client';
+import { hashToken } from '@shared/utils/hash-token.util';
 
 jest.mock('../../services/auth-program-linking.util');
 
@@ -654,6 +655,24 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
       const result = await handler.execute(command());
 
       expect(result).toHaveProperty('accessToken', 'mock_token');
+    });
+
+    // Audit M144 (widened): persisted refreshToken must be the hash, not the
+    // raw JWT the response returns.
+    it('persists the userSession row with the hashed refresh token', async () => {
+      mockPrismaService.userIdentity.findFirst.mockResolvedValue({
+        id: 'identity-id-123',
+        userId: existingUser.id,
+        user: existingUser,
+      });
+
+      await handler.execute(command());
+
+      expect(mockPrismaService.userSession.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ refreshToken: hashToken('mock_token') }),
+        }),
+      );
     });
   });
 

@@ -4,6 +4,7 @@ import { PrismaService } from '../../../../../shared/infrastructure/prisma/prism
 import { UnitOfWork } from '../../../../../shared/infrastructure/database/unit-of-work.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { hashToken } from '@shared/utils/hash-token.util';
 
 @Injectable()
 export class VerifyEmailHandler {
@@ -15,9 +16,12 @@ export class VerifyEmailHandler {
   ) {}
 
   async execute(command: VerifyEmailCommand): Promise<{ success: boolean; message: string }> {
+    // Audit M144: emailVerificationToken is stored hashed (see
+    // register.handler.ts / resend-verification-email.handler.ts), so the
+    // incoming raw token has to be hashed the same way before it can match.
     const user = await this.prisma.user.findFirst({
       where: {
-        emailVerificationToken: command.token,
+        emailVerificationToken: hashToken(command.token),
         emailVerificationExpires: {
           gt: new Date(),
         },
@@ -58,7 +62,7 @@ export class VerifyEmailHandler {
             where: { userId: user.id },
             data: { emailVerifiedAt: new Date() }
           });
-        } catch (e) {
+        } catch {
           // Participant might not exist yet, ignore
         }
       },

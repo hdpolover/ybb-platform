@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
+import { hashToken } from '@shared/utils/hash-token.util';
 import { GeoIpService } from '../../../../../shared/infrastructure/geoip/geoip.service';
 import { RegisterCommand } from '../register.command';
 import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
@@ -454,6 +455,71 @@ describe('RegisterHandler', () => {
         expect(result).toHaveProperty('user');
 
         errorSpy.mockRestore();
+    });
+
+    // Audit M144: only the hash goes into the user row; the raw token is
+    // what gets emitted for the verification email link.
+    it('persists only the sha256 hash of the email verification token, while the emitted event carries the matching raw token', async () => {
+        mockPrismaService.authProvider.findUnique.mockResolvedValue({
+            id: 'provider-id-123',
+            name: 'local',
+            isActive: true,
+            isOAuth: false,
+        });
+        mockPrismaService.brand.findUnique.mockResolvedValue({
+            id: 'category-id-123',
+            isActive: true,
+            name: 'Test Category',
+            requireEmailVerification: true,
+        });
+        mockPrismaService.program.findUnique.mockResolvedValue({
+            id: 'program-id-123',
+            brandId: 'category-id-123',
+            status: 'published',
+            isActive: true,
+            isPublished: true,
+            allowRegistration: true,
+            registrationOpenDate: null,
+            registrationCloseDate: null,
+            requireEmailVerification: true,
+        });
+        mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
+        mockPrismaService.user.findFirst.mockResolvedValue(null);
+        mockPrismaService.user.create.mockResolvedValue({
+            id: 'new-user-id',
+            email: 'test@example.com',
+            brandId: 'category-id-123',
+            isActive: true,
+            isOnboardingCompleted: false,
+            identities: [{ providerId: 'provider-id-123' }],
+        });
+        mockPrismaService.participant.findUnique.mockResolvedValue({
+            id: 'participant-id-123',
+            userId: 'new-user-id',
+        });
+        mockPrismaService.participant.create.mockResolvedValue({
+            id: 'participant-id-123',
+            userId: 'new-user-id',
+        });
+        mockPrismaService.participantApplication.findUnique.mockResolvedValue(null);
+        mockRabbitMQProducer.emitSafe.mockResolvedValueOnce(true);
+
+        await handler.execute(command);
+
+        const persistedHash: string = mockPrismaService.user.create.mock.calls[0][0].data.emailVerificationToken;
+        const rawToken: string = mockRabbitMQProducer.emitSafe.mock.calls[0][1].token;
+
+        expect(persistedHash).toBe(hashToken(rawToken));
+        expect(persistedHash).not.toBe(rawToken);
+
+        // Audit M144 (widened): the userSession row created for this same
+        // registration must hold the hashed refresh token too, not the raw
+        // signed JWT the response returns.
+        expect(mockPrismaService.userSession.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({ refreshToken: hashToken('mock_token') }),
+            }),
+        );
     });
 
     it('persists ad click ids captured at signup onto the new participant, with a capturedAt stamp', async () => {

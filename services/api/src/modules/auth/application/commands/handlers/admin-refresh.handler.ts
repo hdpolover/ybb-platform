@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { hashToken } from '@shared/utils/hash-token.util';
 import { AdminAuthResponseDto } from '../../../presentation/dto/admin-auth-response.dto';
 import {
   buildAccessiblePrograms,
@@ -54,11 +55,22 @@ export class AdminRefreshHandler {
       throw new UnauthorizedException('Invalid admin refresh token');
     }
 
+    // Audit M144 (widened): userSession.refreshToken moved from storing the
+    // raw JWT to storing its sha256 hash, so a leaked DB dump can no longer
+    // be replayed as working refresh tokens directly. Rows written before
+    // this deploy still hold the raw JWT, so the lookup matches EITHER the
+    // hash (new rows) OR the raw value (legacy rows still mid-migration) -
+    // this is a live, zero-forced-logout migration, not a hard cutover.
+    // Whichever form actually matched gets read back into
+    // matchedRefreshTokenValue below, and the rotation write always stores
+    // the hash going forward, so a legacy row is upgraded the very next time
+    // it is used to refresh.
+    const presentedTokenHash = hashToken(refreshToken);
     const session = await this.prisma.userSession.findFirst({
       where: {
         userId: payload.sub,
         sessionToken: payload.sid,
-        refreshToken,
+        OR: [{ refreshToken: presentedTokenHash }, { refreshToken }],
         isActive: true,
         revokedAt: null,
         expiresAt: { gt: new Date() },
@@ -199,10 +211,16 @@ export class AdminRefreshHandler {
     // logout to its own next refresh with no way for the client to tell the
     // difference from a genuine expiry - deterministic-now is strictly
     // better than probabilistic-later for an auth surface.
+    // Guarded on session.refreshToken (the exact value the findFirst above
+    // actually matched - hash or legacy plaintext), not the presented
+    // refreshToken/presentedTokenHash, so the concurrency guard still works
+    // for a row that hasn't migrated yet. The write always stores the hash
+    // of the new token, so every row is on the hashed format after its first
+    // rotation post-deploy.
     const rotated = await this.prisma.userSession.updateMany({
-      where: { id: session.id, refreshToken },
+      where: { id: session.id, refreshToken: session.refreshToken },
       data: {
-        refreshToken: nextRefreshToken,
+        refreshToken: hashToken(nextRefreshToken),
         expiresAt,
         lastActivity: new Date(),
       },

@@ -9,6 +9,7 @@ import { PrismaService } from '../../../../../shared/infrastructure/prisma/prism
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { GeoIpService } from '../../../../../shared/infrastructure/geoip/geoip.service';
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
+import { hashToken } from '@shared/utils/hash-token.util';
 
 jest.mock('bcrypt', () => ({
   compare: jest.fn().mockResolvedValue(true),
@@ -236,6 +237,33 @@ describe('LoginHandler', () => {
         programSlug: 'brand-two-program',
       }),
     ]);
+  });
+
+  // Audit M144 (widened): the row persisted for admin-refresh.handler.ts's
+  // dual-read lookup must hold the hash of the signed refresh token, never
+  // the raw JWT - even though the response the caller receives still carries
+  // the raw token, per the login contract.
+  it('persists the userSession row with the hashed refresh token, while the response returns the raw one', async () => {
+    const command = new LoginCommand(
+      'same@example.com',
+      'password123',
+      '127.0.0.1',
+      'Mozilla/5.0',
+      'brand-2',
+    );
+
+    const result = await handler.execute(command);
+
+    expect(mockPrismaService.userSession.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ refreshToken: hashToken(result.refreshToken) }),
+      }),
+    );
+    expect(mockPrismaService.userSession.create).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ refreshToken: result.refreshToken }),
+      }),
+    );
   });
 
   it('resolves the brand from domain and logs into the matching same-email account', async () => {

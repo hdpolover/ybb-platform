@@ -4,6 +4,7 @@ import { ResendVerificationEmailCommand } from '../resend-verification-email.com
 import * as crypto from 'crypto';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { AuthLoggingService } from '../../services/auth-logging.service';
+import { hashToken } from '@shared/utils/hash-token.util';
 
 // Audit M125: returned for a non-existent email, an already-verified email,
 // and a genuine send — a single constant response so the endpoint can't be
@@ -94,10 +95,13 @@ export class ResendVerificationEmailHandler {
     const emailVerificationToken = crypto.randomBytes(32).toString('hex');
     const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
+    // Audit M144: only the hash is persisted; the raw emailVerificationToken
+    // below still goes out in the email. Same hashToken() helper and pattern
+    // as forgot-password.handler.ts / register.handler.ts.
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
-        emailVerificationToken,
+        emailVerificationToken: hashToken(emailVerificationToken),
         emailVerificationExpires,
       },
     });

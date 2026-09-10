@@ -9,6 +9,7 @@ import { MetricsService } from '@shared/infrastructure/monitoring/metrics.servic
 import { AuthLoggingService } from '../../services/auth-logging.service';
 import { AmbassadorLoginHandler } from './ambassador-login.handler';
 import { AmbassadorLoginCommand } from '../ambassador-login.command';
+import { hashToken } from '@shared/utils/hash-token.util';
 
 describe('AmbassadorLoginHandler', () => {
     let handler: AmbassadorLoginHandler;
@@ -211,5 +212,20 @@ describe('AmbassadorLoginHandler', () => {
                 data: expect.objectContaining({ failedLoginAttempts: 0, lockedUntil: null }),
             });
         });
+    });
+
+    // Audit M144 (widened): persisted refreshToken must be the hash, not the
+    // raw signed JWT - admin-refresh.handler.ts dual-reads (hash first,
+    // plaintext fallback) so this is a live migration, not a hard cutover.
+    it('persists the userSession row with the hashed refresh token', async () => {
+        mockPrismaService.ambassador.findFirst.mockResolvedValue({ id: 'amb-1' });
+
+        await handler.execute(command);
+
+        expect(mockPrismaService.userSession.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({ refreshToken: hashToken('mock_token') }),
+            }),
+        );
     });
 });
