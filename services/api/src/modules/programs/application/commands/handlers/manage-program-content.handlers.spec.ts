@@ -2958,19 +2958,66 @@ describe('ManageProgramContentHandlers', () => {
     });
 
     describe('UpdateProgramLandingContentHandler', () => {
-        it('merges the patch into the existing landingContent', async () => {
+        // tx is a disjoint object from prisma (never `cb(prisma)`) so a write that
+        // escapes the transaction onto the outer client stays observable - see
+        // test/utils/prisma-tx-mock.ts's docstring.
+        function makeLandingContentDeps(lockedLandingContent: Record<string, unknown>) {
             const programRepository = {
                 findById: jest.fn().mockResolvedValue({ id: 'prog-1', landingContent: { benefits: { title: 'Old' } } }),
-                update: jest.fn().mockResolvedValue({ id: 'prog-1' }),
+                update: jest.fn(),
             };
-            const prisma = { program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-1' }) } };
+            const tx: { $queryRaw: jest.Mock; program: { update: jest.Mock } } = {
+                $queryRaw: jest.fn().mockResolvedValue([{ landingContent: lockedLandingContent }]),
+                program: { update: jest.fn().mockResolvedValue({ id: 'prog-1' }) },
+            };
+            const prisma = {
+                program: { findUnique: jest.fn().mockResolvedValue({ brandId: 'brand-1' }) },
+                $transaction: jest.fn((cb: (txClient: typeof tx) => Promise<unknown>) => cb(tx)),
+            };
             const landingCacheInvalidation = { invalidate: jest.fn().mockResolvedValue(undefined) };
+            return { programRepository, tx, prisma, landingCacheInvalidation };
+        }
+
+        it('merges the patch into the row-locked read of landingContent, inside a transaction', async () => {
+            const { programRepository, tx, prisma, landingCacheInvalidation } =
+                makeLandingContentDeps({ benefits: { title: 'Old' } });
             const handler = new UpdateProgramLandingContentHandler(programRepository as any, prisma as any, landingCacheInvalidation as any);
 
             await handler.execute(new UpdateProgramLandingContentCommand('prog-1', { patch: { features: [{ title: 'New' }] } } as any, 'user-1'));
 
-            expect(programRepository.update).toHaveBeenCalledWith('prog-1', {
-                landingContent: { benefits: { title: 'Old' }, features: [{ title: 'New' }] },
+            expect(tx.$queryRaw).toHaveBeenCalled();
+            expect(tx.program.update).toHaveBeenCalledWith({
+                where: { id: 'prog-1' },
+                data: { landingContent: { benefits: { title: 'Old' }, features: [{ title: 'New' }] } },
+            });
+            // The write must go through the transaction client, never the plain
+            // repository update - that unguarded read-merge-write is the M4 bug.
+            expect(programRepository.update).not.toHaveBeenCalled();
+        });
+
+        // M4: two concurrent admin edits used to silently drop each other's
+        // section. This pins the actual fix - the merge base is the FOR UPDATE
+        // read taken inside the transaction, not the plain `findById` read taken
+        // before it. Here they deliberately disagree (as they would if another
+        // admin's save committed in between); only the locked read may win.
+        it('merges against the row-locked read, not the earlier findById snapshot, when they disagree (concurrent-write regression)', async () => {
+            const { programRepository, tx, prisma, landingCacheInvalidation } = makeLandingContentDeps({
+                benefits: { title: 'Old' },
+                faq: { title: 'Written by a concurrent admin save' },
+            });
+            const handler = new UpdateProgramLandingContentHandler(programRepository as any, prisma as any, landingCacheInvalidation as any);
+
+            await handler.execute(new UpdateProgramLandingContentCommand('prog-1', { patch: { features: [{ title: 'New' }] } } as any, 'user-1'));
+
+            expect(tx.program.update).toHaveBeenCalledWith({
+                where: { id: 'prog-1' },
+                data: {
+                    landingContent: {
+                        benefits: { title: 'Old' },
+                        faq: { title: 'Written by a concurrent admin save' },
+                        features: [{ title: 'New' }],
+                    },
+                },
             });
         });
 

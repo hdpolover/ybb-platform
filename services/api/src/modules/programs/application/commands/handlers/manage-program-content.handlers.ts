@@ -2316,10 +2316,40 @@ export class UpdateProgramLandingContentHandler implements ICommandHandler<Updat
             });
         }
 
-        const existing = (program.landingContent as Record<string, unknown>) ?? {};
-        const merged = { ...existing, ...command.dto.patch };
+        // Audit M4: read-merge-write on landingContent, no lock, no atomic merge -
+        // two concurrent admin section edits silently dropped each other's
+        // changes. The audit's own suggested SQL-merge fix (`landing_content =
+        // COALESCE(...) || $1::jsonb`) does not hold here: `landing_content` is
+        // `@db.Json`, not `Jsonb` (see program.prisma) - so an atomic `||` merge
+        // would need a json->jsonb->json round-trip cast, which is documented
+        // as the exact trap to avoid on save-submission-section.handler.ts (the
+        // M61 fix for the same class of bug on participant_applications, whose
+        // personal_data/essay_answers/uploaded_files columns are likewise
+        // @db.Json, not Jsonb). Following that fix's pattern instead: lock the
+        // program row with SELECT ... FOR UPDATE inside a transaction, so a
+        // second concurrent save's merge starts from what the first save just
+        // committed rather than from its own now-stale pre-save read.
+        await this.prisma.$transaction(async (tx) => {
+            const rows = await tx.$queryRaw<{ landingContent: unknown }[]>`
+                SELECT landing_content AS "landingContent"
+                FROM programs
+                WHERE id = ${command.programId}::uuid
+                FOR UPDATE
+            `;
+            const current = rows[0];
+            if (!current) {
+                throw new NotFoundException(`Program ${command.programId} not found`);
+            }
 
-        await this.programRepository.update(command.programId, { landingContent: merged });
+            const existing = (current.landingContent as Record<string, unknown>) ?? {};
+            const merged = { ...existing, ...command.dto.patch };
+
+            await tx.program.update({
+                where: { id: command.programId },
+                data: { landingContent: merged as Prisma.InputJsonValue },
+            });
+        });
+
         await invalidateLandingCacheByProgramId(command.programId, this.prisma, this.landingCacheInvalidation);
     }
 }
