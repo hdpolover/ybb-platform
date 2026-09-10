@@ -1,3 +1,10 @@
+# DATABASE_HOST selects which Postgres this stack talks to. It defaults to the
+# `postgres-api` service defined below, which is how this ran until 2026-09-10.
+# Production now sets it to the standalone Dokploy Postgres service
+# (ybb-platform-postgres-api-...), because holding the production database
+# inside this compose project meant one Delete click in the panel destroyed it.
+# The postgres-api service is kept defined here as the rollback: unset
+# DATABASE_HOST and this stack points back at it.
 services:
   api:
     build:
@@ -8,7 +15,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-4000}
-      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-api:5432/${DATABASE_NAME}
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@${DATABASE_HOST:-postgres-api}:5432/${DATABASE_NAME}
       REDIS_URL: redis://default:${REDIS_PASSWORD}@${REDIS_HOST:-ybb-platform-redis-service-omv9vw}:6379
       REDIS_HOST: ${REDIS_HOST:-ybb-platform-redis-service-omv9vw}
       REDIS_PORT: 6379
@@ -106,7 +113,7 @@ services:
     restart: "no"
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres-api:5432/${DATABASE_NAME}
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@${DATABASE_HOST:-postgres-api}:5432/${DATABASE_NAME}
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
       RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY: ${RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY:-false}
       RABBITMQ_QUEUE_CLEANUP_TARGETS: ${RABBITMQ_QUEUE_CLEANUP_TARGETS:-audit_log_queue,reporting_queue}
@@ -176,7 +183,12 @@ services:
     image: prodrigestivill/postgres-backup-local:15
     restart: unless-stopped
     environment:
-      POSTGRES_HOST: postgres-api
+      # Follows DATABASE_HOST too: after the 2026-09-10 extraction the database
+      # this stack must back up is no longer the postgres-api container defined
+      # below. A backup sidecar still pointed at the old host backs up a frozen
+      # copy while the live database goes unbacked - which inverts the whole
+      # point of the move.
+      POSTGRES_HOST: ${DATABASE_HOST:-postgres-api}
       POSTGRES_DB: ${DATABASE_NAME}
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
