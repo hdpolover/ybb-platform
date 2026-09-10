@@ -30,6 +30,16 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
             throw new BadRequestException(`Invalid country code: ${dto.originCountry}`);
         }
 
+        // Hoisted out of the transaction (audit M202): this is a pure read
+        // with no dependency on the participant upsert below, so it has no
+        // reason to sit inside the 5s tx holding the participant/user locks.
+        // Narrow select — only emailVerifiedAt (synced onto the participant)
+        // and brandId (scopes the ambassador lookup below) are used.
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { emailVerifiedAt: true, brandId: true },
+        });
+
         const result = await this.unitOfWork.execute(async (repos) => {
             const tx = repos.tx;
             let participant = await tx.participant.upsert({
@@ -55,120 +65,19 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
                     birthdate: new Date(dto.birthDate),
                     knowledgeSource: dto.knowledgeSource,
                     // Only set profileCompletedAt if it wasn't set before
-                    profileCompletedAt: new Date(), 
+                    profileCompletedAt: new Date(),
                     // Only bump percentage if it was 0
                     profileCompletionPercentage: { set: 20 },
                     lastProfileUpdate: new Date(),
                 },
             });
 
-            // 1. Sync User Data to Participant (Email Verified Status)
-            const user = await tx.user.findUnique({ where: { id: userId } });
+            // Sync User Data to Participant (Email Verified Status)
             if (user && user.emailVerifiedAt && !participant.emailVerifiedAt) {
                  participant = await tx.participant.update({
                      where: { id: participant.id },
                      data: { emailVerifiedAt: user.emailVerifiedAt }
                  });
-            }
-
-            // Handle Referral Logic if provided
-            //
-            // Brand-wide code, per-programme attribution: an ambassador now holds
-            // one code per brand (Ambassador.userId is unique and users are
-            // per-brand), so the ambassador lookup below is NOT scoped by
-            // ambassador.programId any more - a code from any programme in the
-            // caller's brand is usable. What programme the resulting referral is
-            // attributed to is decided separately, per participant application
-            // (see resolvedProgramId below), and idempotency is per (participant,
-            // programme) rather than per participant ever - see the unique index
-            // on ambassador_referrals(participant_id, program_id).
-            if (dto.referralCode && user) {
-                 // 1. Validate Ambassador - brand-scoped, not programme-scoped.
-                 // `user` (fetched above) is the participant's own user row, so
-                 // user.brandId is the participant's brand. Without this check a
-                 // referral code minted for brand A could attribute a referral
-                 // for a participant onboarding under brand B - codes are
-                 // globally unique strings today so this isn't currently
-                 // exploitable, but it becomes load-bearing the moment codes are
-                 // brand-wide instead of programme-wide.
-                 const ambassador = await tx.ambassador.findFirst({
-                     where: {
-                         referralCode: normalizeReferralCode(dto.referralCode),
-                         isActive: true,
-                         deletedAt: null,
-                         user: { brandId: user.brandId },
-                     }
-                 });
-
-                 if (ambassador) {
-                     try {
-                         // 2. Resolve the programme this referral is attributed
-                         // to. Onboarding carries no programme of its own, so
-                         // derive it from the participant's own application. If
-                         // they have exactly one, attribute to it; if they have
-                         // none or several, the intended programme is genuinely
-                         // ambiguous, so fall back to the ambassador's own
-                         // programId - that preserves today's behaviour rather
-                         // than silently dropping a real referral.
-                         const applications = await tx.participantApplication.findMany({
-                             where: { participantId: participant.id },
-                             select: { programId: true },
-                             distinct: ['programId'],
-                             take: 2,
-                         });
-                         const resolvedProgramId =
-                             applications.length === 1 ? applications[0].programId : ambassador.programId;
-
-                         // 3. Check if a referral for THIS participant + THIS
-                         // programme already exists.
-                         //
-                         // Latent trap, dormant only because nothing writes
-                         // AmbassadorReferral.deletedAt today (audit M73): this read is
-                         // now soft-delete filtered like every other read, and it is the
-                         // only thing standing between a duplicate and the
-                         // @@unique([participantId, programId]) index. The moment a
-                         // referral soft-delete path exists, a participant with a
-                         // soft-deleted referral for the same programme falls through to
-                         // create() and P2002s the whole onboarding-completion request -
-                         // this one is NOT wrapped in a non-blocking catch, unlike the
-                         // sibling in portal-submit-application.handler.ts. Make it an
-                         // upsert, or filter on deletedAt explicitly, before adding one.
-                         const existingReferral = await tx.ambassadorReferral.findFirst({
-                             where: { participantId: participant.id, programId: resolvedProgramId }
-                         });
-
-                         if (!existingReferral) {
-                             // 4. Create Link
-                             await tx.ambassadorReferral.create({
-                                 data: {
-                                     ambassadorId: ambassador.id,
-                                     participantId: participant.id,
-                                     programId: resolvedProgramId,
-                                     status: 'referred',
-                                 }
-                             });
-
-                             // 5. Update Stats
-                             await tx.ambassador.update({
-                                 where: { id: ambassador.id },
-                                 data: {
-                                     totalReferrals: { increment: 1 },
-                                     lastReferralAt: new Date(),
-                                 }
-                             });
-
-                             // 6. Ensure participant record has the code
-                             if (participant.referralCode !== dto.referralCode) {
-                                 participant = await tx.participant.update({
-                                     where: { id: participant.id },
-                                     data: { referralCode: dto.referralCode }
-                                 });
-                             }
-                         }
-                     } catch (e) {
-                         this.logger.warn(`Failed to process referral for user ${userId}: ${e.message}`);
-                     }
-                 }
             }
 
             await tx.user.update({
@@ -179,6 +88,24 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
             return participant;
         }, { name: 'complete-onboarding', timeout: 5000 });
 
+        // Referral attribution runs in its own transaction, deliberately
+        // OUTSIDE the onboarding transaction above (audit M202). The
+        // ambassador lookup and referral reads need participant.id, which
+        // only exists once the upsert above has committed, so they cannot be
+        // hoisted any earlier than this point. Running them in the same tx as
+        // the upsert was the actual bug: a P2002 on ambassadorReferral.create
+        // aborts the underlying Postgres transaction, and the inner
+        // try/catch that used to wrap this block could not stop that abort
+        // from surfacing on the next statement in the same tx (tx.user.update)
+        // — so despite looking non-blocking, a referral race could fail the
+        // whole onboarding request. Isolating it in its own transaction with
+        // its own catch, same as the sibling in
+        // portal-submit-application.handler.ts, is what actually makes it
+        // non-blocking.
+        if (dto.referralCode && user) {
+            await this.linkReferral(userId, user.brandId, result.id, dto.referralCode);
+        }
+
         // Advance referral funnel: referred → registered
         await this.referralFunnel.advanceToRegistered(result.id);
 
@@ -186,6 +113,110 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
         await this.invalidateParticipantCaches(userId, result.id);
 
         return result;
+    }
+
+    // Brand-wide code, per-programme attribution: an ambassador now holds one
+    // code per brand (Ambassador.userId is unique and users are per-brand),
+    // so the ambassador lookup below is NOT scoped by ambassador.programId
+    // any more - a code from any programme in the caller's brand is usable.
+    // What programme the resulting referral is attributed to is decided
+    // separately, per participant application (see resolvedProgramId below),
+    // and idempotency is per (participant, programme) rather than per
+    // participant ever - see the unique index on
+    // ambassador_referrals(participant_id, program_id).
+    private async linkReferral(
+        userId: string,
+        brandId: string,
+        participantId: string,
+        referralCode: string,
+    ): Promise<void> {
+        try {
+            await this.prisma.$transaction(async (tx) => {
+                // 1. Validate Ambassador - brand-scoped, not programme-scoped.
+                // `brandId` is the participant's own user row's brandId.
+                // Without this check a referral code minted for brand A could
+                // attribute a referral for a participant onboarding under
+                // brand B - codes are globally unique strings today so this
+                // isn't currently exploitable, but it becomes load-bearing the
+                // moment codes are brand-wide instead of programme-wide.
+                const ambassador = await tx.ambassador.findFirst({
+                    where: {
+                        referralCode: normalizeReferralCode(referralCode),
+                        isActive: true,
+                        deletedAt: null,
+                        user: { brandId },
+                    }
+                });
+                if (!ambassador) return;
+
+                // 2. Resolve the programme this referral is attributed to.
+                // Onboarding carries no programme of its own, so derive it
+                // from the participant's own application. If they have
+                // exactly one, attribute to it; if they have none or several,
+                // the intended programme is genuinely ambiguous, so fall back
+                // to the ambassador's own programId - that preserves today's
+                // behaviour rather than silently dropping a real referral.
+                const applications = await tx.participantApplication.findMany({
+                    where: { participantId },
+                    select: { programId: true },
+                    distinct: ['programId'],
+                    take: 2,
+                });
+                const resolvedProgramId =
+                    applications.length === 1 ? applications[0].programId : ambassador.programId;
+
+                // 3. Check if a referral for THIS participant + THIS
+                // programme already exists.
+                //
+                // Latent trap, dormant only because nothing writes
+                // AmbassadorReferral.deletedAt today (audit M73): this read is
+                // soft-delete filtered like every other read, and it is the
+                // only thing standing between a duplicate and the
+                // @@unique([participantId, programId]) index. The moment a
+                // referral soft-delete path exists, a participant with a
+                // soft-deleted referral for the same programme falls through
+                // to create() and P2002s — that is now caught by the outer
+                // try/catch below and logged, not allowed to fail onboarding.
+                const existingReferral = await tx.ambassadorReferral.findFirst({
+                    where: { participantId, programId: resolvedProgramId }
+                });
+                if (existingReferral) return;
+
+                // 4. Create Link
+                await tx.ambassadorReferral.create({
+                    data: {
+                        ambassadorId: ambassador.id,
+                        participantId,
+                        programId: resolvedProgramId,
+                        status: 'referred',
+                    }
+                });
+
+                // 5. Update Stats
+                await tx.ambassador.update({
+                    where: { id: ambassador.id },
+                    data: {
+                        totalReferrals: { increment: 1 },
+                        lastReferralAt: new Date(),
+                    }
+                });
+
+                // 6. Ensure participant record has the code
+                const participant = await tx.participant.findUnique({
+                    where: { id: participantId },
+                    select: { referralCode: true },
+                });
+                if (participant && participant.referralCode !== referralCode) {
+                    await tx.participant.update({
+                        where: { id: participantId },
+                        data: { referralCode }
+                    });
+                }
+            });
+        } catch (e) {
+            // Referral linking must never block onboarding completion.
+            this.logger.warn(`Failed to process referral for user ${userId}: ${e instanceof Error ? e.message : String(e)}`);
+        }
     }
 
     private async invalidateParticipantCaches(userId: string, participantId: string): Promise<void> {

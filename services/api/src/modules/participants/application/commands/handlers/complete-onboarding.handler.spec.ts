@@ -7,35 +7,44 @@ import { ReferralFunnelService } from '../../services/referral-funnel.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CompleteOnboardingCommand } from '../complete-onboarding.command';
 import { Gender, OnboardingDto } from '../../../presentation/dto/onboarding.dto';
+import { makePrismaTxMock, expectNoOuterWrites } from '../../../../../../test/utils/prisma-tx-mock';
 
 describe('CompleteOnboardingHandler - referral attribution', () => {
     let handler: CompleteOnboardingHandler;
 
-    const mockTx = {
+    // The onboarding upsert transaction (unitOfWork.execute) — participant +
+    // user.isOnboardingCompleted only, since audit M202.
+    const mockOnboardingTx = {
         participant: {
             upsert: jest.fn(),
             update: jest.fn(),
         },
         user: {
-            findUnique: jest.fn(),
             update: jest.fn(),
-        },
-        ambassador: {
-            findFirst: jest.fn(),
-            update: jest.fn(),
-        },
-        participantApplication: {
-            findMany: jest.fn(),
-        },
-        ambassadorReferral: {
-            findFirst: jest.fn(),
-            create: jest.fn(),
         },
     };
 
     const mockUnitOfWork = {
-        execute: jest.fn((work: (repos: { tx: typeof mockTx }) => unknown) => work({ tx: mockTx })),
+        execute: jest.fn((work: (repos: { tx: typeof mockOnboardingTx }) => unknown) =>
+            work({ tx: mockOnboardingTx }),
+        ),
     };
+
+    // The separate referral-linking transaction (this.prisma.$transaction),
+    // deliberately disjoint from `mockPrisma.user.findUnique` (the hoisted
+    // read) so a write that escapes the referral tx is independently
+    // observable — see prisma-tx-mock.ts's docstring.
+    const { prisma: mockPrisma, tx: mockReferralTx } = makePrismaTxMock(
+        {
+            user: { findUnique: jest.fn() },
+        },
+        {
+            ambassador: { findFirst: jest.fn(), update: jest.fn() },
+            participantApplication: { findMany: jest.fn() },
+            ambassadorReferral: { findFirst: jest.fn(), create: jest.fn() },
+            participant: { findUnique: jest.fn(), update: jest.fn() },
+        },
+    );
 
     const mockReferralFunnel = {
         advanceToRegistered: jest.fn().mockResolvedValue(undefined),
@@ -45,8 +54,6 @@ describe('CompleteOnboardingHandler - referral attribution', () => {
         invalidatePortalCache: jest.fn().mockResolvedValue(undefined),
         invalidateKey: jest.fn().mockResolvedValue(undefined),
     };
-
-    const mockPrisma = {};
 
     const baseDto: OnboardingDto = {
         fullName: 'Jane Doe',
@@ -78,16 +85,68 @@ describe('CompleteOnboardingHandler - referral attribution', () => {
         handler = module.get<CompleteOnboardingHandler>(CompleteOnboardingHandler);
 
         jest.clearAllMocks();
-        mockUnitOfWork.execute.mockImplementation((work: (repos: { tx: typeof mockTx }) => unknown) =>
-            work({ tx: mockTx }),
+        mockUnitOfWork.execute.mockImplementation((work: (repos: { tx: typeof mockOnboardingTx }) => unknown) =>
+            work({ tx: mockOnboardingTx }),
+        );
+        mockPrisma.$transaction.mockImplementation((cb: (tx: typeof mockReferralTx) => unknown) => cb(mockReferralTx));
+
+        mockOnboardingTx.participant.upsert.mockResolvedValue({ id: 'participant-1', referralCode: null });
+        mockOnboardingTx.participant.update.mockResolvedValue({ id: 'participant-1', referralCode: 'REFCODE' });
+        mockOnboardingTx.user.update.mockResolvedValue({});
+        mockPrisma.user.findUnique.mockResolvedValue({ brandId: 'brand-1', emailVerifiedAt: null });
+        mockReferralTx.ambassadorReferral.findFirst.mockResolvedValue(null);
+        mockReferralTx.participantApplication.findMany.mockResolvedValue([]);
+        mockReferralTx.participant.findUnique.mockResolvedValue({ referralCode: null });
+    });
+
+    // audit M202: the emailVerifiedAt/brandId read must happen via the outer
+    // (non-transactional) prisma client, BEFORE unitOfWork.execute is
+    // invoked — not via tx.user.findUnique inside the transaction.
+    it('reads the user outside the onboarding transaction, before unitOfWork.execute runs', async () => {
+        const callOrder: string[] = [];
+        mockPrisma.user.findUnique.mockImplementation(() => {
+            callOrder.push('user.findUnique');
+            return Promise.resolve({ brandId: 'brand-1', emailVerifiedAt: null });
+        });
+        mockUnitOfWork.execute.mockImplementation(async (work: (repos: { tx: typeof mockOnboardingTx }) => unknown) => {
+            callOrder.push('unitOfWork.execute');
+            return work({ tx: mockOnboardingTx });
+        });
+
+        await handler.execute(new CompleteOnboardingCommand('user-1', baseDto));
+
+        expect(callOrder).toEqual(['user.findUnique', 'unitOfWork.execute']);
+        expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+            where: { id: 'user-1' },
+            select: { emailVerifiedAt: true, brandId: true },
+        });
+        // No tx.user.findUnique on the onboarding tx mock at all — it has no such method any more.
+        expect((mockOnboardingTx as Record<string, unknown>).user).not.toHaveProperty('findUnique');
+    });
+
+    // audit M202: a duplicate-referral race (P2002) must not fail the whole
+    // onboarding request — the referral link now runs in its own transaction
+    // wrapped in a non-blocking catch, matching the sibling in
+    // portal-submit-application.handler.ts.
+    it('does not fail onboarding when referral linking throws (non-blocking)', async () => {
+        mockReferralTx.ambassador.findFirst.mockResolvedValue(ambassador);
+        mockReferralTx.participantApplication.findMany.mockResolvedValue([{ programId: 'applied-program' }]);
+        mockReferralTx.ambassadorReferral.create.mockRejectedValue(
+            Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
         );
 
-        mockTx.participant.upsert.mockResolvedValue({ id: 'participant-1', referralCode: null });
-        mockTx.participant.update.mockResolvedValue({ id: 'participant-1', referralCode: 'REFCODE' });
-        mockTx.user.findUnique.mockResolvedValue({ id: 'user-1', brandId: 'brand-1', emailVerifiedAt: null });
-        mockTx.user.update.mockResolvedValue({});
-        mockTx.ambassadorReferral.findFirst.mockResolvedValue(null);
-        mockTx.participantApplication.findMany.mockResolvedValue([]);
+        const result = await handler.execute(
+            new CompleteOnboardingCommand('user-1', { ...baseDto, referralCode: 'REFCODE' }),
+        );
+
+        expect(result).toEqual({ id: 'participant-1', referralCode: null });
+        // The onboarding tx's own writes still went through — the referral
+        // failure did not poison the already-committed onboarding tx.
+        expect(mockOnboardingTx.user.update).toHaveBeenCalledWith({
+            where: { id: 'user-1' },
+            data: { isOnboardingCompleted: true },
+        });
+        expect(mockReferralFunnel.advanceToRegistered).toHaveBeenCalledWith('participant-1');
     });
 
     // (d) Ambassador exists, code is real, but belongs to a DIFFERENT brand
@@ -98,7 +157,7 @@ describe('CompleteOnboardingHandler - referral attribution', () => {
         // The brand-scoped where clause is what actually enforces this - a
         // real Prisma query would return null here because the ambassador's
         // user.brandId does not match. Simulate that directly.
-        mockTx.ambassador.findFirst.mockImplementation(({ where }: any) => {
+        mockReferralTx.ambassador.findFirst.mockImplementation(({ where }: any) => {
             if (where.user?.brandId === 'brand-1') return Promise.resolve(null);
             return Promise.resolve(ambassador);
         });
@@ -107,7 +166,7 @@ describe('CompleteOnboardingHandler - referral attribution', () => {
             new CompleteOnboardingCommand('user-1', { ...baseDto, referralCode: 'REFCODE' }),
         );
 
-        expect(mockTx.ambassador.findFirst).toHaveBeenCalledWith({
+        expect(mockReferralTx.ambassador.findFirst).toHaveBeenCalledWith({
             where: {
                 referralCode: 'REFCODE',
                 isActive: true,
@@ -115,21 +174,21 @@ describe('CompleteOnboardingHandler - referral attribution', () => {
                 user: { brandId: 'brand-1' },
             },
         });
-        expect(mockTx.ambassadorReferral.create).not.toHaveBeenCalled();
-        expect(mockTx.ambassador.update).not.toHaveBeenCalled();
+        expect(mockReferralTx.ambassadorReferral.create).not.toHaveBeenCalled();
+        expect(mockReferralTx.ambassador.update).not.toHaveBeenCalled();
     });
 
     it('attributes the referral to the participant\'s single application programme when unambiguous', async () => {
-        mockTx.ambassador.findFirst.mockResolvedValue(ambassador);
-        mockTx.participantApplication.findMany.mockResolvedValue([{ programId: 'applied-program' }]);
-        mockTx.ambassadorReferral.create.mockResolvedValue({});
-        mockTx.ambassador.update.mockResolvedValue({});
+        mockReferralTx.ambassador.findFirst.mockResolvedValue(ambassador);
+        mockReferralTx.participantApplication.findMany.mockResolvedValue([{ programId: 'applied-program' }]);
+        mockReferralTx.ambassadorReferral.create.mockResolvedValue({});
+        mockReferralTx.ambassador.update.mockResolvedValue({});
 
         await handler.execute(
             new CompleteOnboardingCommand('user-1', { ...baseDto, referralCode: 'REFCODE' }),
         );
 
-        expect(mockTx.ambassadorReferral.create).toHaveBeenCalledWith({
+        expect(mockReferralTx.ambassadorReferral.create).toHaveBeenCalledWith({
             data: {
                 ambassadorId: ambassador.id,
                 participantId: 'participant-1',
@@ -137,19 +196,20 @@ describe('CompleteOnboardingHandler - referral attribution', () => {
                 status: 'referred',
             },
         });
+        expectNoOuterWrites(mockPrisma);
     });
 
     it('falls back to the ambassador\'s home programme when the participant has no applications yet', async () => {
-        mockTx.ambassador.findFirst.mockResolvedValue(ambassador);
-        mockTx.participantApplication.findMany.mockResolvedValue([]);
-        mockTx.ambassadorReferral.create.mockResolvedValue({});
-        mockTx.ambassador.update.mockResolvedValue({});
+        mockReferralTx.ambassador.findFirst.mockResolvedValue(ambassador);
+        mockReferralTx.participantApplication.findMany.mockResolvedValue([]);
+        mockReferralTx.ambassadorReferral.create.mockResolvedValue({});
+        mockReferralTx.ambassador.update.mockResolvedValue({});
 
         await handler.execute(
             new CompleteOnboardingCommand('user-1', { ...baseDto, referralCode: 'REFCODE' }),
         );
 
-        expect(mockTx.ambassadorReferral.create).toHaveBeenCalledWith({
+        expect(mockReferralTx.ambassadorReferral.create).toHaveBeenCalledWith({
             data: {
                 ambassadorId: ambassador.id,
                 participantId: 'participant-1',
@@ -160,17 +220,17 @@ describe('CompleteOnboardingHandler - referral attribution', () => {
     });
 
     it('does not create a referral when one already exists for the resolved programme (idempotent)', async () => {
-        mockTx.ambassador.findFirst.mockResolvedValue(ambassador);
-        mockTx.participantApplication.findMany.mockResolvedValue([{ programId: 'applied-program' }]);
-        mockTx.ambassadorReferral.findFirst.mockResolvedValue({ id: 'existing-referral' });
+        mockReferralTx.ambassador.findFirst.mockResolvedValue(ambassador);
+        mockReferralTx.participantApplication.findMany.mockResolvedValue([{ programId: 'applied-program' }]);
+        mockReferralTx.ambassadorReferral.findFirst.mockResolvedValue({ id: 'existing-referral' });
 
         await handler.execute(
             new CompleteOnboardingCommand('user-1', { ...baseDto, referralCode: 'REFCODE' }),
         );
 
-        expect(mockTx.ambassadorReferral.findFirst).toHaveBeenCalledWith({
+        expect(mockReferralTx.ambassadorReferral.findFirst).toHaveBeenCalledWith({
             where: { participantId: 'participant-1', programId: 'applied-program' },
         });
-        expect(mockTx.ambassadorReferral.create).not.toHaveBeenCalled();
+        expect(mockReferralTx.ambassadorReferral.create).not.toHaveBeenCalled();
     });
 });
