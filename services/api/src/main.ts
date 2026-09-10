@@ -43,6 +43,14 @@ import { CacheService } from './shared/infrastructure/cache/cache.service';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { PrismaService } from './shared/infrastructure/prisma/prisma.service';
+import { ConsumerStatusService } from './shared/infrastructure/messaging/consumer-status.service';
+import {
+  AUDIT_LOG_QUEUE,
+  REPORTING_QUEUE,
+  PAYMENT_EVENTS_QUEUE,
+  LOA_EVENTS_QUEUE,
+  REMINDER_EVENTS_QUEUE,
+} from './shared/constants/rabbitmq-queues';
 import * as amqp from 'amqplib';
 
 type AmqpConnection = Awaited<ReturnType<typeof amqp.connect>>;
@@ -197,12 +205,17 @@ export async function bootstrap() {
   console.log(`\n🚀 Application is running on: http://localhost:${port}`);
   console.log(`📚 API Documentation: http://localhost:${port}/docs\n`);
 
+  // Resolved from the HTTP app's DI container (HealthModule) so /v1/health
+  // can report live consumer state — see ConsumerStatusService for why this
+  // exists and health.controller.ts for how it's read.
+  const consumerStatusService = app.get(ConsumerStatusService);
+
   // Fire-and-forget: startRabbitMqConsumers retries indefinitely on failure
   // (see RMQ_STARTUP_MAX_DELAY_MS) and is not expected to reject. The .catch
   // here is a backstop, not the primary error handling path — if this ever
   // fires it means that invariant broke, and process.on('unhandledRejection')
   // above would otherwise have been the only thing to notice.
-  startRabbitMqConsumers(rabbitMqUrl, retryDelayMs).catch((err: unknown) => {
+  startRabbitMqConsumers(rabbitMqUrl, retryDelayMs, consumerStatusService).catch((err: unknown) => {
     console.error(
       '[FATAL-CANDIDATE] RabbitMQ consumer startup loop exited without retrying — this should be unreachable:',
       err instanceof Error ? err.stack ?? err.message : err,
@@ -225,20 +238,60 @@ export function computeRabbitMqBackoffDelayMs(attempt: number): number {
   return Math.min(delay, RMQ_STARTUP_MAX_DELAY_MS);
 }
 
+// Minimal structural interface instead of importing ConsumerStatusService's
+// concrete type here: main.ts already reaches into shared/infrastructure for
+// the class itself (bootstrap needs it to call app.get()), but the retry
+// loop below only ever needs these three methods, and keeping the loop's own
+// signature structural means a test double never needs to implement more
+// than it uses.
+export interface ConsumerStatusRecorder {
+  recordAttempt(): void;
+  recordConnected(): void;
+  recordFailure(error: Error): void;
+}
+
+// Status reporting is diagnostic only. Swallowing here means a recorder that
+// throws (an incompatible stub in a test, or a future bug in
+// ConsumerStatusService) can never break the actual consumer retry loop —
+// getting consumers connected always takes priority over reporting that they
+// did.
+function recordStatusSafely(fn: () => void): void {
+  try {
+    fn();
+  } catch (error) {
+    console.error(
+      '[rabbitmq] consumer status recorder threw; ignoring:',
+      error instanceof Error ? error.stack ?? error.message : error,
+    );
+  }
+}
+
 // Retries connectRabbitMqConsumers indefinitely with bounded exponential
 // backoff instead of throwing. A broker outage at boot (or one that starts
 // mid-retry) must not crash the process — the HTTP app is already listening
 // by the time this is called (see bootstrap above).
-export async function startRabbitMqConsumers(rabbitMqUrl: string, retryDelayMs: number): Promise<void> {
+//
+// statusRecorder is optional and defaults to doing nothing: main.spec.ts
+// calls this with two args, and any future caller that doesn't care about
+// consumer status reporting shouldn't have to construct one.
+export async function startRabbitMqConsumers(
+  rabbitMqUrl: string,
+  retryDelayMs: number,
+  statusRecorder?: ConsumerStatusRecorder,
+): Promise<void> {
   let attempt = 0;
   for (;;) {
     attempt += 1;
+    recordStatusSafely(() => statusRecorder?.recordAttempt());
     try {
       await connectRabbitMqConsumers(rabbitMqUrl, retryDelayMs);
+      recordStatusSafely(() => statusRecorder?.recordConnected());
       console.log(`[rabbitmq] consumers connected on attempt ${attempt}.`);
       return;
     } catch (error) {
       const delay = computeRabbitMqBackoffDelayMs(attempt);
+      const normalizedError = error instanceof Error ? error : new Error(String(error));
+      recordStatusSafely(() => statusRecorder?.recordFailure(normalizedError));
       console.error(
         `[rabbitmq] consumer startup failed on attempt ${attempt}; retrying in ${delay}ms:`,
         error instanceof Error ? error.stack ?? error.message : error,
@@ -259,14 +312,14 @@ export async function connectRabbitMqConsumers(rabbitMqUrl: string, retryDelayMs
     loaEventsQueueOptions,
     reminderEventsQueueOptions,
   ] = await Promise.all([
-    resolvePrimaryQueueOptions(rabbitMqUrl, 'audit_log_queue'),
-    resolvePrimaryQueueOptions(rabbitMqUrl, 'reporting_queue'),
-    resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-payment-events'),
-    resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-loa-events'),
-    resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-reminder-events'),
+    resolvePrimaryQueueOptions(rabbitMqUrl, AUDIT_LOG_QUEUE),
+    resolvePrimaryQueueOptions(rabbitMqUrl, REPORTING_QUEUE),
+    resolvePrimaryQueueOptions(rabbitMqUrl, PAYMENT_EVENTS_QUEUE),
+    resolvePrimaryQueueOptions(rabbitMqUrl, LOA_EVENTS_QUEUE),
+    resolvePrimaryQueueOptions(rabbitMqUrl, REMINDER_EVENTS_QUEUE),
   ]);
 
-  await ensureRetryTopology(rabbitMqUrl, 'audit_log_queue', {
+  await ensureRetryTopology(rabbitMqUrl, AUDIT_LOG_QUEUE, {
     retryDelayMs,
     primaryQueueOptions: auditQueueOptions,
     binding: {
@@ -275,7 +328,7 @@ export async function connectRabbitMqConsumers(rabbitMqUrl: string, retryDelayMs
       routingKey: '#',
     },
   });
-  await ensureRetryTopology(rabbitMqUrl, 'reporting_queue', {
+  await ensureRetryTopology(rabbitMqUrl, REPORTING_QUEUE, {
     retryDelayMs,
     primaryQueueOptions: reportingQueueOptions,
     binding: {
@@ -284,7 +337,7 @@ export async function connectRabbitMqConsumers(rabbitMqUrl: string, retryDelayMs
       routingKey: '#',
     },
   });
-  await ensureRetryTopology(rabbitMqUrl, 'api-service-payment-events', {
+  await ensureRetryTopology(rabbitMqUrl, PAYMENT_EVENTS_QUEUE, {
     retryDelayMs,
     primaryQueueOptions: paymentEventsQueueOptions,
     binding: {
@@ -298,7 +351,7 @@ export async function connectRabbitMqConsumers(rabbitMqUrl: string, retryDelayMs
   // this queue only ever carries the one event it handles — an unhandled
   // pattern here would be ack-dropped, but a queue that only receives what it
   // handles is easier to reason about when the DLQ is non-empty.
-  await ensureRetryTopology(rabbitMqUrl, 'api-service-loa-events', {
+  await ensureRetryTopology(rabbitMqUrl, LOA_EVENTS_QUEUE, {
     retryDelayMs,
     primaryQueueOptions: loaEventsQueueOptions,
     binding: {
@@ -312,7 +365,7 @@ export async function connectRabbitMqConsumers(rabbitMqUrl: string, retryDelayMs
   // on api-service-loa-events: ensureRetryTopology takes one binding per queue,
   // and a queue that only ever receives what it handles is easier to reason
   // about when the DLQ is non-empty.
-  await ensureRetryTopology(rabbitMqUrl, 'api-service-reminder-events', {
+  await ensureRetryTopology(rabbitMqUrl, REMINDER_EVENTS_QUEUE, {
     retryDelayMs,
     primaryQueueOptions: reminderEventsQueueOptions,
     binding: {
@@ -328,11 +381,11 @@ export async function connectRabbitMqConsumers(rabbitMqUrl: string, retryDelayMs
   // `app` created in bootstrap() intentionally has NO microservice attached.
   const deserializer = new RoutingKeyDeserializer();
   const consumerSpecs: Array<{ queue: string; module: Type<unknown>; queueOptions: PrimaryQueueOptions }> = [
-    { queue: 'audit_log_queue', module: AuditConsumerModule, queueOptions: auditQueueOptions },
-    { queue: 'reporting_queue', module: ReportingConsumerModule, queueOptions: reportingQueueOptions },
-    { queue: 'api-service-payment-events', module: PaymentEventsConsumerModule, queueOptions: paymentEventsQueueOptions },
-    { queue: 'api-service-loa-events', module: LoaEventsConsumerModule, queueOptions: loaEventsQueueOptions },
-    { queue: 'api-service-reminder-events', module: ReminderEventsConsumerModule, queueOptions: reminderEventsQueueOptions },
+    { queue: AUDIT_LOG_QUEUE, module: AuditConsumerModule, queueOptions: auditQueueOptions },
+    { queue: REPORTING_QUEUE, module: ReportingConsumerModule, queueOptions: reportingQueueOptions },
+    { queue: PAYMENT_EVENTS_QUEUE, module: PaymentEventsConsumerModule, queueOptions: paymentEventsQueueOptions },
+    { queue: LOA_EVENTS_QUEUE, module: LoaEventsConsumerModule, queueOptions: loaEventsQueueOptions },
+    { queue: REMINDER_EVENTS_QUEUE, module: ReminderEventsConsumerModule, queueOptions: reminderEventsQueueOptions },
   ];
 
   // M171 follow-up: connectRabbitMqConsumers is now retried by
