@@ -99,11 +99,13 @@ export class LoaDownloadService {
       programId,
     );
 
-    // Resolve the program from the application's own programId. Only `id`/`year`
-    // needed here - LoaRenderDataService (step 8) fetches the full program row.
+    // Resolve the program from the application's own programId. `slug` is
+    // needed alongside `id`/`year` to build a per-programme document-number
+    // token (see programCode below) - LoaRenderDataService (step 8) fetches
+    // the full program row separately.
     const program = await this.prisma.program.findUnique({
       where: { id: application.programId },
-      select: { id: true, year: true },
+      select: { id: true, year: true, slug: true },
     });
     if (!program) throw new NotFoundException('Program not found');
 
@@ -120,7 +122,29 @@ export class LoaDownloadService {
     // 6. Assign or reuse stable document number (Bug 2 fix: pass template.id so the
     //    ParticipantDocument row carries templateId, enabling GetPortalDocumentsHandler
     //    to match it by templateId and skip it in the uploaded-docs loop)
-    const programCode = String(program.year);
+    //
+    // Audit M62: programCode used to be just the programme year (`String(program.year)`),
+    // and LoaDocumentNumberService's per-program count-based padding (LOA-<code>-0001,
+    // 0002, ...) was scoped by programId but the resulting NUMBER carried no programme
+    // identity beyond the year - so two different programmes running in the same year
+    // both minted "LOA-2026-0001" for their first participant. Production already
+    // carries 144 such collisions across 288 issued documents (China Youth Summit 2026
+    // and Middle East Youth Summit 6th both ran LOA-2026-0001 upward).
+    //
+    // `program.slug` is only unique per brand (`@@unique([brandId, slug])`), not
+    // globally, so this token narrows collisions to "same year, same slug, different
+    // brands" rather than eliminating them. The partial unique index that would close
+    // that last gap is NOT shipped yet: it cannot be created while those 288 legacy
+    // rows violate it, and renumbering them is a business decision, not a migration -
+    // an LOA number may already appear on a document a participant submitted for a
+    // visa. Existing numbers are never reassigned (assignOrGet returns the stored one),
+    // so this change only affects newly issued documents.
+    //
+    // The retry-on-P2002 path in LoaDocumentNumberService is therefore inert until
+    // that index exists. It is kept because it is the half that cannot be added
+    // safely later under concurrency.
+    const slugToken = (program.slug ?? '').toUpperCase().replace(/[^A-Z0-9]+/g, '').slice(0, 20);
+    const programCode = slugToken ? `${program.year}-${slugToken}` : String(program.year);
     const { docNumber, existingDocId } = await this.loaDocumentNumberService.assignOrGet(
       application.id,
       program.id,

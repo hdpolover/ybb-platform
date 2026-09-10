@@ -55,6 +55,7 @@ describe('LOA preview/download parity', () => {
   const fixtureProgram = {
     id: programId,
     name: 'Japan Youth Summit 2026 Batch 2',
+    slug: 'japan-youth-summit-2026-batch-2',
     year: 2026,
     startDate: new Date('2026-08-01'),
     endDate: new Date('2026-08-10'),

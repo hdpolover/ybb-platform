@@ -19,7 +19,7 @@ describe('LoaDownloadService', () => {
 
   const mockParticipant = { id: 'participant-1', fullName: 'John Doe' };
   const mockApplication = { id: 'app-1', programId: 'program-1' };
-  const mockProgram = { id: 'program-1', year: 2026 };
+  const mockProgram = { id: 'program-1', year: 2026, slug: 'ybb-summer' };
   const mockTemplate = {
     id: 'template-1',
     htmlContent: '<p>Hello {{participant.fullName}}</p>',
@@ -132,7 +132,7 @@ describe('LoaDownloadService', () => {
       expect(loaDocumentNumberService.assignOrGet).toHaveBeenCalledWith(
         mockApplication.id,
         mockApplication.programId,
-        String(mockProgram.year),
+        `${mockProgram.year}-YBBSUMMER`,
         mockTemplate.id,
       );
       expect(loaRenderDataService.buildSourceMapForApplication).toHaveBeenCalledWith(
@@ -150,6 +150,64 @@ describe('LoaDownloadService', () => {
       );
       expect(result.buffer).toBe(mockPdfBuffer);
       expect(result.filename).toBe('LOA-LOA-2026-0001.pdf');
+    });
+
+    // Audit M62: programCode used to be just `String(program.year)`, so two
+    // different programmes running in the same year both minted "LOA-2026-0001"
+    // for their first participant. Asserting the slug is folded in here is what
+    // pins that regression.
+    it('(b2) builds programCode from year + sanitized slug, not just the year, so two programmes in the same year do not collide', async () => {
+      mockHappyPath();
+      (prisma.program.findUnique as jest.Mock).mockResolvedValue({
+        id: 'program-2',
+        year: 2026,
+        slug: 'ybb winter! (2nd cohort)',
+      });
+
+      await service.downloadLoa('user-1', 'brand-1');
+
+      expect(loaDocumentNumberService.assignOrGet).toHaveBeenCalledWith(
+        mockApplication.id,
+        'program-2',
+        '2026-YBBWINTER2NDCOHORT', // non-alnum stripped, uppercased
+        mockTemplate.id,
+      );
+    });
+
+    it('(b2b) truncates a long slug token to 20 characters', async () => {
+      mockHappyPath();
+      (prisma.program.findUnique as jest.Mock).mockResolvedValue({
+        id: 'program-2b',
+        year: 2026,
+        slug: 'summer-leadership-program-2026-batch-one',
+      });
+
+      await service.downloadLoa('user-1', 'brand-1');
+
+      expect(loaDocumentNumberService.assignOrGet).toHaveBeenCalledWith(
+        mockApplication.id,
+        'program-2b',
+        '2026-SUMMERLEADERSHIPPROG',
+        mockTemplate.id,
+      );
+    });
+
+    it('(b3) falls back to the bare year when the slug has no alphanumeric characters', async () => {
+      mockHappyPath();
+      (prisma.program.findUnique as jest.Mock).mockResolvedValue({
+        id: 'program-3',
+        year: 2026,
+        slug: '---',
+      });
+
+      await service.downloadLoa('user-1', 'brand-1');
+
+      expect(loaDocumentNumberService.assignOrGet).toHaveBeenCalledWith(
+        mockApplication.id,
+        'program-3',
+        '2026',
+        mockTemplate.id,
+      );
     });
 
     it('(c) records download tracking - increments downloadCount and sets lastDownloadedAt', async () => {
