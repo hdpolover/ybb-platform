@@ -2712,6 +2712,68 @@ describe('ManageProgramContentHandlers', () => {
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-p', revalidateOptions);
         });
 
+        // M156: CreateIntentRequest.amount is int64 at the gRPC payment gateway
+        // boundary and truncates cents silently. The DTO already rejects this
+        // (create-update-program-content.dto.spec.ts); these checks are the
+        // handler's own defense-in-depth in case a caller bypasses the DTO layer.
+        it('CreateProgramPricingTierHandler rejects a cents-bearing usdPrice and never calls the repository', async () => {
+            const handler = new CreateProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation, prismaRead);
+
+            await expect(handler.execute(new CreateProgramPricingTierCommand(
+                { programId: 'prog-1', name: 'Tier 1', usdPrice: 49.99, idrPrice: 1500000 } as any,
+                'user-1',
+                actor,
+            ))).rejects.toThrow('usdPrice must be a whole dollar amount (no cents) until the payment gateway supports USD minor units');
+
+            expect(repo.createPricingTier).not.toHaveBeenCalled();
+        });
+
+        it('CreateProgramPricingTierHandler accepts a whole-dollar usdPrice', async () => {
+            const handler = new CreateProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation, prismaRead);
+            repo.createPricingTier.mockResolvedValue({ id: 'tier-1', programId: 'prog-1' });
+
+            await handler.execute(new CreateProgramPricingTierCommand(
+                { programId: 'prog-1', name: 'Tier 1', usdPrice: 50, idrPrice: 1500000 } as any,
+                'user-1',
+                actor,
+            ));
+
+            expect(repo.createPricingTier).toHaveBeenCalled();
+        });
+
+        it('UpdateProgramPricingTierHandler rejects a cents-bearing usdPrice and never calls the repository', async () => {
+            const handler = new UpdateProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation);
+            repo.findPricingTierById.mockResolvedValue({
+                id: 'tier-1',
+                programId: 'prog-1',
+                feeType: 'program_fee_1',
+                allowedCategories: [],
+                isActive: true,
+            });
+
+            await expect(handler.execute(new UpdateProgramPricingTierCommand(
+                'tier-1', { usdPrice: 49.99 } as any, 'user-1',
+            ))).rejects.toThrow('usdPrice must be a whole dollar amount (no cents) until the payment gateway supports USD minor units');
+
+            expect(repo.updatePricingTier).not.toHaveBeenCalled();
+        });
+
+        it('UpdateProgramPricingTierHandler accepts a whole-dollar usdPrice', async () => {
+            const handler = new UpdateProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation);
+            repo.findPricingTierById.mockResolvedValue({
+                id: 'tier-1',
+                programId: 'prog-1',
+                feeType: 'program_fee_1',
+                allowedCategories: [],
+                isActive: true,
+            });
+            repo.updatePricingTier.mockResolvedValue({ id: 'tier-1', programId: 'prog-1', usdPrice: 50 });
+
+            await handler.execute(new UpdateProgramPricingTierCommand('tier-1', { usdPrice: 50 } as any, 'user-1'));
+
+            expect(repo.updatePricingTier).toHaveBeenCalled();
+        });
+
         it('UpdateProgramPaymentInfoHandler fires revalidation after saving payment info html', async () => {
             const programRepository = {
                 findById: jest.fn().mockResolvedValue({ id: 'prog-1', brandId: 'brand-p' }),

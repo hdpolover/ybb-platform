@@ -257,6 +257,22 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
     );
   });
 
+  // M156 backstop: CreateIntentRequest.amount is int64 at the gRPC boundary and
+  // silently truncates cents. This should be unreachable via the product now that
+  // the admin-facing usdPrice DTO guard exists — it is here to catch a row written
+  // by a migration, a script, or a future code path that bypasses the DTO.
+  it('rejects a cents-bearing USD amount with a 400 and never calls the payment client (M156)', async () => {
+    mockPrisma.programPricingTier.findFirst.mockResolvedValue({
+      price: 49.99,
+      currency: 'USD',
+      usdPrice: 49.99,
+    });
+
+    await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
+
+    expect(mockPaymentClient.createIntent).not.toHaveBeenCalled();
+  });
+
   it('falls back to legacy price/currency for tiers without dual pricing', async () => {
     mockPrisma.programPricingTier.findFirst.mockResolvedValue({
       price: 176000,

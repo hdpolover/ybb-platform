@@ -132,6 +132,54 @@ describe('ConfirmPortalPaymentHandler', () => {
         );
     });
 
+    // M156 backstop: CreateIntentRequest.amount is int64 at the gRPC boundary and
+    // silently truncates cents. This should be unreachable via the product now that
+    // the admin-facing usdPrice DTO guard exists — it is here to catch a row written
+    // by a migration, a script, or a future code path that bypasses the DTO.
+    it('rejects a cents-bearing gateway settlement amount with a 400 and never calls the payment client (M156)', async () => {
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+            id: 'participant-1',
+            userId: 'user-1',
+        });
+        mockPrisma.applicationInvoice.findUnique.mockResolvedValue({
+            id: 'invoice-1',
+            applicationId: 'app-1',
+            amount: '49.99',
+            currency: 'USD',
+            status: 'unpaid',
+            exchangeRateSnapshot: null,
+            paymentMethod: null,
+            externalIntentId: null,
+            externalTransactionId: null,
+            pricingTier: {
+                name: 'Registration Fee',
+                isActive: true,
+                deletedAt: null,
+            },
+            application: {
+                participantId: 'participant-1',
+                programId: 'program-1',
+                program: {
+                    name: 'China Youth Summit 2026',
+                    currency: 'USD',
+                    usdInIdr: '17580',
+                },
+                participant: {
+                    fullName: 'Hendra',
+                    user: {
+                        email: 'hendra@example.com',
+                    },
+                },
+            },
+        });
+
+        await expect(
+            handler.execute(new ConfirmPortalPaymentCommand('user-1', 'invoice-1', 'gateway', 'xendit_credit_card')),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(mockPaymentClient.createIntent).not.toHaveBeenCalled();
+    });
+
     it('flips the invoice to IDR settlement when the participant chooses manual transfer', async () => {
         mockPortalCacheService.getParticipantProfile.mockResolvedValue({
             id: 'participant-1',

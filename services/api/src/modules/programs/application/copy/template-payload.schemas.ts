@@ -35,6 +35,19 @@ function coerceDecimal(value: unknown): unknown {
 const decimalSchema = z.preprocess(coerceDecimal, z.number());
 const nullableDecimalSchema = z.preprocess(coerceDecimal, z.number().nullable());
 
+// usdPrice specifically must be a whole dollar: CreateIntentRequest.amount is int64 at the
+// gRPC payment gateway boundary and silently truncates cents otherwise (M156). This schema
+// runs on parseTemplateItems' single choke point for ContentTemplate.payload, so it is what
+// stops a cents-bearing usdPrice from ever being persisted into a reusable template in the
+// first place, regardless of which copier later applies it.
+const nullableWholeUsdPriceSchema = z.preprocess(
+  coerceDecimal,
+  z
+    .number()
+    .int({ message: 'usdPrice must be a whole dollar amount (no cents) until the payment gateway supports USD minor units' })
+    .nullable(),
+);
+
 // Same shape of problem for DateTime columns: a raw Date instance fails
 // z.string().datetime() outright (also verified empirically). Normalizes to
 // the same ISO-8601 string form Date#toJSON()/JSON.stringify already
@@ -165,7 +178,7 @@ const paymentsItemSchema = z
     description: z.string().nullable(),
     price: decimalSchema,
     currency: z.string(),
-    usdPrice: nullableDecimalSchema,
+    usdPrice: nullableWholeUsdPriceSchema,
     idrPrice: nullableDecimalSchema,
     capacity: z.number().nullable(),
     benefits: z.array(z.string()),

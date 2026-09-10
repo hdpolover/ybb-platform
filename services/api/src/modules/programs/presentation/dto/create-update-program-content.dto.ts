@@ -972,9 +972,12 @@ export class CreateProgramPricingTierDto {
     description?: string;
 
     // NEW — both required
-    @ApiProperty({ description: 'Price in USD for automatic gateway payments' })
-    @IsNumber()
-    @Min(0.01)
+    // Whole dollars only: the gRPC payment gateway boundary (CreateIntentRequest.amount)
+    // is int64 and truncates any fractional cents silently (M156). Reject at the source
+    // instead of letting a mispriced tier reach checkout.
+    @ApiProperty({ description: 'Price in USD for automatic gateway payments (whole dollars only, no cents)' })
+    @IsInt({ message: 'usdPrice must be a whole dollar amount (no cents) until the payment gateway supports USD minor units' })
+    @Min(1)
     @IsNotEmpty()
     usdPrice: number;
 
@@ -1094,10 +1097,10 @@ export class UpdateProgramPricingTierDto {
     @IsOptional()
     description?: string;
 
-    // NEW
-    @ApiPropertyOptional()
-    @IsNumber()
-    @Min(0.01)
+    // NEW — whole dollars only, see CreateProgramPricingTierDto.usdPrice for why.
+    @ApiPropertyOptional({ description: 'Price in USD for automatic gateway payments (whole dollars only, no cents)' })
+    @IsInt({ message: 'usdPrice must be a whole dollar amount (no cents) until the payment gateway supports USD minor units' })
+    @Min(1)
     @IsOptional()
     usdPrice?: number;
 
