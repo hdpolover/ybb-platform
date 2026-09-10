@@ -63,6 +63,7 @@ describe('RegisterHandler', () => {
     participantApplication: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       create: jest.fn().mockResolvedValue({ id: 'application-created-1' }),
     },
     programParticipationInfo: {
@@ -167,6 +168,10 @@ describe('RegisterHandler', () => {
       }),
     );
     mockPrismaService.participantApplication.findUnique.mockResolvedValue(null);
+    // getRegisteredPrograms (shared auth-program-linking.util helper, audit
+    // M128) — queries off the already-loaded newParticipant.id, no user
+    // re-fetch.
+    mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
     mockPrismaService.programParticipationInfo.findMany.mockResolvedValue([]);
   });
 
@@ -300,6 +305,15 @@ describe('RegisterHandler', () => {
 
         expect(result).toHaveProperty('accessToken', 'mock_token');
         expect(result).toHaveProperty('user');
+
+        // Audit M128: registeredPrograms is built off the already-loaded
+        // newParticipant.id (queried via participant.findUnique above), not a
+        // fresh user.findUnique re-fetch with a 3-level include.
+        expect(mockPrismaService.user.findUnique).not.toHaveBeenCalled();
+        expect(mockPrismaService.participantApplication.findMany).toHaveBeenCalledWith({
+            where: { participantId: 'participant-id-123', program: { brandId: 'category-id-123' } },
+            include: { program: true },
+        });
     });
 
     // Audit M142: a try/catch INSIDE the registration transaction used to

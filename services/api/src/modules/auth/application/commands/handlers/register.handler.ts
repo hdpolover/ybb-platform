@@ -16,6 +16,7 @@ import { MetricsService } from '../../../../../shared/infrastructure/monitoring/
 import { GeoIpService } from '@shared/infrastructure/geoip/geoip.service';
 import {
   ensureProgramApplication,
+  getRegisteredPrograms,
   resolveAuthTargetProgram,
   toProgramRegistrationInfo,
 } from '../../services/auth-program-linking.util';
@@ -42,40 +43,6 @@ export class RegisterHandler {
     // tracking" instead of failing account registration outright.
     @Optional() private readonly metaCapiService?: MetaCapiService,
   ) {}
-
-  /**
-   * Helper to fetch Registered Programs
-   */
-  private async getRegisteredPrograms(userId: string, brandId: string) {
-    const userData = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        participant: {
-          include: {
-            applications: {
-              where: {
-                program: {
-                  brandId: brandId 
-                }
-              },
-              include: {
-                program: true
-              }
-            }
-          }
-        }
-      }
-    });
-
-    return userData?.participant?.applications.map(app => ({
-      programId: app.programId,
-      programName: app.program.name,
-      programSlug: app.program.slug,
-      year: app.program.year,
-      applicationId: app.id,
-      applicationStatus: app.status
-    })) || [];
-  }
 
   /**
    * Best-effort ambassador referral linking, run AFTER the registration
@@ -545,8 +512,12 @@ export class RegisterHandler {
         .labels(authProvider.name, brand.name)
         .inc();
 
-    const registeredPrograms = await this.getRegisteredPrograms(newUser.id, newUser.brandId);
-    
+    // newParticipant is already loaded above (audit M128) — no need to
+    // re-fetch the user with a 3-level include just to list its applications.
+    const registeredPrograms = newParticipant
+      ? await getRegisteredPrograms(this.prisma, newParticipant.id, newUser.brandId)
+      : [];
+
     return {
       accessToken,
       refreshToken,

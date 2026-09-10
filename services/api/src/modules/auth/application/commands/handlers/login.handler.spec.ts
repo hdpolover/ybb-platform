@@ -33,6 +33,7 @@ describe('LoginHandler', () => {
     },
     participantApplication: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
       create: jest.fn(),
     },
     program: {
@@ -59,7 +60,7 @@ describe('LoginHandler', () => {
 
   const mockAuthLoggingService = {
     logFailedLogin: jest.fn(),
-    logSuccessfulLogin: jest.fn(),
+    logSuccessfulLogin: jest.fn().mockResolvedValue(undefined),
   };
 
   const mockGeoIpService = {
@@ -163,50 +164,71 @@ describe('LoginHandler', () => {
       return null;
     });
 
-    // findUnique handles id-based lookups (getRegisteredPrograms helper)
-    mockPrismaService.user.findUnique.mockImplementation(async ({ where }: any) => {
-      if (where?.id === 'user-brand-1') {
-        return {
-          participant: {
-            applications: [
-              {
-                id: 'application-1',
-                programId: 'program-1',
-                status: 'draft',
-                program: {
-                  id: 'program-1',
-                  name: 'Brand One Program',
-                  slug: 'brand-one-program',
-                  year: 2026,
-                },
-              },
-            ],
+    // getRegisteredPrograms (shared auth-program-linking.util helper, audit
+    // M128) now queries participantApplication.findMany directly off
+    // participantId + program.brandId instead of re-fetching the user.
+    mockPrismaService.participantApplication.findMany.mockImplementation(async ({ where }: any) => {
+      const brandId = where?.program?.brandId;
+
+      if (brandId === 'brand-1') {
+        return [
+          {
+            id: 'application-1',
+            programId: 'program-1',
+            status: 'draft',
+            program: {
+              id: 'program-1',
+              name: 'Brand One Program',
+              slug: 'brand-one-program',
+              year: 2026,
+            },
           },
-        };
+        ];
       }
 
-      if (where?.id === 'user-brand-2') {
-        return {
-          participant: {
-            applications: [
-              {
-                id: 'application-2',
-                programId: 'program-2',
-                status: 'draft',
-                program: {
-                  id: 'program-2',
-                  name: 'Brand Two Program',
-                  slug: 'brand-two-program',
-                  year: 2026,
-                },
-              },
-            ],
+      if (brandId === 'brand-2') {
+        return [
+          {
+            id: 'application-2',
+            programId: 'program-2',
+            status: 'draft',
+            program: {
+              id: 'program-2',
+              name: 'Brand Two Program',
+              slug: 'brand-two-program',
+              year: 2026,
+            },
           },
-        };
+        ];
       }
 
-      return null;
+      return [];
     });
+  });
+
+  // Audit M128: getRegisteredPrograms used to re-fetch the user by id with a
+  // 3-level include even though the participant was already loaded via
+  // ensureParticipantExists. It must now be built off participantApplication
+  // directly, with no user.findUnique round trip at all.
+  it('builds registeredPrograms without re-fetching the user (M128)', async () => {
+    const command = new LoginCommand(
+      'same@example.com',
+      'password123',
+      '127.0.0.1',
+      'Mozilla/5.0',
+      'brand-1',
+    );
+
+    const result = await handler.execute(command);
+
+    expect(mockPrismaService.user.findUnique).not.toHaveBeenCalled();
+    expect(mockPrismaService.participantApplication.findMany).toHaveBeenCalledWith({
+      where: { participantId: 'participant-1', program: { brandId: 'brand-1' } },
+      include: { program: true },
+    });
+    expect(result.user.registeredPrograms).toEqual([
+      expect.objectContaining({ programId: 'program-1', programSlug: 'brand-one-program' }),
+    ]);
   });
 
   it('logs into the account scoped to the explicit brand for the same email', async () => {
