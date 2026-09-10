@@ -1525,8 +1525,10 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
 
         // Defense-in-depth validation on the new canonical price fields
         // (DTO already validates these; keep checks here in case a caller bypasses the DTO layer).
-        if (typeof command.dto.usdPrice !== 'number' || command.dto.usdPrice <= 0) {
-            throw new BadRequestException('usdPrice must be a positive number');
+        // usdPrice must be a whole dollar: CreateIntentRequest.amount is int64 at the gRPC
+        // boundary and silently truncates cents otherwise (M156).
+        if (!Number.isInteger(command.dto.usdPrice) || command.dto.usdPrice <= 0) {
+            throw new BadRequestException('usdPrice must be a whole dollar amount (no cents) until the payment gateway supports USD minor units');
         }
         if (!Number.isInteger(command.dto.idrPrice) || command.dto.idrPrice <= 0) {
             throw new BadRequestException('idrPrice must be a positive integer');
@@ -1613,9 +1615,11 @@ export class UpdateProgramPricingTierHandler implements ICommandHandler<UpdatePr
         }
 
         // Defense-in-depth validation on the new canonical price fields when present
+        // usdPrice must be a whole dollar: CreateIntentRequest.amount is int64 at the gRPC
+        // boundary and silently truncates cents otherwise (M156).
         if (command.dto.usdPrice !== undefined) {
-            if (typeof command.dto.usdPrice !== 'number' || command.dto.usdPrice <= 0) {
-                throw new BadRequestException('usdPrice must be a positive number');
+            if (!Number.isInteger(command.dto.usdPrice) || command.dto.usdPrice <= 0) {
+                throw new BadRequestException('usdPrice must be a whole dollar amount (no cents) until the payment gateway supports USD minor units');
             }
         }
         if (command.dto.idrPrice !== undefined) {

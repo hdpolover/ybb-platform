@@ -247,6 +247,52 @@ describe('parseTemplateItems', () => {
     expect(validityPeriods[0].endDate).toBe('2027-02-01T00:00:00.000Z');
   });
 
+  // M156: CreateIntentRequest.amount is int64 at the gRPC payment gateway boundary
+  // and silently truncates cents. This schema runs on parseTemplateItems' single
+  // choke point for ContentTemplate.payload (both the template-save path and every
+  // copier's applyTemplate path), so it is what stops a cents-bearing usdPrice from
+  // ever being persisted into, or applied from, a reusable template.
+  it('payments: rejects a cents-bearing usdPrice', () => {
+    const base = {
+      name: 'Early Bird',
+      description: null,
+      price: 49.99,
+      currency: 'USD',
+      usdPrice: 49.99,
+      idrPrice: 750000,
+      capacity: null,
+      benefits: [],
+      requirements: [],
+      feeType: 'registration_fee',
+      allowedCategories: ['self_funded'],
+      icon: null,
+      isActive: true,
+      validityPeriods: [],
+    };
+    expect(() => parseTemplateItems('payments', [base])).toThrow(BadRequestException);
+  });
+
+  it('payments: accepts a whole-dollar usdPrice', () => {
+    const base = {
+      name: 'Early Bird',
+      description: null,
+      price: 50,
+      currency: 'USD',
+      usdPrice: 50,
+      idrPrice: 750000,
+      capacity: null,
+      benefits: [],
+      requirements: [],
+      feeType: 'registration_fee',
+      allowedCategories: ['self_funded'],
+      icon: null,
+      isActive: true,
+      validityPeriods: [],
+    };
+    const items = parseTemplateItems('payments', [base]);
+    expect(items[0].usdPrice).toBe(50);
+  });
+
   it('payments: rejects an invalid feeType and an invalid allowedCategories member instead of accepting any string', () => {
     const base = {
       name: 'Early Bird',

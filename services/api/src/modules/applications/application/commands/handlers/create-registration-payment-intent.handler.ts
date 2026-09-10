@@ -183,6 +183,21 @@ export class CreateRegistrationPaymentIntentHandler {
       );
     }
 
+    // Backstop for M156: CreateIntentRequest.amount is int64 at the gRPC boundary
+    // and silently truncates any fractional cents (49.99 -> 49), which would
+    // charge the participant the wrong amount without either side noticing. The
+    // admin-facing usdPrice DTO guard (create/update-program-content.dto.ts) is
+    // supposed to make a cents-bearing amount unreachable via the product, which
+    // is exactly why this must still be here: it is what catches a row written by
+    // a migration, a script, or a future code path that bypasses the DTO. Mirrors
+    // ConfirmPortalPaymentHandler's identical guard.
+    if (currency.toUpperCase() !== 'IDR' && !Number.isInteger(amount)) {
+      this.logger.error(
+        `[create-registration-payment-intent] amount has fractional cents and would truncate at the gRPC boundary: applicationId=${application.id} currency=${currency} amount=${amount}`,
+      );
+      throw new BadRequestException('This payment amount cannot be processed. Please contact support.');
+    }
+
     // 4. Create the intent via the Payment Service (with exchange-rate snapshot).
     const intent = await this.paymentClient.createIntent({
       user_id: participant.userId,

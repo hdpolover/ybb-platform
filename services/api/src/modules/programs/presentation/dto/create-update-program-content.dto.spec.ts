@@ -1,3 +1,4 @@
+import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import {
   CreateProgramRequirementDto,
@@ -5,6 +6,8 @@ import {
   CreateDocumentTemplateDto,
   UpdateDocumentTemplateDto,
   PreviewDocumentTemplateDto,
+  CreateProgramPricingTierDto,
+  UpdateProgramPricingTierDto,
 } from './create-update-program-content.dto';
 
 /**
@@ -139,5 +142,60 @@ describe('placeholders array survives class-transformer with enableImplicitConve
         dto.placeholders?.forEach((p, i) => {
             expect(p).toEqual(samplePlaceholders[i]);
         });
+    });
+});
+
+// M156: CreateIntentRequest.amount is int64 at the gRPC payment gateway boundary and
+// silently truncates any fractional cents (49.99 -> 49), charging the participant the
+// wrong amount. Reject a cents-bearing usdPrice at the point an admin sets it, instead of
+// letting it reach a participant's checkout.
+describe('CreateProgramPricingTierDto.usdPrice must be a whole dollar amount', () => {
+    const basePayload = {
+        programId: '11111111-1111-1111-1111-111111111111',
+        name: 'Early Bird',
+        idrPrice: 1500000,
+        validFrom: '2026-01-01T00:00:00.000Z',
+        validUntil: '2026-06-01T00:00:00.000Z',
+    };
+
+    it('rejects a cents-bearing usdPrice', async () => {
+        const dto = plainToInstance(CreateProgramPricingTierDto, { ...basePayload, usdPrice: 49.99 });
+        const errors = await validate(dto);
+
+        const usdPriceError = errors.find((e) => e.property === 'usdPrice');
+        expect(usdPriceError).toBeDefined();
+        expect(usdPriceError?.constraints?.isInt).toMatch(/whole dollar amount/);
+    });
+
+    it('accepts a whole-dollar usdPrice', async () => {
+        const dto = plainToInstance(CreateProgramPricingTierDto, { ...basePayload, usdPrice: 50 });
+        const errors = await validate(dto);
+
+        expect(errors.find((e) => e.property === 'usdPrice')).toBeUndefined();
+    });
+});
+
+describe('UpdateProgramPricingTierDto.usdPrice must be a whole dollar amount', () => {
+    it('rejects a cents-bearing usdPrice', async () => {
+        const dto = plainToInstance(UpdateProgramPricingTierDto, { usdPrice: 49.99 });
+        const errors = await validate(dto);
+
+        const usdPriceError = errors.find((e) => e.property === 'usdPrice');
+        expect(usdPriceError).toBeDefined();
+        expect(usdPriceError?.constraints?.isInt).toMatch(/whole dollar amount/);
+    });
+
+    it('accepts a whole-dollar usdPrice', async () => {
+        const dto = plainToInstance(UpdateProgramPricingTierDto, { usdPrice: 50 });
+        const errors = await validate(dto);
+
+        expect(errors.find((e) => e.property === 'usdPrice')).toBeUndefined();
+    });
+
+    it('allows omitting usdPrice entirely (partial update)', async () => {
+        const dto = plainToInstance(UpdateProgramPricingTierDto, { name: 'Renamed' });
+        const errors = await validate(dto);
+
+        expect(errors.find((e) => e.property === 'usdPrice')).toBeUndefined();
     });
 });

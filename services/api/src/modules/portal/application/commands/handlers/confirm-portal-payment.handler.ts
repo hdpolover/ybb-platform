@@ -231,6 +231,22 @@ export class ConfirmPortalPaymentHandler {
                 ? `${baseDescription} (${invoiceDisplayCurrency.toUpperCase()} ${invoiceDisplayAmount.toFixed(2)})`.slice(0, 255)
                 : baseDescription;
 
+        // Backstop for M156: CreateIntentRequest.amount is int64 at the gRPC boundary
+        // and silently truncates any fractional cents (49.99 -> 49), which would
+        // charge the participant the wrong amount without either side noticing. The
+        // admin-facing usdPrice DTO guard (create/update-program-content.dto.ts) is
+        // supposed to make a cents-bearing settlementAmount unreachable via the
+        // product, which is exactly why this must still be here: it is what catches
+        // a row written by a migration, a script, or a future code path that
+        // bypasses the DTO. IDR settlements are excluded — idrPrice/idr amounts are
+        // already whole units by definition (Decimal(15,0), no minor unit at all).
+        if (settlementCurrency.toUpperCase() !== 'IDR' && !Number.isInteger(settlementAmount)) {
+            this.logger.error(
+                `[confirm-payment] settlementAmount has fractional cents and would truncate at the gRPC boundary: invoiceId=${invoice.id} currency=${settlementCurrency} amount=${settlementAmount}`,
+            );
+            throw new BadRequestException('This payment amount cannot be processed. Please contact support.');
+        }
+
         // Create a payment intent via the Payment Service
         const intentResponse = await this.paymentClient.createIntent({
             user_id: userId,
