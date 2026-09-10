@@ -1,5 +1,5 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Inject, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
@@ -46,6 +46,10 @@ import { assertProgramContentAccess } from '../../utils/program-content-access.u
 import { resolveRevenueAccessScope } from '@modules/stats/revenue/utils/revenue-access.util';
 import { assertBrandAccess, orNotFound } from '@shared/guards/admin-scope.guard';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
+
+// Module-scoped: the cache-invalidation helpers below are free functions, not
+// injectable providers, so they have no `this.logger` to reach for.
+const cacheLogger = new Logger('ProgramContentCacheInvalidation');
 
 // ─── Shared cache-invalidation helpers ───────────────────────────────────────
 // Used by ~9 call sites (gallery, faq, document-template x3 each) plus the
@@ -104,20 +108,50 @@ async function assertProgramOrBrandContentAccess(
 
 /**
  * Full cache invalidation for pricing tier / validity-period mutations.
- * Clears landing pages (brand-scoped) AND all enrolled-participant portal caches
- * (dashboard, payments, submission-detail) via wildcard to avoid a DB lookup of
- * all enrolled participants — accepted over-invalidation tradeoff.
+ * Clears the Postgres landing snapshot directly, then delegates the Redis
+ * landing-cache clear + the Next.js frontend revalidation hook to
+ * LandingCacheInvalidationService.
  *
- * Also fires the Next.js frontend revalidation hook via the shared
- * LandingCacheInvalidationService. clearSnapshot/bustProgramCache are passed
- * false there because the Promise.all above already cleared the Postgres
- * snapshot and busted `program:*` directly — this call exists only to fire
- * `revalidate`, not to redo work already done a few lines up.
+ * Audit M24: this used to ALSO run cacheService.invalidateBrandLandingCaches()
+ * and four explicit invalidateByPattern() SCANs (`program:*`,
+ * `portal:dashboard:*`, `portal:payments:*`, `portal:submission-detail:*`)
+ * directly in the Promise.all below, on top of everything listed here. Both
+ * were provable duplicates, not just "probably covered":
+ *
+ * 1. invalidateBrandLandingCaches(brandId) — landingCacheInvalidation.invalidate()
+ *    a few lines down ALWAYS calls cacheService.invalidateBrandLandingCaches(brandId)
+ *    for this same brandId internally (see LandingCacheInvalidationService.
+ *    clearCacheLayers — it's unconditional, not gated by clearSnapshot/
+ *    bustProgramCache), so the direct call ran the exact same 9 keys + 4
+ *    patterns twice, back to back, every time.
+ * 2. The four explicit invalidateByPattern() SCANs — every caller of this
+ *    function (CreateProgramPricingTierHandler, UpdateProgramPricingTierHandler,
+ *    DeleteProgramPricingTierHandler, UpdateProgramPaymentInfoHandler; see the
+ *    call sites below) is only ever invoked from a controller action decorated
+ *    with `@CacheInvalidate(PROGRAM_CONTENT_PATTERNS)` (program-application.
+ *    controller.ts / programs.controller.ts), and PROGRAM_CONTENT_PATTERNS
+ *    (shared/constants/cache-patterns.ts) already contains `program:*`,
+ *    `portal:dashboard:*`, `portal:payments:*`, and `portal:submission-detail:*`
+ *    verbatim. CacheInvalidationInterceptor runs those same four SCANs (plus
+ *    11 more) on every request into this handler regardless, so the explicit
+ *    calls here bought nothing.
+ *    CAVEAT: this removal is only safe as long as every caller keeps going
+ *    through a `@CacheInvalidate(PROGRAM_CONTENT_PATTERNS)`-decorated
+ *    endpoint. A future caller invoked from anywhere else (a script, an RMQ
+ *    consumer, a non-decorated endpoint) would silently lose these four
+ *    patterns — re-add them explicitly (or switch back to invalidateByPatterns
+ *    for that new caller) if one is ever added.
+ *
+ * Deliberately NOT touched: clearing brandLandingSnapshot via Prisma below
+ * (Postgres, not Redis — no interceptor pattern reaches it) and the
+ * per-participant portal wildcards (`portal:dashboard:*` etc. above) that
+ * PROGRAM_CONTENT_PATTERNS itself still runs via the interceptor — those are
+ * real invalidation work, not duplication, just now run once instead of
+ * twice/thrice.
  */
 async function invalidatePricingTierCachesByProgramId(
     programId: string,
     prisma: PrismaService,
-    cacheService: CacheService,
     landingCacheInvalidation: LandingCacheInvalidationService,
 ): Promise<void> {
     try {
@@ -126,20 +160,32 @@ async function invalidatePricingTierCachesByProgramId(
             select: { brandId: true },
         });
         if (program?.brandId) {
-            await Promise.all([
-                prisma.brandLandingSnapshot.deleteMany({ where: { brandId: program.brandId } }),
-                cacheService.invalidateBrandLandingCaches(program.brandId),
-                cacheService.invalidateByPattern('program:*'),
-                cacheService.invalidateByPattern('portal:dashboard:*'),
-                cacheService.invalidateByPattern('portal:payments:*'),
-                cacheService.invalidateByPattern('portal:submission-detail:*'),
-            ]);
-            await landingCacheInvalidation.invalidate(program.brandId, {
-                clearSnapshot: false,
-                bustProgramCache: false,
-                swallowErrors: true,
-                revalidate: { kind: 'homeAndSettings' },
-            });
+            await prisma.brandLandingSnapshot.deleteMany({ where: { brandId: program.brandId } });
+            // Fire-and-forget (M24): this used to be `await`ed, tacking up to
+            // ~3s (LandingRevalidationService's HTTP timeout) onto the admin's
+            // save request whenever the participant frontend is slow or down.
+            // The mutation itself has already committed by this point, and
+            // LandingCacheInvalidationService.invalidate() (with swallowErrors:
+            // true, as passed here) already catches and logs every internal
+            // failure — including the revalidate HTTP call itself, which never
+            // rejects (see LandingRevalidationService.post()'s own try/catch +
+            // rxjs catchError). So `.catch()` below is a last-resort net for
+            // anything upstream of that, following the same
+            // `void promise.catch(logger.warn/error)` shape already used for
+            // other detached calls in this codebase (see
+            // AuditTrailInterceptor's log write and GatewayAdminController.
+            // notifyGatewayRefresh).
+            void landingCacheInvalidation
+                .invalidate(program.brandId, {
+                    clearSnapshot: false,
+                    bustProgramCache: false,
+                    swallowErrors: true,
+                    revalidate: { kind: 'homeAndSettings' },
+                })
+                .catch((error) => {
+                    const message = error instanceof Error ? error.message : String(error);
+                    cacheLogger.error(`Detached landing cache invalidation failed for brand ${program.brandId}: ${message}`);
+                });
         }
     } catch { /* non-critical — cache failure must not break the mutation */ }
 }
@@ -147,13 +193,13 @@ async function invalidatePricingTierCachesByProgramId(
 /**
  * Full cache invalidation for validity-period mutations where only a
  * pricingTierId is available (lookup walks tier → program → brandId).
- * See invalidatePricingTierCachesByProgramId above for why
- * clearSnapshot/bustProgramCache are false in the revalidation call.
+ * See invalidatePricingTierCachesByProgramId above for why the explicit
+ * invalidateBrandLandingCaches/invalidateByPattern calls were removed and why
+ * the revalidation call below is fire-and-forget.
  */
 async function invalidatePricingTierCachesByPricingTierId(
     pricingTierId: string,
     prisma: PrismaService,
-    cacheService: CacheService,
     landingCacheInvalidation: LandingCacheInvalidationService,
 ): Promise<void> {
     try {
@@ -162,20 +208,19 @@ async function invalidatePricingTierCachesByPricingTierId(
             select: { program: { select: { brandId: true } } },
         });
         if (tier?.program?.brandId) {
-            await Promise.all([
-                prisma.brandLandingSnapshot.deleteMany({ where: { brandId: tier.program.brandId } }),
-                cacheService.invalidateBrandLandingCaches(tier.program.brandId),
-                cacheService.invalidateByPattern('program:*'),
-                cacheService.invalidateByPattern('portal:dashboard:*'),
-                cacheService.invalidateByPattern('portal:payments:*'),
-                cacheService.invalidateByPattern('portal:submission-detail:*'),
-            ]);
-            await landingCacheInvalidation.invalidate(tier.program.brandId, {
-                clearSnapshot: false,
-                bustProgramCache: false,
-                swallowErrors: true,
-                revalidate: { kind: 'homeAndSettings' },
-            });
+            const brandId = tier.program.brandId;
+            await prisma.brandLandingSnapshot.deleteMany({ where: { brandId } });
+            void landingCacheInvalidation
+                .invalidate(brandId, {
+                    clearSnapshot: false,
+                    bustProgramCache: false,
+                    swallowErrors: true,
+                    revalidate: { kind: 'homeAndSettings' },
+                })
+                .catch((error) => {
+                    const message = error instanceof Error ? error.message : String(error);
+                    cacheLogger.error(`Detached landing cache invalidation failed for brand ${brandId}: ${message}`);
+                });
         }
     } catch { /* non-critical — cache failure must not break the mutation */ }
 }
@@ -1525,7 +1570,7 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
             warnings = await buildValidityPeriodWarnings(result.id, this.repository, this.prisma, period.id);
         }
 
-        await invalidatePricingTierCachesByProgramId(command.dto.programId, this.prisma, this.cacheService, this.landingCacheInvalidation);
+        await invalidatePricingTierCachesByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
         return { ...result, warnings };
     }
 }
@@ -1613,7 +1658,7 @@ export class UpdateProgramPricingTierHandler implements ICommandHandler<UpdatePr
         }
 
         const result = await this.repository.updatePricingTier(command.id, dto as unknown as Partial<ProgramPricingTier>);
-        await invalidatePricingTierCachesByProgramId(existingTier.programId, this.prisma, this.cacheService, this.landingCacheInvalidation);
+        await invalidatePricingTierCachesByProgramId(existingTier.programId, this.prisma, this.landingCacheInvalidation);
         return result;
     }
 }
@@ -1629,7 +1674,7 @@ export class DeleteProgramPricingTierHandler implements ICommandHandler<DeletePr
         const existing = await this.repository.findPricingTierById(command.id);
         const result = await this.repository.deletePricingTier(command.id);
         if (existing?.programId) {
-            await invalidatePricingTierCachesByProgramId(existing.programId, this.prisma, this.cacheService, this.landingCacheInvalidation);
+            await invalidatePricingTierCachesByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
         }
         return result;
     }
@@ -1700,7 +1745,7 @@ export class CreateValidityPeriodHandler implements ICommandHandler<CreateValidi
             description: command.dto.description,
         };
         const result = await this.repository.createValidityPeriod(dto as Partial<PricingTierValidityPeriod>);
-        await invalidatePricingTierCachesByPricingTierId(pricingTierId, this.prisma, this.cacheService, this.landingCacheInvalidation);
+        await invalidatePricingTierCachesByPricingTierId(pricingTierId, this.prisma, this.landingCacheInvalidation);
         const warnings = await buildValidityPeriodWarnings(pricingTierId, this.repository, this.prisma, result.id);
         return {
             ...result,
@@ -1753,7 +1798,7 @@ export class UpdateValidityPeriodHandler implements ICommandHandler<UpdateValidi
             description: command.dto.description,
         };
         const result = await this.repository.updateValidityPeriod(command.id, dto as Partial<PricingTierValidityPeriod>);
-        await invalidatePricingTierCachesByPricingTierId(existing.pricingTierId, this.prisma, this.cacheService, this.landingCacheInvalidation);
+        await invalidatePricingTierCachesByPricingTierId(existing.pricingTierId, this.prisma, this.landingCacheInvalidation);
         const warnings = await buildValidityPeriodWarnings(existing.pricingTierId, this.repository, this.prisma, command.id);
         return {
             ...result,
@@ -1777,7 +1822,7 @@ export class DeleteValidityPeriodHandler implements ICommandHandler<DeleteValidi
         const existing = await this.repository.findValidityPeriodById(command.id);
         const result = await this.repository.deleteValidityPeriod(command.id);
         if (existing?.pricingTierId) {
-            await invalidatePricingTierCachesByPricingTierId(existing.pricingTierId, this.prisma, this.cacheService, this.landingCacheInvalidation);
+            await invalidatePricingTierCachesByPricingTierId(existing.pricingTierId, this.prisma, this.landingCacheInvalidation);
         }
         return result;
     }
@@ -2230,7 +2275,7 @@ export class UpdateProgramPaymentInfoHandler implements ICommandHandler<UpdatePr
             paymentInfoHtml: command.dto.paymentInfoHtml ?? null,
         });
 
-        await invalidatePricingTierCachesByProgramId(command.programId, this.prisma, this.cacheService, this.landingCacheInvalidation);
+        await invalidatePricingTierCachesByProgramId(command.programId, this.prisma, this.landingCacheInvalidation);
     }
 }
 

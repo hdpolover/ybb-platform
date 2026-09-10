@@ -1,6 +1,6 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import {
     CreateProgramEssayHandler,
@@ -2722,6 +2722,88 @@ describe('ManageProgramContentHandlers', () => {
             await handler.execute(new UpdateProgramPaymentInfoCommand('prog-1', { paymentInfoHtml: '<p>Pay here</p>' } as any, 'user-1'));
 
             expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-p', revalidateOptions);
+        });
+
+        // Audit M24: cacheService.invalidateBrandLandingCaches() and the four
+        // explicit invalidateByPattern() SCANs (program:*, portal:dashboard:*,
+        // portal:payments:*, portal:submission-detail:*) used to run directly
+        // in invalidatePricingTierCachesByProgramId/ByPricingTierId, duplicating
+        // work landingCacheInvalidation.invalidate() (called right after) and
+        // the global CacheInvalidationInterceptor (PROGRAM_CONTENT_PATTERNS,
+        // fired by every controller route these handlers sit behind) already
+        // do. Only the Postgres snapshot delete and the delegated
+        // landingCacheInvalidation.invalidate() call should remain.
+        it('does not call cacheService.invalidateBrandLandingCaches or invalidateByPattern directly (M24)', async () => {
+            const handler = new CreateProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation, prismaRead);
+            repo.createPricingTier.mockResolvedValue({ id: 'tier-1', programId: 'prog-1' });
+
+            await handler.execute(new CreateProgramPricingTierCommand(
+                { programId: 'prog-1', name: 'Tier 1', usdPrice: 100, idrPrice: 1500000 } as any,
+                'user-1',
+                actor,
+            ));
+
+            expect(cache.invalidateBrandLandingCaches).not.toHaveBeenCalled();
+            expect(cache.invalidateByPattern).not.toHaveBeenCalled();
+            expect(prisma.brandLandingSnapshot.deleteMany).toHaveBeenCalledWith({ where: { brandId: 'brand-p' } });
+        });
+
+        // Audit M24: the revalidation call used to be awaited, tacking the HTTP
+        // call's ~3s timeout onto the admin's save request. It is now
+        // fire-and-forget: the handler must resolve without waiting for
+        // landingCacheInvalidation.invalidate() to settle.
+        it('resolves without waiting for the landing revalidation promise to settle (M24 fire-and-forget)', async () => {
+            let releaseInvalidate!: () => void;
+            const pendingInvalidate = new Promise<void>((resolve) => {
+                releaseInvalidate = resolve;
+            });
+            landingCacheInvalidation.invalidate = jest.fn().mockReturnValue(pendingInvalidate);
+
+            const handler = new UpdateProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation);
+            repo.findPricingTierById.mockResolvedValue({
+                id: 'tier-1',
+                programId: 'prog-1',
+                feeType: 'program_fee_1',
+                allowedCategories: [],
+                isActive: true,
+            });
+            repo.updatePricingTier.mockResolvedValue({ id: 'tier-1', programId: 'prog-1', name: 'Renamed' });
+
+            // Would hang forever if execute() awaited the still-pending
+            // invalidate() promise instead of firing it and moving on.
+            await handler.execute(new UpdateProgramPricingTierCommand('tier-1', { name: 'Renamed' } as any, 'user-1'));
+
+            expect(landingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-p', revalidateOptions);
+
+            releaseInvalidate();
+            await Promise.resolve();
+        });
+
+        // Audit M24: a rejected detached promise must be caught and logged, not
+        // left to surface as an unhandled rejection (or worse, thrown back into
+        // the admin's request).
+        it('logs, and does not throw, when the detached landing revalidation rejects (M24)', async () => {
+            const loggerErrorSpy = jest
+                .spyOn(Logger.prototype, 'error')
+                .mockImplementation(() => undefined);
+            landingCacheInvalidation.invalidate = jest.fn().mockRejectedValue(new Error('revalidate boom'));
+
+            const handler = new DeleteProgramPricingTierHandler(repo, prisma, cache, landingCacheInvalidation);
+            repo.findPricingTierById.mockResolvedValue({ id: 'tier-1', programId: 'prog-1' });
+            repo.deletePricingTier.mockResolvedValue(undefined);
+
+            // Fails the test if execute() rejects instead of resolving cleanly.
+            await handler.execute(new DeleteProgramPricingTierCommand('tier-1', 'user-1'));
+
+            // Let the detached .catch() microtask run before asserting on it.
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(loggerErrorSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Detached landing cache invalidation failed for brand brand-p: revalidate boom'),
+            );
+
+            loggerErrorSpy.mockRestore();
         });
     });
 
