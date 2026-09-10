@@ -14,6 +14,7 @@ import {
 import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
 import { effectiveStart, resolveTierPeriod } from '@shared/utils/tier-period.util';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
+import { resolveInvoiceRevenue, RevenueInvoiceMoneyInput } from '@modules/stats/revenue/utils/revenue-money.util';
 
 function getFeeTypePriority(feeType?: string | null): number {
     const normalized = String(feeType ?? '').toLowerCase();
@@ -46,6 +47,48 @@ function resolveTierDualPrices(tier: {
             ? Number(idrRaw)
             : (legacyCurrency === 'IDR' ? legacyPrice : 0),
     };
+}
+
+// Audit M60: totalPaid/totalDue used to do `+= Number(invoice.amount)` with no
+// regard for invoice.currency, so a participant with one USD invoice and one
+// IDR invoice (dual-currency programmes: gateway tiers are usually USD, manual
+// bank-transfer settlements are usually IDR - see module CLAUDE.md) got a
+// total that silently summed two different currencies and labelled the result
+// with the programme's currency. Fixed by converting every invoice into the
+// programme's display currency before summing, reusing the same gross-amount
+// resolution the revenue/stats module already relies on (prefer the invoice's
+// own dual-price snapshot, then its own exchangeRateSnapshot, then the
+// programme's configured rate) instead of re-deriving conversion logic here.
+//
+// Response shape: stats.totalPaid/stats.totalDue/stats.currency keep their
+// existing meaning (a single number in `stats.currency`) - checked against
+// the participant frontend (ybb-program-next/app/api/portal/payments/route.ts)
+// before changing anything, and it does not read totalPaid/totalDue at all
+// today (it recomputes its own totals from `outstanding`/`history` and only
+// reads stats.currency as a fallback), so there is no live consumer of the
+// old, wrong number to preserve. Kept the field meaning intact anyway rather
+// than reshaping into a per-currency breakdown, since the DTO is public API
+// surface for any other current or future caller.
+function resolveTotalContribution(
+    invoice: RevenueInvoiceMoneyInput,
+    programCurrency: string,
+    programUsdInIdr: unknown,
+): number {
+    const resolved = resolveInvoiceRevenue(invoice, programUsdInIdr);
+    const isIdrProgram = (programCurrency ?? '').toUpperCase() === 'IDR';
+    const converted = isIdrProgram ? resolved.grossIdr : resolved.grossUsd;
+    if (converted !== undefined) return converted;
+
+    // Unresolvable only when the invoice's currency differs from the
+    // programme's, it has no amountUsd/amountIdr snapshot, AND no FX rate is
+    // configured anywhere (invoice snapshot or programme). Rather than fall
+    // back to the raw invoice.amount here - which is exactly the bug this
+    // fixes, since that amount is in the WRONG currency for this total -
+    // exclude it from the total. This can only under-count, never conflate
+    // currencies; it should be unreachable in practice since production
+    // programmes are expected to have a configured usdInIdr (see
+    // ybb-payment-methods-per-program-overlay / prior FX audits).
+    return 0;
 }
 
 @Injectable()
@@ -91,6 +134,11 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                         paymentMethod: true,
                         pricingTierId: true,
                         exchangeRateSnapshot: true,
+                        // feeProvider/netAmount: not displayed here, only needed so
+                        // resolveInvoiceRevenue (below, for totalPaid/totalDue) can
+                        // run without a separate query. See resolveTotalContribution.
+                        feeProvider: true,
+                        netAmount: true,
                         pricingTier: {
                             select: {
                                 id: true,
@@ -339,12 +387,13 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                             && Number(invoice.amount) > 0,
                     };
 
+                    const totalContribution = resolveTotalContribution(invoice, currency, application.program?.usdInIdr);
                     if (normalizedStatus === 'paid') {
                         history.push(item);
-                        totalPaid += Number(invoice.amount);
+                        totalPaid += totalContribution;
                     } else {
                         outstanding.push(item);
-                        totalDue += Number(invoice.amount);
+                        totalDue += totalContribution;
                     }
 
                     continue;
@@ -368,7 +417,14 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                     dueDate: dueDate || undefined,
                     sequenceOrder,
                 });
-                totalDue += Number(tier.price);
+                // Same M60 currency-mixing bug as the invoice branch above, for tiers
+                // that don't have an invoice yet: `tier.price`/`tier.currency` are the
+                // legacy single-currency fields and can disagree with the programme's
+                // display currency. Use the already-resolved dual-price fields instead
+                // of the legacy ones, matching `currency` (program.currency).
+                totalDue += currency.toUpperCase() === 'IDR'
+                    ? availableTierPrices.idrPrice
+                    : availableTierPrices.usdPrice;
             }
 
             // Preserve past invoice records tied to inactive/deleted/out-of-scope tiers.
@@ -451,12 +507,13 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                     canPay: false,
                 };
 
+                const totalContribution = resolveTotalContribution(invoice, currency, application.program?.usdInIdr);
                 if (normalizedStatus === 'paid') {
                     history.push(item);
-                    totalPaid += Number(invoice.amount);
+                    totalPaid += totalContribution;
                 } else {
                     outstanding.push(item);
-                    totalDue += Number(invoice.amount);
+                    totalDue += totalContribution;
                 }
             }
         }
