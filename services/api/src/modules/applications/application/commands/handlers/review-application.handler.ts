@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { IApplicationRepository } from '@core/interfaces/repositories/application.repository.interface';
-import { ApplicationStatus } from '@core/entities/participant-application.entity';
+import { ApplicationStatus, ApplicationUpdateField } from '@core/entities/participant-application.entity';
 import { ReviewApplicationCommand } from '../review-application.command';
 import { ApplicationResponseDto } from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
@@ -11,6 +11,8 @@ import { ReferralFunnelService } from '@modules/participants/application/service
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { buildParticipantDocumentsUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
+import { PrismaTransactionClient } from '@shared/types/prisma-transaction.type';
+import { PaymentStatus } from '@prisma/client';
 
 /**
  * Review Application Handler
@@ -92,16 +94,46 @@ export class ReviewApplicationHandler {
     );
 
     // ========================================
-    // CRITICAL: Use Transaction for Atomicity
-    // Application update and related operations must succeed together
+    // CRITICAL: Use Transaction for Atomicity (audit M111)
+    //
+    // The review-status write and applyAcceptanceMode's side effects used to
+    // be two separate, non-transactional statements. Between them, a payment
+    // webhook could land and flip registrationPaymentStatus to paid/processing
+    // - the ambassador branch of applyAcceptanceMode then unconditionally
+    // overwrote it back to 'cancelled', silently discarding a real payment
+    // (see assertAmbassadorAcceptanceAllowed above: it makes the SAME check
+    // up front, but that read-then-later-write gap is exactly the race).
+    //
+    // applyAcceptanceModeTx is pure DB writes - no gRPC/HTTP/email call in
+    // either branch (verified by reading it) - so, unlike a call to the
+    // payment gateway, it is safe to hold inside one interactive transaction
+    // alongside the review update. Do NOT extend this pattern to a handler
+    // whose side effect makes network I/O; that would hold a DB
+    // connection/lock for the duration of an external call.
     // ========================================
-    const updated = await this.applicationRepository.update(application);
+    const reviewFields: ApplicationUpdateField[] = [
+      'status',
+      'statusHistory',
+      'reviewedBy',
+      'reviewedAt',
+      'reviewerNotes',
+    ];
+    const reviewPatch = this.applicationMapper.toPrismaUpdate(application, reviewFields);
 
-    if (command.status === ApplicationStatus.ACCEPTED && command.approvalMode) {
-      await this.applyAcceptanceMode(command.applicationId, command.approvalMode);
-    }
-    // Note: Repository should implement transaction support internally
-    // For multi-repository operations, wrap in controller or use application service
+    const updatedRow = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.participantApplication.update({
+        where: { id: application.id },
+        data: reviewPatch,
+      });
+
+      if (command.status === ApplicationStatus.ACCEPTED && command.approvalMode) {
+        await this.applyAcceptanceModeTx(tx, command.applicationId, command.approvalMode);
+      }
+
+      return row;
+    });
+
+    const updated = this.applicationMapper.toDomain(updatedRow);
 
     // Invalidate portal cache for the participant
     // When admin reviews, the participant should see status change immediately
@@ -159,39 +191,58 @@ export class ReviewApplicationHandler {
     }
   }
 
-  private async applyAcceptanceMode(
+  private async applyAcceptanceModeTx(
+    tx: PrismaTransactionClient,
     applicationId: string,
     approvalMode: 'participant' | 'ambassador',
   ): Promise<void> {
     if (approvalMode === 'participant') {
-      await this.prisma.participantApplication.update({
+      await tx.participantApplication.update({
         where: { id: applicationId },
         data: { ticketStatus: 'regular' },
       });
       return;
     }
 
-    await this.prisma.$transaction([
-      this.prisma.participantApplication.update({
-        where: { id: applicationId },
-        data: {
-          ticketStatus: 'ambassador',
-          registrationPaymentStatus: 'cancelled',
+    // ticketStatus reflects the reviewer's decision and always applies.
+    await tx.participantApplication.update({
+      where: { id: applicationId },
+      data: { ticketStatus: 'ambassador' },
+    });
+
+    // registrationPaymentStatus is the one field a payment webhook can be
+    // writing concurrently (M111). updateMany's WHERE re-checks that status
+    // hasn't already moved to paid/processing since assertAmbassadorAcceptanceAllowed's
+    // read; if it has, this is a 0-row no-op instead of stomping a real
+    // payment back to 'cancelled'. The invoice cancellation below is
+    // unaffected either way - it already excludes paid/processing invoices.
+    const guarded = await tx.participantApplication.updateMany({
+      where: {
+        id: applicationId,
+        registrationPaymentStatus: { notIn: [PaymentStatus.paid, PaymentStatus.processing] },
+      },
+      data: { registrationPaymentStatus: 'cancelled' },
+    });
+
+    if (guarded.count === 0) {
+      this.logger.warn(
+        `Ambassador acceptance for application ${applicationId}: registrationPaymentStatus left untouched - ` +
+          'a payment was already paid/processing (webhook race). ticketStatus was still set to ambassador.',
+      );
+    }
+
+    await tx.applicationInvoice.updateMany({
+      where: {
+        applicationId,
+        status: {
+          in: ['unpaid', 'failed', 'cancelled'],
         },
-      }),
-      this.prisma.applicationInvoice.updateMany({
-        where: {
-          applicationId,
-          status: {
-            in: ['unpaid', 'failed', 'cancelled'],
-          },
-        },
-        data: {
-          status: 'cancelled',
-          rejectionReason: 'Accepted as ambassador',
-        },
-      }),
-    ]);
+      },
+      data: {
+        status: 'cancelled',
+        rejectionReason: 'Accepted as ambassador',
+      },
+    });
   }
 
   /**

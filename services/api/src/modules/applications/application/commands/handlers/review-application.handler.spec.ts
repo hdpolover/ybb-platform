@@ -3,6 +3,14 @@
 // Task 9: ReviewApplicationCommand no longer carries scoreTotal/scoreBreakdown/
 // scoreStatus (the new scoring API - Tasks 7/8/8b - is now the sole writer of
 // those columns). This spec covers the handler's remaining review paths.
+//
+// Audit M111/M112: the review-status write and applyAcceptanceMode's side
+// effects now run inside a single `prisma.$transaction`, via a raw
+// `tx.participantApplication.update`/`updateMany` rather than
+// `applicationRepository.update`. `tx` is kept a disjoint mock from `mockPrisma`
+// (never `cb(mockPrisma)`) so "was this write routed through the transaction"
+// stays independently observable from "did the outer client see this write" -
+// see test/utils/prisma-tx-mock.ts's docstring for why that separation matters.
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { ReviewApplicationHandler } from './review-application.handler';
@@ -55,6 +63,8 @@ describe('ReviewApplicationHandler', () => {
 
   const mockApplicationMapper = {
     toDto: jest.fn((app: unknown) => app),
+    toPrismaUpdate: jest.fn(() => ({ status: 'accepted' })),
+    toDomain: jest.fn((row: unknown) => row),
   };
 
   // Derived from the real CacheService: this handler catches and logs
@@ -64,6 +74,17 @@ describe('ReviewApplicationHandler', () => {
 
   const mockReferralFunnel = {
     advanceToAccepted: jest.fn().mockResolvedValue(undefined),
+  };
+
+  // The transaction client. Disjoint from mockPrisma - see file header.
+  const mockTx = {
+    participantApplication: {
+      update: jest.fn().mockResolvedValue({ id: 'app-1' }),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+    },
+    applicationInvoice: {
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 
   const mockPrisma = {
@@ -94,7 +115,7 @@ describe('ReviewApplicationHandler', () => {
         participant: { fullName: 'Jane Doe', user: { email: 'jane@example.com' } },
       }),
     },
-    $transaction: jest.fn(),
+    $transaction: jest.fn((cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx)),
   };
 
   const mockRabbitmqProducer = {
@@ -119,12 +140,16 @@ describe('ReviewApplicationHandler', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation((cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx));
+    mockPrisma.applicationInvoice.count.mockResolvedValue(0);
+    mockTx.participantApplication.update.mockResolvedValue({ id: 'app-1' });
+    mockTx.participantApplication.updateMany.mockResolvedValue({ count: 1 });
+    mockTx.applicationInvoice.updateMany.mockResolvedValue({ count: 0 });
   });
 
   it('accepts a reviewable application and does not throw without score fields on the command', async () => {
     const application = buildApplication(ApplicationStatus.SUBMITTED);
     mockApplicationRepository.findById.mockResolvedValue(application);
-    mockApplicationRepository.update.mockResolvedValue(application);
 
     const command = new ReviewApplicationCommand(
       'app-1',
@@ -136,7 +161,30 @@ describe('ReviewApplicationHandler', () => {
     await expect(handler.execute(command)).resolves.toBeDefined();
 
     expect(application.accept).toHaveBeenCalledWith('reviewer-1', 'looks good');
-    expect(mockApplicationRepository.update).toHaveBeenCalledWith(application);
+    // The review write goes through the transaction client's raw update, not
+    // applicationRepository.update (audit M111/M112 - see file header).
+    expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
+      where: { id: 'app-1' },
+      data: expect.any(Object),
+    });
+    expect(mockApplicationRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('builds the review patch from only the review-relevant fields (audit M112)', async () => {
+    const application = buildApplication(ApplicationStatus.SUBMITTED);
+    mockApplicationRepository.findById.mockResolvedValue(application);
+
+    await handler.execute(
+      new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.ACCEPTED, 'ok'),
+    );
+
+    expect(mockApplicationMapper.toPrismaUpdate).toHaveBeenCalledWith(application, [
+      'status',
+      'statusHistory',
+      'reviewedBy',
+      'reviewedAt',
+      'reviewerNotes',
+    ]);
   });
 
   // Coverage this file only appears to have had. The handler catches and logs
@@ -146,7 +194,6 @@ describe('ReviewApplicationHandler', () => {
   it('invalidates the participant portal cache after a successful review', async () => {
     const application = buildApplication(ApplicationStatus.SUBMITTED);
     mockApplicationRepository.findById.mockResolvedValue(application);
-    mockApplicationRepository.update.mockResolvedValue(application);
 
     await handler.execute(
       new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.ACCEPTED, 'ok'),
@@ -166,7 +213,7 @@ describe('ReviewApplicationHandler', () => {
     );
 
     await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
-    expect(mockApplicationRepository.update).not.toHaveBeenCalled();
+    expect(mockTx.participantApplication.update).not.toHaveBeenCalled();
   });
 
   it('throws BadRequestException when accepting as ambassador while a payment is processing or paid', async () => {
@@ -184,13 +231,81 @@ describe('ReviewApplicationHandler', () => {
 
     await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
     expect(application.accept).not.toHaveBeenCalled();
-    expect(mockApplicationRepository.update).not.toHaveBeenCalled();
+    expect(mockTx.participantApplication.update).not.toHaveBeenCalled();
+  });
+
+  // M111: applyAcceptanceMode's ambassador branch now runs inside the SAME
+  // transaction as the review-status write, and guards the
+  // registrationPaymentStatus write with an updateMany WHERE clause instead
+  // of an unconditional update - see review-application.handler.ts.
+  describe('ambassador acceptance (M111 transactional guard)', () => {
+    it('runs the review update and the acceptance-mode writes in one transaction', async () => {
+      const application = buildApplication(ApplicationStatus.SUBMITTED);
+      mockApplicationRepository.findById.mockResolvedValue(application);
+
+      await handler.execute(
+        new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.ACCEPTED, 'ok', 'ambassador'),
+      );
+
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
+        where: { id: 'app-1' },
+        data: expect.any(Object),
+      });
+      expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
+        where: { id: 'app-1' },
+        data: { ticketStatus: 'ambassador' },
+      });
+      expect(mockTx.participantApplication.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'app-1',
+          registrationPaymentStatus: { notIn: ['paid', 'processing'] },
+        },
+        data: { registrationPaymentStatus: 'cancelled' },
+      });
+    });
+
+    it('still sets ticketStatus to ambassador, but leaves registrationPaymentStatus untouched, when the guard finds a concurrent payment (0 rows)', async () => {
+      const application = buildApplication(ApplicationStatus.SUBMITTED);
+      mockApplicationRepository.findById.mockResolvedValue(application);
+      // Simulates a payment webhook having already landed between
+      // assertAmbassadorAcceptanceAllowed's check and this write.
+      mockTx.participantApplication.updateMany.mockResolvedValueOnce({ count: 0 });
+
+      await expect(
+        handler.execute(
+          new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.ACCEPTED, 'ok', 'ambassador'),
+        ),
+      ).resolves.toBeDefined();
+
+      expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
+        where: { id: 'app-1' },
+        data: { ticketStatus: 'ambassador' },
+      });
+      // The transaction still committed successfully - a 0-row guard is a
+      // no-op, not a thrown error.
+      expect(mockTx.applicationInvoice.updateMany).toHaveBeenCalled();
+    });
+
+    it('sets ticketStatus to regular for participant-mode acceptance, without touching registrationPaymentStatus', async () => {
+      const application = buildApplication(ApplicationStatus.SUBMITTED);
+      mockApplicationRepository.findById.mockResolvedValue(application);
+
+      await handler.execute(
+        new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.ACCEPTED, 'ok', 'participant'),
+      );
+
+      expect(mockTx.participantApplication.update).toHaveBeenCalledWith({
+        where: { id: 'app-1' },
+        data: { ticketStatus: 'regular' },
+      });
+      expect(mockTx.participantApplication.updateMany).not.toHaveBeenCalled();
+    });
   });
 
   it('emits notification.application_accepted on a genuine transition into accepted', async () => {
     const application = buildApplication(ApplicationStatus.SUBMITTED);
     mockApplicationRepository.findById.mockResolvedValue(application);
-    mockApplicationRepository.update.mockResolvedValue(application);
 
     await handler.execute(
       new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.ACCEPTED, 'ok'),
@@ -211,7 +326,6 @@ describe('ReviewApplicationHandler', () => {
   it('does not emit notification.application_accepted on reject', async () => {
     const application = buildApplication(ApplicationStatus.SUBMITTED);
     mockApplicationRepository.findById.mockResolvedValue(application);
-    mockApplicationRepository.update.mockResolvedValue(application);
 
     await handler.execute(
       new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.REJECTED, 'no'),
@@ -236,7 +350,6 @@ describe('ReviewApplicationHandler', () => {
   it('does not let a notification failure fail the review action', async () => {
     const application = buildApplication(ApplicationStatus.SUBMITTED);
     mockApplicationRepository.findById.mockResolvedValue(application);
-    mockApplicationRepository.update.mockResolvedValue(application);
     mockRabbitmqProducer.emit.mockRejectedValueOnce(new Error('broker down'));
 
     const command = new ReviewApplicationCommand('app-1', 'reviewer-1', ApplicationStatus.ACCEPTED, 'ok');
