@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { prismaToHttp } from '@shared/utils/prisma-error.util';
 import { UpdateProgramHandler } from './update-program.handler';
 import { UpdateProgramCommand } from '../update-program.command';
 import { IProgramRepository } from '@core/interfaces/repositories/program.repository.interface';
@@ -93,17 +94,53 @@ describe('UpdateProgramHandler', () => {
         expect(result.name).toBe('FailSafe');
     });
 
-    it('should generate a slug from name when slug is not provided', async () => {
+    // Audit M8: renaming a program used to silently regenerate its slug on
+    // every update, breaking already-shared public/admin URLs. The slug
+    // must now stay untouched unless the client explicitly sends one.
+    it('does not regenerate the slug from name when slug is not provided', async () => {
         const program = makeProgram();
         programRepository.findById.mockResolvedValue(program as any);
-        programRepository.update.mockResolvedValue({ ...program, name: 'Hello World', slug: 'hello-world' } as any);
+        programRepository.update.mockResolvedValue({ ...program, name: 'Hello World' } as any);
 
         const command = new UpdateProgramCommand('prog-1', { name: 'Hello World' }, 'user-1');
         await handler.execute(command);
 
+        const updateArg = (programRepository.update as jest.Mock).mock.calls[0][1];
+        expect(updateArg).not.toHaveProperty('slug');
+    });
+
+    it('passes an explicitly requested slug through unchanged', async () => {
+        const program = makeProgram();
+        programRepository.findById.mockResolvedValue(program as any);
+        programRepository.update.mockResolvedValue({ ...program, slug: 'custom-slug' } as any);
+
+        const command = new UpdateProgramCommand('prog-1', { slug: 'custom-slug' }, 'user-1');
+        await handler.execute(command);
+
         expect(programRepository.update).toHaveBeenCalledWith(
             'prog-1',
-            expect.objectContaining({ slug: 'hello-world' }),
+            expect.objectContaining({ slug: 'custom-slug' }),
+        );
+    });
+
+    // The handler deliberately does not translate this itself; the global
+    // HttpExceptionFilter maps P2002 to a 409 naming the offending field, and a
+    // catch here would relabel every unique violation as a slug collision.
+    it('lets a P2002 slug collision propagate for the global filter to map', async () => {
+        const program = makeProgram();
+        programRepository.findById.mockResolvedValue(program as any);
+        const p2002 = Object.assign(new Error('Unique constraint failed on the fields: (`brand_id`,`slug`)'), {
+            code: 'P2002',
+            clientVersion: 'test',
+            name: 'PrismaClientKnownRequestError',
+        });
+        programRepository.update.mockRejectedValue(p2002);
+
+        const command = new UpdateProgramCommand('prog-1', { slug: 'taken-slug' }, 'user-1');
+
+        await expect(handler.execute(command)).rejects.toBe(p2002);
+        expect(prismaToHttp(p2002)).toEqual(
+            expect.objectContaining({ status: 409, errorCode: 'DUPLICATE_RECORD' }),
         );
     });
 
@@ -161,19 +198,6 @@ describe('UpdateProgramHandler', () => {
         );
 
         await expect(handler.execute(command)).resolves.toBeDefined();
-    });
-
-    it('caps the auto-generated slug at 255 chars (Program.slug is VarChar(255))', async () => {
-        const program = makeProgram();
-        programRepository.findById.mockResolvedValue(program as any);
-        programRepository.update.mockImplementation((_id, data) => Promise.resolve({ ...program, ...data } as any));
-
-        const longName = 'Word '.repeat(60).trim(); // well over 255 chars once hyphenated
-        const command = new UpdateProgramCommand('prog-1', { name: longName }, 'user-1');
-        await handler.execute(command);
-
-        const updatedSlug = (programRepository.update as jest.Mock).mock.calls[0][1].slug as string;
-        expect(updatedSlug.length).toBeLessThanOrEqual(255);
     });
 
     describe('status/isActive drift guard (MEYS 7th incident)', () => {

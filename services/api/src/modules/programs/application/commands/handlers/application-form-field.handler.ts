@@ -163,19 +163,31 @@ export class UpdateApplicationFormFieldHandler
     // must remain editable without being forced through the catalog picker.
     let existing: ApplicationFormField | null = null;
     let keyChanged = false;
-    if (dto.fieldName) {
+    if (dto.fieldName || dto.fieldType !== undefined) {
       existing = await this.repository.findFormFieldById(fieldId);
-      keyChanged = !existing || existing.name !== dto.fieldName;
+    }
+
+    // Audit M12: same invariant create() already enforces above — the system
+    // catalog is the single source of truth for a system field's type and
+    // name. Without this, a client could downgrade e.g. a phone field to text
+    // or rename it away from its systemFieldKey through the update path even
+    // though create blocks exactly that.
+    const effectiveDto = existing?.source === 'system'
+      ? { ...dto, fieldType: undefined, fieldName: undefined }
+      : dto;
+
+    if (effectiveDto.fieldName) {
+      keyChanged = !existing || existing.name !== effectiveDto.fieldName;
       if (keyChanged) {
         try {
-          await this.keyValidator.validateCustomKey(dto.fieldName);
+          await this.keyValidator.validateCustomKey(effectiveDto.fieldName);
         } catch (err) {
           throw translateValidationError(err);
         }
       }
     }
 
-    const updateData = mapDtoToField(dto) as Partial<ApplicationFormField>;
+    const updateData = mapDtoToField(effectiveDto) as Partial<ApplicationFormField>;
 
     // Renaming a live field's key is not cosmetic: participant answers are
     // stored in personal_data keyed by the OLD name via an exact-key lookup
@@ -184,8 +196,8 @@ export class UpdateApplicationFormFieldHandler
     // answer to this field the moment the key changes. Do the migration in
     // the same transaction as the rename so the schema and the data can never
     // drift apart.
-    if (existing && keyChanged && dto.fieldName) {
-      return this.renameAndMigrateAnswers(existing, dto.fieldName, updateData);
+    if (existing && keyChanged && effectiveDto.fieldName) {
+      return this.renameAndMigrateAnswers(existing, effectiveDto.fieldName, updateData);
     }
 
     return this.repository.updateFormField(fieldId, updateData);

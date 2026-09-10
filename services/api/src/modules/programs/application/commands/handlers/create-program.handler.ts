@@ -60,6 +60,10 @@ export class CreateProgramHandler implements ICommandHandler<CreateProgramComman
             mutableData.status = derivedStatus;
         }
 
+        // Audit M8 asked for a handler-level P2002 -> 409 here. Not applied:
+        // the global HttpExceptionFilter already maps P2002 to a 409 that names
+        // the offending field, and a catch here would relabel EVERY unique
+        // violation on this write as a slug collision.
         const program = await this.programRepository.create(mutableData as Partial<Program>);
 
         // Log activity

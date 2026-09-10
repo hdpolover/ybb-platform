@@ -348,4 +348,68 @@ describe('UpdateApplicationFormFieldHandler', () => {
     expect(mockTx.$executeRaw).toHaveBeenCalledTimes(1);
     warnSpy.mockRestore();
   });
+
+  // Audit M12: mirrors create's catalog-is-source-of-truth guard on the
+  // update path — a system-sourced field must not have its type or name
+  // overwritten by the client.
+  it('strips fieldType and fieldName from the update when the field is system-sourced', async () => {
+    mockRepo.findFormFieldById.mockResolvedValue({
+      id: 'f1',
+      name: 'phone',
+      source: 'system',
+      type: 'phone',
+      programId: 'p1',
+    });
+    mockRepo.updateFormField.mockResolvedValue({ id: 'f1' });
+
+    await handler.execute(
+      new UpdateApplicationFormFieldCommand(
+        'f1',
+        {
+          fieldType: FormFieldType.TEXT, // attempt to downgrade the catalog type
+          fieldName: 'not_phone', // attempt to rename away from the catalog key
+          label: 'Phone Number (edited)',
+        },
+        'u1',
+      ),
+    );
+
+    expect(mockValidator.validateCustomKey).not.toHaveBeenCalled();
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    expect(mockRepo.updateFormField).toHaveBeenCalledWith(
+      'f1',
+      expect.objectContaining({ label: 'Phone Number (edited)' }),
+    );
+    const [, updateData] = mockRepo.updateFormField.mock.calls[0];
+    expect(updateData).not.toHaveProperty('type');
+    expect(updateData).not.toHaveProperty('name');
+  });
+
+  it('still allows a custom-sourced field to change type and name', async () => {
+    mockRepo.findFormFieldById.mockResolvedValue({
+      id: 'f1',
+      name: 'old_key',
+      source: 'custom',
+      type: 'text',
+      programId: 'p1',
+    });
+    mockValidator.validateCustomKey.mockResolvedValue(undefined);
+    mockTx.applicationFormField.update.mockResolvedValue({ id: 'f1', name: 'new_key' });
+
+    await handler.execute(
+      new UpdateApplicationFormFieldCommand(
+        'f1',
+        { fieldType: FormFieldType.TEXTAREA, fieldName: 'new_key' },
+        'u1',
+      ),
+    );
+
+    expect(mockValidator.validateCustomKey).toHaveBeenCalledWith('new_key');
+    expect(mockTx.applicationFormField.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'f1' },
+        data: expect.objectContaining({ type: FormFieldType.TEXTAREA, name: 'new_key' }),
+      }),
+    );
+  });
 });

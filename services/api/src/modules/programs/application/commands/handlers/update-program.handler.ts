@@ -28,10 +28,10 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
             throw new NotFoundException(`Program with ID ${programId} not found`);
         }
 
-        if (updateProgramDto.name && !updateProgramDto.slug) {
-            updateProgramDto.slug = this.generateSlug(updateProgramDto.name);
-        }
-
+        // Audit M8: this used to regenerate the slug from `name` on every
+        // update that omitted an explicit slug, so renaming a program
+        // silently rewrote its already-shared public/admin URL. The slug now
+        // only ever changes when the client explicitly sends `slug`.
         const programData: Record<string, unknown> = { ...updateProgramDto };
         if (programData.startDate) programData.startDate = new Date(programData.startDate as string);
         if (programData.endDate) programData.endDate = new Date(programData.endDate as string);
@@ -73,6 +73,10 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
             programData.status = derivedStatus;
         }
 
+        // A slug collision surfaces as a 409 from the global
+        // HttpExceptionFilter's P2002 mapping, which names the offending field.
+        // Catching it here would relabel every unique violation on this write
+        // as a slug collision, so it is deliberately left to the filter.
         const updatedProgram = await this.programRepository.update(programId, programData);
 
         // Log activity
@@ -111,22 +115,5 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
             ...rest,
             brandId: brandId,
         };
-    }
-
-    private generateSlug(text: string): string {
-        // Cap at the Program.slug column limit (VarChar(255), see prisma/schema/program.prisma).
-        // Not routed through shared/utils/auto-slug.ts: that util is separator-incompatible
-        // here (underscore-joined, built for form-field keys) and would rewrite every
-        // program slug off its established hyphenated convention (e.g. "world-youth-fest").
-        // This transform chain only ever removes characters, so slicing after is a safe
-        // hard cap, not a truncation that changes earlier chars.
-        return text
-            .toString()
-            .toLowerCase()
-            .trim()
-            .replace(/\s+/g, '-')     // Replace spaces with -
-            .replace(/[^\w-]+/g, '') // Remove all non-word chars
-            .replace(/--+/g, '-')  // Replace multiple - with single -
-            .slice(0, 255);
     }
 }

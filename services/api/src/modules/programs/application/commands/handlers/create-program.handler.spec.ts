@@ -1,5 +1,6 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
+import { prismaToHttp } from '@shared/utils/prisma-error.util';
 import { CreateProgramHandler } from './create-program.handler';
 import { CreateProgramCommand } from '../create-program.command';
 import { IUserActivityLogRepository } from '@core/interfaces/repositories/user-activity-log.repository.interface';
@@ -114,6 +115,34 @@ describe('CreateProgramHandler', () => {
 
         const createdSlug = mockProgramRepository.create.mock.calls[0][0].slug as string;
         expect(createdSlug.length).toBeLessThanOrEqual(255);
+    });
+
+    // Audit M8 asked the handler to translate this itself. It does not: the
+    // global HttpExceptionFilter maps P2002 to a 409 naming the offending
+    // field, and a catch here would relabel every unique violation on this
+    // write as a slug collision. What matters is that the handler lets the
+    // Prisma error through untouched.
+    it('lets a P2002 slug collision propagate for the global filter to map', async () => {
+        const dto: CreateProgramDto = {
+            name: 'Test Program',
+            brandId: 'cat-1',
+            year: 2024,
+            startDate: '2024-01-01',
+            endDate: '2024-01-10',
+            applicationDeadline: '2023-12-31',
+        };
+        const command = new CreateProgramCommand(dto, 'user-1');
+        const p2002 = Object.assign(new Error('Unique constraint failed on the fields: (`brand_id`,`slug`)'), {
+            code: 'P2002',
+            clientVersion: 'test',
+            name: 'PrismaClientKnownRequestError',
+        });
+        mockProgramRepository.create.mockRejectedValue(p2002);
+
+        await expect(handler.execute(command)).rejects.toBe(p2002);
+        expect(prismaToHttp(p2002)).toEqual(
+            expect.objectContaining({ status: 409, errorCode: 'DUPLICATE_RECORD' }),
+        );
     });
 
     // Audit: this handler cleared Redis + the Postgres snapshot directly but
