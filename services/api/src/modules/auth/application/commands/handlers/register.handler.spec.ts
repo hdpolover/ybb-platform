@@ -75,7 +75,13 @@ describe('RegisterHandler', () => {
     },
     userSession: {
       create: jest.fn()
-    }
+    },
+    // Audit M142: ambassador referral linking now runs AFTER the
+    // registration transaction commits, via its own small
+    // this.prisma.$transaction([create, update]) (array form) - not through
+    // UnitOfWork/repos.createAmbassadorReferral any more. Array-form
+    // $transaction just needs to resolve the passed promises.
+    $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
   };
 
   const mockUnitOfWork = {
@@ -143,6 +149,10 @@ describe('RegisterHandler', () => {
     geoIpService = module.get<GeoIpService>(GeoIpService);
 
     jest.clearAllMocks();
+    // Audit M142: the transaction callback now only creates the user and
+    // participant - ambassador referral linking is a best-effort call made
+    // AFTER this transaction commits (see RegisterHandler.linkAmbassadorReferral),
+    // not part of the work UnitOfWork.execute runs here.
     mockUnitOfWork.execute.mockImplementation(async (work: any) =>
       work({
         tx: {
@@ -153,23 +163,6 @@ describe('RegisterHandler', () => {
             create: mockPrismaService.participant.create,
           },
         },
-        createAmbassadorReferral: async ({ participantId, ambassadorId, programId }: { participantId: string; ambassadorId: string; programId: string }) =>
-          mockPrismaService.ambassadorReferral.create({
-            data: {
-              ambassadorId,
-              participantId,
-              programId,
-              status: 'referred',
-            },
-          }),
-        incrementAmbassadorReferrals: async (ambassadorId: string) =>
-          mockPrismaService.ambassador.update({
-            where: { id: ambassadorId },
-            data: {
-              totalReferrals: { increment: 1 },
-              lastReferralAt: new Date(),
-            },
-          }),
       }),
     );
     mockPrismaService.participantApplication.findUnique.mockResolvedValue(null);
@@ -272,13 +265,16 @@ describe('RegisterHandler', () => {
         });
 
         // Verify Referral Tracking — attributed to the target program resolved for
-        // this registration.
+        // this registration. Runs AFTER the registration transaction commits
+        // (audit M142), via RegisterHandler.linkAmbassadorReferral's own
+        // this.prisma.$transaction([create, update]) — not through
+        // UnitOfWork/repos any more.
         expect(mockPrismaService.ambassadorReferral.create).toHaveBeenCalledWith({
             data: {
-                ambassadorId: 'ambassador-id-123',
                 participantId: 'participant-id-123',
+                ambassadorId: 'ambassador-id-123',
                 programId: 'program-id-123',
-                status: 'referred',
+                referredAt: expect.any(Date),
             }
         });
 
@@ -298,12 +294,84 @@ describe('RegisterHandler', () => {
             where: { id: 'ambassador-id-123' },
             data: {
                 totalReferrals: { increment: 1 },
-                lastReferralAt: expect.any(Date),
             }
         });
 
         expect(result).toHaveProperty('accessToken', 'mock_token');
         expect(result).toHaveProperty('user');
+    });
+
+    // Audit M142: a try/catch INSIDE the registration transaction used to
+    // swallow exactly this failure, which — under Postgres aborted-transaction
+    // semantics — silently rolled back the just-created user/participant while
+    // the handler carried on as if registration had succeeded. Referral
+    // linking now runs after the transaction has committed, so a failure here
+    // must be logged and swallowed WITHOUT affecting the registration result.
+    it('logs and swallows an ambassador referral link failure without failing registration — regression for M142', async () => {
+        mockPrismaService.authProvider.findUnique.mockResolvedValue({
+            id: 'provider-id-123',
+            name: 'local',
+            isActive: true,
+            isOAuth: false,
+        });
+        mockPrismaService.brand.findUnique.mockResolvedValue({
+            id: 'category-id-123',
+            isActive: true,
+            name: 'Test Category',
+            requireEmailVerification: false,
+        });
+        mockPrismaService.program.findUnique.mockResolvedValue({
+            id: 'program-id-123',
+            brandId: 'category-id-123',
+            status: 'published',
+            isActive: true,
+            isPublished: true,
+            allowRegistration: true,
+            registrationOpenDate: null,
+            registrationCloseDate: null,
+        });
+        mockPrismaService.ambassador.findFirst.mockResolvedValue({
+            id: 'ambassador-id-123',
+            referralCode: 'REFCODE',
+            isActive: true,
+        });
+        mockPrismaService.user.findFirst.mockResolvedValue(null);
+        mockPrismaService.user.create.mockResolvedValue({
+            id: 'new-user-id',
+            email: 'test@example.com',
+            brandId: 'category-id-123',
+            isActive: true,
+            isOnboardingCompleted: false,
+            identities: [{ providerId: 'provider-id-123' }],
+        });
+        mockPrismaService.participant.findUnique.mockResolvedValue({
+            id: 'participant-id-123',
+            userId: 'new-user-id',
+        });
+        mockPrismaService.participant.create.mockResolvedValue({
+            id: 'participant-id-123',
+            userId: 'new-user-id',
+        });
+        mockPrismaService.participantApplication.findUnique.mockResolvedValue(null);
+
+        // Simulates a real FK/unique-constraint failure on the referral write.
+        mockPrismaService.$transaction.mockRejectedValueOnce(new Error('unique constraint violation'));
+
+        const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+        const result = await handler.execute(command);
+
+        // The already-committed user registration must still succeed.
+        expect(result).toHaveProperty('accessToken', 'mock_token');
+        expect(result).toHaveProperty('user');
+        expect(mockPrismaService.user.create).toHaveBeenCalled();
+
+        // The failure must be logged loudly, not silently discarded.
+        expect(errorSpy).toHaveBeenCalledWith(
+            expect.stringContaining('Failed to link ambassador referral'),
+        );
+
+        errorSpy.mockRestore();
     });
 
     it('awaits the verification email publish and logs an error (without failing registration) when the broker publish fails — regression for M86/M131', async () => {

@@ -77,6 +77,47 @@ export class RegisterHandler {
   }
 
   /**
+   * Best-effort ambassador referral linking, run AFTER the registration
+   * transaction has committed (audit M142 — see the comment at the call
+   * site in execute()). Deliberately outside any transaction that also
+   * writes the user/participant rows: a failure here must never roll those
+   * back. The two writes still share a small transaction of their own so the
+   * referral row and the ambassador's counter can't diverge from each other,
+   * but that transaction is independent of user registration.
+   */
+  private async linkAmbassadorReferral(
+    participantId: string,
+    ambassadorId: string,
+    programId: string,
+  ): Promise<void> {
+    try {
+      await this.prisma.$transaction([
+        this.prisma.ambassadorReferral.create({
+          data: {
+            participantId,
+            ambassadorId,
+            programId,
+            referredAt: new Date(),
+          },
+        }),
+        this.prisma.ambassador.update({
+          where: { id: ambassadorId },
+          data: { totalReferrals: { increment: 1 } },
+        }),
+      ]);
+    } catch (e) {
+      // User registration already committed successfully — a referral-link
+      // failure (bad state, FK/unique violation, transient DB error) is
+      // logged, never thrown, and never allowed to affect the response.
+      this.logger.error(
+        `Failed to link ambassador referral for participant ${participantId} / ambassador ${ambassadorId}: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+  }
+
+  /**
    * Resolve domain to brandId
    * Similar logic to login handler
    */
@@ -286,12 +327,31 @@ export class RegisterHandler {
 
     // ========================================
     // Unit of Work: User Registration with Full Profile Setup
-    // All user creation, participant setup, and referral linking must succeed together
-    // or rollback completely to prevent orphaned records
+    // User creation and participant setup must succeed together or rollback
+    // completely to prevent orphaned records.
+    //
+    // Audit M142: ambassador referral linking used to run INSIDE this same
+    // transaction, wrapped in its own try/catch that swallowed a
+    // createAmbassadorReferral failure (e.g. an FK/unique-constraint error).
+    // That catch made the JS callback look like it completed successfully,
+    // but under Postgres aborted-transaction semantics, a statement erroring
+    // inside a transaction marks the WHOLE transaction aborted server-side —
+    // every following statement (including this callback's own COMMIT) is
+    // rejected/ignored until COMMIT turns into an implicit ROLLBACK. The
+    // practical effect: the referral error silently rolled back the user and
+    // participant rows that had already been created, while this handler
+    // went on believing registration had succeeded (JWTs issued, session
+    // created, etc. for a user that no longer exists).
+    //
+    // Fix: referral linking is a best-effort side effect, not part of the
+    // user-creation invariant, so it is moved OUT of this transaction
+    // entirely and run after the transaction has committed (see
+    // linkAmbassadorReferral below). It never re-enters a try/catch inside a
+    // transaction callback.
     // ========================================
     const newUser = await this.unitOfWork.execute(async (repos) => {
       const tx = repos.tx;
-      
+
       // Create user with identity
       const user = await tx.user.create({
         data: {
@@ -317,7 +377,7 @@ export class RegisterHandler {
       });
 
       // Create participant profile
-      const participant = await tx.participant.create({
+      await tx.participant.create({
         data: {
           userId: user.id,
           // Blank until onboarding — see the note on the other participant
@@ -331,25 +391,6 @@ export class RegisterHandler {
         },
       });
 
-      // Link ambassador referral if valid
-      if (ambassador && referralProgramId) {
-        try {
-          await repos.createAmbassadorReferral({
-            participantId: participant.id,
-            ambassadorId: ambassador.id,
-            programId: referralProgramId,
-            referredAt: new Date(),
-          });
-
-          // Increment ambassador stats
-          await repos.incrementAmbassadorReferrals(ambassador.id);
-        } catch (e) {
-          // Log but don't fail the transaction for referral issues
-          this.logger.error(`Failed to link ambassador: ${e.message}`);
-          // Still continue - user registration is more important than referral
-        }
-      }
-
       return user;
     }, { name: 'user-registration', timeout: 10000 });
 
@@ -357,6 +398,15 @@ export class RegisterHandler {
       where: { userId: newUser.id },
       select: { id: true },
     });
+
+    // Link ambassador referral AFTER the registration transaction has
+    // committed — see the M142 comment above. Best-effort: a failure here
+    // (bad referral state, FK/unique violation, transient DB error) must
+    // never affect the user/participant rows already committed, so it is
+    // logged, never thrown.
+    if (newParticipant && ambassador && referralProgramId) {
+      await this.linkAmbassadorReferral(newParticipant.id, ambassador.id, referralProgramId);
+    }
 
     let applicationResult: Awaited<ReturnType<typeof ensureProgramApplication>> | undefined;
 
