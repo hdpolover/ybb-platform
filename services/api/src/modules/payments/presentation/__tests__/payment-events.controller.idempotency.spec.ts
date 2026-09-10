@@ -93,6 +93,7 @@ describe('PaymentEventsController — idempotency on redelivered event', () => {
         };
         const mockCache = {
             invalidateKey: jest.fn().mockResolvedValue(undefined),
+            invalidateKeys: jest.fn().mockResolvedValue(undefined),
             invalidateByPattern: jest.fn().mockResolvedValue(undefined),
         };
         const mockPaymentOutbox = {

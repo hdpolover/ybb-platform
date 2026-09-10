@@ -104,7 +104,7 @@ describe('PaymentEventsController — server-side conversion tracking', () => {
                 { provide: MetricsService, useValue: { paymentTotal: { inc: jest.fn() }, paymentAmount: { observe: jest.fn() }, jobProcessingDuration: { observe: jest.fn() } } },
                 { provide: PrismaService, useValue: mockPrisma },
                 { provide: UnitOfWork, useValue: mockUnitOfWork },
-                { provide: CacheService, useValue: { invalidateKey: jest.fn().mockResolvedValue(undefined), invalidateByPattern: jest.fn().mockResolvedValue(undefined) } },
+                { provide: CacheService, useValue: { invalidateKey: jest.fn().mockResolvedValue(undefined), invalidateKeys: jest.fn().mockResolvedValue(undefined), invalidateByPattern: jest.fn().mockResolvedValue(undefined) } },
                 { provide: PaymentOutboxService, useValue: { enqueueInTransaction: jest.fn().mockResolvedValue({ queued: true, dedupeKey: 'key-1' }), isEnabled: jest.fn().mockReturnValue(false) } },
                 { provide: RabbitMQProducerService, useValue: { emit: jest.fn().mockResolvedValue(true) } },
                 { provide: PaymentGatewayClient, useValue: { voidTransaction: jest.fn().mockResolvedValue({ outcome: 'voided', detail: 'ok' }) } },

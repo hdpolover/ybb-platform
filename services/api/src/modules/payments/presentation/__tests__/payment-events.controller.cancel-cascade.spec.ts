@@ -37,8 +37,10 @@ describe('PaymentEventsController — payment.cancelled cascade void', () => {
         externalIntentId: 'intent-1',
         externalTransactionId: 'txn-1',
         pricingTier: { feeType: 'registration_fee' },
-        application: { participant: { userId: 'user-1' } },
+        application: { participant: { userId: 'user-1' }, programId: 'program-1' },
     };
+
+    let mockCache: { invalidateKey: jest.Mock; invalidateKeys: jest.Mock; invalidateByPattern: jest.Mock };
 
     beforeEach(async () => {
         mockGatewayClient = { voidTransaction: jest.fn().mockResolvedValue({ outcome: 'voided', detail: 'ok' }) };
@@ -55,13 +57,19 @@ describe('PaymentEventsController — payment.cancelled cascade void', () => {
             $transaction: jest.fn().mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops)),
         };
 
+        mockCache = {
+            invalidateKey: jest.fn().mockResolvedValue(undefined),
+            invalidateKeys: jest.fn().mockResolvedValue(undefined),
+            invalidateByPattern: jest.fn().mockResolvedValue(undefined),
+        };
+
         const module: TestingModule = await Test.createTestingModule({
             controllers: [PaymentEventsController],
             providers: [
                 { provide: MetricsService, useValue: { jobProcessingDuration: { observe: jest.fn() } } },
                 { provide: PrismaService, useValue: mockPrisma },
                 { provide: UnitOfWork, useValue: { execute: jest.fn() } },
-                { provide: CacheService, useValue: { invalidateKey: jest.fn(), invalidateByPattern: jest.fn() } },
+                { provide: CacheService, useValue: mockCache },
                 { provide: PaymentOutboxService, useValue: { enqueueInTransaction: jest.fn(), isEnabled: jest.fn().mockReturnValue(false) } },
                 { provide: RabbitMQProducerService, useValue: { emit: jest.fn() } },
                 { provide: PaymentGatewayClient, useValue: mockGatewayClient },
@@ -93,5 +101,60 @@ describe('PaymentEventsController — payment.cancelled cascade void', () => {
         await controller.handlePaymentCancelled(payload as any, makeRmqContext());
 
         expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    // Audit M150: when the invoice's programId is known (the normal case -
+    // resolveFailureInvoice's include now selects application.programId), cache
+    // invalidation must use exact keys (invalidateKeys / plain DEL) and never
+    // fall back to the full-keyspace SCAN (invalidateByPattern).
+    it('invalidates portal cache by exact key when programId is known (M150)', async () => {
+        const payload = {
+            metadata: { application_id: 'app-1', invoice_id: 'inv-1' },
+            transaction_id: 'txn-1',
+        };
+
+        await controller.handlePaymentCancelled(payload as any, makeRmqContext());
+
+        expect(mockCache.invalidateKeys).toHaveBeenCalledTimes(1);
+        const keys: string[] = mockCache.invalidateKeys.mock.calls[0][0];
+        expect(keys).toEqual(
+            expect.arrayContaining([
+                'portal:dashboard:user-1:latest',
+                'portal:dashboard:user-1:program-1',
+                'portal:submissions:user-1:latest',
+                'portal:submissions:user-1:program-1',
+                'portal:submission-detail:user-1:latest',
+                'portal:submission-detail:user-1:program-1',
+                'portal:payments:user-1:latest',
+                'portal:payments:user-1:program-1',
+                'portal:documents:user-1:latest',
+                'portal:documents:user-1:program-1',
+                'portal:payment-detail:user-1:inv-1',
+            ]),
+        );
+        expect(keys.every((key) => !key.includes('*'))).toBe(true);
+        expect(mockCache.invalidateByPattern).not.toHaveBeenCalled();
+    });
+
+    // Fallback path: when the invoice's application/programId cannot be resolved
+    // at all (e.g. resolveFailureInvoice comes back null and the applicationId
+    // fallback lookup also fails), invalidateUserPortalCache is never invoked and
+    // the wildcard scan never fires - there's nothing to bust for a user we
+    // couldn't identify. This just documents that no cache call happens rather
+    // than silently invalidating nothing for a known user.
+    it('does not invalidate cache when the invoice and application cannot be resolved', async () => {
+        mockPrisma.applicationInvoice.findUnique.mockResolvedValue(null);
+        mockPrisma.applicationInvoice.findFirst.mockResolvedValue(null);
+        mockPrisma.participantApplication.findUnique.mockResolvedValue(null);
+
+        const payload = {
+            metadata: { application_id: 'app-missing', invoice_id: 'inv-missing' },
+            transaction_id: 'txn-missing',
+        };
+
+        await controller.handlePaymentCancelled(payload as any, makeRmqContext());
+
+        expect(mockCache.invalidateKeys).not.toHaveBeenCalled();
+        expect(mockCache.invalidateByPattern).not.toHaveBeenCalled();
     });
 });

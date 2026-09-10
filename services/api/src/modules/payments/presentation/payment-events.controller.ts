@@ -183,11 +183,13 @@ export class PaymentEventsController {
                     cancelledInvoice.userId,
                     'payment cancelled',
                     cancelledInvoice.invoiceId,
+                    cancelledInvoice.programId,
                 );
             } else if (applicationId) {
                 const application = await this.prisma.participantApplication.findUnique({
                     where: { id: applicationId },
-                    include: {
+                    select: {
+                        programId: true,
                         participant: {
                             select: { userId: true },
                         },
@@ -195,7 +197,12 @@ export class PaymentEventsController {
                 });
 
                 if (application?.participant?.userId) {
-                    await this.invalidateUserPortalCache(application.participant.userId, 'payment cancelled');
+                    await this.invalidateUserPortalCache(
+                        application.participant.userId,
+                        'payment cancelled',
+                        undefined,
+                        application.programId,
+                    );
                 }
             }
         } catch (error) {
@@ -401,7 +408,12 @@ export class PaymentEventsController {
 
                 // Invalidate portal cache for this user to reflect payment immediately
                 if (result) {
-                    await this.invalidateUserPortalCache(result.userId, 'payment succeeded', result.invoiceId ?? undefined);
+                    await this.invalidateUserPortalCache(
+                        result.userId,
+                        'payment succeeded',
+                        result.invoiceId ?? undefined,
+                        result.programId,
+                    );
 
                     // Advance referral funnel: → completed (only when all payments are done)
                     if (this.referralFunnel) {
@@ -898,11 +910,17 @@ export class PaymentEventsController {
             });
             
             if (failedInvoice?.userId) {
-                await this.invalidateUserPortalCache(failedInvoice.userId, 'payment failed', failedInvoice.invoiceId);
+                await this.invalidateUserPortalCache(
+                    failedInvoice.userId,
+                    'payment failed',
+                    failedInvoice.invoiceId,
+                    failedInvoice.programId,
+                );
             } else if (applicationId) {
                 const application = await this.prisma.participantApplication.findUnique({
                     where: { id: applicationId },
-                    include: {
+                    select: {
+                        programId: true,
                         participant: {
                             select: { userId: true }
                         }
@@ -910,7 +928,12 @@ export class PaymentEventsController {
                 });
 
                 if (application?.participant?.userId) {
-                    await this.invalidateUserPortalCache(application.participant.userId, 'payment failed');
+                    await this.invalidateUserPortalCache(
+                        application.participant.userId,
+                        'payment failed',
+                        undefined,
+                        application.programId,
+                    );
                 }
             }
 
@@ -1032,13 +1055,14 @@ export class PaymentEventsController {
         transactionId?: string;
         failureReason?: string;
         paymentMethod?: string;
-    }): Promise<{ userId: string; invoiceId: string; superseded?: boolean; alreadyFailed?: boolean } | null> {
+    }): Promise<{ userId: string; invoiceId: string; programId: string; superseded?: boolean; alreadyFailed?: boolean } | null> {
         const invoice = await this.resolveFailureInvoice(input);
         if (!invoice) {
             return null;
         }
 
         const userId = invoice.application.participant.userId;
+        const programId = invoice.application.programId;
 
         // A failure for a superseded attempt must not touch the current one.
         if (isSupersededAttempt(invoice, input)) {
@@ -1047,14 +1071,14 @@ export class PaymentEventsController {
                 `event txn=${input.transactionId ?? '-'} intent=${input.intentId ?? '-'} but invoice holds ` +
                 `txn=${invoice.externalTransactionId ?? '-'} intent=${invoice.externalIntentId ?? '-'}`,
             );
-            return { userId, invoiceId: invoice.id, superseded: true };
+            return { userId, invoiceId: invoice.id, programId, superseded: true };
         }
 
         if (invoice.status === PaymentStatus.paid) {
             // Stale/duplicate failure event for an invoice that's actually paid -
             // nothing to write, and the caller must not send a "payment failed"
             // email for a payment that in fact succeeded.
-            return { userId, invoiceId: invoice.id, superseded: true };
+            return { userId, invoiceId: invoice.id, programId, superseded: true };
         }
 
         // Whether this event is a redelivered/replayed payment.failed rather than
@@ -1123,6 +1147,7 @@ export class PaymentEventsController {
         return {
             userId,
             invoiceId: invoice.id,
+            programId,
             superseded: !!paidSibling,
             alreadyFailed: failClaim.count === 0,
         };
@@ -1135,13 +1160,14 @@ export class PaymentEventsController {
         transactionId?: string;
         cancellationReason?: string;
         paymentMethod?: string;
-    }): Promise<{ userId: string; invoiceId: string } | null> {
+    }): Promise<{ userId: string; invoiceId: string; programId: string } | null> {
         const invoice = await this.resolveFailureInvoice(input);
         if (!invoice) {
             return null;
         }
 
         const userId = invoice.application.participant.userId;
+        const programId = invoice.application.programId;
 
         // Same stale-attempt guard as markInvoiceFailed: a cancellation for an
         // abandoned attempt must not cancel the retry that replaced it (M157).
@@ -1151,11 +1177,11 @@ export class PaymentEventsController {
                 `event txn=${input.transactionId ?? '-'} intent=${input.intentId ?? '-'} but invoice holds ` +
                 `txn=${invoice.externalTransactionId ?? '-'} intent=${invoice.externalIntentId ?? '-'}`,
             );
-            return { userId, invoiceId: invoice.id };
+            return { userId, invoiceId: invoice.id, programId };
         }
 
         if (invoice.status === PaymentStatus.paid || invoice.status === PaymentStatus.cancelled) {
-            return { userId, invoiceId: invoice.id };
+            return { userId, invoiceId: invoice.id, programId };
         }
 
         const cancellationReason =
@@ -1175,7 +1201,7 @@ export class PaymentEventsController {
                     `markInvoiceCancelled: refusing to cancel invoice ${invoice.id} — ` +
                     `transaction ${transactionId} is settled at the gateway (${voidResult.detail})`,
                 );
-                return { userId, invoiceId: invoice.id };
+                return { userId, invoiceId: invoice.id, programId };
             }
             // This is an async event consumer (payment.cancelled), not a synchronous
             // user-facing action — throwing here would just trigger a message
@@ -1186,7 +1212,7 @@ export class PaymentEventsController {
                     `markInvoiceCancelled: skipping cancellation for invoice ${invoice.id} — ` +
                     `transaction ${transactionId} is awaiting manual review (${voidResult.detail})`,
                 );
-                return { userId, invoiceId: invoice.id };
+                return { userId, invoiceId: invoice.id, programId };
             }
             // 'voided' | 'already_terminal' | 'error' all proceed: a transient gateway
             // failure must not block the invoice write — the widened reconciler
@@ -1241,7 +1267,7 @@ export class PaymentEventsController {
                   ]),
         ]);
 
-        return { userId, invoiceId: invoice.id };
+        return { userId, invoiceId: invoice.id, programId };
     }
 
     private async resolveFailureInvoice(input: {
@@ -1256,6 +1282,7 @@ export class PaymentEventsController {
             },
             application: {
                 select: {
+                    programId: true,
                     participant: {
                         select: { userId: true },
                     },
@@ -1302,12 +1329,71 @@ export class PaymentEventsController {
     /**
      * Invalidate all portal cache entries for a specific user
      * This ensures the user sees updated payment status immediately
-     * 
+     *
      * For multi-instance deployments, uses Redis Pub/Sub to broadcast
      * invalidation to all API instances
      */
-    private async invalidateUserPortalCache(userId: string, reason: string, invoiceId?: string): Promise<void> {
+    private async invalidateUserPortalCache(
+        userId: string,
+        reason: string,
+        invoiceId?: string,
+        programId?: string | null,
+    ): Promise<void> {
         try {
+            // Audit M150: every payment event ran 2-3 full-keyspace SCANs
+            // (invalidateByPattern) here even though most callers already know
+            // the programId by this point (processApplicationPayment's result, or
+            // the invoice's application). When it's known, invalidate the exact
+            // keys instead of scanning.
+            //
+            // Both the bare `KEY(userId)` ("latest") and `KEY(userId, programId)`
+            // variants are cleared: the portal read handlers accept an optional
+            // programId query param and fall back to 'latest' when it's absent
+            // (see CACHE_KEYS.PORTAL_DASHBOARD etc.), so a caller that read
+            // without one is serving the bare key, not the program-scoped one.
+            // Same two-key shape already used by cancel-portal-payment.handler.ts
+            // and ensure-portal-payment-invoice.handler.ts for the same reason.
+            //
+            // These are exact Redis keys, not wildcard patterns, so they go
+            // through cacheService.invalidateKeys() (plain DEL) rather than
+            // invalidateByPattern()/scanKeys() (full-keyspace SCAN) - and,
+            // deliberately, NOT through pubSubService.invalidateAndPublish():
+            // that helper routes every entry it's given through
+            // invalidateByPattern regardless of whether it contains a wildcard
+            // (see RedisPubSubService.invalidateAndPublish), which would silently
+            // reintroduce the exact SCAN cost this fix removes. That broadcast
+            // also buys nothing here - the cache store is one shared Redis
+            // instance (see cache-core.module.ts: a single Keyv+KeyvRedis store,
+            // no per-process in-memory tier), so a DEL against it is already
+            // visible to every API instance the moment it completes.
+            if (programId) {
+                const exactKeys = [
+                    CACHE_KEYS.PORTAL_DASHBOARD(userId),
+                    CACHE_KEYS.PORTAL_DASHBOARD(userId, programId),
+                    CACHE_KEYS.PORTAL_SUBMISSIONS(userId),
+                    CACHE_KEYS.PORTAL_SUBMISSIONS(userId, programId),
+                    CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId),
+                    CACHE_KEYS.PORTAL_SUBMISSION_DETAIL(userId, programId),
+                    CACHE_KEYS.PORTAL_PAYMENTS(userId),
+                    CACHE_KEYS.PORTAL_PAYMENTS(userId, programId),
+                    CACHE_KEYS.PORTAL_DOCUMENTS(userId),
+                    CACHE_KEYS.PORTAL_DOCUMENTS(userId, programId),
+                ];
+                if (invoiceId) {
+                    exactKeys.push(CACHE_KEYS.PORTAL_PAYMENT_DETAIL(userId, invoiceId));
+                }
+
+                await this.cacheService.invalidateKeys(exactKeys);
+                this.logger.debug(
+                    `Invalidated exact-key portal cache for user ${userId}, program ${programId} (reason: ${reason})`,
+                );
+                return;
+            }
+
+            // Fallback: programId genuinely unavailable on this code path. A missed
+            // invalidation here is worse than the SCAN cost - a stale submit gate
+            // means the participant cannot submit - so this MUST keep working via
+            // the wildcard scan rather than silently skip anything.
             const patterns = [
                 // PORTAL_DASHBOARD is keyed by (userId, programId?) too, so this must
                 // be a wildcard - the bare key only clears the `:latest` variant.
