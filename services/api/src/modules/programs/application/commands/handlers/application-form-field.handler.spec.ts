@@ -236,14 +236,18 @@ describe('UpdateApplicationFormFieldHandler', () => {
     $executeRaw: jest.fn(),
   };
   const mockPrisma = {
-    $transaction: jest.fn((cb: (tx: typeof mockTx) => unknown) => cb(mockTx)),
+    $transaction: jest.fn(
+      (cb: (tx: typeof mockTx) => unknown, _options?: { timeout?: number; maxWait?: number }) => cb(mockTx),
+    ),
   };
 
   let handler: UpdateApplicationFormFieldHandler;
 
   beforeEach(async () => {
     jest.resetAllMocks();
-    mockPrisma.$transaction.mockImplementation((cb: (tx: typeof mockTx) => unknown) => cb(mockTx));
+    mockPrisma.$transaction.mockImplementation(
+      (cb: (tx: typeof mockTx) => unknown, _options?: { timeout?: number; maxWait?: number }) => cb(mockTx),
+    );
     mockTx.$queryRaw.mockResolvedValue([]);
     mockTx.$executeRaw.mockResolvedValue(0);
     const moduleRef = await Test.createTestingModule({
@@ -327,6 +331,27 @@ describe('UpdateApplicationFormFieldHandler', () => {
     expect(mockTx.$executeRaw).toHaveBeenCalledTimes(1);
     expect(mockRepo.updateFormField).not.toHaveBeenCalled();
     expect(result).toEqual({ id: 'f1', name: 'new_key' });
+  });
+
+  // Audit M26 (cheap half only): the rename/migration transaction casts
+  // personal_data::jsonb over every application in the program with no index
+  // to help, so Prisma's 5000ms interactive-transaction default is not
+  // generous enough on a large program. Pin the explicit timeout.
+  it('passes an explicit timeout to the rename/migration transaction', async () => {
+    mockRepo.findFormFieldById.mockResolvedValue({ id: 'f1', name: 'old_key', programId: 'p1' });
+    mockValidator.validateCustomKey.mockResolvedValue(undefined);
+    mockTx.applicationFormField.update.mockResolvedValue({ id: 'f1', name: 'new_key' });
+
+    await handler.execute(
+      new UpdateApplicationFormFieldCommand('f1', { fieldName: 'new_key' }, 'u1'),
+    );
+
+    expect(mockPrisma.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ timeout: expect.any(Number) }),
+    );
+    const [, options] = mockPrisma.$transaction.mock.calls[0];
+    expect(options?.timeout).toBeGreaterThan(5000);
   });
 
   it('does not migrate personal_data when a collision is found, only logs it', async () => {
