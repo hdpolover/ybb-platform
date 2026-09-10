@@ -3,6 +3,11 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom, timeout, catchError, of } from 'rxjs';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import {
+    parseAllowedOrigins,
+    isOriginAllowed,
+    resolvesToPublicAddressesOnly,
+} from '@shared/utils/ssrf-guard.util';
 
 /**
  * Nudge a brand's landing Next.js app to drop its server-side `unstable_cache`
@@ -15,7 +20,13 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
  *   3. `LANDING_URL` env var fallback (dev, shared landing, or override)
  *
  * Env:
- *   LANDING_URL                — optional fallback / override.
+ *   LANDING_URL                       — optional fallback / override.
+ *   LANDING_REVALIDATION_ALLOWED_ORIGINS — comma-separated allowlist of
+ *                                every legitimate landing origin (scheme +
+ *                                host[:port], e.g.
+ *                                "https://icysummit.com,https://meys.ybbfoundation.com").
+ *                                Required for this service to ever actually
+ *                                send a request — see Audit M211 below.
  *   SETTINGS_REVALIDATE_SECRET — shared secret matching the landing settings
  *                                revalidation route. Optional; the route
  *                                treats missing secret as "open" for dev.
@@ -26,6 +37,22 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
  * Failures are logged and swallowed: the brand/program save already succeeded,
  * and the landing's TTL is the safety net. A bad revalidate shouldn't 500 the
  * admin request.
+ *
+ * Audit M211 (SSRF): `landingUrl` / `websiteUrl` are admin-settable brand
+ * fields, validated only by @IsUrl at the DTO layer - that allows ANY
+ * http(s) host, including internal services, localhost, and the cloud
+ * metadata address (169.254.169.254). This service sends an
+ * Authorization: Bearer <secret> header, so an unvalidated target here is a
+ * secret-exfiltration primitive, not just an availability issue. Before
+ * every outbound POST, `post()` requires BOTH: (1) the origin is in the
+ * LANDING_REVALIDATION_ALLOWED_ORIGINS allowlist, and (2) the hostname
+ * actually RESOLVES to public IP addresses only (checked via DNS lookup at
+ * request time, not string-matched against the hostname — see
+ * shared/utils/ssrf-guard.util.ts for why the resolve step is required and
+ * not just the allowlist). A target failing either check is never
+ * requested; the attempt is logged and revalidation is skipped for that
+ * brand, the same "log and move on" failure mode as every other error path
+ * in this service.
  */
 @Injectable()
 export class LandingRevalidationService {
@@ -33,6 +60,7 @@ export class LandingRevalidationService {
     private readonly fallbackLandingUrl: string;
     private readonly revalidateSecret: string;
     private readonly homeRevalidateSecret: string;
+    private readonly allowedOrigins: ReadonlySet<string>;
 
     constructor(
         private readonly httpService: HttpService,
@@ -42,6 +70,20 @@ export class LandingRevalidationService {
         this.fallbackLandingUrl = this.configService.get<string>('LANDING_URL', '').trim();
         this.revalidateSecret = this.configService.get<string>('SETTINGS_REVALIDATE_SECRET', '').trim();
         this.homeRevalidateSecret = this.configService.get<string>('HOME_REVALIDATE_SECRET', '').trim();
+        this.allowedOrigins = parseAllowedOrigins(
+            this.configService.get<string>('LANDING_REVALIDATION_ALLOWED_ORIGINS', ''),
+        );
+        if (this.allowedOrigins.size === 0) {
+            // Not a hard boot failure (unlike M168's RABBITMQ_URL/REDIS_PASSWORD):
+            // this service is best-effort and already swallows every other
+            // failure mode, and an empty allowlist just means every revalidation
+            // attempt is rejected and logged rather than the whole app refusing
+            // to start. Loud at boot either way, so a misconfigured deploy is
+            // still visible immediately instead of only on the first save.
+            this.logger.warn(
+                'LANDING_REVALIDATION_ALLOWED_ORIGINS is not set - all landing revalidation requests will be rejected until it is configured.',
+            );
+        }
     }
 
     /**
@@ -77,7 +119,7 @@ export class LandingRevalidationService {
             return;
         }
         const brandDomain = new URL(target).host;
-        await this.post(target, 'settings', this.revalidateSecret, brandDomain);
+        await this.post(target, 'settings', this.revalidateSecret, brandDomain, brandId);
     }
 
     /**
@@ -85,10 +127,10 @@ export class LandingRevalidationService {
      * already has it in memory (e.g. delete handlers that captured it before
      * removing the brand row).
      */
-    async revalidateLandingUrl(landingUrl: string | null | undefined): Promise<void> {
+    async revalidateLandingUrl(landingUrl: string | null | undefined, brandId?: string): Promise<void> {
         const target = this.normalize(landingUrl) ?? this.normalize(this.fallbackLandingUrl);
         if (!target) return;
-        await this.post(target, 'settings', this.revalidateSecret);
+        await this.post(target, 'settings', this.revalidateSecret, undefined, brandId);
     }
 
     /**
@@ -112,8 +154,8 @@ export class LandingRevalidationService {
         }
         const brandDomain = new URL(base).host;
         await Promise.all([
-            this.post(base, 'settings', this.revalidateSecret, brandDomain),
-            this.post(base, 'home', this.homeRevalidateSecret, brandDomain),
+            this.post(base, 'settings', this.revalidateSecret, brandDomain, brandId),
+            this.post(base, 'home', this.homeRevalidateSecret, brandDomain, brandId),
         ]);
     }
 
@@ -144,9 +186,39 @@ export class LandingRevalidationService {
         route: 'home' | 'settings',
         secret: string,
         brandDomain?: string,
+        brandId?: string,
     ): Promise<void> {
         const qs = brandDomain ? `?brandDomain=${encodeURIComponent(brandDomain)}` : '';
         const url = `${baseUrl}/api/${route}/revalidate${qs}`;
+
+        // Audit M211: fail closed. baseUrl traces back to an admin-settable
+        // brand field (landingUrl/websiteUrl) validated only by @IsUrl, so it
+        // must never be trusted as a request target on its own - see the
+        // class-level comment for the full threat. Both checks run BEFORE the
+        // secret-bearing request is built; on rejection nothing is sent, no
+        // header goes anywhere, and the brand + rejected URL are logged so a
+        // misconfigured/malicious brand row is visible instead of silently
+        // skipped or silently sent.
+        let target: URL;
+        try {
+            target = new URL(url);
+        } catch {
+            this.logger.error(`Landing revalidation rejected: unparseable URL for brand ${brandId ?? 'unknown'} (${url})`);
+            return;
+        }
+        if (!isOriginAllowed(target, this.allowedOrigins)) {
+            this.logger.error(
+                `Landing revalidation rejected: origin not in LANDING_REVALIDATION_ALLOWED_ORIGINS for brand ${brandId ?? 'unknown'} (${target.origin})`,
+            );
+            return;
+        }
+        if (!(await resolvesToPublicAddressesOnly(target.hostname))) {
+            this.logger.error(
+                `Landing revalidation rejected: ${target.hostname} does not resolve to a public address for brand ${brandId ?? 'unknown'} (${url})`,
+            );
+            return;
+        }
+
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         const hasSecret = Boolean(secret);
         if (hasSecret) {

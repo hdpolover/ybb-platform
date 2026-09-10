@@ -2,12 +2,34 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { of, throwError } from 'rxjs';
+import { lookup } from 'node:dns/promises';
 import { LandingRevalidationService } from './landing-revalidation.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+
+// Audit M211: post() now resolves the target hostname via DNS before
+// sending. Mocked here so these tests exercise real HTTP-call wiring
+// without a real network lookup - defaults to "everything resolves public"
+// so the pre-existing tests (written before the SSRF guard existed) keep
+// asserting what they always asserted. The dedicated SSRF describe block
+// below overrides this per-test to prove the guard itself.
+jest.mock('node:dns/promises', () => ({
+    lookup: jest.fn(),
+}));
 
 const makeHttpService = () => ({
     post: jest.fn().mockReturnValue(of({ data: { revalidated: true } })),
 });
+
+// Every hostname used by the pre-existing tests below must be allow-listed
+// here (Audit M211 - an unlisted origin is now rejected before the POST is
+// even attempted), matching this file's existing fixtures exactly rather
+// than widening the allowlist to something more permissive.
+const DEFAULT_ALLOWED_ORIGINS = [
+    'https://istanbulyouthsummit.com',
+    'https://websiteurl.com',
+    'https://landingurl.com',
+    'https://fallback.example.com',
+].join(',');
 
 const makeConfigService = (overrides: Record<string, string> = {}) => ({
     get: jest.fn((key: string, fallback = '') => {
@@ -15,6 +37,7 @@ const makeConfigService = (overrides: Record<string, string> = {}) => ({
             LANDING_URL: '',
             SETTINGS_REVALIDATE_SECRET: 'settings-secret',
             HOME_REVALIDATE_SECRET: 'home-secret',
+            LANDING_REVALIDATION_ALLOWED_ORIGINS: DEFAULT_ALLOWED_ORIGINS,
             ...overrides,
         };
         return map[key] ?? fallback;
@@ -44,6 +67,11 @@ async function buildService(
 }
 
 describe('LandingRevalidationService', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (lookup as jest.Mock).mockResolvedValue([{ address: '8.8.8.8', family: 4 }]);
+    });
+
     describe('revalidateHomeAndSettingsForBrand', () => {
         it('POSTs to both /api/home/revalidate and /api/settings/revalidate with brandDomain', async () => {
             // Arrange
@@ -182,6 +210,89 @@ describe('LandingRevalidationService', () => {
             const service = await buildService(http, config, prisma);
 
             await service.revalidateForBrand('brand-xyz');
+
+            expect(http.post).not.toHaveBeenCalled();
+        });
+    });
+
+    // Audit M211 (SSRF): landingUrl/websiteUrl are admin-settable and only
+    // @IsUrl-validated, so an attacker (or a fat-fingered admin) can point
+    // this at an internal service, localhost, or the cloud metadata address.
+    // The Bearer secret must never be sent to a target that fails either
+    // check.
+    describe('SSRF guard', () => {
+        it('never sends the request when the origin is not in LANDING_REVALIDATION_ALLOWED_ORIGINS', async () => {
+            const http = makeHttpService();
+            const config = makeConfigService();
+            const prisma = makePrismaService({ websiteUrl: 'https://attacker.example.com', landingUrl: null });
+            const service = await buildService(http, config, prisma);
+
+            await service.revalidateForBrand('brand-attacker');
+
+            expect(http.post).not.toHaveBeenCalled();
+        });
+
+        it('never sends the request when the hostname resolves to a private/loopback address (metadata SSRF)', async () => {
+            (lookup as jest.Mock).mockResolvedValue([{ address: '169.254.169.254', family: 4 }]);
+            const http = makeHttpService();
+            // Origin allow-listed, but its DNS answer is the metadata address -
+            // the resolve step must still reject it.
+            const config = makeConfigService({
+                LANDING_REVALIDATION_ALLOWED_ORIGINS: 'https://istanbulyouthsummit.com',
+            });
+            const prisma = makePrismaService({ websiteUrl: 'https://istanbulyouthsummit.com', landingUrl: null });
+            const service = await buildService(http, config, prisma);
+
+            await service.revalidateForBrand('brand-rebind');
+
+            expect(http.post).not.toHaveBeenCalled();
+        });
+
+        it('never sends the Authorization header anywhere when a target is rejected', async () => {
+            const http = makeHttpService();
+            const config = makeConfigService();
+            const prisma = makePrismaService({ websiteUrl: 'https://attacker.example.com', landingUrl: null });
+            const service = await buildService(http, config, prisma);
+
+            await service.revalidateForBrand('brand-attacker');
+
+            expect(http.post).not.toHaveBeenCalledWith(
+                expect.anything(),
+                expect.anything(),
+                expect.objectContaining({ headers: expect.objectContaining({ Authorization: expect.anything() }) }),
+            );
+        });
+
+        it('still sends the request when both the origin allowlist and DNS resolution pass', async () => {
+            const http = makeHttpService();
+            const config = makeConfigService();
+            const prisma = makePrismaService({ websiteUrl: 'https://istanbulyouthsummit.com', landingUrl: null });
+            const service = await buildService(http, config, prisma);
+
+            await service.revalidateForBrand('brand-ok');
+
+            expect(http.post).toHaveBeenCalledTimes(1);
+        });
+
+        it('rejects when DNS resolution fails closed (NXDOMAIN/timeout)', async () => {
+            (lookup as jest.Mock).mockRejectedValue(new Error('ENOTFOUND'));
+            const http = makeHttpService();
+            const config = makeConfigService();
+            const prisma = makePrismaService({ websiteUrl: 'https://istanbulyouthsummit.com', landingUrl: null });
+            const service = await buildService(http, config, prisma);
+
+            await service.revalidateForBrand('brand-nxdomain');
+
+            expect(http.post).not.toHaveBeenCalled();
+        });
+
+        it('rejects every target when LANDING_REVALIDATION_ALLOWED_ORIGINS is unset, rather than defaulting open', async () => {
+            const http = makeHttpService();
+            const config = makeConfigService({ LANDING_REVALIDATION_ALLOWED_ORIGINS: '' });
+            const prisma = makePrismaService({ websiteUrl: 'https://istanbulyouthsummit.com', landingUrl: null });
+            const service = await buildService(http, config, prisma);
+
+            await service.revalidateForBrand('brand-noallowlist');
 
             expect(http.post).not.toHaveBeenCalled();
         });

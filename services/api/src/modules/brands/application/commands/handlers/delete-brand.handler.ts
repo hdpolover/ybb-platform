@@ -22,6 +22,6 @@ export class DeleteBrandHandler implements ICommandHandler<DeleteBrandCommand> {
         // a later lookup would miss. Prefer landingUrl; fall back to websiteUrl.
         const landingUrl = brand.landingUrl || brand.websiteUrl;
         await this.brandRepository.delete(id);
-        await this.landingRevalidation.revalidateLandingUrl(landingUrl);
+        await this.landingRevalidation.revalidateLandingUrl(landingUrl, id);
     }
 }
