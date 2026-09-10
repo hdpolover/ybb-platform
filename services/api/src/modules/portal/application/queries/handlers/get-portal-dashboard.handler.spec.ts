@@ -16,6 +16,12 @@ describe('GetPortalDashboardHandler', () => {
         file: {
             findFirst: jest.fn().mockResolvedValue(null),
         },
+        // Audit M55: announcement previews are read with a prefix projection
+        // ($queryRaw), so the nested `programAnnouncements` select is gone.
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        programAnnouncement: {
+            findMany: jest.fn().mockResolvedValue([]),
+        },
     };
 
     const mockCacheService = {
@@ -754,6 +760,8 @@ describe('GetPortalDashboardHandler - programId scoping', () => {
 
     const mockPrisma = {
         participantApplication: { findFirst: jest.fn() },
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        programAnnouncement: { findMany: jest.fn().mockResolvedValue([]) },
     };
 
     const mockCacheService = {

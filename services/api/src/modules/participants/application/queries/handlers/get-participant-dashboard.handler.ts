@@ -8,7 +8,7 @@ import {
     ParticipantDashboardApplicationSummaryDto,
     ParticipantDashboardAnnouncementDto
 } from '../../../presentation/dto/participant-dashboard.dto';
-import { buildRichTextPreview } from '@shared/utils/rich-text';
+import { fetchProgramAnnouncementPreviews } from '@shared/utils/announcement-preview';
 
 @Injectable()
 @QueryHandler(GetParticipantDashboardQuery)
@@ -57,16 +57,6 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
             include: {
                 program: {
                     include: {
-                        programAnnouncements: {
-                            orderBy: { createdAt: 'desc' },
-                            take: 3,
-                            where: { isActive: true },
-                            include: {
-                                reads: {
-                                    where: { userId: participant.userId }
-                                }
-                            }
-                        },
                         announcements: { // System Announcements linked to Program
                             where: { 
                                 isPublished: true,
@@ -118,13 +108,13 @@ export class GetParticipantDashboardHandler implements IQueryHandler<GetParticip
                  isRead: a.reads.length > 0
              }));
 
-             const progAnnouncements = latestApplication.program.programAnnouncements.map(a => ({
-                 id: a.id,
-                 title: a.title,
-                 date: a.createdAt,
-                 preview: buildRichTextPreview(a.content),
-                 isRead: a.reads.length > 0
-             }));
+             // Audit M55: same over-fetch as the portal dashboard - whole
+             // announcement bodies read to slice 100-character previews.
+             const progAnnouncements = await fetchProgramAnnouncementPreviews(
+                 this.readPrisma,
+                 latestApplication.program.id,
+                 participant.userId,
+             );
 
              // Combine and Sort
              announcements = [...sysAnnouncements, ...progAnnouncements]

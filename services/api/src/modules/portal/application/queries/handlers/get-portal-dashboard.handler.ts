@@ -15,7 +15,7 @@ import {
     PortalApplicationSummaryDto
 } from '../../../presentation/dto/portal-dashboard.dto';
 import { resolveMaskedFileUrl } from '@shared/utils/masked-file-url';
-import { buildRichTextPreview } from '@shared/utils/rich-text';
+import { fetchProgramAnnouncementPreviews } from '@shared/utils/announcement-preview';
 import { calculatePortalTotalRequired } from '../../utils/calculate-portal-total-required';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 import { isPastSubmissionDeadline, resolveSubmissionCutoff } from '@shared/utils/submission-deadline.util';
@@ -95,21 +95,6 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                                 isRequired: true,
                             },
                             orderBy: { order: 'asc' },
-                        },
-                        programAnnouncements: {
-                            where: { isActive: true },
-                            orderBy: { createdAt: 'desc' },
-                            take: 3,
-                            select: {
-                                id: true,
-                                title: true,
-                                content: true,
-                                createdAt: true,
-                                reads: {
-                                    where: { userId },
-                                    select: { id: true }
-                                }
-                            }
                         },
                         announcements: {
                             where: { isPublished: true },
@@ -195,6 +180,19 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         let announcements: { id: string; title: string; date: Date | null; preview: string; isRead: boolean }[] = [];
 
         if (latestApplication) {
+            // Audit M55: announcement previews are a separate read (Prisma has no
+            // prefix projection). Started here and awaited below so it overlaps the
+            // guidebook lookups instead of adding a round trip to the critical path.
+            const programAnnouncementPreviews = fetchProgramAnnouncementPreviews(
+                this.prisma,
+                latestApplication.program.id,
+                userId,
+            );
+            // The await sits after the guidebook lookups, which can throw; attaching
+            // a handler now keeps that from turning this into an unhandled rejection.
+            // The rejection itself is still delivered at the await.
+            programAnnouncementPreviews.catch(() => undefined);
+
             alerts = this.generateAlerts(hasOutstandingPayment);
             
             const tiers = (latestApplication.program.pricingTiers ?? []) as unknown as {
@@ -354,13 +352,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 isRead: a.reads.length > 0
             }));
 
-            const progAnnouncements = latestApplication.program.programAnnouncements.map(a => ({
-                id: a.id,
-                title: a.title,
-                date: a.createdAt,
-                preview: buildRichTextPreview(a.content),
-                isRead: a.reads.length > 0
-            }));
+            const progAnnouncements = await programAnnouncementPreviews;
 
             announcements = [...sysAnnouncements, ...progAnnouncements]
                 .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
