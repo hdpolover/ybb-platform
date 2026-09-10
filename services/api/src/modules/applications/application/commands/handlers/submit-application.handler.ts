@@ -85,7 +85,15 @@ export class SubmitApplicationHandler {
     // CRITICAL: Use Transaction for Atomicity
     // Ensures application update is atomic with status history
     // ========================================
-    const updated = await this.applicationRepository.update(application);
+    // Audit M112: only status/statusHistory/submittedAt are the columns THIS
+    // command changed - see ApplicationMapper.toPrismaUpdate for why the
+    // field list is explicit now (an unconditional spread of the stale
+    // pre-submit entity used to be able to clobber a concurrent scoring write).
+    const updated = await this.applicationRepository.update(application, [
+      'status',
+      'statusHistory',
+      'submittedAt',
+    ]);
     // Note: Repository layer handles transaction for status history updates
 
     // Record metric

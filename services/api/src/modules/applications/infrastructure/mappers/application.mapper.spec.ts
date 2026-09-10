@@ -65,10 +65,47 @@ describe('ApplicationMapper', () => {
       };
       const entity = buildEntity(documents);
 
-      const result = mapper.toPrismaUpdate(entity);
+      const result = mapper.toPrismaUpdate(entity, ['documents']);
 
       expect(result.documentFiles).toEqual(documents);
       expect(result).not.toHaveProperty('documents');
+    });
+
+    // M112: toPrismaUpdate used to spread every field on the entity
+    // regardless of what the caller actually changed - a stale scoreTotal/
+    // scoreStatus/scoreBreakdown read at request start could clobber a
+    // concurrent write from the rubric-scoring handler. Only fields the
+    // caller explicitly lists may appear in the patch.
+    it('only includes explicitly-requested fields in the patch', () => {
+      const entity = buildEntity({});
+
+      const result = mapper.toPrismaUpdate(entity, ['status']);
+
+      expect(result).toHaveProperty('status');
+      expect(result).not.toHaveProperty('scoreTotal');
+      expect(result).not.toHaveProperty('scoreBreakdown');
+      expect(result).not.toHaveProperty('scoreStatus');
+      expect(result).not.toHaveProperty('documentFiles');
+      expect(result).not.toHaveProperty('participantSnapshot');
+      expect(result).not.toHaveProperty('motivationLetter');
+    });
+
+    it('always bumps updatedAt and lastEditedAt regardless of the requested fields', () => {
+      const entity = buildEntity({});
+
+      const result = mapper.toPrismaUpdate(entity, []);
+
+      expect(result.updatedAt).toBeInstanceOf(Date);
+      expect(result.lastEditedAt).toBeInstanceOf(Date);
+    });
+
+    it('omits applicationCategory when the entity does not carry one, even if requested', () => {
+      const entity = buildEntity({});
+      entity.applicationCategory = null as unknown as ApplicationCategory;
+
+      const result = mapper.toPrismaUpdate(entity, ['applicationCategory']);
+
+      expect(result).not.toHaveProperty('applicationCategory');
     });
   });
 });

@@ -92,7 +92,7 @@ describe('ParticipantApplication.withdraw()', () => {
         const application = makeWithdrawableApplication();
 
         application.withdraw('admin-user-1');
-        const payload = new ApplicationMapper().toPrismaUpdate(application);
+        const payload = new ApplicationMapper().toPrismaUpdate(application, ['withdrawnAt', 'withdrawnBy']);
 
         expect(payload.withdrawnAt).toBe(application.withdrawnAt);
         expect(payload.withdrawnBy).toBe('admin-user-1');

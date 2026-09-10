@@ -220,7 +220,7 @@ export class ParticipantApplication {
     if (!this.statusHistory) {
       this.statusHistory = [];
     }
-    
+
     this.statusHistory.push({
       status: newStatus,
       changedAt: new Date().toISOString(),
@@ -229,3 +229,28 @@ export class ParticipantApplication {
     });
   }
 }
+
+/**
+ * Columns ApplicationMapper.toPrismaUpdate is allowed to write for a given
+ * command (audit M112 — see that method's comment in application.mapper.ts).
+ * Lives here, not in the mapper, so the domain-layer repository interface
+ * (application.repository.interface.ts) can reference it without importing
+ * across into the infrastructure layer.
+ */
+export type ApplicationUpdateField =
+  | 'status'
+  | 'applicationCategory'
+  | 'motivationLetter'
+  | 'achievements'
+  | 'experiences'
+  | 'documents'
+  | 'requirementFiles'
+  | 'twibbonLink'
+  | 'pricingTierId'
+  | 'reviewedBy'
+  | 'reviewedAt'
+  | 'reviewerNotes'
+  | 'statusHistory'
+  | 'submittedAt'
+  | 'withdrawnAt'
+  | 'withdrawnBy';

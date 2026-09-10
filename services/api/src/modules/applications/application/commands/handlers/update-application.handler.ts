@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
-import { ApplicationCategory } from '@core/entities/participant-application.entity';
+import { ApplicationCategory, ApplicationUpdateField } from '@core/entities/participant-application.entity';
 import { IApplicationRepository } from '@core/interfaces/repositories/application.repository.interface';
 import { UpdateApplicationCommand } from '../update-application.command';
 import { ApplicationResponseDto } from '../../dto/application-response.dto';
@@ -40,34 +40,48 @@ export class UpdateApplicationHandler {
       );
     }
 
-    // Apply updates
+    // Apply updates. Audit M112: `fields` tracks exactly which columns this
+    // request actually touched, so toPrismaUpdate only writes those - not
+    // every field on the entity (which would just be a stale read for
+    // anything the admin didn't include in this PUT, clobbering a concurrent
+    // write to e.g. scoreTotal/scoreStatus from the scoring handler).
+    const fields: ApplicationUpdateField[] = [];
+
     if (command.updates.applicationCategory) {
       application.applicationCategory = command.updates.applicationCategory as ApplicationCategory;
+      fields.push('applicationCategory');
     }
     if (command.updates.motivationLetter !== undefined) {
       application.motivationLetter = command.updates.motivationLetter;
+      fields.push('motivationLetter');
     }
     if (command.updates.achievements !== undefined) {
       application.achievements = command.updates.achievements;
+      fields.push('achievements');
     }
     if (command.updates.experiences !== undefined) {
       application.experiences = command.updates.experiences;
+      fields.push('experiences');
     }
     if (command.updates.documents) {
       application.documents = command.updates.documents;
+      fields.push('documents');
     }
     if (command.updates.requirementFiles) {
       application.requirementFiles = command.updates.requirementFiles;
+      fields.push('requirementFiles');
     }
     if (command.updates.twibbonLink !== undefined) {
       application.twibbonLink = command.updates.twibbonLink;
+      fields.push('twibbonLink');
     }
     if (command.updates.pricingTierId !== undefined) {
       application.pricingTierId = command.updates.pricingTierId;
+      fields.push('pricingTierId');
     }
 
     // Save to database
-    const updated = await this.applicationRepository.update(application);
+    const updated = await this.applicationRepository.update(application, fields);
 
     // This route (PUT /applications/:id) is admin-only, so the participant's
     // portal cache must be busted by looking up their real userId rather than

@@ -3,6 +3,7 @@ import { IApplicationRepository } from '@core/interfaces/repositories/applicatio
 import {
   ParticipantApplication,
   ApplicationStatus,
+  ApplicationUpdateField,
   ScoreStatus,
 } from '@core/entities/participant-application.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -332,8 +333,11 @@ export class ApplicationRepository implements IApplicationRepository {
     return this.mapper.toDomain(created);
   }
 
-  async update(application: ParticipantApplication): Promise<ParticipantApplication> {
-    const data = this.mapper.toPrismaUpdate(application);
+  async update(
+    application: ParticipantApplication,
+    fields: readonly ApplicationUpdateField[],
+  ): Promise<ParticipantApplication> {
+    const data = this.mapper.toPrismaUpdate(application, fields);
 
     const updated = await this.prisma.participantApplication.update({
       where: { id: application.id },

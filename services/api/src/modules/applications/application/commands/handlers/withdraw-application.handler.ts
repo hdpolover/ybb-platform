@@ -43,8 +43,15 @@ export class WithdrawApplicationHandler {
     application.withdraw(command.userId);
     application.addStatusToHistory(application.status, command.userId, 'Application withdrawn');
 
-    // Save to database
-    const updated = await this.applicationRepository.update(application);
+    // Save to database. Audit M112: only status/statusHistory/withdrawnAt/
+    // withdrawnBy are the columns THIS command changed - see
+    // ApplicationMapper.toPrismaUpdate for why the field list is explicit now.
+    const updated = await this.applicationRepository.update(application, [
+      'status',
+      'statusHistory',
+      'withdrawnAt',
+      'withdrawnBy',
+    ]);
 
     // This route (POST /applications/:id/withdraw) is admin-only, so the
     // participant's portal cache must be busted by looking up their real

@@ -1,4 +1,4 @@
-import { ParticipantApplication, ApplicationStatus, ScoreStatus } from '@core/entities/participant-application.entity';
+import { ParticipantApplication, ApplicationStatus, ApplicationUpdateField, ScoreStatus } from '@core/entities/participant-application.entity';
 import { PaymentStatus } from '@prisma/client';
 
 /**
@@ -97,9 +97,14 @@ export interface IApplicationRepository {
   create(application: ParticipantApplication): Promise<ParticipantApplication>;
 
   /**
-   * Update existing application
+   * Update existing application.
+   *
+   * `fields` (audit M112) is the caller's explicit list of columns this
+   * command actually changed on `application` - see ApplicationUpdateField
+   * and the mapper.toPrismaUpdate comment for why this exists. There is no
+   * "spread everything" default: every caller must declare its own intent.
    */
-  update(application: ParticipantApplication): Promise<ParticipantApplication>;
+  update(application: ParticipantApplication, fields: readonly ApplicationUpdateField[]): Promise<ParticipantApplication>;
 
   /**
    * Delete application (soft delete)

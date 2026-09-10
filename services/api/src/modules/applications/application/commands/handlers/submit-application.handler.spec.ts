@@ -270,7 +270,7 @@ describe('SubmitApplicationHandler (admin path)', () => {
 
             expect(app.submit).toHaveBeenCalled();
             expect(app.addStatusToHistory).toHaveBeenCalled();
-            expect(mockAppRepository.update).toHaveBeenCalledWith(app);
+            expect(mockAppRepository.update).toHaveBeenCalledWith(app, ['status', 'statusHistory', 'submittedAt']);
             expect(mockMetrics.applicationSubmittedTotal.inc).toHaveBeenCalled();
             expect(mockCacheService.invalidatePortalCache).toHaveBeenCalledWith('participant-user-1');
             expect(mockReferralFunnel.advanceToApplied).toHaveBeenCalledWith(
