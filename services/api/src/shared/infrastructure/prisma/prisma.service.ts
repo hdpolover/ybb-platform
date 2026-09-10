@@ -438,9 +438,14 @@ function toCamelCase(str: string) {
   return str.charAt(0).toLowerCase() + str.slice(1);
 }
 
+const deletedAtModelCache = new Map<string, boolean>();
 function modelHasDeletedAt(modelName: string) {
+  const cached = deletedAtModelCache.get(modelName);
+  if (cached !== undefined) return cached;
   const model = Prisma.dmmf.datamodel.models.find((m) => m.name === modelName);
-  return model?.fields.some((f) => f.name === 'deletedAt') ?? false;
+  const hasDeletedAt = model?.fields.some((f) => f.name === 'deletedAt') ?? false;
+  deletedAtModelCache.set(modelName, hasDeletedAt);
+  return hasDeletedAt;
 }
 
 type RelationField = { type: string; isList: boolean };
