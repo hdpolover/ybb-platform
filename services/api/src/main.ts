@@ -73,7 +73,7 @@ async function createConsumerApp(
   });
 }
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // DELIBERATELY NOT SET: app.set('trust proxy', ...).
@@ -112,75 +112,6 @@ async function bootstrap() {
     throw new Error('RABBITMQ_URL is required and must be set - no insecure default is allowed.');
   }
   const retryDelayMs = parsePositiveInt(process.env.RABBITMQ_RETRY_DELAY_MS, 15000);
-  const [
-    auditQueueOptions,
-    reportingQueueOptions,
-    paymentEventsQueueOptions,
-    loaEventsQueueOptions,
-    reminderEventsQueueOptions,
-  ] = await Promise.all([
-    resolvePrimaryQueueOptions(rabbitMqUrl, 'audit_log_queue'),
-    resolvePrimaryQueueOptions(rabbitMqUrl, 'reporting_queue'),
-    resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-payment-events'),
-    resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-loa-events'),
-    resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-reminder-events'),
-  ]);
-
-  await ensureRetryTopology(rabbitMqUrl, 'audit_log_queue', {
-    retryDelayMs,
-    primaryQueueOptions: auditQueueOptions,
-    binding: {
-      exchange: 'ybb.events',
-      exchangeType: 'topic',
-      routingKey: '#',
-    },
-  });
-  await ensureRetryTopology(rabbitMqUrl, 'reporting_queue', {
-    retryDelayMs,
-    primaryQueueOptions: reportingQueueOptions,
-    binding: {
-      exchange: 'ybb.events',
-      exchangeType: 'topic',
-      routingKey: '#',
-    },
-  });
-  await ensureRetryTopology(rabbitMqUrl, 'api-service-payment-events', {
-    retryDelayMs,
-    primaryQueueOptions: paymentEventsQueueOptions,
-    binding: {
-      exchange: 'payment-events',
-      exchangeType: 'topic',
-      routingKey: 'payment.#',
-    },
-  });
-  // Per-recipient LOA email outcomes reported back by services/notification,
-  // which has no database of its own. Narrow routing key (not 'loa.#') so
-  // this queue only ever carries the one event it handles — an unhandled
-  // pattern here would be ack-dropped, but a queue that only receives what it
-  // handles is easier to reason about when the DLQ is non-empty.
-  await ensureRetryTopology(rabbitMqUrl, 'api-service-loa-events', {
-    retryDelayMs,
-    primaryQueueOptions: loaEventsQueueOptions,
-    binding: {
-      exchange: 'ybb.events',
-      exchangeType: 'topic',
-      routingKey: 'loa.batch.send_result',
-    },
-  });
-  // Per-recipient outcomes for admin-scheduled participant reminders, reported
-  // back by services/notification. Its own queue rather than a second binding
-  // on api-service-loa-events: ensureRetryTopology takes one binding per queue,
-  // and a queue that only ever receives what it handles is easier to reason
-  // about when the DLQ is non-empty.
-  await ensureRetryTopology(rabbitMqUrl, 'api-service-reminder-events', {
-    retryDelayMs,
-    primaryQueueOptions: reminderEventsQueueOptions,
-    binding: {
-      exchange: 'ybb.events',
-      exchangeType: 'topic',
-      routingKey: 'reminder.participant.send_result',
-    },
-  });
 
   // HTTP response compression (audit M170/M176). Cloudflare already compresses
   // the client-facing hop (client -> Cloudflare -> Traefik -> API, documented
@@ -253,10 +184,155 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3000;
 
+  // M171: the HTTP server must accept connections even when RabbitMQ is
+  // completely unreachable (or its topology has drifted, e.g. a changed
+  // RABBITMQ_RETRY_DELAY_MS against an already-declared `.retry` queue).
+  // Everything above this line is HTTP-only setup with no broker I/O, so
+  // `app.listen` goes up here, ABOVE all RabbitMQ work — topology probes,
+  // retry-topology assertion, and consumer creation all happen afterwards,
+  // in the background, and are not allowed to block or kill boot. See
+  // startRabbitMqConsumers below for the retry/backoff loop.
+  await app.listen(port);
+
+  console.log(`\n🚀 Application is running on: http://localhost:${port}`);
+  console.log(`📚 API Documentation: http://localhost:${port}/docs\n`);
+
+  // Fire-and-forget: startRabbitMqConsumers retries indefinitely on failure
+  // (see RMQ_STARTUP_MAX_DELAY_MS) and is not expected to reject. The .catch
+  // here is a backstop, not the primary error handling path — if this ever
+  // fires it means that invariant broke, and process.on('unhandledRejection')
+  // above would otherwise have been the only thing to notice.
+  startRabbitMqConsumers(rabbitMqUrl, retryDelayMs).catch((err: unknown) => {
+    console.error(
+      '[FATAL-CANDIDATE] RabbitMQ consumer startup loop exited without retrying — this should be unreachable:',
+      err instanceof Error ? err.stack ?? err.message : err,
+    );
+  });
+}
+
+if (require.main === module) {
+  bootstrap().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
+
+const RMQ_STARTUP_INITIAL_DELAY_MS = 1000;
+const RMQ_STARTUP_MAX_DELAY_MS = 60000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Exponential backoff, doubling from RMQ_STARTUP_INITIAL_DELAY_MS and capped
+// at RMQ_STARTUP_MAX_DELAY_MS. Never gives up: a broker that comes back 20
+// minutes after boot must be reconnected to without a container restart.
+export function computeRabbitMqBackoffDelayMs(attempt: number): number {
+  const delay = RMQ_STARTUP_INITIAL_DELAY_MS * 2 ** (attempt - 1);
+  return Math.min(delay, RMQ_STARTUP_MAX_DELAY_MS);
+}
+
+// Retries connectRabbitMqConsumers indefinitely with bounded exponential
+// backoff instead of throwing. A broker outage at boot (or one that starts
+// mid-retry) must not crash the process — the HTTP app is already listening
+// by the time this is called (see bootstrap above).
+export async function startRabbitMqConsumers(rabbitMqUrl: string, retryDelayMs: number): Promise<void> {
+  let attempt = 0;
+  for (;;) {
+    attempt += 1;
+    try {
+      await connectRabbitMqConsumers(rabbitMqUrl, retryDelayMs);
+      console.log(`[rabbitmq] consumers connected on attempt ${attempt}.`);
+      return;
+    } catch (error) {
+      const delay = computeRabbitMqBackoffDelayMs(attempt);
+      console.error(
+        `[rabbitmq] consumer startup failed on attempt ${attempt}; retrying in ${delay}ms:`,
+        error instanceof Error ? error.stack ?? error.message : error,
+      );
+      await sleep(delay);
+    }
+  }
+}
+
+// One full attempt at bringing up RabbitMQ: topology resolution, retry
+// topology, and the five consumer microservices. Throws on any failure —
+// startRabbitMqConsumers is what turns that into a retry instead of a crash.
+export async function connectRabbitMqConsumers(rabbitMqUrl: string, retryDelayMs: number): Promise<void> {
+  const [
+    auditQueueOptions,
+    reportingQueueOptions,
+    paymentEventsQueueOptions,
+    loaEventsQueueOptions,
+    reminderEventsQueueOptions,
+  ] = await Promise.all([
+    resolvePrimaryQueueOptions(rabbitMqUrl, 'audit_log_queue'),
+    resolvePrimaryQueueOptions(rabbitMqUrl, 'reporting_queue'),
+    resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-payment-events'),
+    resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-loa-events'),
+    resolvePrimaryQueueOptions(rabbitMqUrl, 'api-service-reminder-events'),
+  ]);
+
+  await ensureRetryTopology(rabbitMqUrl, 'audit_log_queue', {
+    retryDelayMs,
+    primaryQueueOptions: auditQueueOptions,
+    binding: {
+      exchange: 'ybb.events',
+      exchangeType: 'topic',
+      routingKey: '#',
+    },
+  });
+  await ensureRetryTopology(rabbitMqUrl, 'reporting_queue', {
+    retryDelayMs,
+    primaryQueueOptions: reportingQueueOptions,
+    binding: {
+      exchange: 'ybb.events',
+      exchangeType: 'topic',
+      routingKey: '#',
+    },
+  });
+  await ensureRetryTopology(rabbitMqUrl, 'api-service-payment-events', {
+    retryDelayMs,
+    primaryQueueOptions: paymentEventsQueueOptions,
+    binding: {
+      exchange: 'payment-events',
+      exchangeType: 'topic',
+      routingKey: 'payment.#',
+    },
+  });
+  // Per-recipient LOA email outcomes reported back by services/notification,
+  // which has no database of its own. Narrow routing key (not 'loa.#') so
+  // this queue only ever carries the one event it handles — an unhandled
+  // pattern here would be ack-dropped, but a queue that only receives what it
+  // handles is easier to reason about when the DLQ is non-empty.
+  await ensureRetryTopology(rabbitMqUrl, 'api-service-loa-events', {
+    retryDelayMs,
+    primaryQueueOptions: loaEventsQueueOptions,
+    binding: {
+      exchange: 'ybb.events',
+      exchangeType: 'topic',
+      routingKey: 'loa.batch.send_result',
+    },
+  });
+  // Per-recipient outcomes for admin-scheduled participant reminders, reported
+  // back by services/notification. Its own queue rather than a second binding
+  // on api-service-loa-events: ensureRetryTopology takes one binding per queue,
+  // and a queue that only ever receives what it handles is easier to reason
+  // about when the DLQ is non-empty.
+  await ensureRetryTopology(rabbitMqUrl, 'api-service-reminder-events', {
+    retryDelayMs,
+    primaryQueueOptions: reminderEventsQueueOptions,
+    binding: {
+      exchange: 'ybb.events',
+      exchangeType: 'topic',
+      routingKey: 'reminder.participant.send_result',
+    },
+  });
+
   // Each consumer runs in its own DI container so only its controller's
   // @EventPattern handlers are registered against its queue. This is what stops
   // the previous app-wide handler fan-out (double/triple processing). The HTTP
-  // `app` above intentionally has NO microservice attached.
+  // `app` created in bootstrap() intentionally has NO microservice attached.
   const deserializer = new RoutingKeyDeserializer();
   const consumerSpecs: Array<{ queue: string; module: Type<unknown>; queueOptions: PrimaryQueueOptions }> = [
     { queue: 'audit_log_queue', module: AuditConsumerModule, queueOptions: auditQueueOptions },
@@ -278,16 +354,9 @@ async function bootstrap() {
       }),
     ),
   );
-
-  await app.listen(port);
-
-  console.log(`\n🚀 Application is running on: http://localhost:${port}`);
-  console.log(`📚 API Documentation: http://localhost:${port}/docs\n`);
 }
 
-bootstrap();
-
-async function ensureRetryTopology(
+export async function ensureRetryTopology(
   rabbitMqUrl: string,
   queueName: string,
   options: {
@@ -334,6 +403,22 @@ async function ensureRetryTopology(
       );
     }
   } catch (error) {
+    if (isQueuePreconditionFailure(error)) {
+      // M171: give ensureRetryTopology the same 406 PRECONDITION_FAILED
+      // tolerance resolvePrimaryQueueOptions already has for the primary
+      // queue. Without this, a changed RABBITMQ_RETRY_DELAY_MS (which changes
+      // the x-message-ttl argument this function asserts on `${queueName}.retry`)
+      // crash-loops the whole API against an already-declared queue. Leave the
+      // existing topology in place and log loudly instead of throwing.
+      console.warn(
+        `[rabbitmq] retry topology assertion for queue "${queueName}" hit 406 PRECONDITION_FAILED — ` +
+        `the existing queue was declared with different arguments (check RABBITMQ_RETRY_DELAY_MS ` +
+        `against x-message-ttl on ${queueName}.retry, and services/shared-rabbitmq/scripts/init_rabbitmq.py, ` +
+        `which pre-declares some of these queues). Leaving the existing topology in place instead of crashing.`,
+      );
+      return;
+    }
+
     // Name the queue. A channel-level broker error here is almost always an
     // argument mismatch against a queue that already exists, and the amqplib
     // error alone says only "Channel closed" — see the finally block below.
