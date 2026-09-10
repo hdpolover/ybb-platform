@@ -36,3 +36,34 @@ describe('PaymentsController getPaymentDetail - M148 id validation', () => {
     await expect(pipe.transform(uuid, metadata as never)).resolves.toBe(uuid);
   });
 });
+
+// Audit N-2026-09-09-B: POST /payments/intents/:id/confirm bound `id` as a
+// bare @Param('id') with no shape validation. Same fix as M148: bind
+// `@Param('id', new ParseUUIDPipe())`. Verified same way M148's own test does.
+describe('PaymentsController confirmPayment - N-2026-09-09-B id validation', () => {
+  const pipe = new ParseUUIDPipe();
+  const metadata = { type: 'param', data: 'id' } as const;
+
+  it('rejects a path-traversal id', async () => {
+    await expect(pipe.transform('foo/../confirm', metadata as never)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('rejects a percent-encoded path separator', async () => {
+    await expect(pipe.transform('foo%2Fbar', metadata as never)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('rejects a non-UUID plain string', async () => {
+    await expect(pipe.transform('not-a-uuid', metadata as never)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('accepts a well-formed UUID unchanged', async () => {
+    const uuid = '4202cef4-9e6d-4772-bea7-e01a719138fe';
+    await expect(pipe.transform(uuid, metadata as never)).resolves.toBe(uuid);
+  });
+});

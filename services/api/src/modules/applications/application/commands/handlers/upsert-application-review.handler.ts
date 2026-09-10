@@ -1,6 +1,6 @@
 // services/api/src/modules/applications/application/commands/handlers/upsert-application-review.handler.ts
 import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
-import { Prisma, ScoringStage, ScoreStatus } from '@prisma/client';
+import { ApplicationStatus, Prisma, ScoringStage, ScoreStatus } from '@prisma/client';
 import { IApplicationRepository } from '@core/interfaces/repositories/application.repository.interface';
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
 import {
@@ -30,6 +30,15 @@ import {
 // maxScore on a criterion. Reject before Postgres ever sees it, per the VarChar/Decimal
 // overflow defect class already hit three times in this codebase.
 const MAX_DECIMAL_5_2 = 999.99;
+
+// Audit M118: an application in one of these states cannot meaningfully be
+// scored — draft was never submitted, and withdrawn/rejected are terminal.
+// Verified against the actual ApplicationStatus enum in schema.prisma.
+const UNSCORABLE_APPLICATION_STATUSES: ReadonlySet<ApplicationStatus> = new Set([
+  ApplicationStatus.draft,
+  ApplicationStatus.withdrawn,
+  ApplicationStatus.rejected,
+]);
 
 const SCHEMA_CATEGORIES_INCLUDE = {
   categories: {
@@ -174,6 +183,12 @@ export class UpsertApplicationReviewHandler {
       throw new NotFoundException(`Application ${command.applicationId} not found`);
     }
 
+    if (UNSCORABLE_APPLICATION_STATUSES.has(application.status)) {
+      throw new ConflictException(
+        `Cannot score an application with status "${application.status}".`,
+      );
+    }
+
     const existingReview = await this.prisma.applicationReview.findUnique({
       where: { applicationId_stage: { applicationId: command.applicationId, stage: command.stage } },
     });
@@ -283,11 +298,27 @@ export class UpsertApplicationReviewHandler {
       });
 
       if (command.payload.status === 'submitted') {
-        const outcome = resolveStageOutcome(command.stage, finalTotal, toNumber(finalSchema.passThreshold));
-        await tx.participantApplication.update({
-          where: { id: command.applicationId },
-          data: { scoreTotal: finalTotal, scoreStatus: outcome as ScoreStatus },
-        });
+        // Audit M118: the denormalized scoreTotal/scoreStatus on
+        // participant_applications reflect whichever stage last wrote them.
+        // Once an interview-stage review has been submitted, re-submitting
+        // the application-stage rubric must not regress those fields back to
+        // the application-stage outcome.
+        const interviewAlreadySubmitted =
+          command.stage === ScoringStage.application &&
+          (await tx.applicationReview.findUnique({
+            where: {
+              applicationId_stage: { applicationId: command.applicationId, stage: ScoringStage.interview },
+            },
+            select: { status: true },
+          }))?.status === 'submitted';
+
+        if (!interviewAlreadySubmitted) {
+          const outcome = resolveStageOutcome(command.stage, finalTotal, toNumber(finalSchema.passThreshold));
+          await tx.participantApplication.update({
+            where: { id: command.applicationId },
+            data: { scoreTotal: finalTotal, scoreStatus: outcome as ScoreStatus },
+          });
+        }
       }
     });
 

@@ -39,7 +39,13 @@ export class PaymentsController {
     @ApiOperation({ summary: 'Confirm payment (charge)' })
     @ApiResponse({ status: 200, description: 'Payment processing initiated' })
     async confirmPayment(
-        @Param('id') id: string,
+        // Audit N-2026-09-09-B: id used to be a bare @Param('id') string. Same
+        // pattern as M47/M148 (ParseUUIDPipe) so a malformed id 400s here
+        // instead of reaching the Go payment service. Note this call goes over
+        // gRPC (ProcessPaymentCommand -> PaymentGrpcClient), not an interpolated
+        // HTTP path, so there is no encodeURIComponent site to pair this with
+        // here.
+        @Param('id', new ParseUUIDPipe()) id: string,
         @Body() dto: ConfirmPaymentDto,
         @CurrentUser() user: CurrentUserData,
     ): Promise<ProcessPaymentResponse> {

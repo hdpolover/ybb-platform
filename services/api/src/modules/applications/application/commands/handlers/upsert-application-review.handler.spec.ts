@@ -346,6 +346,54 @@ describe('UpsertApplicationReviewHandler', () => {
     });
   });
 
+  // Audit M118.
+  it('rejects scoring outright when the application status is draft', async () => {
+    mockApplicationRepo.findById.mockResolvedValue({ ...makeApplication(), status: 'draft' });
+    stub(ScoringStage.application);
+
+    await expect(
+      handler.execute(new UpsertApplicationReviewCommand(applicationId, ScoringStage.application, 'admin-1', UserRole.ADMIN, validPayload)),
+    ).rejects.toThrow(ConflictException);
+    expect(mockScoringRubricRepo.findActiveRubric).not.toHaveBeenCalled();
+  });
+
+  it('rejects scoring outright when the application status is withdrawn', async () => {
+    mockApplicationRepo.findById.mockResolvedValue({ ...makeApplication(), status: 'withdrawn' });
+    stub(ScoringStage.application);
+
+    await expect(
+      handler.execute(new UpsertApplicationReviewCommand(applicationId, ScoringStage.application, 'admin-1', UserRole.ADMIN, validPayload)),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('rejects scoring outright when the application status is rejected', async () => {
+    mockApplicationRepo.findById.mockResolvedValue({ ...makeApplication(), status: 'rejected' });
+    stub(ScoringStage.application);
+
+    await expect(
+      handler.execute(new UpsertApplicationReviewCommand(applicationId, ScoringStage.application, 'admin-1', UserRole.ADMIN, validPayload)),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('re-submitting the application-stage rubric after a submitted interview review exists does not regress the denormalized ParticipantApplication fields', async () => {
+    stub(ScoringStage.application, { passThreshold: 75 });
+    mockTx.applicationReview.findUnique.mockImplementation(({ where }: any) => {
+      if (where.applicationId_stage.stage === ScoringStage.interview) {
+        return Promise.resolve({ id: 'review-interview', status: 'submitted' });
+      }
+      return Promise.resolve(null);
+    });
+
+    await handler.execute(new UpsertApplicationReviewCommand(applicationId, ScoringStage.application, 'admin-1', UserRole.ADMIN, validPayload));
+
+    // The review row itself (and its score items) still get written...
+    expect(mockTx.applicationReview.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ status: 'submitted', totalScore: 86 }) }),
+    );
+    // ...but the denormalized fields, already advanced by the interview stage, are left alone.
+    expect(mockTx.participantApplication.update).not.toHaveBeenCalled();
+  });
+
   it('schema-pin race: rescoring uses whatever schema the transaction actually persisted, not the one this call speculated', async () => {
     stub(ScoringStage.application);
     const winnerSchemaId = 'schema-application-v2-concurrent-winner';

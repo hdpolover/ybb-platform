@@ -552,6 +552,28 @@ describe('ManageProgramContentHandlers', () => {
                 );
             });
 
+            // Audit M5 investigated (see the note above CreateValidityPeriodHandler)
+            // and reverted; the duplicate check stays raw-vs-raw. This covers the
+            // one case that matters: an exact-duplicate retry where the existing
+            // sibling already happens to sit at WIB midnight.
+            it('rejects an exact duplicate of an already-snapped sibling', async () => {
+                const handler = await buildModule(CreateValidityPeriodHandler);
+                const command = new CreateValidityPeriodCommand(
+                    { pricingTierId: 'tier-1', startDate: '2026-08-31T17:00:00.000Z', endDate: '2026-09-30T16:59:00.000Z' },
+                    'user-1',
+                );
+                vpRepository.findPricingTierById.mockResolvedValue({
+                    id: 'tier-1',
+                    programId: 'prog-1',
+                    validityPeriods: [
+                        { id: 'p1', startDate: new Date('2026-08-31T17:00:00.000Z'), endDate: new Date('2026-09-30T16:59:00.000Z'), description: null },
+                    ],
+                });
+
+                await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
+                expect(vpRepository.createValidityPeriod).not.toHaveBeenCalled();
+            });
+
             it('creates the period and returns overlap/coverage-gap warnings without blocking the save', async () => {
                 // Real prod: MEYS fully-funded had two live overlapping periods.
                 // Overlap must surface as a warning, not reject the write.
@@ -677,6 +699,40 @@ describe('ManageProgramContentHandlers', () => {
                     swallowErrors: true,
                     revalidate: { kind: 'homeAndSettings' },
                 });
+            });
+
+            // Audit M5 investigated and reverted (see the note in the source file);
+            // covers the update-path equivalent of the create-path test above.
+            it('rejects an update that would exactly duplicate a sibling already at WIB midnight', async () => {
+                const handler = await buildModule(UpdateValidityPeriodHandler);
+                const command = new UpdateValidityPeriodCommand(
+                    'period-2',
+                    { startDate: '2026-08-31T17:00:00.000Z' },
+                    'user-1',
+                );
+                const period1 = {
+                    id: 'period-1',
+                    pricingTierId: 'tier-1',
+                    startDate: new Date('2026-08-31T17:00:00.000Z'),
+                    endDate: new Date('2026-09-30T16:59:00.000Z'),
+                    description: 'Period 1',
+                };
+                const period2 = {
+                    id: 'period-2',
+                    pricingTierId: 'tier-1',
+                    startDate: new Date('2026-10-01T00:00:00.000Z'),
+                    endDate: new Date('2026-09-30T16:59:00.000Z'),
+                    description: 'Period 2',
+                };
+                vpRepository.findValidityPeriodById.mockResolvedValue(period2);
+                vpRepository.findPricingTierById.mockResolvedValue({
+                    id: 'tier-1',
+                    programId: 'prog-1',
+                    validityPeriods: [period1, period2],
+                });
+
+                await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
+                expect(vpRepository.updateValidityPeriod).not.toHaveBeenCalled();
             });
 
             it('rejects an update that would invert the range', async () => {

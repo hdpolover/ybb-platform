@@ -1636,6 +1636,29 @@ export class DeleteProgramPricingTierHandler implements ICommandHandler<DeletePr
 }
 
 // --- Validity Period Handlers ---
+//
+// Audit M5 investigated (both handlers below): the audit's prescription was
+// to duplicate-check `assertNoDuplicatePeriod` against the SNAPPED candidate
+// start (after snapEarliestPeriodStart) instead of the raw typed value,
+// claiming a retried save of the earliest period could slip past the
+// duplicate guard. Tried and reverted:
+//   1. snapEarliestPeriodStart only widens a candidate to WIB midnight when
+//      it is <= every sibling's stored start (isEarliest). Any sibling
+//      already pinned at that same day's WIB midnight is, by construction,
+//      earlier than or equal to any other same-day instant, so a later-typed
+//      candidate can never satisfy isEarliest against it — the widened
+//      result can only coincide with a sibling's stored value when the raw
+//      candidate was already identical to it. The raw-vs-raw comparison
+//      already catches that case; duplicate-checking the snapped value adds
+//      no coverage the audit claims it does.
+//   2. Duplicate-checking the snapped value instead actively REGRESSES the
+//      one case that matters: a genuinely byte-identical retry against the
+//      tier's own first (not-yet-widened) period. Reordering makes the new
+//      candidate widen to midnight before comparison while the existing
+//      duplicate sibling's raw, non-midnight stored value does not move,
+//      so the two no longer compare equal and the retry is wrongly allowed.
+// Kept the original ordering: duplicate-check the raw typed value, snap
+// only the value that gets persisted.
 @CommandHandler(CreateValidityPeriodCommand)
 export class CreateValidityPeriodHandler implements ICommandHandler<CreateValidityPeriodCommand> {
     constructor(
@@ -1658,6 +1681,11 @@ export class CreateValidityPeriodHandler implements ICommandHandler<CreateValidi
         assertValidPeriodRange(rawStartDate, endDate);
         const existingTier = await this.repository.findPricingTierById(pricingTierId);
         const siblings = existingTier?.validityPeriods ?? [];
+        // Audit M5 investigated: switching this to duplicate-check the SNAPPED
+        // candidate (post-widening) instead of the raw typed value was tried
+        // and reverted — see the M5 note in the class doc comment above this
+        // handler group for why. Raw-vs-raw is what actually catches a
+        // byte-identical retry submission.
         assertNoDuplicatePeriod({ startDate: rawStartDate, endDate }, siblings);
 
         // If nothing else on the tier starts earlier, this new period becomes
@@ -1707,6 +1735,8 @@ export class UpdateValidityPeriodHandler implements ICommandHandler<UpdateValidi
         assertValidPeriodRange(rawStartDate, endDate);
         const existingTier = await this.repository.findPricingTierById(existing.pricingTierId);
         const siblings = (existingTier?.validityPeriods ?? []).filter((p) => p.id !== command.id);
+        // Audit M5 investigated and reverted — see the note above the create
+        // handler in this section for why raw-vs-raw is kept here too.
         assertNoDuplicatePeriod({ startDate: rawStartDate, endDate }, siblings);
 
         // Only re-pin the start when it's actually being changed — and only if
