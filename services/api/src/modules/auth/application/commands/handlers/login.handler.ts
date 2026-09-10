@@ -284,6 +284,17 @@ export class LoginHandler {
     // logSuccessfulLogin is deliberately NOT a hard Promise.all member: a
     // logging failure must never fail a login, so its rejection is caught
     // and only logged, never rethrown.
+    //
+    // Known, accepted tradeoff: userSession.create now runs in the same
+    // Promise.all as the other three writes, so if a sibling (the counter
+    // reset or the participant/application chain) rejects, the session row
+    // can still have been written for a login that ultimately throws and
+    // returns 500. The client never receives the signed refresh token in
+    // that case, so the exposure is an orphaned, unusable row, not a live
+    // credential, and it self-expires in 7 days (`expiresAt` below). Do NOT
+    // "fix" this by pulling userSession.create back into a serial chain —
+    // user_sessions is already ~109MB in prod; the goal here is fewer
+    // sequential round trips, not more rows written.
     const [, { participant, applicationResult }] = await Promise.all([
       this.prisma.user.update({
         where: { id: user.id },

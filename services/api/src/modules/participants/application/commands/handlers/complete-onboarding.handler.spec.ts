@@ -184,7 +184,7 @@ describe('CompleteOnboardingHandler - referral attribution', () => {
         mockReferralTx.ambassadorReferral.create.mockResolvedValue({});
         mockReferralTx.ambassador.update.mockResolvedValue({});
 
-        await handler.execute(
+        const result = await handler.execute(
             new CompleteOnboardingCommand('user-1', { ...baseDto, referralCode: 'REFCODE' }),
         );
 
@@ -197,6 +197,49 @@ describe('CompleteOnboardingHandler - referral attribution', () => {
             },
         });
         expectNoOuterWrites(mockPrisma);
+        // Regression pin: linkReferral runs AFTER unitOfWork.execute has
+        // already returned `result` (id: 'participant-1', referralCode:
+        // null from the upsert mock above). The handler must merge the code
+        // linkReferral actually persisted back into the response, not
+        // return the stale pre-link value.
+        expect(result.referralCode).toBe('REFCODE');
+    });
+
+    // Regression pin (post-review of the M202 commit): the onboarding
+    // transaction returns `result` BEFORE linkReferral runs, so `result`
+    // itself never carries the just-persisted referralCode. The handler must
+    // merge linkReferral's own report of what it wrote back into the
+    // response — re-reading the participant just for this would be
+    // redundant, since linkReferral already knows the value.
+    it('returns a participant whose referralCode matches a referral code that resolves to a live ambassador', async () => {
+        mockReferralTx.ambassador.findFirst.mockResolvedValue(ambassador);
+        mockReferralTx.participantApplication.findMany.mockResolvedValue([{ programId: 'applied-program' }]);
+        mockReferralTx.ambassadorReferral.create.mockResolvedValue({});
+        mockReferralTx.ambassador.update.mockResolvedValue({});
+        // Existing participant row, re-onboarding: no referralCode on file
+        // yet, so this exercises the tx.participant.update branch of step 6,
+        // not the create() path where referralCode is seeded up front.
+        mockOnboardingTx.participant.upsert.mockResolvedValue({ id: 'participant-1', referralCode: null });
+        mockReferralTx.participant.findUnique.mockResolvedValue({ referralCode: null });
+        mockReferralTx.participant.update.mockResolvedValue({ id: 'participant-1', referralCode: 'REFCODE' });
+
+        const result = await handler.execute(
+            new CompleteOnboardingCommand('user-1', { ...baseDto, referralCode: 'REFCODE' }),
+        );
+
+        expect(result.referralCode).toBe('REFCODE');
+    });
+
+    it('does not overwrite referralCode when linkReferral wrote nothing (no matching ambassador)', async () => {
+        mockReferralTx.ambassador.findFirst.mockResolvedValue(null);
+        mockOnboardingTx.participant.upsert.mockResolvedValue({ id: 'participant-1', referralCode: null });
+
+        const result = await handler.execute(
+            new CompleteOnboardingCommand('user-1', { ...baseDto, referralCode: 'BOGUS' }),
+        );
+
+        expect(result.referralCode).toBeNull();
+        expect(mockReferralTx.ambassadorReferral.create).not.toHaveBeenCalled();
     });
 
     it('falls back to the ambassador\'s home programme when the participant has no applications yet', async () => {

@@ -102,8 +102,16 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
         // its own catch, same as the sibling in
         // portal-submit-application.handler.ts, is what actually makes it
         // non-blocking.
+        // linkReferral reports back the referralCode it actually persisted (or
+        // null when it wrote nothing — no ambassador matched, or a referral
+        // already existed for this participant+programme). `result` was
+        // returned by the onboarding transaction BEFORE linkReferral ran, so
+        // it does not reflect that write; merge the reported code back in
+        // here rather than re-reading the participant, since linkReferral
+        // already knows the value it wrote.
+        let linkedReferralCode: string | null = null;
         if (dto.referralCode && user) {
-            await this.linkReferral(userId, user.brandId, result.id, dto.referralCode);
+            linkedReferralCode = await this.linkReferral(userId, user.brandId, result.id, dto.referralCode);
         }
 
         // Advance referral funnel: referred → registered
@@ -112,7 +120,7 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
         // Invalidate participant-related portal caches
         await this.invalidateParticipantCaches(userId, result.id);
 
-        return result;
+        return linkedReferralCode ? { ...result, referralCode: linkedReferralCode } : result;
     }
 
     // Brand-wide code, per-programme attribution: an ambassador now holds one
@@ -129,9 +137,9 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
         brandId: string,
         participantId: string,
         referralCode: string,
-    ): Promise<void> {
+    ): Promise<string | null> {
         try {
-            await this.prisma.$transaction(async (tx) => {
+            return await this.prisma.$transaction(async (tx) => {
                 // 1. Validate Ambassador - brand-scoped, not programme-scoped.
                 // `brandId` is the participant's own user row's brandId.
                 // Without this check a referral code minted for brand A could
@@ -147,7 +155,7 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
                         user: { brandId },
                     }
                 });
-                if (!ambassador) return;
+                if (!ambassador) return null;
 
                 // 2. Resolve the programme this referral is attributed to.
                 // Onboarding carries no programme of its own, so derive it
@@ -180,7 +188,7 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
                 const existingReferral = await tx.ambassadorReferral.findFirst({
                     where: { participantId, programId: resolvedProgramId }
                 });
-                if (existingReferral) return;
+                if (existingReferral) return null;
 
                 // 4. Create Link
                 await tx.ambassadorReferral.create({
@@ -212,10 +220,16 @@ export class CompleteOnboardingHandler implements ICommandHandler<CompleteOnboar
                         data: { referralCode }
                     });
                 }
+
+                // Report back the code actually persisted so the caller can
+                // merge it into the onboarding response (see execute() —
+                // `result` was captured before this transaction ran).
+                return referralCode;
             });
         } catch (e) {
             // Referral linking must never block onboarding completion.
             this.logger.warn(`Failed to process referral for user ${userId}: ${e instanceof Error ? e.message : String(e)}`);
+            return null;
         }
     }
 
