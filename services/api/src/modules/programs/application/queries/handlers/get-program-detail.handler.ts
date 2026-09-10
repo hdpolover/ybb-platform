@@ -14,12 +14,40 @@ export class GetProgramDetailHandler {
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) { }
 
+  /**
+   * The include modes this handler actually branches on. Anything else falls
+   * through every `include === ...` check and produces exactly the same
+   * response as 'basic', so an unrecognised value is folded onto 'basic'
+   * rather than carried into the cache key.
+   *
+   * Audit M23: binding GetProgramDetailQueryDto (the M33 fix) clamped the
+   * three limits, but `include` is only @IsString - free text on a @Public()
+   * route. Left raw, every distinct junk value minted its own Redis entry
+   * whose miss costs the full ~15-relation hydration, which is the flood M23
+   * describes. Folding here bounds the key to these seven values without
+   * changing any response: an unknown include already behaved as 'basic'.
+   * Deliberately NOT an @IsIn on the DTO - that would turn today's 200 into
+   * a 400 for any live caller sending something unexpected.
+   */
+  private static readonly INCLUDE_MODES = new Set([
+    'all',
+    'basic',
+    'content',
+    'payments',
+    'requirements',
+    'team',
+    'testimonials',
+  ]);
+
   async execute(query: GetProgramDetailQuery) {
     const {
       identifier,
-      include = 'all',
       isAdmin = false,
     } = query;
+    const requestedInclude = query.include ?? 'all';
+    const include = GetProgramDetailHandler.INCLUDE_MODES.has(requestedInclude)
+      ? requestedInclude
+      : 'basic';
     let {
       testimonialsLimit = 10,
       announcementsLimit = 10,

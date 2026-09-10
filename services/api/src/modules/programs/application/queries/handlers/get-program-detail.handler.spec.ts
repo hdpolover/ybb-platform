@@ -79,6 +79,49 @@ describe('GetProgramDetailHandler', () => {
     // Prisma `where` filtering (like the participationCategories test above) so
     // these tests fail if the forced conditions are ever dropped or weakened,
     // not just if the object shape passed to findFirst changes.
+    describe('M23: include is folded onto a bounded set before it reaches the cache key', () => {
+        beforeEach(() => {
+            prisma.program.findFirst.mockResolvedValue({
+                id: 'prog-1',
+                name: 'Test Program',
+                slug: 'test-program',
+                participationCategories: [],
+            });
+        });
+
+        const cacheKeyOf = () => cacheManager.get.mock.calls[cacheManager.get.mock.calls.length - 1][0] as string;
+
+        it('mints one cache key for every unrecognised include, not one per distinct junk value', async () => {
+            await handler.execute(new GetProgramDetailQuery('test-program', 'junk-1'));
+            const first = cacheKeyOf();
+
+            await handler.execute(new GetProgramDetailQuery('test-program', 'junk-2'));
+            const second = cacheKeyOf();
+
+            await handler.execute(new GetProgramDetailQuery('test-program', 'basic'));
+            const basic = cacheKeyOf();
+
+            expect(first).toBe(second);
+            expect(first).toBe(basic);
+        });
+
+        it('keeps every recognised include mode distinct in the key', async () => {
+            const keys = new Set<string>();
+            for (const mode of ['all', 'basic', 'content', 'payments', 'requirements', 'team', 'testimonials']) {
+                await handler.execute(new GetProgramDetailQuery('test-program', mode));
+                keys.add(cacheKeyOf());
+            }
+
+            expect(keys.size).toBe(7);
+        });
+
+        it('still defaults to the full response when no include is given', async () => {
+            await handler.execute(new GetProgramDetailQuery('test-program'));
+
+            expect(cacheKeyOf()).toContain(':all:');
+        });
+    });
+
     describe('M13: non-admin (isAdmin falsy, i.e. anonymous or non-admin caller) filtering', () => {
         const DRAFT_PROGRAM_ID = '11111111-1111-1111-1111-111111111111';
         const draftProgram = { id: DRAFT_PROGRAM_ID, slug: 'draft-program', isPublished: false, isVisibleToUsers: true, deletedAt: null };
