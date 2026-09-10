@@ -4,6 +4,7 @@ import {
   BadRequestException,
   PreconditionFailedException,
   Inject,
+  Logger,
 } from '@nestjs/common';
 import { IApplicationRepository } from '@core/interfaces/repositories/application.repository.interface';
 import { CreateRegistrationPaymentIntentCommand } from '../create-registration-payment-intent.command';
@@ -30,8 +31,21 @@ type CreateIntentResponse = Awaited<ReturnType<PaymentGrpcClient['createIntent']
  * - A USD intent requires a configured USD→IDR rate; without it the gateway
  *   returns a cryptic 412 after the intent is already created, so we fail fast.
  */
+// Audit M119: statuses that mean "the gateway is still working on this
+// intent" - a new intent must not be minted on top of one of these. Mirrors
+// GetApplicationHandler.attachPaymentStatus's pending check (PENDING /
+// REQUIRES_PAYMENT_METHOD) plus PROCESSING, per PaymentIntent.status's own
+// documented value set ("REQUIRES_PAYMENT_METHOD", "PROCESSING", "SUCCEEDED",
+// "CANCELED" - see payment.interface.ts). SUCCEEDED/CANCELED are terminal and
+// deliberately excluded: a succeeded intent is already covered by the
+// isRegistrationFeePaid guard above, and a canceled one should not block a
+// fresh attempt.
+const IN_FLIGHT_INTENT_STATUSES = new Set(['PENDING', 'REQUIRES_PAYMENT_METHOD', 'PROCESSING']);
+
 @Injectable()
 export class CreateRegistrationPaymentIntentHandler {
+  private readonly logger = new Logger(CreateRegistrationPaymentIntentHandler.name);
+
   constructor(
     @Inject(APPLICATION_REPOSITORY)
     private readonly applicationRepository: IApplicationRepository,
@@ -77,6 +91,41 @@ export class CreateRegistrationPaymentIntentHandler {
     const alreadyPaid = await this.registrationFeeGate.isRegistrationFeePaid(applicationId);
     if (alreadyPaid) {
       throw new BadRequestException('Registration fee has already been paid.');
+    }
+
+    // Duplicate-INTENT guard (audit M119): the check above only catches a
+    // registration fee that already SUCCEEDED. Every other call before that -
+    // e.g. an admin double-clicking, or retrying after the gateway redirect
+    // stalled - used to mint a brand-new intent every time, because this
+    // handler has no ApplicationInvoice row to dedupe against the way the
+    // portal path does (ConfirmPortalPaymentHandler blocks re-paying an
+    // invoice whose status is already 'processing'). There is no invoice here
+    // to check, so query the payment service directly for existing intents on
+    // this (reference_type, reference_id) pair - the exact same lookup
+    // GetApplicationHandler.attachPaymentStatus already makes for this same
+    // pair - and reuse an in-flight one instead of creating another.
+    //
+    // Fails OPEN: if this lookup itself throws (payment service hiccup), fall
+    // through to creating a new intent rather than blocking admins from
+    // charging registration fees entirely - a spurious duplicate intent is
+    // recoverable (refund/cancel); an admin who can never create one is not.
+    try {
+      const existingIntents = await this.paymentClient.getIntentsByReference({
+        reference_type: 'application',
+        reference_id: application.id,
+      });
+      const pendingIntent = (existingIntents?.intents ?? []).find(
+        (intent) =>
+          IN_FLIGHT_INTENT_STATUSES.has(intent.status) &&
+          intent.metadata?.['payment_category'] === 'registration',
+      );
+      if (pendingIntent) {
+        return { intent_id: pendingIntent.id, status: pendingIntent.status };
+      }
+    } catch (error) {
+      this.logger.warn(
+        `[create-registration-payment-intent] pending-intent lookup failed for application ${applicationId}, proceeding to create a new intent: ${(error as Error)?.message}`,
+      );
     }
 
     // 2. Resolve the registration fee. The selected tier MUST be an active

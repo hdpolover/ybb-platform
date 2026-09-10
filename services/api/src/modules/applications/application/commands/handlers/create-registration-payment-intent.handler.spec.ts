@@ -25,7 +25,7 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
   let handler: CreateRegistrationPaymentIntentHandler;
 
   const mockAppRepository = { findById: jest.fn() };
-  const mockPaymentClient = { createIntent: jest.fn() };
+  const mockPaymentClient = { createIntent: jest.fn(), getIntentsByReference: jest.fn() };
   const mockPrisma = {
     participant: { findUnique: jest.fn() },
     programPricingTier: { findFirst: jest.fn() },
@@ -69,6 +69,7 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
     mockPrisma.program.findUnique.mockResolvedValue({ usdInIdr: 16000, brandId: 'brand-1' });
     mockPrisma.brandSetting.findFirst.mockResolvedValue({ usdInIdr: 16000 });
     mockPaymentClient.createIntent.mockResolvedValue({ intent_id: 'pi-1', status: 'REQUIRES_PAYMENT_METHOD' });
+    mockPaymentClient.getIntentsByReference.mockResolvedValue({ intents: [] });
     mockRegistrationFeeGate.isRegistrationFeePaid.mockResolvedValue(false);
   });
 
@@ -128,6 +129,116 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
         }),
       }),
     );
+  });
+
+  // ── duplicate-intent guard (audit M119) ────────────────────────────────────
+  //
+  // isRegistrationFeePaid only catches a fee that already SUCCEEDED. Every
+  // earlier call - the gateway hasn't come back yet - used to mint a brand-new
+  // intent on every click because this admin path has no ApplicationInvoice
+  // row to dedupe against the way the portal path does. Mirror the portal's
+  // dedup intent by querying the payment service for an existing in-flight
+  // intent on this (reference_type, reference_id) pair first.
+
+  it('reuses an existing PENDING registration intent instead of creating a new one', async () => {
+    mockPaymentClient.getIntentsByReference.mockResolvedValue({
+      intents: [
+        {
+          id: 'pi-existing',
+          user_id: 'user-1',
+          amount: 10,
+          currency: 'USD',
+          status: 'PENDING',
+          created_at: new Date().toISOString(),
+          reference_type: 'application',
+          reference_id: 'app-1',
+          metadata: { payment_category: 'registration' },
+        },
+      ],
+    });
+
+    const result = await handler.execute(command);
+
+    expect(result).toEqual({ intent_id: 'pi-existing', status: 'PENDING' });
+    expect(mockPaymentClient.createIntent).not.toHaveBeenCalled();
+  });
+
+  it('reuses an existing REQUIRES_PAYMENT_METHOD or PROCESSING registration intent', async () => {
+    mockPaymentClient.getIntentsByReference.mockResolvedValue({
+      intents: [
+        {
+          id: 'pi-existing-2',
+          user_id: 'user-1',
+          amount: 10,
+          currency: 'USD',
+          status: 'PROCESSING',
+          created_at: new Date().toISOString(),
+          reference_type: 'application',
+          reference_id: 'app-1',
+          metadata: { payment_category: 'registration' },
+        },
+      ],
+    });
+
+    const result = await handler.execute(command);
+
+    expect(result).toEqual({ intent_id: 'pi-existing-2', status: 'PROCESSING' });
+    expect(mockPaymentClient.createIntent).not.toHaveBeenCalled();
+  });
+
+  it('ignores a SUCCEEDED or CANCELED intent and creates a new one', async () => {
+    mockPaymentClient.getIntentsByReference.mockResolvedValue({
+      intents: [
+        {
+          id: 'pi-old',
+          user_id: 'user-1',
+          amount: 10,
+          currency: 'USD',
+          status: 'CANCELED',
+          created_at: new Date().toISOString(),
+          reference_type: 'application',
+          reference_id: 'app-1',
+          metadata: { payment_category: 'registration' },
+        },
+      ],
+    });
+
+    const result = await handler.execute(command);
+
+    expect(mockPaymentClient.createIntent).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({ intent_id: 'pi-1' }));
+  });
+
+  it('ignores an in-flight intent for a different payment_category (e.g. program_fee)', async () => {
+    mockPaymentClient.getIntentsByReference.mockResolvedValue({
+      intents: [
+        {
+          id: 'pi-other-category',
+          user_id: 'user-1',
+          amount: 500,
+          currency: 'USD',
+          status: 'PENDING',
+          created_at: new Date().toISOString(),
+          reference_type: 'application',
+          reference_id: 'app-1',
+          metadata: { payment_category: 'program_fee' },
+        },
+      ],
+    });
+
+    const result = await handler.execute(command);
+
+    expect(mockPaymentClient.createIntent).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({ intent_id: 'pi-1' }));
+  });
+
+  it('fails open and creates a new intent when the pending-intent lookup itself throws', async () => {
+    mockPaymentClient.getIntentsByReference.mockRejectedValue(new Error('payment service unavailable'));
+
+    const result = await handler.execute(command);
+
+    expect(mockPaymentClient.createIntent).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expect.objectContaining({ intent_id: 'pi-1' }));
   });
 
   // ── pricing ───────────────────────────────────────────────────────────────
