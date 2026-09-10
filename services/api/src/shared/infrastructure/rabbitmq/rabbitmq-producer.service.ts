@@ -20,7 +20,10 @@ export class RabbitMQProducerService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly configService: ConfigService) { }
 
   async onModuleInit() {
-    const urls = [this.configService.get<string>('RABBITMQ_URL') || 'amqp://guest:guest@localhost:5672/'];
+    // Audit M168: no insecure guest:guest fallback. RABBITMQ_URL is a
+    // required var enforced by validateEnv() at ConfigModule.forRoot - a
+    // missing value fails the whole process at boot, not here.
+    const urls = [this.configService.getOrThrow<string>('RABBITMQ_URL')];
     
     this.connection = connect(urls);
     

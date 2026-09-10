@@ -65,10 +65,13 @@ import { UserAwareThrottlerGuard } from './user-aware-throttler.guard';
             limit: configService.get<number>('THROTTLE_LONG_LIMIT', 300),
           },
         ],
+        // Audit M168: no silent no-password fallback. REDIS_PASSWORD is a
+        // required var enforced by validateEnv() at ConfigModule.forRoot - a
+        // missing value fails the whole process at boot.
         storage: new RedisThrottlerStorage(
           configService.get<string>('REDIS_HOST', 'localhost'),
           configService.get<number>('REDIS_PORT', 6379),
-          configService.get<string>('REDIS_PASSWORD', ''),
+          configService.getOrThrow<string>('REDIS_PASSWORD'),
         ),
       }),
       inject: [ConfigService],

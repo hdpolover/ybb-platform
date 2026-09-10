@@ -35,11 +35,13 @@ import { PrismaModule } from '../prisma/prisma.module';
       useFactory: async (configService: ConfigService) => {
         const redisHost = configService.get<string>('REDIS_HOST', 'localhost');
         const redisPort = configService.get<number>('REDIS_PORT', 6379);
-        const redisPassword = configService.get<string>('REDIS_PASSWORD', '');
+        // Audit M168: no silent no-password fallback. REDIS_PASSWORD is a
+        // required var enforced by validateEnv() at ConfigModule.forRoot - a
+        // missing value fails the whole process at boot, not by quietly
+        // connecting to Redis with no auth.
+        const redisPassword = configService.getOrThrow<string>('REDIS_PASSWORD');
 
-        const redisUrl = redisPassword
-          ? `redis://:${redisPassword}@${redisHost}:${redisPort}`
-          : `redis://${redisHost}:${redisPort}`;
+        const redisUrl = `redis://:${redisPassword}@${redisHost}:${redisPort}`;
 
         return {
           stores: [

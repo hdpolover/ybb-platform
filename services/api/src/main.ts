@@ -102,8 +102,15 @@ async function bootstrap() {
   // published Cloudflare range. Leaving trust proxy off also keeps `req.ips`
   // empty, so nobody can start reading a value that would need the same
   // conditional treatment to be meaningful.
-  const rabbitMqUrl =
-    process.env.RABBITMQ_URL || 'amqp://guest:guest@localhost:5672/';
+  // Audit M168: no insecure guest:guest fallback. AppModule's ConfigModule
+  // (imported above via NestFactory.create) already runs validateEnv() and
+  // crashes the process before this line is reached if RABBITMQ_URL is
+  // missing — the explicit throw here is just defense in depth against this
+  // function ever being reached some other way.
+  const rabbitMqUrl = process.env.RABBITMQ_URL;
+  if (!rabbitMqUrl) {
+    throw new Error('RABBITMQ_URL is required and must be set - no insecure default is allowed.');
+  }
   const retryDelayMs = parsePositiveInt(process.env.RABBITMQ_RETRY_DELAY_MS, 15000);
   const [
     auditQueueOptions,

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { validateEnv } from './config/env.validation';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { CacheModule } from '@shared/infrastructure/cache/cache.module';
@@ -52,9 +53,16 @@ import { PlatformSettingsModule } from '@modules/platform-settings/platform-sett
 @Module({
   imports: [
     // Configuration
+    //
+    // Audit M168: validate fails the whole boot immediately with a readable
+    // error when a required var (RABBITMQ_URL, REDIS_PASSWORD) is missing or
+    // empty, instead of letting individual services silently fall back to
+    // insecure defaults (guest:guest, no Redis password) and only surface a
+    // connection error once something first tries to use them.
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+      validate: validateEnv,
     }),
 
     // Logging

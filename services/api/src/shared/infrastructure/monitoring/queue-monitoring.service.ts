@@ -83,7 +83,9 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
 
     private async ensureMonitoringChannel() {
         if (!this.connection) {
-            const url = this.configService.get<string>('RABBITMQ_URL') || 'amqp://guest:guest@localhost:5672/';
+            // Audit M168: no insecure guest:guest fallback - see
+            // rabbitmq-producer.service.ts's onModuleInit for the same fix.
+            const url = this.configService.getOrThrow<string>('RABBITMQ_URL');
             this.connection = await amqp.connect(url);
             this.connection.on('error', (error) => {
                 this.logger.warn(`Queue monitoring connection error: ${error instanceof Error ? error.message : String(error)}`);
@@ -117,7 +119,9 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
 
         let ch = this.channel;
         if (!ch) {
-            const url = this.configService.get<string>('RABBITMQ_URL') || 'amqp://guest:guest@localhost:5672/';
+            // Audit M168: no insecure guest:guest fallback - see
+            // rabbitmq-producer.service.ts's onModuleInit for the same fix.
+            const url = this.configService.getOrThrow<string>('RABBITMQ_URL');
             const conn = await amqp.connect(url);
             ch = await conn.createChannel();
         }

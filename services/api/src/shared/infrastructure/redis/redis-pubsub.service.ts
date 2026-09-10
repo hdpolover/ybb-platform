@@ -41,12 +41,15 @@ export class RedisPubSubService implements OnModuleInit, OnModuleDestroy {
     ) {
         const host = this.configService.get<string>('REDIS_HOST', 'localhost');
         const port = this.configService.get<number>('REDIS_PORT', 6379);
-        const password = this.configService.get<string>('REDIS_PASSWORD', '');
+        // Audit M168: no silent no-password fallback. REDIS_PASSWORD is a
+        // required var enforced by validateEnv() at ConfigModule.forRoot - a
+        // missing value fails the whole process at boot.
+        const password = this.configService.getOrThrow<string>('REDIS_PASSWORD');
 
         const options = {
             host,
             port,
-            password: password || undefined,
+            password,
             // Defer the TCP connection until first use. Constructing this service must be
             // side-effect free so DI containers (incl. the scoped RMQ consumer apps and
             // module-compile tests) don't open sockets just by wiring providers.

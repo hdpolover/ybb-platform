@@ -37,6 +37,9 @@ describe('throttler wiring for the auth routes', () => {
 
     const options = (await optionsProvider!.useFactory!({
       get: (_key: string, fallback: unknown) => fallback,
+      // REDIS_PASSWORD is read via getOrThrow (Audit M168 - no silent
+      // no-password fallback), not get(), so the mock needs it too.
+      getOrThrow: (_key: string) => 'test-redis-password',
     })) as { throttlers: { name?: string }[] };
 
     expect(options.throttlers.map((throttler) => throttler.name)).toContain('default');
@@ -74,8 +77,16 @@ describe('throttler wiring for the auth routes', () => {
     // ignoreEnvFile means the factory sees only process.env, and the factory
     // now refuses to build without a secret — which is the point of the test
     // above.
-    const previous = process.env.JWT_SECRET;
+    //
+    // REDIS_PASSWORD is set here for the same reason (Audit M168): the real
+    // RedisThrottlerStorage factory now uses getOrThrow, so this real
+    // ConfigService/ignoreEnvFile setup needs it present too, or module
+    // compilation fails before ever reaching the JwtService assertion this
+    // test is actually about.
+    const previousJwtSecret = process.env.JWT_SECRET;
+    const previousRedisPassword = process.env.REDIS_PASSWORD;
     process.env.JWT_SECRET = 'throttler-module-spec-secret';
+    process.env.REDIS_PASSWORD = 'throttler-module-spec-redis-password';
     try {
       const moduleRef = await Test.createTestingModule({
         imports: [ConfigModule.forRoot({ ignoreEnvFile: true }), ThrottlerModule],
@@ -84,8 +95,10 @@ describe('throttler wiring for the auth routes', () => {
       expect(moduleRef.select(ThrottlerModule).get(JwtService)).toBeInstanceOf(JwtService);
       await moduleRef.close();
     } finally {
-      if (previous === undefined) delete process.env.JWT_SECRET;
-      else process.env.JWT_SECRET = previous;
+      if (previousJwtSecret === undefined) delete process.env.JWT_SECRET;
+      else process.env.JWT_SECRET = previousJwtSecret;
+      if (previousRedisPassword === undefined) delete process.env.REDIS_PASSWORD;
+      else process.env.REDIS_PASSWORD = previousRedisPassword;
     }
   });
 

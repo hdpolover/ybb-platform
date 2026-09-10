@@ -6,7 +6,12 @@ import { RedisPubSubService } from './redis-pubsub.service';
 // container). The publisher now stamps a process id and every subscriber drops
 // its own process's messages.
 describe('RedisPubSubService self-skip', () => {
-    const configService = { get: (_key: string, fallback?: unknown) => fallback } as never;
+    const configService = {
+        get: (_key: string, fallback?: unknown) => fallback,
+        // REDIS_PASSWORD is read via getOrThrow (Audit M168 - no silent
+        // no-password fallback), not get(), so the mock needs it too.
+        getOrThrow: (_key: string) => 'test-redis-password',
+    } as never;
 
     function build() {
         const cacheService = { invalidateByPattern: jest.fn().mockResolvedValue(undefined) };
