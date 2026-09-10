@@ -73,6 +73,24 @@ function createMockHttpApp() {
   };
 }
 
+// A RabbitMQ connection/channel that succeeds at every assertion — used to
+// let resolvePrimaryQueueOptions/ensureRetryTopology proceed past the broker
+// I/O steps without error, so tests can isolate failures elsewhere (a
+// consumer's listen()/create(), or a specific topology assertion).
+function createWorkingAmqpConnection() {
+  const channel = {
+    assertExchange: jest.fn().mockResolvedValue(undefined),
+    assertQueue: jest.fn().mockResolvedValue(undefined),
+    bindQueue: jest.fn().mockResolvedValue(undefined),
+    close: jest.fn().mockResolvedValue(undefined),
+  };
+  return {
+    on: jest.fn(),
+    createChannel: jest.fn().mockResolvedValue(channel),
+    close: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe('main.ts bootstrap (M171)', () => {
   const originalRabbitMqUrl = process.env.RABBITMQ_URL;
 
@@ -102,6 +120,13 @@ describe('main.ts bootstrap (M171)', () => {
     expect(mockApp.listen).toHaveBeenCalledTimes(1);
     expect(mockApp.listen).toHaveBeenCalledWith(process.env.PORT || 3000);
 
+    // bootstrap() fires the RabbitMQ retry loop in the background and returns
+    // without waiting for it. Left failing, it would keep scheduling backoff
+    // timers past the end of this test — drain it by letting the next attempt
+    // succeed before moving on.
+    amqpConnectMock.mockImplementation(() => Promise.resolve(createWorkingAmqpConnection()));
+    await jest.advanceTimersByTimeAsync(1000);
+
     errorSpy.mockRestore();
     logSpy.mockRestore();
   });
@@ -114,6 +139,11 @@ describe('main.ts bootstrap (M171)', () => {
 
     await expect(bootstrap()).resolves.toBeUndefined();
 
+    // Same as above: drain the background retry loop instead of abandoning it
+    // mid-backoff.
+    amqpConnectMock.mockImplementation(() => Promise.resolve(createWorkingAmqpConnection()));
+    await jest.advanceTimersByTimeAsync(1000);
+
     errorSpy.mockRestore();
     logSpy.mockRestore();
   });
@@ -123,9 +153,11 @@ describe('main.ts bootstrap (M171)', () => {
     amqpConnectMock.mockRejectedValue(new Error('ECONNREFUSED'));
     const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    // Fire-and-forget: startRabbitMqConsumers never resolves while amqp.connect
-    // keeps rejecting, so this deliberately is not awaited.
-    void startRabbitMqConsumers('amqp://guest:guest@localhost:5672', 15000);
+    // Captured (not discarded) so the test can let this settle at the end
+    // instead of leaving an unbounded retry loop running past the test —
+    // startRabbitMqConsumers never gives up on its own, so something has to
+    // make the 4th attempt succeed for this promise to ever resolve.
+    const runPromise = startRabbitMqConsumers('amqp://guest:guest@localhost:5672', 15000);
 
     // Attempt 1 runs immediately (5 queues resolved in parallel via Promise.all).
     await jest.advanceTimersByTimeAsync(0);
@@ -151,6 +183,13 @@ describe('main.ts bootstrap (M171)', () => {
       .filter((message) => message.includes('retrying in'))
       .map((message) => Number(message.match(/retrying in (\d+)ms/)?.[1]));
     expect(loggedDelays).toEqual(expect.arrayContaining([1000, 2000, 4000]));
+
+    // Let attempt 4 succeed and drain the loop so no retry keeps running
+    // (with real timers underneath, since fake timers are torn down) after
+    // this test finishes — that dangling loop was leaking into later tests.
+    amqpConnectMock.mockImplementation(() => Promise.resolve(createWorkingAmqpConnection()));
+    await jest.advanceTimersByTimeAsync(4000);
+    await runPromise;
 
     errorSpy.mockRestore();
   });
@@ -250,20 +289,6 @@ describe('connectRabbitMqConsumers (M171 follow-up — cleanup on partial failur
     'api-service-reminder-events',
   ];
 
-  function createWorkingAmqpConnection() {
-    const channel = {
-      assertExchange: jest.fn().mockResolvedValue(undefined),
-      assertQueue: jest.fn().mockResolvedValue(undefined),
-      bindQueue: jest.fn().mockResolvedValue(undefined),
-      close: jest.fn().mockResolvedValue(undefined),
-    };
-    return {
-      on: jest.fn(),
-      createChannel: jest.fn().mockResolvedValue(channel),
-      close: jest.fn().mockResolvedValue(undefined),
-    };
-  }
-
   beforeEach(() => {
     jest.clearAllMocks();
     // resolvePrimaryQueueOptions and ensureRetryTopology both connect+assert
@@ -326,5 +351,43 @@ describe('connectRabbitMqConsumers (M171 follow-up — cleanup on partial failur
     listenMocks.forEach((listen) => {
       expect(listen).not.toHaveBeenCalled();
     });
+  });
+
+  it('still closes a consumer app whose create() resolves on a later tick than the one that rejects (M171 follow-up 2)', async () => {
+    // Promise.all rejects on the FIRST rejection without waiting for (or
+    // cancelling) siblings still in flight. Spec index 2 (api-service-payment-events)
+    // rejects on the first available tick; spec index 4 (api-service-reminder-events)
+    // resolves several microtask ticks later — via a real .then() chain, not a
+    // timer — so it lands well after the tick on which Promise.all's rejection,
+    // and pre-fix, the catch block's cleanup, would already have run.
+    const createError = new Error('microservice creation failed');
+    const closeMocks = QUEUE_ORDER.map(() => jest.fn().mockResolvedValue(undefined));
+    const LATE_TICK_HOPS = 10;
+
+    nestFactoryCreateMicroserviceMock
+      .mockImplementationOnce(() => Promise.resolve({ close: closeMocks[0], listen: jest.fn().mockResolvedValue(undefined) }))
+      .mockImplementationOnce(() => Promise.resolve({ close: closeMocks[1], listen: jest.fn().mockResolvedValue(undefined) }))
+      .mockImplementationOnce(() => Promise.reject(createError))
+      .mockImplementationOnce(() => Promise.resolve({ close: closeMocks[3], listen: jest.fn().mockResolvedValue(undefined) }))
+      .mockImplementationOnce(() => {
+        let chain: Promise<unknown> = Promise.resolve();
+        for (let hop = 0; hop < LATE_TICK_HOPS; hop += 1) {
+          chain = chain.then(() => undefined);
+        }
+        return chain.then(() => ({ close: closeMocks[4], listen: jest.fn().mockResolvedValue(undefined) }));
+      });
+
+    await expect(
+      connectRabbitMqConsumers('amqp://guest:guest@localhost:5672', 15000),
+    ).rejects.toThrow(createError);
+
+    // The consumer created on the later tick must still be closed — this is
+    // the case that leaks without awaiting Promise.allSettled(createPromises)
+    // before closeConsumerApps.
+    expect(closeMocks[4]).toHaveBeenCalledTimes(1);
+    [0, 1, 3].forEach((i) => {
+      expect(closeMocks[i]).toHaveBeenCalledTimes(1);
+    });
+    expect(closeMocks[2]).not.toHaveBeenCalled();
   });
 });

@@ -345,15 +345,15 @@ export async function connectRabbitMqConsumers(rabbitMqUrl: string, retryDelayMs
   // before rethrowing. The invariant: this function either returns with all
   // five consumers listening, or leaves nothing running behind it.
   const consumerApps: Array<{ queue: string; app: INestMicroservice }> = [];
+  const createPromises = consumerSpecs.map((spec) =>
+    createConsumerApp(spec.module, spec.queue, spec.queueOptions, rabbitMqUrl, deserializer).then((app) => {
+      consumerApps.push({ queue: spec.queue, app });
+      return app;
+    }),
+  );
+
   try {
-    await Promise.all(
-      consumerSpecs.map((spec) =>
-        createConsumerApp(spec.module, spec.queue, spec.queueOptions, rabbitMqUrl, deserializer).then((app) => {
-          consumerApps.push({ queue: spec.queue, app });
-          return app;
-        }),
-      ),
-    );
+    await Promise.all(createPromises);
 
     await Promise.all(
       consumerApps.map(({ queue, app }) =>
@@ -364,6 +364,18 @@ export async function connectRabbitMqConsumers(rabbitMqUrl: string, retryDelayMs
       ),
     );
   } catch (error) {
+    // Promise.all rejects on the FIRST rejection without cancelling (or
+    // waiting for) the siblings still in flight. If spec 3's create rejects
+    // while specs 4 and 5 are still pending, this catch would otherwise run
+    // against whatever had pushed to consumerApps SO FAR — then 4 and 5
+    // resolve afterwards and their .then(push) lands after cleanup already
+    // ran, leaking both. Waiting for every create promise to settle first
+    // guarantees each one has either pushed to consumerApps or definitively
+    // failed by the time closeConsumerApps enumerates what to close.
+    // allSettled never rejects — it is exactly what absorbs the rejections
+    // from createPromises here, so none of them surfaces as an unhandled
+    // rejection — and it does not replace the error we rethrow below.
+    await Promise.allSettled(createPromises);
     await closeConsumerApps(consumerApps);
     throw error;
   }
