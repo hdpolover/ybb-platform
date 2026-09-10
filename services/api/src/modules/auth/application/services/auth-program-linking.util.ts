@@ -351,3 +351,41 @@ export async function ensureProgramApplication(
 
   return { status: 'created', program: targetProgram, applicationId: createdApplication.id };
 }
+
+export type RegisteredProgramInfo = {
+  programId: string;
+  programName: string;
+  programSlug: string;
+  year: number;
+  applicationId: string;
+  applicationStatus: string;
+};
+
+// Shared by login.handler.ts and register.handler.ts (audit M128): both used
+// to re-fetch the user by id with a 3-level include (participant ->
+// applications -> program) just to list the participant's registered
+// programs, even though both callers already have the participant loaded by
+// this point (from ensureParticipantExists / the registration transaction).
+// Query directly off participantId instead of round-tripping through user.
+export async function getRegisteredPrograms(
+  prisma: PrismaService,
+  participantId: string,
+  brandId: string,
+): Promise<RegisteredProgramInfo[]> {
+  const applications = await prisma.participantApplication.findMany({
+    where: {
+      participantId,
+      program: { brandId },
+    },
+    include: { program: true },
+  });
+
+  return applications.map((app) => ({
+    programId: app.programId,
+    programName: app.program.name,
+    programSlug: app.program.slug,
+    year: app.program.year,
+    applicationId: app.id,
+    applicationStatus: app.status,
+  }));
+}

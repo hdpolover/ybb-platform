@@ -12,6 +12,7 @@ import { MetricsService } from '@shared/infrastructure/monitoring/metrics.servic
 import {
   ensureParticipantExists,
   ensureProgramApplication,
+  getRegisteredPrograms,
   toProgramRegistrationInfo,
 } from '../../services/auth-program-linking.util';
 import { recordFailedAttempt, isLockedOut, LOCKED_OUT_MESSAGE } from '../../services/account-lockout.util';
@@ -34,40 +35,6 @@ export class LoginHandler {
     // degrades to "no conversion tracking" instead of failing login.
     @Optional() private readonly metaCapiService?: MetaCapiService,
   ) { }
-
-  /**
-   * Helper to fetch Registered Programs
-   */
-  private async getRegisteredPrograms(userId: string, brandId: string) {
-    const userData = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        participant: {
-          include: {
-            applications: {
-              where: {
-                program: {
-                  brandId: brandId 
-                }
-              },
-              include: {
-                program: true
-              }
-            }
-          }
-        }
-      }
-    });
-
-    return userData?.participant?.applications.map(app => ({
-      programId: app.programId,
-      programName: app.program.name,
-      programSlug: app.program.slug,
-      year: app.program.year,
-      applicationId: app.id,
-      applicationStatus: app.status
-    })) || [];
-  }
 
   /**
    * Resolve domain to brandId
@@ -255,46 +222,6 @@ export class LoginHandler {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Reset failed login attempts on successful login
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        failedLoginAttempts: 0,
-        lastLoginAt: new Date(),
-        lockedUntil: null,
-      },
-    });
-
-    const participant = await ensureParticipantExists(this.prisma, user.id);
-    const applicationResult = await ensureProgramApplication(this.prisma, {
-      participantId: participant.id,
-      brandId,
-      programId: command.programId,
-      programSlug: command.programSlug,
-      metaCapiService: this.metaCapiService,
-      userEmail: user.email,
-      userId: user.id,
-    });
-
-    if (applicationResult.status === 'closed') {
-      this.logger.warn(
-        `Registration closed for program ${applicationResult.program.id} at login time (userId: ${user.id})`,
-      );
-    }
-
-    // Log success
-    await this.authLoggingService.logSuccessfulLogin(user.id, command.ipAddress, command.userAgent);
-    
-    this.metricsService.loginTotal.inc({ method: 'email', result: 'success' });
-
-    // Update identity last used
-    if (localIdentity) {
-      await this.prisma.userIdentity.update({
-        where: { id: localIdentity.id },
-        data: { lastUsedAt: new Date() },
-      });
-    }
-
     // Determine roles
     const roles: string[] = [];
     if (user.admin) {
@@ -338,35 +265,103 @@ export class LoginHandler {
       expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d'),
     });
 
-    // Create User Session
+    // Session bookkeeping computed up front (all synchronous) so
+    // userSession.create below has everything it needs to join the
+    // Promise.all group rather than waiting on it.
     const agentInfo = this.parseUserAgent(command.userAgent);
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiration
-
     const geoCtx = this.geoIpService.lookup(command.ipAddress);
 
-    // Audit M144 (widened): userSession.refreshToken is stored hashed, not
-    // as the raw JWT. admin-refresh.handler.ts is the only place that looks
-    // this column up, and it dual-reads (hash first, plaintext fallback) so
-    // sessions created before this deploy keep working and self-migrate on
-    // their next refresh - see that handler for the migration path.
-    await this.prisma.userSession.create({
-      data: {
-        userId: user.id,
-        sessionToken,
-        refreshToken: hashToken(refreshToken),
-        deviceType: agentInfo.deviceType,
-        deviceName: `${agentInfo.browser} on ${agentInfo.os}`,
-        browser: agentInfo.browser,
-        operatingSystem: agentInfo.os,
-        ipAddress: command.ipAddress,
-        expiresAt,
-        country: geoCtx.country,
-        city: geoCtx.city,
-      }
-    });
+    // audit M128: these five post-auth writes were previously awaited one at
+    // a time. Four are genuinely independent and now run concurrently:
+    //   - resetting the failed-login counters
+    //   - participant + program-application linking (kept sequential
+    //     INTERNALLY — ensureProgramApplication needs participant.id from
+    //     ensureParticipantExists, a real dependency, not parallelised)
+    //   - the local identity's lastUsedAt stamp
+    //   - the session row itself
+    // logSuccessfulLogin is deliberately NOT a hard Promise.all member: a
+    // logging failure must never fail a login, so its rejection is caught
+    // and only logged, never rethrown.
+    //
+    // Known, accepted tradeoff: userSession.create now runs in the same
+    // Promise.all as the other three writes, so if a sibling (the counter
+    // reset or the participant/application chain) rejects, the session row
+    // can still have been written for a login that ultimately throws and
+    // returns 500. The client never receives the signed refresh token in
+    // that case, so the exposure is an orphaned, unusable row, not a live
+    // credential, and it self-expires in 7 days (`expiresAt` below). Do NOT
+    // "fix" this by pulling userSession.create back into a serial chain —
+    // user_sessions is already ~109MB in prod; the goal here is fewer
+    // sequential round trips, not more rows written.
+    const [, { participant, applicationResult }] = await Promise.all([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: 0,
+          lastLoginAt: new Date(),
+          lockedUntil: null,
+        },
+      }),
+      (async () => {
+        const participant = await ensureParticipantExists(this.prisma, user.id);
+        const applicationResult = await ensureProgramApplication(this.prisma, {
+          participantId: participant.id,
+          brandId,
+          programId: command.programId,
+          programSlug: command.programSlug,
+          metaCapiService: this.metaCapiService,
+          userEmail: user.email,
+          userId: user.id,
+        });
+        return { participant, applicationResult };
+      })(),
+      localIdentity
+        ? this.prisma.userIdentity.update({
+            where: { id: localIdentity.id },
+            data: { lastUsedAt: new Date() },
+          })
+        : Promise.resolve(undefined),
+      // Audit M144 (widened): userSession.refreshToken is stored hashed, not
+      // as the raw JWT. admin-refresh.handler.ts is the only place that
+      // looks this column up, and it dual-reads (hash first, plaintext
+      // fallback) so sessions created before this deploy keep working and
+      // self-migrate on their next refresh - see that handler for the
+      // migration path.
+      this.prisma.userSession.create({
+        data: {
+          userId: user.id,
+          sessionToken,
+          refreshToken: hashToken(refreshToken),
+          deviceType: agentInfo.deviceType,
+          deviceName: `${agentInfo.browser} on ${agentInfo.os}`,
+          browser: agentInfo.browser,
+          operatingSystem: agentInfo.os,
+          ipAddress: command.ipAddress,
+          expiresAt,
+          country: geoCtx.country,
+          city: geoCtx.city,
+        }
+      }),
+      this.authLoggingService
+        .logSuccessfulLogin(user.id, command.ipAddress, command.userAgent)
+        .catch((err: unknown) => {
+          this.logger.warn(
+            `Failed to log successful login for user ${user.id}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }),
+    ]);
 
-    const registeredPrograms = await this.getRegisteredPrograms(user.id, user.brandId);
+    if (applicationResult.status === 'closed') {
+      this.logger.warn(
+        `Registration closed for program ${applicationResult.program.id} at login time (userId: ${user.id})`,
+      );
+    }
+
+    this.metricsService.loginTotal.inc({ method: 'email', result: 'success' });
+
+    const registeredPrograms = await getRegisteredPrograms(this.prisma, participant.id, user.brandId);
 
     return {
       accessToken,

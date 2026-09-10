@@ -211,6 +211,14 @@ export class UpdateApplicationFormFieldHandler
     const oldKey = existing.name;
     const programId = existing.programId;
 
+    // Audit M26 (cheap half only — see the audit entry for why a jsonb
+    // migration is explicitly out of scope here): this transaction runs two
+    // full `personal_data::jsonb` casts over every application in the
+    // program (the collision SELECT and the migration UPDATE below), and
+    // `personal_data` is @db.Json, not Jsonb, so the cast is per-row with no
+    // index to help. Prisma's interactive-transaction default is 5000ms,
+    // which a large program can plausibly exceed. A generous explicit
+    // timeout buys headroom without touching the column type.
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.applicationFormField.update({
         where: { id: existing.id },
@@ -254,7 +262,7 @@ export class UpdateApplicationFormFieldHandler
       );
 
       return updated;
-    });
+    }, { timeout: 30000, maxWait: 10000 });
   }
 }
 

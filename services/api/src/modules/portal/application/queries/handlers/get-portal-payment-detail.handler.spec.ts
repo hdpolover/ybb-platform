@@ -150,3 +150,85 @@ describe('GetPortalPaymentDetailHandler due date (audit M66)', () => {
         expect(result.invoice.dueDate).toBeUndefined();
     });
 });
+
+// Audit M71: the history entry's date/time fields must render WIB (Asia/Jakarta,
+// UTC+7), matching the rest of the platform and the receipt path, not raw
+// toISOString() (UTC).
+describe('GetPortalPaymentDetailHandler history date/time (audit M71)', () => {
+    let handler: GetPortalPaymentDetailHandler;
+
+    const mockPrisma = {
+        applicationInvoice: { findUnique: jest.fn() },
+        brandSetting: { findFirst: jest.fn().mockResolvedValue(null) },
+    };
+    const mockCacheService = { get: jest.fn().mockResolvedValue(null), set: jest.fn().mockResolvedValue(undefined) };
+    const mockPortalCacheService = {
+        getParticipantProfile: jest.fn().mockResolvedValue({ id: 'p-1', userId: 'u-1' }),
+    };
+    const mockPaymentClient = { getTransactionStatus: jest.fn().mockResolvedValue(null) };
+
+    // 18:30 UTC on 4 Sep is 01:30 WIB on 5 Sep — a UTC-vs-WIB render would
+    // show a different calendar day AND a different clock time.
+    const PAID_AT_UTC = new Date('2026-09-04T18:30:00.000Z');
+
+    const buildPaidInvoice = () => ({
+        id: 'inv-1',
+        status: 'paid',
+        amount: 100,
+        currency: 'USD',
+        createdAt: PAID_AT_UTC,
+        updatedAt: PAID_AT_UTC,
+        paidAt: PAID_AT_UTC,
+        paymentMethod: 'bank_transfer',
+        externalTransactionId: 'txn-1',
+        exchangeRateSnapshot: null,
+        amountUsd: null,
+        amountIdr: null,
+        application: {
+            participantId: 'p-1',
+            program: { usdInIdr: 16000, brandId: 'b-1', paymentInfoHtml: null },
+        },
+        pricingTier: {
+            name: 'Registration',
+            feeType: 'registration_fee',
+            price: 100,
+            currency: 'USD',
+            usdPrice: 100,
+            idrPrice: null,
+            validityPeriods: [],
+        },
+    });
+
+    beforeEach(async () => {
+        const module: TestingModule = await Test.createTestingModule({
+            providers: [
+                GetPortalPaymentDetailHandler,
+                { provide: PrismaService, useValue: mockPrisma },
+                { provide: CacheService, useValue: mockCacheService },
+                { provide: PortalCacheService, useValue: mockPortalCacheService },
+                { provide: PaymentServiceHttpClient, useValue: mockPaymentClient },
+                { provide: ConfigService, useValue: { get: jest.fn() } },
+            ],
+        }).compile();
+
+        handler = module.get(GetPortalPaymentDetailHandler);
+        mockCacheService.get.mockResolvedValue(null);
+        mockPortalCacheService.getParticipantProfile.mockResolvedValue({ id: 'p-1', userId: 'u-1' });
+        mockPrisma.applicationInvoice.findUnique.mockResolvedValue(buildPaidInvoice());
+    });
+
+    afterEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('renders the paid history entry date/time in WIB, not UTC', async () => {
+        const result = await handler.execute(new GetPortalPaymentDetailQuery('u-1', 'inv-1'));
+
+        const entry = result.history[0];
+        // WIB is UTC+7: 2026-09-04T18:30:00.000Z -> 2026-09-05 01:30 WIB.
+        // A UTC-slicing implementation would assert '2026-09-04' / '18:30'
+        // here instead — this is the assertion that fails under that bug.
+        expect(entry.date).toBe('2026-09-05');
+        expect(entry.time).toBe('01:30');
+    });
+});
