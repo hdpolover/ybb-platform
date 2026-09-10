@@ -49,6 +49,7 @@ import { NestFactory } from '@nestjs/core';
 import {
   bootstrap,
   startRabbitMqConsumers,
+  connectRabbitMqConsumers,
   ensureRetryTopology,
   computeRabbitMqBackoffDelayMs,
 } from './main';
@@ -234,5 +235,96 @@ describe('ensureRetryTopology (M171 — 406 PRECONDITION_FAILED tolerance)', () 
 
     expect(channel.close).toHaveBeenCalledTimes(1);
     expect(connection.close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('connectRabbitMqConsumers (M171 follow-up — cleanup on partial failure)', () => {
+  // Queue order must match the consumerSpecs array in connectRabbitMqConsumers:
+  // audit_log_queue, reporting_queue, api-service-payment-events,
+  // api-service-loa-events, api-service-reminder-events.
+  const QUEUE_ORDER = [
+    'audit_log_queue',
+    'reporting_queue',
+    'api-service-payment-events',
+    'api-service-loa-events',
+    'api-service-reminder-events',
+  ];
+
+  function createWorkingAmqpConnection() {
+    const channel = {
+      assertExchange: jest.fn().mockResolvedValue(undefined),
+      assertQueue: jest.fn().mockResolvedValue(undefined),
+      bindQueue: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+    return {
+      on: jest.fn(),
+      createChannel: jest.fn().mockResolvedValue(channel),
+      close: jest.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // resolvePrimaryQueueOptions and ensureRetryTopology both connect+assert
+    // successfully; only consumer listen() is made to fail below.
+    (amqp.connect as jest.Mock).mockImplementation(() => Promise.resolve(createWorkingAmqpConnection()));
+  });
+
+  it('closes every created consumer app and rethrows the original error when one listen() rejects', async () => {
+    const listenError = new Error('boom');
+    const consumerAppMocks = QUEUE_ORDER.map((queue, index) => ({
+      queue,
+      close: jest.fn().mockResolvedValue(undefined),
+      // The 3rd consumer (api-service-payment-events) fails to listen; the
+      // other four succeed and must still be closed during cleanup.
+      listen: index === 2 ? jest.fn().mockRejectedValue(listenError) : jest.fn().mockResolvedValue(undefined),
+    }));
+
+    consumerAppMocks.forEach(({ close, listen }) => {
+      nestFactoryCreateMicroserviceMock.mockImplementationOnce(() =>
+        Promise.resolve({ close, listen }),
+      );
+    });
+
+    await expect(
+      connectRabbitMqConsumers('amqp://guest:guest@localhost:5672', 15000),
+    ).rejects.toThrow(/Consumer for queue "api-service-payment-events" failed to start: boom/);
+
+    // Every consumer app that was created — including the four whose listen()
+    // succeeded — must be closed. Nothing is left running behind a failed attempt.
+    consumerAppMocks.forEach(({ close }) => {
+      expect(close).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('does not leak apps created before a sibling create() rejects, and never calls listen() on any of them', async () => {
+    const createError = new Error('microservice creation failed');
+    const closeMocks = QUEUE_ORDER.map(() => jest.fn().mockResolvedValue(undefined));
+    const listenMocks = QUEUE_ORDER.map(() => jest.fn().mockResolvedValue(undefined));
+
+    // The 3rd consumer (api-service-payment-events) rejects during creation
+    // itself, before any listen() call happens at all. The other four
+    // (0, 1, 3, 4) are created successfully and must still be closed.
+    nestFactoryCreateMicroserviceMock
+      .mockImplementationOnce(() => Promise.resolve({ close: closeMocks[0], listen: listenMocks[0] }))
+      .mockImplementationOnce(() => Promise.resolve({ close: closeMocks[1], listen: listenMocks[1] }))
+      .mockImplementationOnce(() => Promise.reject(createError))
+      .mockImplementationOnce(() => Promise.resolve({ close: closeMocks[3], listen: listenMocks[3] }))
+      .mockImplementationOnce(() => Promise.resolve({ close: closeMocks[4], listen: listenMocks[4] }));
+
+    await expect(
+      connectRabbitMqConsumers('amqp://guest:guest@localhost:5672', 15000),
+    ).rejects.toThrow(createError);
+
+    [0, 1, 3, 4].forEach((i) => {
+      expect(closeMocks[i]).toHaveBeenCalledTimes(1);
+    });
+    expect(closeMocks[2]).not.toHaveBeenCalled(); // never created, nothing to close
+
+    // The create-phase Promise.all rejected before the listen-phase ever ran.
+    listenMocks.forEach((listen) => {
+      expect(listen).not.toHaveBeenCalled();
+    });
   });
 });

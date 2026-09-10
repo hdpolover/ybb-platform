@@ -6,9 +6,9 @@ import './tracing';
 };
 
 // Process-level safety net, installed before anything else runs. This
-// process hosts the HTTP app AND every RMQ consumer (see the consumerApps
-// wiring in bootstrap() below) — an unhandled rejection anywhere takes all of
-// it down together, not just the request or message that caused it.
+// process hosts the HTTP app AND every RMQ consumer (see the consumer app
+// wiring in connectRabbitMqConsumers below) — an unhandled rejection anywhere
+// takes all of it down together, not just the request or message that caused it.
 //
 // This is NOT a silent catch-all: it logs at error level with the full
 // reason/stack and does nothing else. It does not prevent the underlying bug
@@ -210,13 +210,6 @@ export async function bootstrap() {
   });
 }
 
-if (require.main === module) {
-  bootstrap().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
-}
-
 const RMQ_STARTUP_INITIAL_DELAY_MS = 1000;
 const RMQ_STARTUP_MAX_DELAY_MS = 60000;
 
@@ -341,18 +334,58 @@ export async function connectRabbitMqConsumers(rabbitMqUrl: string, retryDelayMs
     { queue: 'api-service-loa-events', module: LoaEventsConsumerModule, queueOptions: loaEventsQueueOptions },
     { queue: 'api-service-reminder-events', module: ReminderEventsConsumerModule, queueOptions: reminderEventsQueueOptions },
   ];
-  const consumerApps = await Promise.all(
-    consumerSpecs.map((spec) =>
-      createConsumerApp(spec.module, spec.queue, spec.queueOptions, rabbitMqUrl, deserializer),
-    ),
-  );
+
+  // M171 follow-up: connectRabbitMqConsumers is now retried by
+  // startRabbitMqConsumers instead of crashing the process on failure, which
+  // means a partial failure here can no longer be left for process death to
+  // clean up. Track every app as soon as it is created (not just the ones
+  // consumerSpecs "should" have produced — .then(push) records each one the
+  // instant it resolves, regardless of ordering or of a sibling create/listen
+  // call failing) so any failure below can close everything already created
+  // before rethrowing. The invariant: this function either returns with all
+  // five consumers listening, or leaves nothing running behind it.
+  const consumerApps: Array<{ queue: string; app: INestMicroservice }> = [];
+  try {
+    await Promise.all(
+      consumerSpecs.map((spec) =>
+        createConsumerApp(spec.module, spec.queue, spec.queueOptions, rabbitMqUrl, deserializer).then((app) => {
+          consumerApps.push({ queue: spec.queue, app });
+          return app;
+        }),
+      ),
+    );
+
+    await Promise.all(
+      consumerApps.map(({ queue, app }) =>
+        app.listen().catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          throw new Error(`Consumer for queue "${queue}" failed to start: ${message}`);
+        }),
+      ),
+    );
+  } catch (error) {
+    await closeConsumerApps(consumerApps);
+    throw error;
+  }
+}
+
+// Best-effort cleanup for connectRabbitMqConsumers' partial-failure path.
+// Each close is individually guarded so one failing close cannot mask the
+// original startup error, or stop the rest of the batch from being closed.
+async function closeConsumerApps(
+  consumerApps: Array<{ queue: string; app: INestMicroservice }>,
+): Promise<void> {
   await Promise.all(
-    consumerApps.map((consumer, i) =>
-      consumer.listen().catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new Error(`Consumer for queue "${consumerSpecs[i].queue}" failed to start: ${message}`);
-      }),
-    ),
+    consumerApps.map(async ({ queue, app }) => {
+      try {
+        await app.close();
+      } catch (closeError) {
+        console.error(
+          `[rabbitmq] failed to close consumer app for queue "${queue}" during startup-failure cleanup:`,
+          closeError instanceof Error ? closeError.stack ?? closeError.message : closeError,
+        );
+      }
+    }),
   );
 }
 
@@ -538,4 +571,15 @@ async function closeAmqpConnection(connection: AmqpConnection | undefined) {
   } catch {
     // The connection may already be closed after a failed channel assertion.
   }
+}
+
+// Only auto-run bootstrap() when this file is the Node entry point, not when
+// it is imported (e.g. by main.spec.ts) — kept at the bottom of the file, after
+// every const/function it touches, so there is no TDZ hazard from reading
+// bootstrap or anything it closes over before module evaluation finishes.
+if (require.main === module) {
+  bootstrap().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }
