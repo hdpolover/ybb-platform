@@ -12,6 +12,7 @@ import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
 import { MetricsController } from './metrics.controller';
 import { BrandsController } from '@modules/brands/presentation/brands.controller';
+import { HealthController } from '@modules/health/health.controller';
 
 const reflector = new Reflector();
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,5 +49,29 @@ describe('M210 — GET /v1/brands/:id/programs is no longer anonymous', () => {
             expect.arrayContaining([JwtAuthGuard, RolesGuard, AdminScopeGuard]),
         );
         expect(rolesOn(handler)).toEqual([UserRole.ADMIN, UserRole.SUPER_ADMIN]);
+    });
+});
+
+describe('N-2026-09-10-D — folded circuit-breaker/detailed health endpoints require admin', () => {
+    it('requires an admin role on circuit-breaker and detailed, unlike the public health routes', () => {
+        for (const handler of [
+            HealthController.prototype.getCircuitBreakerState,
+            HealthController.prototype.detailedHealthCheck,
+        ]) {
+            expect(guardsOn(handler)).toEqual(expect.arrayContaining([JwtAuthGuard, RolesGuard]));
+            expect(rolesOn(handler)).toEqual([UserRole.ADMIN, UserRole.SUPER_ADMIN]);
+        }
+    });
+
+    // These two exposed UnitOfWork's circuit-breaker internals on the old dead
+    // controller; GET /health and /health/db must stay anonymous (no global
+    // APP_GUARD covers /v1/health) and must not have picked up guards as a
+    // side effect of folding the admin-only endpoints onto the same class.
+    it('leaves the basic health and db checks public and role-free', () => {
+        for (const handler of [HealthController.prototype.check, HealthController.prototype.checkDatabase]) {
+            expect(guardsOn(handler)).toEqual([]);
+            expect(rolesOn(handler)).toBeUndefined();
+        }
+        expect(guardsOn(HealthController)).toEqual([]);
     });
 });

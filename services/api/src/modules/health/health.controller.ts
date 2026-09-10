@@ -1,7 +1,12 @@
-import { Controller, Get, Logger } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Controller, Get, Logger, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ConsumerStatusService } from '@shared/infrastructure/messaging/consumer-status.service';
+import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service';
+import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
+import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { UserRole } from '@core/entities/user.entity';
 
 @ApiTags('health')
 @Controller('health')
@@ -11,6 +16,9 @@ export class HealthController {
   constructor(
     private readonly prismaRead: PrismaReadService,
     private readonly consumerStatus: ConsumerStatusService,
+    // Global via PrismaModule (see prisma.module.ts) -- no import needed here
+    // beyond the type itself.
+    private readonly unitOfWork: UnitOfWork,
   ) {}
 
   @Get()
@@ -36,6 +44,14 @@ export class HealthController {
     return {
       status: state === 'connected' ? 'ok' : 'degraded',
       consumerBootstrap: bootstrapState,
+      // N-2026-09-10-G: the runtime half consumerBootstrap can't cover (see
+      // ConsumerStatusService's ConsumerActivity doc for exactly what
+      // 'active'/'inactive'/'unknown' mean and the cluster-wide-count caveat).
+      // Deliberately not folded into `status` above -- consumerBootstrap and
+      // consumerActivity answer different questions ("did we ever connect" vs
+      // "is anyone consuming right now") and collapsing them into one overall
+      // status would hide which one tripped.
+      consumerActivity: this.consumerStatus.getConsumerActivity(),
       timestamp: new Date().toISOString(),
       service: 'ybb-api-gateway',
       version: '1.0.0',
@@ -65,5 +81,75 @@ export class HealthController {
         timestamp: new Date().toISOString(),
       };
     }
+  }
+
+  // N-2026-09-10-D: folded from the dead src/shared/presentation/health.controller.ts,
+  // which was registered in no module and 404'd in production. Unlike GET /health
+  // and GET /health/db above, these two expose UnitOfWork's internal failure/success
+  // counters -- operational detail, not a public liveness check -- so they get the
+  // same admin-only guard pattern as admin-programs.controller.ts rather than
+  // joining the public routes on this controller. Method-level (not class-level)
+  // guards so /health and /health/db stay anonymous.
+  @Get('circuit-breaker')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get database circuit breaker status (admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Circuit breaker state',
+    schema: {
+      example: {
+        state: 'closed',
+        failureCount: 0,
+        successCount: 0,
+        healthy: true,
+        message: 'Database operations are functioning normally',
+      },
+    },
+  })
+  getCircuitBreakerState() {
+    const { state, failureCount, successCount } = this.unitOfWork.getCircuitState();
+
+    const stateMessages = {
+      closed: 'Database operations are functioning normally',
+      open: 'Circuit breaker is OPEN - database operations are being rejected due to failures',
+      half_open: 'Circuit breaker is testing recovery - monitoring database health',
+    };
+
+    return {
+      state,
+      failureCount,
+      successCount,
+      healthy: state === 'closed',
+      message: stateMessages[state],
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  @Get('detailed')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Detailed health check with subsystem status (admin only)' })
+  @ApiResponse({ status: 200, description: 'Detailed health information' })
+  detailedHealthCheck() {
+    const circuitState = this.unitOfWork.getCircuitState();
+
+    return {
+      status: circuitState.state === 'closed' ? 'ok' : 'degraded',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      subsystems: {
+        database: {
+          status: circuitState.state === 'closed' ? 'healthy' : 'unhealthy',
+          circuitBreaker: circuitState,
+        },
+        api: {
+          status: 'healthy',
+          version: process.env.npm_package_version || '1.0.0',
+        },
+      },
+    };
   }
 }

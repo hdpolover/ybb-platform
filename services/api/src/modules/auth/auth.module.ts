@@ -16,6 +16,7 @@ import { FirebaseLoginHandler } from './application/commands/handlers/firebase-l
 import { LinkLocalIdentityHandler } from './application/commands/handlers/link-local-identity.handler';
 import { AdminLoginHandler } from './application/commands/handlers/admin-login.handler';
 import { AdminRefreshHandler } from './application/commands/handlers/admin-refresh.handler';
+import { RefreshHandler } from './application/commands/handlers/refresh.handler';
 import { AmbassadorLoginHandler } from './application/commands/handlers/ambassador-login.handler';
 import { GetUserProfileHandler } from './application/queries/handlers/get-user-profile.handler';
 import { GetAuthProvidersHandler } from './application/queries/handlers/get-auth-providers.handler';
@@ -32,7 +33,7 @@ import { FirebaseAuthService } from './infrastructure/services/firebase-auth.ser
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AuthLoggingService } from './application/services/auth-logging.service';
 import { GeoIpModule } from '@shared/infrastructure/geoip/geoip.module';
-import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
+import { MetricsCoreModule } from '@shared/infrastructure/monitoring/metrics-core.module';
 
 @Module({
   imports: [
@@ -48,7 +49,14 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
       inject: [ConfigService],
     }),
     GeoIpModule,
-    MonitoringModule,
+    // N-2026-09-10-H: MetricsCoreModule, NOT the full MonitoringModule. The
+    // login handlers here only inject MetricsService, but MonitoringModule
+    // also carries QueueMonitoringService (its own AMQP connection + 15s poll
+    // loop) and MetricsMiddleware (an Express middleware with no routes to
+    // attach to in a microservice-only app). AuthModule is the path by which
+    // all three leaking RMQ consumer containers were reaching it - see
+    // consumer-monitoring-fanout.spec.ts.
+    MetricsCoreModule,
   ],
   controllers: [AuthController, AuthProviderController],
   providers: [
@@ -64,6 +72,7 @@ import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.m
     LinkLocalIdentityHandler,
     AdminLoginHandler,
     AdminRefreshHandler,
+    RefreshHandler,
     AmbassadorLoginHandler,
     GetUserProfileHandler,
     GetAuthProvidersHandler,

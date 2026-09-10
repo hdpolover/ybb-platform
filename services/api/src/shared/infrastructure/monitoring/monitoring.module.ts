@@ -2,6 +2,7 @@ import { Module, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
 import { MetricsCoreModule } from './metrics-core.module';
 import { MetricsMiddleware } from './metrics.middleware';
 import { QueueMonitoringService } from './queue-monitoring.service';
+import { ConsumerStatusModule } from '../messaging/consumer-status.module';
 
 // Full monitoring surface: HTTP request metrics middleware + RabbitMQ
 // queue-depth polling, on top of the MetricsCoreModule every process gets.
@@ -12,8 +13,13 @@ import { QueueMonitoringService } from './queue-monitoring.service';
 // prom-client registry, and only the HTTP app's registry is ever scraped via
 // /metrics). See bootstrap/consumer-infra.module.ts, which imports
 // MetricsCoreModule directly instead of this module.
+//
+// ConsumerStatusModule is imported (not HealthModule) so QueueMonitoringService
+// can feed its per-queue consumerCount into ConsumerStatusService without this
+// module depending on HealthModule -- see ConsumerStatusModule's own comment
+// for why a two-way HealthModule<->MonitoringModule dependency must be avoided.
 @Module({
-    imports: [MetricsCoreModule],
+    imports: [MetricsCoreModule, ConsumerStatusModule],
     providers: [QueueMonitoringService],
     exports: [MetricsCoreModule, QueueMonitoringService],
     controllers: [],

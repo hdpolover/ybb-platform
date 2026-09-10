@@ -4,6 +4,7 @@ import { AuthController } from './auth.controller';
 import { LoginHandler } from '../application/commands/handlers/login.handler';
 import { AdminLoginHandler } from '../application/commands/handlers/admin-login.handler';
 import { AdminRefreshHandler } from '../application/commands/handlers/admin-refresh.handler';
+import { RefreshHandler } from '../application/commands/handlers/refresh.handler';
 import { AmbassadorLoginHandler } from '../application/commands/handlers/ambassador-login.handler';
 import { RegisterHandler } from '../application/commands/handlers/register.handler';
 import { RegisterAdminHandler } from '../application/commands/handlers/register-admin.handler';
@@ -32,6 +33,7 @@ describe('AuthController', () => {
     const mockLoginHandler = { execute: jest.fn() };
     const mockAdminLoginHandler = { execute: jest.fn() };
     const mockAdminRefreshHandler = { execute: jest.fn() };
+    const mockRefreshHandler = { execute: jest.fn() };
     const mockAmbassadorLoginHandler = { execute: jest.fn() };
     const mockRegisterHandler = { execute: jest.fn() };
     const mockRegisterAdminHandler = { execute: jest.fn() };
@@ -53,6 +55,7 @@ describe('AuthController', () => {
                 { provide: LoginHandler, useValue: mockLoginHandler },
                 { provide: AdminLoginHandler, useValue: mockAdminLoginHandler },
                 { provide: AdminRefreshHandler, useValue: mockAdminRefreshHandler },
+                { provide: RefreshHandler, useValue: mockRefreshHandler },
                 { provide: AmbassadorLoginHandler, useValue: mockAmbassadorLoginHandler },
                 { provide: RegisterHandler, useValue: mockRegisterHandler },
                 { provide: RegisterAdminHandler, useValue: mockRegisterAdminHandler },

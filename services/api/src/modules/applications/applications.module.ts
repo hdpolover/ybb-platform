@@ -31,13 +31,21 @@ import { ApplicationMapper } from './infrastructure/mappers/application.mapper';
 import { SubmissionDeadlineReminderService } from './infrastructure/services/submission-deadline-reminder.service';
 import { PostPaymentFollowupService } from './infrastructure/services/post-payment-followup.service';
 import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
-import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
+import { MetricsCoreModule } from '@shared/infrastructure/monitoring/metrics-core.module';
 import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
 
 import { CacheModule } from '@shared/infrastructure/cache/cache.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, ParticipantsModule, ProgramsModule, MonitoringModule, PaymentModule, PaymentsModule, CacheModule],
+  // N-2026-09-10-H: MetricsCoreModule, NOT the full MonitoringModule. This
+  // module only injects MetricsService, but MonitoringModule also carries
+  // QueueMonitoringService (its own AMQP connection + 15s poll loop) and
+  // MetricsMiddleware (an Express middleware with no routes to attach to in a
+  // microservice-only app). The RMQ consumer bootstraps import this module
+  // transitively, so pulling in the full surface here handed four consumer
+  // containers their own queue pollers - the exact fan-out prisma.module.ts
+  // was narrowed to prevent.
+  imports: [PrismaModule, AuthModule, ParticipantsModule, ProgramsModule, MetricsCoreModule, PaymentModule, PaymentsModule, CacheModule],
   controllers: [ApplicationsController],
   providers: [
     // Command Handlers

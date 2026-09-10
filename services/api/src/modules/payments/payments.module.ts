@@ -6,7 +6,7 @@ import { AuthModule } from '../auth/auth.module';
 import { ParticipantsModule } from '../participants/participants.module';
 import { FilesModule } from '../files/files.module';
 import { AdminsModule } from '../admins/admins.module';
-import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
+import { MetricsCoreModule } from '@shared/infrastructure/monitoring/metrics-core.module';
 import { PaymentsController } from './presentation/payments.controller';
 import { PaymentAdminController } from './presentation/payment-admin.controller';
 import { GatewayAdminController } from './presentation/gateway-admin.controller';
@@ -32,7 +32,16 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
         ParticipantsModule,
         FilesModule,
         AdminsModule,
-        MonitoringModule,
+        // N-2026-09-10-H: MetricsCoreModule, NOT the full MonitoringModule. This module only
+        // injects MetricsService, but MonitoringModule also carries
+        // QueueMonitoringService (its own AMQP connection + 15s poll loop) and
+        // MetricsMiddleware (an Express middleware with no routes to attach to in a
+        // microservice-only app). The RMQ consumer bootstraps import this module
+        // transitively, so pulling in the full surface here handed four consumer
+        // containers their own queue pollers - the exact fan-out prisma.module.ts was
+        // narrowed to prevent. Observed live: "Queue Monitoring Connected" four times
+        // in one production container.
+        MetricsCoreModule,
         HttpModule.register({
             timeout: 15000, // bound calls to the Go payment service — no timeout meant a hung request never returned
             maxRedirects: 0,

@@ -5,7 +5,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { AuthModule } from '@modules/auth/auth.module';
-import { MonitoringModule } from '@shared/infrastructure/monitoring/monitoring.module';
+import { MetricsCoreModule } from '@shared/infrastructure/monitoring/metrics-core.module';
 import { FilesController } from './presentation/files.controller';
 import { DocumentsController } from './presentation/documents.controller';
 import { StorageEventsController } from './presentation/storage-events.controller';
@@ -64,7 +64,16 @@ function resolveFileProtoPath(): string {
     ]),
     ConfigModule,
     AuthModule,
-    MonitoringModule,
+    // N-2026-09-10-H: MetricsCoreModule, NOT the full MonitoringModule. This module only
+    // injects MetricsService, but MonitoringModule also carries
+    // QueueMonitoringService (its own AMQP connection + 15s poll loop) and
+    // MetricsMiddleware (an Express middleware with no routes to attach to in a
+    // microservice-only app). The RMQ consumer bootstraps import this module
+    // transitively, so pulling in the full surface here handed four consumer
+    // containers their own queue pollers - the exact fan-out prisma.module.ts was
+    // narrowed to prevent. Observed live: "Queue Monitoring Connected" four times
+    // in one production container.
+    MetricsCoreModule,
   ],
   controllers: [FilesController, DocumentsController, StorageEventsController, AdminMediaController],
   providers: [FileServiceClient, FileGrpcClient, StorageService, PrivateFileUrlResolver],

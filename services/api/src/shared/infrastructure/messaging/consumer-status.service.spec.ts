@@ -59,3 +59,87 @@ describe('ConsumerStatusService', () => {
     ]);
   });
 });
+
+describe('ConsumerStatusService — getConsumerActivity (N-2026-09-10-G)', () => {
+  let service: ConsumerStatusService;
+  const ALL_FIVE_QUEUES = [
+    'audit_log_queue',
+    'reporting_queue',
+    'api-service-payment-events',
+    'api-service-loa-events',
+    'api-service-reminder-events',
+  ];
+
+  beforeEach(() => {
+    service = new ConsumerStatusService();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('reports unknown when no queue has ever been observed (e.g. the monitoring poll has never connected)', () => {
+    expect(service.getConsumerActivity()).toBe('unknown');
+  });
+
+  it('reports active once every API consumer queue has a fresh, non-zero observation', () => {
+    for (const queue of ALL_FIVE_QUEUES) {
+      service.recordQueueObservation(queue, 2);
+    }
+
+    expect(service.getConsumerActivity()).toBe('active');
+  });
+
+  it('reports inactive when any API consumer queue has a fresh reading of exactly zero', () => {
+    for (const queue of ALL_FIVE_QUEUES) {
+      service.recordQueueObservation(queue, 2);
+    }
+    service.recordQueueObservation('api-service-payment-events', 0);
+
+    expect(service.getConsumerActivity()).toBe('inactive');
+  });
+
+  it('ignores observations for queues outside the five API consumer queues', () => {
+    service.recordQueueObservation('notification_queue', 0);
+
+    // No API consumer queue was ever recorded, so this must not read as
+    // 'active' just because the one queue it did see was non-relevant, nor
+    // as 'inactive' from a queue that was never ours to begin with.
+    expect(service.getConsumerActivity()).toBe('unknown');
+  });
+
+  it('reports unknown once the newest observation is older than the staleness window, without flapping to inactive', () => {
+    for (const queue of ALL_FIVE_QUEUES) {
+      service.recordQueueObservation(queue, 2);
+    }
+    expect(service.getConsumerActivity()).toBe('active');
+
+    // Poll interval is 15s and the staleness window is a small multiple of
+    // it; push every observation well past that without any new zero reading.
+    const longAgo = Date.now() - 10 * 60 * 1000;
+    const observations = (service as unknown as { queueObservations: Map<string, { consumerCount: number; observedAtMs: number }> })
+      .queueObservations;
+    for (const queue of ALL_FIVE_QUEUES) {
+      const existing = observations.get(queue)!;
+      observations.set(queue, { ...existing, observedAtMs: longAgo });
+    }
+
+    expect(service.getConsumerActivity()).toBe('unknown');
+  });
+
+  it('does not let one missed poll tick alone flip active to unknown', () => {
+    for (const queue of ALL_FIVE_QUEUES) {
+      service.recordQueueObservation(queue, 2);
+    }
+
+    // A single 15s tick late is still inside the staleness window (a small
+    // multiple of the poll interval), so a transient hiccup should not flap
+    // the indicator.
+    const observations = (service as unknown as { queueObservations: Map<string, { consumerCount: number; observedAtMs: number }> })
+      .queueObservations;
+    const oneTickLate = Date.now() - 16 * 1000;
+    observations.set('reporting_queue', { ...observations.get('reporting_queue')!, observedAtMs: oneTickLate });
+
+    expect(service.getConsumerActivity()).toBe('active');
+  });
+});

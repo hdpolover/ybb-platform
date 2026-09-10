@@ -15,11 +15,14 @@ import { AdminAuthResponseDto } from './dto/admin-auth-response.dto'; // [NEW]
 import { UserProfileDto } from './dto/user-profile.dto';
 import { AdminLoginDto } from './dto/admin-login.dto'; // [NEW]
 import { AdminRefreshDto } from './dto/admin-refresh.dto';
+import { RefreshDto } from './dto/refresh.dto';
+import { RefreshResponseDto } from './dto/refresh-response.dto';
 import { LinkLocalIdentityDto } from './dto/link-local-identity.dto';
 import { LinkLocalIdentityResponseDto } from './dto/link-local-identity-response.dto';
 import { LoginHandler } from '../application/commands/handlers/login.handler';
 import { AdminLoginHandler } from '../application/commands/handlers/admin-login.handler'; // [NEW]
 import { AdminRefreshHandler } from '../application/commands/handlers/admin-refresh.handler';
+import { RefreshHandler } from '../application/commands/handlers/refresh.handler';
 import { RegisterHandler } from '../application/commands/handlers/register.handler';
 import { RegisterAdminHandler } from '../application/commands/handlers/register-admin.handler';
 import { LogoutHandler } from '../application/commands/handlers/logout.handler';
@@ -229,6 +232,7 @@ export class AuthController {
     private readonly loginHandler: LoginHandler,
     private readonly adminLoginHandler: AdminLoginHandler, // [NEW]
     private readonly adminRefreshHandler: AdminRefreshHandler,
+    private readonly refreshHandler: RefreshHandler,
     private readonly ambassadorLoginHandler: AmbassadorLoginHandler,
     private readonly registerHandler: RegisterHandler,
     private readonly registerAdminHandler: RegisterAdminHandler,
@@ -303,6 +307,17 @@ export class AuthController {
       dto.programSlug,
     );
     return this.loginHandler.execute(command, brandDomain);
+  }
+
+  @Public()
+  @Post('refresh')
+  // Carries a refresh token, no email, so this is per-IP - i.e. per
+  // OFFICE/lab. See TOKEN_ROUTE_THROTTLE (same tier as admin/refresh).
+  @Throttle(TOKEN_ROUTE_THROTTLE)
+  @ApiOperation({ summary: 'Refresh Participant Session' })
+  @ApiResponse({ status: 200, description: 'Participant tokens refreshed successfully', type: RefreshResponseDto })
+  async refresh(@Body() dto: RefreshDto): Promise<RefreshResponseDto> {
+    return this.refreshHandler.execute(dto.refreshToken);
   }
 
   @Public()

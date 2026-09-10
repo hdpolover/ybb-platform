@@ -43,3 +43,9 @@ export function withRetrySiblings(queueName: string): readonly [string, string, 
 export const MONITORED_QUEUES: readonly string[] = [...API_CONSUMER_QUEUES, NOTIFICATION_QUEUE].flatMap(
   withRetrySiblings,
 );
+
+// How often QueueMonitoringService polls broker consumer counts. Shared with
+// ConsumerStatusService, which age-caps those observations as a multiple of
+// this interval (see STALE_OBSERVATION_POLLS there) instead of a hardcoded
+// duration that would silently drift out of sync with the poll itself.
+export const QUEUE_POLL_INTERVAL_MS = 15_000;

@@ -13,6 +13,7 @@ import * as amqp from 'amqplib';
 import { ConfigService } from '@nestjs/config';
 import { QueueMonitoringService } from './queue-monitoring.service';
 import { MetricsService } from './metrics.service';
+import { ConsumerStatusService } from '../messaging/consumer-status.service';
 
 const amqpConnectMock = amqp.connect as jest.Mock;
 
@@ -35,6 +36,7 @@ describe('QueueMonitoringService — checkQueueDepths 404 handling', () => {
     let service: QueueMonitoringService;
     let metricsService: MetricsService;
     let setDepthSpy: jest.Mock;
+    let consumerStatus: ConsumerStatusService;
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -46,7 +48,8 @@ describe('QueueMonitoringService — checkQueueDepths 404 handling', () => {
         const configService = {
             getOrThrow: jest.fn().mockReturnValue('amqp://guest:guest@localhost:5672'),
         } as unknown as ConfigService;
-        service = new QueueMonitoringService(configService, metricsService);
+        consumerStatus = new ConsumerStatusService();
+        service = new QueueMonitoringService(configService, metricsService, consumerStatus);
     });
 
     it('checks every later queue in the same pass after an earlier one 404s, on a re-established channel', async () => {
@@ -113,5 +116,49 @@ describe('QueueMonitoringService — checkQueueDepths 404 handling', () => {
 
         await runCheck();
         expect(checkCount).toBe(2);
+    });
+});
+
+describe('QueueMonitoringService — feeding ConsumerStatusService (N-2026-09-10-G)', () => {
+    let service: QueueMonitoringService;
+    let metricsService: MetricsService;
+    let consumerStatus: ConsumerStatusService;
+    let recordSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        metricsService = new MetricsService();
+        (metricsService as unknown as { jobQueueDepth: unknown }).jobQueueDepth = { set: jest.fn() };
+        (metricsService as unknown as { jobQueueConsumers: unknown }).jobQueueConsumers = { set: jest.fn() };
+
+        const configService = {
+            getOrThrow: jest.fn().mockReturnValue('amqp://guest:guest@localhost:5672'),
+        } as unknown as ConfigService;
+        consumerStatus = new ConsumerStatusService();
+        recordSpy = jest.spyOn(consumerStatus, 'recordQueueObservation');
+        service = new QueueMonitoringService(configService, metricsService, consumerStatus);
+    });
+
+    it('reports each successfully-checked API consumer queue observation to ConsumerStatusService', async () => {
+        amqpConnectMock.mockResolvedValue({
+            on: jest.fn(),
+            close: jest.fn().mockResolvedValue(undefined),
+            createChannel: jest.fn().mockResolvedValue(
+                makeChannel(async (queue: string) => ({
+                    messageCount: 0,
+                    consumerCount: queue === 'audit_log_queue' ? 0 : 2,
+                })),
+            ),
+        });
+
+        (service as unknown as { queues: string[] }).queues = ['audit_log_queue', 'reporting_queue'];
+
+        await (service as unknown as { checkQueueDepths: () => Promise<void> }).checkQueueDepths();
+
+        expect(recordSpy).toHaveBeenCalledWith('audit_log_queue', 0);
+        expect(recordSpy).toHaveBeenCalledWith('reporting_queue', 2);
+        // ConsumerStatusService itself filters non-API queues out (see its own
+        // spec) — this just confirms the call reaches it at all.
+        expect(consumerStatus.getConsumerActivity()).toBe('inactive');
     });
 });

@@ -2,7 +2,8 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import * as amqp from 'amqplib';
 import { MetricsService } from './metrics.service';
-import { MONITORED_QUEUES } from '../../constants/rabbitmq-queues';
+import { MONITORED_QUEUES, QUEUE_POLL_INTERVAL_MS } from '../../constants/rabbitmq-queues';
+import { ConsumerStatusService } from '../messaging/consumer-status.service';
 
 type AmqpConnection = Awaited<ReturnType<typeof amqp.connect>>;
 type AmqpChannel = Awaited<ReturnType<AmqpConnection['createChannel']>>;
@@ -32,13 +33,19 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
     constructor(
         private readonly configService: ConfigService,
         private readonly metricsService: MetricsService,
+        // N-2026-09-10-G: feeds per-queue consumerCount into ConsumerStatusService
+        // so HealthController can expose runtime consumer liveness alongside the
+        // one-shot bootstrap flag it already reports. See ConsumerStatusModule for
+        // why this is a small shared module rather than MonitoringModule importing
+        // HealthModule (or vice versa).
+        private readonly consumerStatus: ConsumerStatusService,
     ) {}
 
     async onModuleInit() {
         try {
             await this.ensureMonitoringChannel();
             this.logger.log('Queue Monitoring Connected');
-            this.intervalParams = setInterval(() => this.checkQueueDepths(), 15000);
+            this.intervalParams = setInterval(() => this.checkQueueDepths(), QUEUE_POLL_INTERVAL_MS);
             // Do not let queue polling hold the event loop open on its own. The
             // interval still fires for the life of the process; it just stops a
             // shutdown (or a jest worker) from hanging on it, matching what
@@ -91,6 +98,10 @@ export class QueueMonitoringService implements OnModuleInit, OnModuleDestroy {
                 const info = await this.channel.checkQueue(queue);
                 this.metricsService.jobQueueDepth.set({ queue_name: queue }, info.messageCount);
                 this.metricsService.jobQueueConsumers.set({ queue_name: queue }, info.consumerCount);
+                // Ignored for any queue that isn't one of this API's own five
+                // consumers (notification_queue, .retry/.dlq siblings) — see the
+                // guard in recordQueueObservation itself.
+                this.consumerStatus.recordQueueObservation(queue, info.consumerCount);
                 // The queue exists again (or always did) — clear any stale marker so
                 // a future 404 starts its own fresh reprobe window.
                 this.missingSince.delete(queue);
