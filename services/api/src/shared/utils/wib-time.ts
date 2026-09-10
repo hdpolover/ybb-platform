@@ -68,6 +68,11 @@ export function wibDateKey(date: Date): string {
   return toWibWallClock(date).toISOString().slice(0, 10);
 }
 
+/** The WIB wall-clock time of an instant, as HH:mm (24h). */
+export function wibTimeKey(date: Date): string {
+  return toWibWallClock(date).toISOString().slice(11, 16);
+}
+
 /**
  * Parses an admin filter date. A bare YYYY-MM-DD means a WIB calendar day, so
  * it is anchored to WIB midnight rather than the UTC midnight `new Date()`

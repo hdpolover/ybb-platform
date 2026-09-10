@@ -13,6 +13,7 @@ import {
 } from '../../../presentation/dto/portal-payment.dto';
 import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
 import { resolveTierPeriod } from '@shared/utils/tier-period.util';
+import { wibDateKey, wibTimeKey } from '@shared/utils/wib-time';
 
 interface PendingTransactionContext {
     actionUrl?: string;
@@ -105,8 +106,8 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                 id: invoice.externalTransactionId ?? invoice.id,
                 method: invoice.paymentMethod ?? 'payment',
                 amount: Number(invoice.amount),
-                date: invoice.paidAt.toISOString().split('T')[0],
-                time: invoice.paidAt.toISOString().split('T')[1].substring(0, 5),
+                date: wibDateKey(invoice.paidAt),
+                time: wibTimeKey(invoice.paidAt),
                 status: 'paid',
                 note: 'Payment confirmed',
                 code: invoice.externalTransactionId ?? undefined,
@@ -121,8 +122,8 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                 id: invoice.externalTransactionId ?? invoice.id,
                 method: invoice.paymentMethod ?? 'manual',
                 amount: Number(invoice.amount),
-                date: invoice.updatedAt.toISOString().split('T')[0],
-                time: invoice.updatedAt.toISOString().split('T')[1].substring(0, 5),
+                date: wibDateKey(invoice.updatedAt),
+                time: wibTimeKey(invoice.updatedAt),
                 status: 'processing',
                 note: 'Payment submitted, awaiting verification',
                 code: invoice.externalTransactionId ?? undefined,
@@ -142,8 +143,8 @@ export class GetPortalPaymentDetailHandler implements IQueryHandler<GetPortalPay
                 id: invoice.externalTransactionId ?? invoice.id,
                 method: invoice.paymentMethod ?? 'unknown',
                 amount: Number(invoice.amount),
-                date: invoice.updatedAt.toISOString().split('T')[0],
-                time: invoice.updatedAt.toISOString().split('T')[1].substring(0, 5),
+                date: wibDateKey(invoice.updatedAt),
+                time: wibTimeKey(invoice.updatedAt),
                 status: 'failed',
                 note: 'Payment failed',
                 code: invoice.externalTransactionId ?? undefined,
