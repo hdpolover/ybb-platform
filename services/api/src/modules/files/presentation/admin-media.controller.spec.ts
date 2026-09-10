@@ -87,6 +87,54 @@ describe('AdminMediaController — listMedia', () => {
         );
     });
 
+    it('clamps limit to the page ceiling and rejects unusable page/limit values', async () => {
+        mockPrismaRead.admin.findUnique.mockResolvedValue(mockAdmin({ accessLevel: 10 }));
+        mockFileServiceClient.listProgramMedia.mockResolvedValue({ files: [], total: 0 });
+
+        await controller.listMedia(PROGRAM_ID, platformAdminUser, undefined, undefined, 1, 5000);
+        expect(mockFileServiceClient.listProgramMedia).toHaveBeenLastCalledWith(
+            expect.objectContaining({ page: 1, limit: 100 }),
+        );
+
+        await controller.listMedia(PROGRAM_ID, platformAdminUser, undefined, undefined, 0, -3);
+        expect(mockFileServiceClient.listProgramMedia).toHaveBeenLastCalledWith(
+            expect.objectContaining({ page: 1, limit: 1 }),
+        );
+
+        await controller.listMedia(PROGRAM_ID, platformAdminUser, undefined, undefined, 'x' as unknown as number, 'y' as unknown as number);
+        expect(mockFileServiceClient.listProgramMedia).toHaveBeenLastCalledWith(
+            expect.objectContaining({ page: 1, limit: 1 }),
+        );
+    });
+
+    it('presigns private files without opening one call per file at once', async () => {
+        mockPrismaRead.admin.findUnique.mockResolvedValue(mockAdmin({ accessLevel: 10 }));
+        const files = Array.from({ length: 40 }, (_, i) => ({
+            id: `file-${i}`,
+            storage_path: `documents/${i}.pdf`,
+            url: 'https://stored.example.com/old',
+        }));
+        mockFileServiceClient.listProgramMedia.mockResolvedValue({ files, total: files.length });
+
+        let inFlight = 0;
+        let peak = 0;
+        mockPrivateFileUrlResolver.resolveByKey.mockImplementation(async () => {
+            inFlight += 1;
+            peak = Math.max(peak, inFlight);
+            await new Promise((resolve) => setTimeout(resolve, 1));
+            inFlight -= 1;
+            return PRESIGNED_URL;
+        });
+
+        const result = await controller.listMedia(PROGRAM_ID, platformAdminUser);
+
+        expect(peak).toBeLessThanOrEqual(10);
+        expect(mockPrivateFileUrlResolver.resolveByKey).toHaveBeenCalledTimes(40);
+        expect((result.files as Array<{ url: string }>).map((f) => f.url)).toEqual(
+            Array.from({ length: 40 }, () => PRESIGNED_URL),
+        );
+    });
+
     it('allows a brand-scoped admin to list media for a program in their own brand', async () => {
         mockPrismaRead.admin.findUnique.mockResolvedValue(
             mockAdmin({ adminBrands: [{ brandId: PROGRAM_BRAND_ID, permissions: null }] }),

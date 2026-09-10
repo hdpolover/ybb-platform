@@ -27,7 +27,7 @@ import {
   RevenueTransactionsResultDto,
 } from './dto/revenue-response.dto';
 
-const revenueInvoiceSelect = {
+const revenueRollupSelect = {
   id: true,
   applicationId: true,
   amount: true,
@@ -47,10 +47,6 @@ const revenueInvoiceSelect = {
     select: {
       programId: true,
       applicationCategory: true,
-      // personal_data is the source of truth for nationality/institution/
-      // occupation on the export — the matching participant columns below
-      // are dead in prod and only used as a legacy fallback.
-      personalData: true,
       program: {
         select: {
           id: true,
@@ -60,6 +56,38 @@ const revenueInvoiceSelect = {
           brand: { select: { id: true, name: true } },
         },
       },
+    },
+  },
+} satisfies Prisma.ApplicationInvoiceSelect;
+
+/**
+ * The transaction list shows a participant name; it never reads personal_data.
+ * Selecting the whole personal_data JSON for a page of invoices - or for every
+ * invoice behind a rollup - pulls a document per row for one string.
+ */
+const revenueListSelect = {
+  ...revenueRollupSelect,
+  application: {
+    select: {
+      ...revenueRollupSelect.application.select,
+      participant: { select: { fullName: true } },
+    },
+  },
+} satisfies Prisma.ApplicationInvoiceSelect;
+
+/**
+ * The export is the only surface that reads personal_data (and the dead
+ * participant columns it falls back to), so it is the only one that selects it.
+ */
+const revenueExportSelect = {
+  ...revenueRollupSelect,
+  application: {
+    select: {
+      ...revenueRollupSelect.application.select,
+      // personal_data is the source of truth for nationality/institution/
+      // occupation on the export - the matching participant columns below
+      // are dead in prod and only used as a legacy fallback.
+      personalData: true,
       participant: {
         select: {
           fullName: true,
@@ -73,7 +101,8 @@ const revenueInvoiceSelect = {
   },
 } satisfies Prisma.ApplicationInvoiceSelect;
 
-type RevenueInvoiceRow = Prisma.ApplicationInvoiceGetPayload<{ select: typeof revenueInvoiceSelect }>;
+type RevenueRollupRow = Prisma.ApplicationInvoiceGetPayload<{ select: typeof revenueRollupSelect }>;
+type RevenueListRow = Prisma.ApplicationInvoiceGetPayload<{ select: typeof revenueListSelect }>;
 
 interface EnrichedRow {
   status: PaymentStatus;
@@ -108,7 +137,7 @@ export class RevenueService {
 
     const invoices = await this.readPrisma.applicationInvoice.findMany({
       where: { application: { programId: program.id } },
-      select: revenueInvoiceSelect,
+      select: revenueRollupSelect,
     });
 
     const rows = invoices.map((invoice) => this.enrichRow(invoice));
@@ -131,7 +160,7 @@ export class RevenueService {
 
     const invoices = await this.readPrisma.applicationInvoice.findMany({
       where,
-      select: revenueInvoiceSelect,
+      select: revenueRollupSelect,
     });
 
     const rows = invoices.map((invoice) => this.enrichRow(invoice));
@@ -158,7 +187,7 @@ export class RevenueService {
       this.readPrisma.applicationInvoice.count({ where }),
       this.readPrisma.applicationInvoice.findMany({
         where,
-        select: revenueInvoiceSelect,
+        select: revenueListSelect,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
@@ -237,7 +266,7 @@ export class RevenueService {
 
       const invoices = await this.readPrisma.applicationInvoice.findMany({
         where: cursorWhere ? { AND: [where, cursorWhere] } : where,
-        select: revenueInvoiceSelect,
+        select: revenueExportSelect,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: EXPORT_BATCH_SIZE,
       });
@@ -287,7 +316,7 @@ export class RevenueService {
 
   // ── Shared row shaping ───────────────────────────────────────────────────
 
-  private enrichRow(invoice: RevenueInvoiceRow): EnrichedRow {
+  private enrichRow(invoice: RevenueRollupRow): EnrichedRow {
     return {
       status: invoice.status,
       paidAt: invoice.paidAt,
@@ -302,7 +331,7 @@ export class RevenueService {
     };
   }
 
-  private toTransactionRow(invoice: RevenueInvoiceRow): RevenueTransactionRowDto {
+  private toTransactionRow(invoice: RevenueListRow): RevenueTransactionRowDto {
     const money = resolveInvoiceRevenue(invoice, invoice.application.program?.usdInIdr ?? null);
     return {
       invoiceId: invoice.id,

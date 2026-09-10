@@ -1,6 +1,6 @@
 // src/modules/stats/revenue/dto/revenue-query.dto.ts
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaymentStatus } from '@prisma/client';
 
@@ -11,6 +11,12 @@ export class PlatformRevenueQueryDto {
   brandId?: string;
 }
 
+/**
+ * A page of transactions costs a count over a three-table join plus the page
+ * itself, so the caller does not get to choose an arbitrary size.
+ */
+export const MAX_REVENUE_PAGE_SIZE = 100;
+
 export class RevenueTransactionsQueryDto {
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()
@@ -19,11 +25,12 @@ export class RevenueTransactionsQueryDto {
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({ default: 20 })
+  @ApiPropertyOptional({ default: 20, maximum: MAX_REVENUE_PAGE_SIZE })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(1)
+  @Max(MAX_REVENUE_PAGE_SIZE)
   limit?: number = 20;
 
   @ApiPropertyOptional({ enum: PaymentStatus })

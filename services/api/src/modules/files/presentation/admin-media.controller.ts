@@ -35,6 +35,7 @@ import { FileServiceClient } from '../infrastructure/clients/file-service.client
 import { StorageService } from '../application/storage.service';
 import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '../application/private-file-url-resolver.service';
 import { isPrivateCategoryKey } from '@shared/utils/private-file-key';
+import { mapWithConcurrency } from '@shared/utils/map-with-concurrency';
 import { multerLimits } from '@common/constants';
 
 /**
@@ -51,6 +52,12 @@ import { multerLimits } from '@common/constants';
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class AdminMediaController {
+  /** Largest page the media list will serve, whatever the caller asks for. */
+  private static readonly MAX_PAGE_SIZE = 100;
+
+  /** Presign calls allowed in flight at once for one page of media. */
+  private static readonly PRESIGN_CONCURRENCY = 10;
+
   private static readonly UUID_PATTERN =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   private readonly logger = new Logger(AdminMediaController.name);
@@ -97,14 +104,32 @@ export class AdminMediaController {
         brandId: program.brandId,
         assetType,
         bucket,
-        page: Number(page),
-        limit: Number(limit),
+        page: AdminMediaController.clampPage(page),
+        limit: AdminMediaController.clampLimit(limit),
       });
       return await this.presignPrivateMediaFiles(result);
     } catch (error: unknown) {
       this.logger.error(`Failed to list media for program ${programId}: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
+  }
+
+  /**
+   * `limit` reaches the file service unvalidated otherwise: a non-numeric value
+   * arrives as NaN, and a large one asks for a page whose every private file
+   * costs a presign round trip. Clamped here rather than in a DTO because these
+   * params are read straight off the query string.
+   */
+  private static clampLimit(limit: unknown): number {
+    const parsed = Math.trunc(Number(limit));
+    if (!Number.isFinite(parsed) || parsed < 1) return 1;
+    return Math.min(parsed, AdminMediaController.MAX_PAGE_SIZE);
+  }
+
+  private static clampPage(page: unknown): number {
+    const parsed = Math.trunc(Number(page));
+    if (!Number.isFinite(parsed) || parsed < 1) return 1;
+    return parsed;
   }
 
   /**
@@ -117,8 +142,10 @@ export class AdminMediaController {
     const files = payload?.files;
     if (!Array.isArray(files)) return payload;
 
-    const resolvedFiles = await Promise.all(
-      files.map(async (file: Record<string, unknown>) => {
+    const resolvedFiles = await mapWithConcurrency(
+      files,
+      AdminMediaController.PRESIGN_CONCURRENCY,
+      async (file: Record<string, unknown>) => {
         const storagePath = file?.storage_path;
         if (typeof storagePath !== 'string' || !isPrivateCategoryKey(storagePath)) {
           return file;
@@ -127,7 +154,7 @@ export class AdminMediaController {
         const resolution = await this.privateFileUrlResolver.resolveByKey(storagePath);
         const presignedUrl = resolution === PRIVATE_FILE_UNAVAILABLE || resolution === null ? null : resolution;
         return { ...file, url: presignedUrl, download_url: presignedUrl };
-      }),
+      },
     );
 
     return { ...payload, files: resolvedFiles };

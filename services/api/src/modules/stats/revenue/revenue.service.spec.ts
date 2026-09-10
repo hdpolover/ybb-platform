@@ -211,6 +211,39 @@ describe('RevenueService', () => {
     });
   });
 
+  describe('select scoping', () => {
+    it('does not read personal_data for the transaction list or the rollups', async () => {
+      mockPrisma.applicationInvoice.count.mockResolvedValue(0);
+      mockPrisma.applicationInvoice.findMany.mockResolvedValue([invoiceRow()]);
+
+      await service.getRevenueTransactions({ page: 1, limit: 10 }, platformScope);
+      await service.getPlatformRevenueRollup({}, platformScope);
+
+      for (const call of mockPrisma.applicationInvoice.findMany.mock.calls) {
+        const applicationSelect = call[0].select.application.select;
+        expect(applicationSelect.personalData).toBeUndefined();
+      }
+
+      // The list still needs the participant name it renders.
+      const listSelect = mockPrisma.applicationInvoice.findMany.mock.calls[0][0].select;
+      expect(listSelect.application.select.participant.select).toEqual({ fullName: true });
+    });
+
+    it('still selects personal_data for the export, which reads it', async () => {
+      mockExcelService.streamExcelRows.mockImplementation(
+        async (_res: unknown, rows: AsyncIterable<Record<string, unknown>>) => {
+          for await (const _row of rows) { /* drain */ }
+        },
+      );
+      mockPrisma.applicationInvoice.findMany.mockResolvedValue([]);
+
+      await service.exportRevenueTransactions({} as never, {}, platformScope);
+
+      const exportSelect = mockPrisma.applicationInvoice.findMany.mock.calls[0][0].select;
+      expect(exportSelect.application.select.personalData).toBe(true);
+    });
+  });
+
   describe('exportRevenueTransactions', () => {
     function collectExportedRows(invoices: Record<string, unknown>[]) {
       const collected: Record<string, unknown>[] = [];
