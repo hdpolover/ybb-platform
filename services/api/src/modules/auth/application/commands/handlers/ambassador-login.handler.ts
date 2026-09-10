@@ -103,6 +103,7 @@ export class AmbassadorLoginHandler {
       await recordFailedAttempt(this.prisma, user.id);
 
       await this.authLoggingService.logFailedLogin(
+        user.id,
         user.email,
         command.ipAddress,
         command.userAgent,

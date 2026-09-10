@@ -72,16 +72,17 @@ export class AuthLoggingService {
     });
   }
 
-  async logFailedLogin(email: string, ipAddress: string, userAgent: string, reason: string) {
-    // Find user ID if possible, otherwise null
-    const user = await this.prisma.user.findFirst({
-        where: { email, deletedAt: null },
-        select: { id: true }
-    });
-
+  // Audit M138: this used to re-derive the user via an unscoped,
+  // case-sensitive findFirst(email) with no orderBy, so the attributed
+  // userId was nondeterministic whenever duplicate-case emails existed and
+  // could silently miss a match entirely on case mismatch. Every caller
+  // (login.handler, admin-login.handler, ambassador-login.handler) already
+  // has the loaded user row in scope at the call site, so userId is passed
+  // in directly instead of re-derived by lookup.
+  async logFailedLogin(userId: string | null, email: string, ipAddress: string, userAgent: string, reason: string) {
     await this.prisma.userSecurityLog.create({
       data: {
-        userId: user?.id,
+        userId: userId ?? undefined,
         eventType: 'LOGIN_FAILED',
         eventStatus: 'FAILURE',
         eventDescription: `Failed login attempt: ${reason}`,
@@ -157,8 +158,22 @@ export class AuthLoggingService {
     });
   }
 
-  async logForgotPasswordRequest(email: string, ipAddress: string = '0.0.0.0', userAgent: string = 'unknown') {
-    const user = await this.prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, deletedAt: null }, orderBy: { createdAt: 'asc' }, select: { id: true } });
+  /**
+   * `userId` is the account the caller already resolved for this email, or null
+   * when it resolved to none. The email lookup below is a fallback for callers
+   * that have neither: it is case-insensitive but NOT brand-scoped, so with the
+   * same address registered under two brands it attributes the request to
+   * whichever account is older (audit M138). Pass the id when you have it.
+   */
+  async logForgotPasswordRequest(
+    email: string,
+    ipAddress: string = '0.0.0.0',
+    userAgent: string = 'unknown',
+    userId?: string | null,
+  ) {
+    const user = userId !== undefined
+      ? (userId === null ? null : { id: userId })
+      : await this.prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' }, deletedAt: null }, orderBy: { createdAt: 'asc' }, select: { id: true } });
     const agentInfo = this.parseUserAgent(userAgent);
 
     if (user) {

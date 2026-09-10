@@ -137,7 +137,7 @@ export class AdminLoginHandler {
         if (!isPasswordValid) {
             await recordFailedAttempt(this.prisma, user.id);
 
-            await this.authLoggingService.logFailedLogin(user.email, command.ipAddress, command.userAgent, 'Invalid Admin Password');
+            await this.authLoggingService.logFailedLogin(user.id, user.email, command.ipAddress, command.userAgent, 'Invalid Admin Password');
             this.metricsService.loginTotal.inc({ method: 'admin_email', result: 'failure' });
             throw new UnauthorizedException('Invalid credentials');
         }

@@ -466,4 +466,31 @@ describe('LoginHandler', () => {
       data: { lockedUntil: expect.any(Date), failedLoginAttempts: 0 },
     });
   });
+
+  // Audit M138: logFailedLogin used to be attributed by re-deriving the user
+  // via an unscoped, case-sensitive email lookup. The handler already has the
+  // loaded user row at this point, so userId is passed in directly.
+  it('logs a failed password attempt with the already-loaded userId, not a re-derived lookup', async () => {
+    (bcrypt.compare as jest.Mock).mockResolvedValueOnce(false);
+    mockPrismaService.user.findFirst.mockResolvedValueOnce({ ...brandOneUser });
+    mockPrismaService.user.update.mockResolvedValue({ failedLoginAttempts: 1 });
+
+    const command = new LoginCommand(
+      'same@example.com',
+      'wrong-password',
+      '127.0.0.1',
+      'Mozilla/5.0',
+      'brand-1',
+    );
+
+    await expect(handler.execute(command)).rejects.toThrow(UnauthorizedException);
+
+    expect(mockAuthLoggingService.logFailedLogin).toHaveBeenCalledWith(
+      'user-brand-1',
+      'same@example.com',
+      '127.0.0.1',
+      'Mozilla/5.0',
+      'Invalid Password',
+    );
+  });
 });

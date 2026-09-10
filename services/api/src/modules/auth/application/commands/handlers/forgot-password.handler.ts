@@ -109,6 +109,7 @@ export class ForgotPasswordHandler {
                 command.email,
                 command.ipAddress || '0.0.0.0',
                 command.userAgent || 'unknown',
+                user?.id ?? null,
             );
 
             return { message: FORGOT_PASSWORD_RESPONSE };
@@ -165,6 +166,7 @@ export class ForgotPasswordHandler {
             command.email,
             command.ipAddress || '0.0.0.0',
             command.userAgent || 'unknown',
+            user.id,
         );
 
         return { message: FORGOT_PASSWORD_RESPONSE };

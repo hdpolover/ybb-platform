@@ -90,6 +90,7 @@ describe('AmbassadorLoginHandler', () => {
 
         await expect(handler.execute(command)).rejects.toThrow(UnauthorizedException);
         expect(mockAuthLoggingService.logFailedLogin).toHaveBeenCalledWith(
+            USER_ID,
             'ambassador@example.com',
             '127.0.0.1',
             'node',

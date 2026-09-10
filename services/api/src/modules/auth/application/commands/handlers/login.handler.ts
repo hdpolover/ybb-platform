@@ -247,7 +247,7 @@ export class LoginHandler {
       // Update failed login attempts
       await recordFailedAttempt(this.prisma, user.id);
 
-      await this.authLoggingService.logFailedLogin(user.email, command.ipAddress, command.userAgent, 'Invalid Password');
+      await this.authLoggingService.logFailedLogin(user.id, user.email, command.ipAddress, command.userAgent, 'Invalid Password');
 
       this.metricsService.loginTotal.inc({ method: 'email', result: 'failure' });
 

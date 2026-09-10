@@ -131,6 +131,21 @@ describe('ForgotPasswordHandler - account enumeration hardening', () => {
     expect(hitResult).toEqual(missResult);
   });
 
+  // Audit M138: the handler already knows which account it resolved, so it
+  // hands the id to the logger instead of letting it re-derive one by email.
+  it('attributes the security log to the account it already resolved', async () => {
+    mockPrismaService.user.findFirst.mockResolvedValueOnce(existingUser);
+
+    await handler.execute(new ForgotPasswordCommand('existing@example.com', 'brand-id-123'));
+
+    expect(mockAuthLoggingService.logForgotPasswordRequest).toHaveBeenCalledWith(
+      'existing@example.com',
+      '0.0.0.0',
+      'unknown',
+      existingUser.id,
+    );
+  });
+
   it('produces no side effects when the account does not exist', async () => {
     // Arrange
     mockPrismaService.user.findFirst.mockResolvedValue(null);
@@ -175,10 +190,13 @@ describe('ForgotPasswordHandler - account enumeration hardening', () => {
 
     await handler.execute(new ForgotPasswordCommand('nobody@example.com', 'brand-id-123'));
 
+    // The trailing null says "resolved to no account" so the logger skips its
+    // own email lookup rather than re-deriving one (audit M138).
     expect(mockAuthLoggingService.logForgotPasswordRequest).toHaveBeenCalledWith(
       'nobody@example.com',
       '0.0.0.0',
       'unknown',
+      null,
     );
   });
 
