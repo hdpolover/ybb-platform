@@ -1,18 +1,10 @@
 // services/admin-dashboard/lib/registration-date-warnings.test.ts
 /**
- * Standalone test for the registration-date advisory-warnings helper.
- * The admin dashboard has no test framework; run directly with Node's native
- * TypeScript support:  node lib/registration-date-warnings.test.ts
+ * Vitest suite for the registration-date advisory-warnings helper.
  */
+import { describe, it } from "vitest";
 import assert from "node:assert/strict";
 import { computeRegistrationDateWarnings, type WarningTier } from "./registration-date-warnings.ts";
-
-let passed = 0;
-function t(name: string, fn: () => void) {
-  fn();
-  passed++;
-  console.log("  ✓", name);
-}
 
 const NOW = new Date("2026-09-07T04:00:00.000Z"); // 11:00 WIB
 
@@ -32,7 +24,9 @@ const CLEAN_TIERS: WarningTier[] = [
   regFeeTier("fully_funded", [{ start: "2026-01-01T00:00:00.000Z", end: "2026-12-01T16:59:00.000Z" }]),
 ];
 
-t("a correctly configured program produces no warnings", () => {
+describe("registration-date-warnings", () => {
+
+it("a correctly configured program produces no warnings", () => {
   const warnings = computeRegistrationDateWarnings({
     registrationOpenDate: "2026-01-01T00:00:00.000Z",
     registrationCloseDate: "2026-12-01T16:59:00.000Z",
@@ -42,7 +36,7 @@ t("a correctly configured program produces no warnings", () => {
   assert.deepEqual(warnings, []);
 });
 
-t("check 1: tier window ends after program close (the KYS 4th case)", () => {
+it("check 1: tier window ends after program close (the KYS 4th case)", () => {
   const warnings = computeRegistrationDateWarnings({
     registrationCloseDate: "2027-03-05T16:59:00.000Z",
     tiers: [regFeeTier("self_funded", [{ start: "2026-01-01T00:00:00.000Z", end: "2027-03-20T16:59:00.000Z" }])],
@@ -54,7 +48,7 @@ t("check 1: tier window ends after program close (the KYS 4th case)", () => {
   assert.match(hit!.message, /20 Mar 2027/);
 });
 
-t("check 1: tier window ends before program close", () => {
+it("check 1: tier window ends before program close", () => {
   const warnings = computeRegistrationDateWarnings({
     registrationCloseDate: "2026-12-31T16:59:00.000Z",
     tiers: [regFeeTier("self_funded", [{ start: "2026-01-01T00:00:00.000Z", end: "2026-11-02T16:59:00.000Z" }])],
@@ -65,7 +59,7 @@ t("check 1: tier window ends before program close", () => {
   assert.match(hit!.message, /later than/);
 });
 
-t("check 2: category has a registration-fee tier, but no window covers today", () => {
+it("check 2: category has a registration-fee tier, but no window covers today", () => {
   const warnings = computeRegistrationDateWarnings({
     registrationCloseDate: "2026-12-31T16:59:00.000Z",
     tiers: [
@@ -79,7 +73,7 @@ t("check 2: category has a registration-fee tier, but no window covers today", (
   assert.match(hit!.message, /Fully Funded/);
 });
 
-t("check 3: program offers a category (via a program-fee tier) with no registration-fee tier at all", () => {
+it("check 3: program offers a category (via a program-fee tier) with no registration-fee tier at all", () => {
   const warnings = computeRegistrationDateWarnings({
     tiers: [
       { feeType: "program_fee_1", allowedCategories: ["fully_funded"], validityPeriods: [] },
@@ -93,7 +87,7 @@ t("check 3: program offers a category (via a program-fee tier) with no registrat
   assert.equal(warnings.filter((w) => w.id.includes("fully_funded")).length, 1);
 });
 
-t("check 4: bare-midnight-UTC close date is flagged with its WIB reading", () => {
+it("check 4: bare-midnight-UTC close date is flagged with its WIB reading", () => {
   const warnings = computeRegistrationDateWarnings({
     registrationCloseDate: "2026-07-16T00:00:00.000Z",
     tiers: [regFeeTier("self_funded", [{ start: "2026-01-01T00:00:00.000Z", end: "2026-07-16T00:00:00.000Z" }])],
@@ -104,7 +98,7 @@ t("check 4: bare-midnight-UTC close date is flagged with its WIB reading", () =>
   assert.match(hit!.message, /07:00/);
 });
 
-t("check 4: a proper end-of-day WIB instant (16:59 UTC) is not flagged", () => {
+it("check 4: a proper end-of-day WIB instant (16:59 UTC) is not flagged", () => {
   const warnings = computeRegistrationDateWarnings({
     registrationCloseDate: "2026-07-15T16:59:00.000Z",
     tiers: [regFeeTier("self_funded", [{ start: "2026-01-01T00:00:00.000Z", end: "2026-07-15T16:59:00.000Z" }])],
@@ -113,7 +107,7 @@ t("check 4: a proper end-of-day WIB instant (16:59 UTC) is not flagged", () => {
   assert.equal(warnings.filter((w) => w.id.startsWith("bare-calendar-day")).length, 0);
 });
 
-t("no tiers at all: no category warnings fire (nothing to compare against)", () => {
+it("no tiers at all: no category warnings fire (nothing to compare against)", () => {
   const warnings = computeRegistrationDateWarnings({
     registrationCloseDate: "2026-07-15T16:59:00.000Z",
     tiers: [],
@@ -122,7 +116,7 @@ t("no tiers at all: no category warnings fire (nothing to compare against)", () 
   assert.deepEqual(warnings, []);
 });
 
-t("missing/invalid dates never throw", () => {
+it("missing/invalid dates never throw", () => {
   assert.doesNotThrow(() => {
     computeRegistrationDateWarnings({
       registrationCloseDate: null,
@@ -132,4 +126,4 @@ t("missing/invalid dates never throw", () => {
   });
 });
 
-console.log(`\n${passed} tests passed`);
+});

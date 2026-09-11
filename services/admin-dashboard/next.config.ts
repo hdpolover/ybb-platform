@@ -16,6 +16,26 @@ const nextConfig: NextConfig = {
     "@tiptap/extension-underline",
   ],
 
+  // Turbopack's Node File Tracing dies with
+  // "NftJsonAsset: cannot handle filepath node:worker_threads" when it walks
+  // jsdom's xhr-sync-worker.js, which is reachable from the runtime dependency
+  // isomorphic-dompurify (lib/sanitize-html.ts) and only matters for
+  // synchronous XHR in a browser-like environment — something this app never
+  // does server-side.
+  //
+  // It surfaced when a test runner was added, and the cause is not the runner:
+  // npm hoisted jsdom to the top level before that install and nested it under
+  // isomorphic-dompurify afterwards, and ONLY the nested path trips the tracer.
+  // Verified by building the commit before (clean) and after (broken), then
+  // confirming the break persisted with jsdom and testing-library removed
+  // entirely. So any future dependency that perturbs hoisting would produce the
+  // same broken build - relying on the hoist order is the fragile fix, this is
+  // the durable one. With it in place the full DOM testing stack installs and
+  // the build still passes.
+  outputFileTracingExcludes: {
+    "*": ["**/jsdom/lib/jsdom/living/xhr/xhr-sync-worker.js"],
+  },
+
   // TypeScript configuration
   // Type errors fail the build so regressions are caught at build time
   // instead of shipping silently.
