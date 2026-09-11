@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
-import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Eye, Mail, Pencil, RefreshCw, Trash2, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Eye, FileSpreadsheet, Mail, Pencil, RefreshCw, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import {
@@ -306,6 +307,12 @@ export default function AmbassadorsPage() {
             <Button variant="outline" size="sm" onClick={() => void fetchData()} disabled={loading}>
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
               Refresh
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/programs/${params.programId}/ambassadors/recap`}>
+                <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+                Monthly Recap
+              </Link>
             </Button>
             <Button size="sm" onClick={openCreate}>
               <UserPlus className="mr-1.5 h-3.5 w-3.5" />

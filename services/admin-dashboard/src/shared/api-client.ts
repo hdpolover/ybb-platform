@@ -4171,6 +4171,45 @@ export async function getAmbassadorReferrals(id: string, page = 1): Promise<{ da
   return { data, meta };
 }
 
+export type AmbassadorRecapStage = 'referred' | 'registered' | 'applied' | 'accepted' | 'completed';
+
+export type AmbassadorRecapMonth = { key: string; label: string };
+
+export type AmbassadorRecapRow = {
+  ambassadorId: string;
+  ambassadorName: string;
+  referralCode: string;
+  /** Keyed by month `key` (e.g. "2026-07") — every month in `months` is present, zeros included. */
+  counts: Record<string, number>;
+  total: number;
+};
+
+export type AmbassadorRecapResponse = {
+  stage: AmbassadorRecapStage;
+  months: AmbassadorRecapMonth[];
+  rows: AmbassadorRecapRow[];
+  totals: { byMonth: Record<string, number>; total: number };
+};
+
+/**
+ * Programme-level "who reached this stage, by month" recap — the row/column
+ * shape ops keeps by hand in the "REKAP AFFILIATE AYFN" spreadsheet. Month
+ * boundaries are computed server-side in Asia/Jakarta, not UTC.
+ */
+export function getAmbassadorRecap(params: {
+  programId: string;
+  stage?: AmbassadorRecapStage;
+  from?: string;
+  to?: string;
+}): Promise<AmbassadorRecapResponse> {
+  const q = new URLSearchParams();
+  q.set("programId", params.programId);
+  if (params.stage) q.set("stage", params.stage);
+  if (params.from) q.set("from", params.from);
+  if (params.to) q.set("to", params.to);
+  return request<AmbassadorRecapResponse>(`/admin/ambassadors/recap?${q}`);
+}
+
 export function resendAmbassadorCredentials(id: string): Promise<{ message: string }> {
   return request<{ message: string }>(`/admin/ambassadors/${id}/resend-credentials`, {
     method: "POST",

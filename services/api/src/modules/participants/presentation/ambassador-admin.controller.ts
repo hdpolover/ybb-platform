@@ -13,6 +13,7 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { randomInt } from 'crypto';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
@@ -31,14 +32,62 @@ import {
 } from '../application/commands/ambassador-admin.commands';
 import { DeleteAmbassadorCommand } from '../application/commands/delete-ambassador.command';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
-import { ChangeType } from '@prisma/client';
+import { ChangeType, Prisma } from '@prisma/client';
 import { createAmbassadorShareToken } from '../application/utils/ambassador-share-token.util';
 import { Logger } from '@nestjs/common';
-import { CreateAmbassadorAdminDto, UpdateAmbassadorAdminDto, AmbassadorReferralAnalyticsQueryDto } from './dto/ambassador.dto';
+import {
+  CreateAmbassadorAdminDto,
+  UpdateAmbassadorAdminDto,
+  AmbassadorReferralAnalyticsQueryDto,
+  AmbassadorRecapQueryDto,
+  AmbassadorRecapStage,
+  AMBASSADOR_RECAP_STAGES,
+} from './dto/ambassador.dto';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { assertAmbassadorAccess, assertAmbassadorCreateAccess, resolveAmbassadorProgramScope } from '../application/utils/ambassador-access.util';
-import { buildWibDateRangeFilter, parseWibFilterDate } from '@shared/utils/wib-time';
+import { buildWibDateRangeFilter, parseWibFilterDate, startOfWibMonth, addWibMonths, endOfWibDay, wibMonthKey } from '@shared/utils/wib-time';
+
+// Maps the recap's `stage` query param to the ambassador_referrals column that
+// timestamps it. A hardcoded lookup, not string interpolation of the query
+// param itself — `stage` is user input and this map is what stands between it
+// and a raw SQL identifier in getRecap() below. Column names (snake_case),
+// not Prisma field names, because they are spliced into $queryRaw.
+const AMBASSADOR_RECAP_STAGE_COLUMNS: Record<AmbassadorRecapStage, string> = {
+  referred: 'referred_at',
+  registered: 'registered_at',
+  applied: 'applied_at',
+  accepted: 'accepted_at',
+  completed: 'completed_at',
+};
+
+interface AmbassadorRecapMonth {
+  key: string;
+  label: string;
+}
+
+interface AmbassadorRecapSqlRow {
+  ambassadorId: string;
+  ambassadorName: string;
+  referralCode: string;
+  monthKey: string;
+  count: number;
+}
+
+interface AmbassadorRecapRow {
+  ambassadorId: string;
+  ambassadorName: string;
+  referralCode: string;
+  counts: Record<string, number>;
+  total: number;
+}
+
+interface AmbassadorRecapResponse {
+  stage: AmbassadorRecapStage;
+  months: AmbassadorRecapMonth[];
+  rows: AmbassadorRecapRow[];
+  totals: { byMonth: Record<string, number>; total: number };
+}
 
 @ApiTags('Ambassadors')
 @Controller('admin/ambassadors')
@@ -90,6 +139,209 @@ export class AmbassadorAdminController {
     return this.queryBus.execute(
       new GetAmbassadorsListQuery(programId, search, Number(page), Number(limit), sortBy, sortOrder, allowedProgramIds),
     );
+  }
+
+  // Builds the ordered list of WIB calendar months spanning [gte, lte],
+  // inclusive of both ends. `months` in the recap response is this list's
+  // {key, label} pairs, independent of how many referrals actually landed in
+  // each one — that independence is what makes a fully-zero month show up
+  // as a real 0 column instead of silently vanishing.
+  private buildRecapMonths(gte: Date, lte: Date): AmbassadorRecapMonth[] {
+    const months: AmbassadorRecapMonth[] = [];
+    let cursor = startOfWibMonth(gte);
+    const end = startOfWibMonth(lte);
+    while (cursor.getTime() <= end.getTime()) {
+      const key = wibMonthKey(cursor);
+      const [year, month] = key.split('-').map(Number);
+      const label = new Date(Date.UTC(year, month - 1, 1)).toLocaleString('en-US', {
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+      });
+      months.push({ key, label });
+      cursor = addWibMonths(cursor, 1);
+    }
+    return months;
+  }
+
+  // Reshapes the flat (ambassador x month) SQL rows into the recap's
+  // per-ambassador shape and rolls up totals. The SQL query already
+  // CROSS JOINs every scoped ambassador against every requested month (see
+  // getRecap()), so every (ambassadorId, monthKey) pair this loop needs is
+  // guaranteed to be present — no zero-filling has to happen here.
+  private buildRecapResponse(
+    stage: AmbassadorRecapStage,
+    months: AmbassadorRecapMonth[],
+    sqlRows: AmbassadorRecapSqlRow[],
+  ): AmbassadorRecapResponse {
+    const rowsByAmbassador = new Map<string, AmbassadorRecapRow>();
+    const byMonth: Record<string, number> = {};
+    months.forEach((month) => { byMonth[month.key] = 0; });
+    let grandTotal = 0;
+
+    sqlRows.forEach((sqlRow) => {
+      const row = rowsByAmbassador.get(sqlRow.ambassadorId) ?? {
+        ambassadorId: sqlRow.ambassadorId,
+        ambassadorName: sqlRow.ambassadorName,
+        referralCode: sqlRow.referralCode,
+        counts: {},
+        total: 0,
+      };
+      row.counts[sqlRow.monthKey] = sqlRow.count;
+      row.total += sqlRow.count;
+      rowsByAmbassador.set(sqlRow.ambassadorId, row);
+
+      byMonth[sqlRow.monthKey] = (byMonth[sqlRow.monthKey] ?? 0) + sqlRow.count;
+      grandTotal += sqlRow.count;
+    });
+
+    return {
+      stage,
+      months,
+      rows: Array.from(rowsByAmbassador.values()).sort((a, b) => a.ambassadorName.localeCompare(b.ambassadorName)),
+      totals: { byMonth, total: grandTotal },
+    };
+  }
+
+  @Get('recap')
+  @ApiOperation({ summary: 'Monthly affiliate recap: one row per ambassador, one column per month (Admin)' })
+  @ApiQuery({ name: 'programId', required: true, description: 'Program id or slug' })
+  @ApiQuery({ name: 'stage', required: false, enum: AMBASSADOR_RECAP_STAGES })
+  @ApiQuery({ name: 'from', required: false, description: 'Start of the recap window (WIB calendar day)' })
+  @ApiQuery({ name: 'to', required: false, description: 'End of the recap window (WIB calendar day, inclusive)' })
+  async getRecap(
+    @CurrentUser() actor: CurrentUserData,
+    @Query() query: AmbassadorRecapQueryDto,
+  ): Promise<AmbassadorRecapResponse> {
+    // Same cross-field check as findOne() below: a class-validator decorator
+    // on either field alone can't see its sibling's value, so from > to is
+    // hand-checked here rather than declared on the DTO.
+    if (query.from && query.to) {
+      const fromInstant = parseWibFilterDate(query.from);
+      const toInstant = parseWibFilterDate(query.to);
+      if (fromInstant.getTime() > toInstant.getTime()) {
+        throw new BadRequestException('from must not be later than to');
+      }
+    }
+
+    // programId may be a slug or a uuid, exactly like findAll() above —
+    // resolved the same way so the two admin ambassador endpoints agree on
+    // what a given programId string means.
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query.programId);
+    let resolvedProgramId: string;
+    if (isUuid) {
+      resolvedProgramId = query.programId;
+    } else {
+      const program = await this.prismaRead.program.findFirst({ where: { slug: query.programId }, select: { id: true } });
+      if (!program) throw new NotFoundException('Program not found');
+      resolvedProgramId = program.id;
+    }
+
+    // Authorization — the single most important check on this route. An
+    // explicit programId is resolved above and checked against the caller's
+    // scope BEFORE any recap data is touched, the same way findAll() guards
+    // its own explicit-programId branch: without this, a program-scoped
+    // admin could read another programme's affiliate performance just by
+    // naming it in the query string.
+    const allowedProgramIds = await resolveAmbassadorProgramScope(this.prismaRead, actor);
+    if (allowedProgramIds !== null && !allowedProgramIds.includes(resolvedProgramId)) {
+      throw new ForbiddenException('You do not have access to this program.');
+    }
+
+    const stage: AmbassadorRecapStage = query.stage ?? 'applied';
+    const stageColumn = AMBASSADOR_RECAP_STAGE_COLUMNS[stage];
+
+    const now = new Date();
+    // Default window: the last 6 WIB calendar months, ending with the
+    // current one. `to` defaults to "now" rather than the literal end of the
+    // current month — indistinguishable in the data (nothing has a future
+    // timestamp) but keeps `lte` honest about what was actually scanned.
+    const gte = query.from ? parseWibFilterDate(query.from) : startOfWibMonth(addWibMonths(now, -5));
+    const lte = query.to ? endOfWibDay(parseWibFilterDate(query.to)) : endOfWibDay(now);
+
+    const months = this.buildRecapMonths(gte, lte);
+    const monthKeys = months.map((month) => month.key);
+
+    // One grouped query, not a per-ambassador fan-out (this codebase has a
+    // documented history of exactly that mistake). $queryRaw is used instead
+    // of the Prisma query builder because the builder has no groupBy-by-
+    // WIB-month primitive and no way to CROSS JOIN a synthetic month list
+    // against ambassadors. $queryRaw bypasses the soft-delete extension in
+    // prisma.service.ts entirely, so deleted_at IS NULL is spelled out by
+    // hand for both tables rather than relied on implicitly. `stageColumn`
+    // is spliced in via Prisma.raw, but it can only ever be one of the 5
+    // hardcoded values above — never the raw `stage` query param.
+    const sqlRows = await this.prismaRead.$queryRaw<AmbassadorRecapSqlRow[]>`
+      WITH months(month_key) AS (
+        SELECT unnest(${monthKeys}::text[])
+      ),
+      scoped_ambassadors AS (
+        -- Who belongs on this programme's recap, from BOTH directions.
+        --
+        -- Ambassador.programId is only the ambassador's HOME programme. Its
+        -- schema doc comment is explicit that a brand-wide code produces a
+        -- referral row per programme a participant applies to, and that every
+        -- per-programme read must key on referral.programId, never on
+        -- ambassador.programId. Selecting rows by home programme alone would
+        -- therefore silently drop an ambassador based elsewhere in the brand
+        -- who brought participants INTO this programme: their referrals are
+        -- attributed here and counted nowhere. Production happens to have zero
+        -- cross-programme referrals today, so that is latent rather than live
+        -- — which is exactly why it would have gone unnoticed until a recap
+        -- quietly under-reported a partner.
+        --
+        -- So: ambassadors whose home programme is this one (they belong on the
+        -- recap at zero even if idle — an absent row reads as "not checked",
+        -- a 0 reads as "none"), UNION any ambassador with a referral actually
+        -- attributed to this programme.
+        SELECT id, full_name, referral_code
+        FROM ambassadors
+        WHERE program_id = ${resolvedProgramId}::uuid AND deleted_at IS NULL
+        UNION
+        SELECT a.id, a.full_name, a.referral_code
+        FROM ambassadors a
+        WHERE a.deleted_at IS NULL
+          AND EXISTS (
+            SELECT 1
+            FROM ambassador_referrals r
+            WHERE r.ambassador_id = a.id
+              AND r.program_id = ${resolvedProgramId}::uuid
+              AND r.deleted_at IS NULL
+          )
+      ),
+      matched_referrals AS (
+        -- Stage-REACHED counts, mirroring findOne()'s reachedCounts below: a
+        -- referral counts in the month its OWN stage timestamp falls in, not
+        -- the month matching its current status. referral.programId (not
+        -- ambassador.programId) is what a referral is actually attributed
+        -- to, so it — not the ambassador's home programme — is what's
+        -- filtered here.
+        SELECT
+          ambassador_id,
+          to_char(date_trunc('month', ${Prisma.raw(stageColumn)} + interval '7 hours'), 'YYYY-MM') AS month_key,
+          COUNT(*)::int AS cnt
+        FROM ambassador_referrals
+        WHERE program_id = ${resolvedProgramId}::uuid
+          AND deleted_at IS NULL
+          AND ${Prisma.raw(stageColumn)} IS NOT NULL
+          AND ${Prisma.raw(stageColumn)} >= ${gte}
+          AND ${Prisma.raw(stageColumn)} <= ${lte}
+        GROUP BY ambassador_id, month_key
+      )
+      SELECT
+        a.id AS "ambassadorId",
+        a.full_name AS "ambassadorName",
+        a.referral_code AS "referralCode",
+        m.month_key AS "monthKey",
+        COALESCE(mr.cnt, 0)::int AS count
+      FROM scoped_ambassadors a
+      CROSS JOIN months m
+      LEFT JOIN matched_referrals mr
+        ON mr.ambassador_id = a.id AND mr.month_key = m.month_key
+      ORDER BY a.full_name, m.month_key;
+    `;
+
+    return this.buildRecapResponse(stage, months, sqlRows);
   }
 
   @Get(':id')

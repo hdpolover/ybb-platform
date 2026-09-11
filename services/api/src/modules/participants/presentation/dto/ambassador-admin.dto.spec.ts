@@ -1,6 +1,6 @@
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { CreateAmbassadorAdminDto, UpdateAmbassadorAdminDto, AmbassadorReferralAnalyticsQueryDto } from './ambassador.dto';
+import { CreateAmbassadorAdminDto, UpdateAmbassadorAdminDto, AmbassadorReferralAnalyticsQueryDto, AmbassadorRecapQueryDto } from './ambassador.dto';
 
 const basePayload = {
   email: 'jane@example.com',
@@ -110,5 +110,39 @@ describe('AmbassadorReferralAnalyticsQueryDto', () => {
     const dto = plainToInstance(AmbassadorReferralAnalyticsQueryDto, { to: '2026-13-45' });
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'to')).toBe(true);
+  });
+});
+
+describe('AmbassadorRecapQueryDto', () => {
+  it('passes with only programId, stage/from/to all omitted', async () => {
+    const dto = plainToInstance(AmbassadorRecapQueryDto, { programId: 'meys-7th' });
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
+  });
+
+  it('passes with each of the 5 allowed stage values', async () => {
+    for (const stage of ['referred', 'registered', 'applied', 'accepted', 'completed']) {
+      const dto = plainToInstance(AmbassadorRecapQueryDto, { programId: 'meys-7th', stage });
+      const errors = await validate(dto);
+      expect(errors).toHaveLength(0);
+    }
+  });
+
+  it('rejects a stage outside the 5 allowed values', async () => {
+    const dto = plainToInstance(AmbassadorRecapQueryDto, { programId: 'meys-7th', stage: 'rejected' });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'stage')).toBe(true);
+  });
+
+  it('rejects a missing programId', async () => {
+    const dto = plainToInstance(AmbassadorRecapQueryDto, {});
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'programId')).toBe(true);
+  });
+
+  it('rejects an unparseable from/to date', async () => {
+    const dto = plainToInstance(AmbassadorRecapQueryDto, { programId: 'meys-7th', from: 'not-a-date' });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'from')).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AmbassadorAdminController } from './ambassador-admin.controller';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -46,8 +46,9 @@ describe('AmbassadorAdminController', () => {
         adminPrograms: [],
       }),
     },
-    program: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
+    program: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), findFirst: jest.fn() },
     ambassador: { findFirst: jest.fn() },
+    $queryRaw: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -213,6 +214,167 @@ describe('AmbassadorAdminController', () => {
       mockPrismaService.ambassadorReferral.findMany.mockResolvedValue([]);
 
       await expect(controller.findOne('amb-1', platformActor, { from: '2026-07-30', to: '2026-07-01' })).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getRecap', () => {
+    // A valid-uuid-shaped id so the isUuid regex short-circuits straight to
+    // resolvedProgramId, skipping the slug lookup path (exercised by its own
+    // test below).
+    const programId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+
+    // 'assigned' scope, mirroring how resolveAmbassadorProgramScope resolves
+    // an admin with no brand grants and one explicit program assignment (see
+    // getAdminProgramAccessScope: accessLevel < 5, no platform permissions,
+    // adminBrands empty -> 'assigned').
+    const assignedActor = { userId: 'u2', email: 'scoped@b.c', brandId: 'b', adminId: 'adm-2' } as never;
+    const assignedAdminRecord = (allowedProgramId: string) => ({
+      accessLevel: 1,
+      canManageAdmins: false,
+      canAssignRoles: false,
+      customPermissions: [],
+      role: { name: 'admin', permissions: [] },
+      adminBrands: [],
+      adminPrograms: [{ programId: allowedProgramId }],
+    });
+
+    const extractSql = (callIndex = 0): { text: string; values: unknown[] } => {
+      const [strings, ...values] = mockPrismaRead.$queryRaw.mock.calls[callIndex];
+      return { text: (strings as string[]).join(''), values };
+    };
+
+    beforeEach(() => {
+      mockPrismaRead.$queryRaw.mockResolvedValue([]);
+    });
+
+    // An ambassador's Ambassador.programId is only their HOME programme. The
+    // schema doc comment is explicit that a brand-wide code produces a referral
+    // row per programme a participant applies to, and that per-programme reads
+    // must key on referral.programId. Selecting recap rows by home programme
+    // alone drops an ambassador based elsewhere who brought participants INTO
+    // this programme — their referrals are attributed here and counted nowhere,
+    // so the recap under-reports a partner with no error anywhere. Production
+    // has zero cross-programme referrals today, which is precisely why this
+    // needs a test rather than a manual check.
+    it('includes ambassadors from other home programmes who have referrals attributed to this one', async () => {
+      await controller.getRecap(platformActor, { programId });
+
+      const { text } = extractSql();
+      // Home-programme membership alone is not the row set: there must also be
+      // an existence check against referrals attributed to this programme.
+      expect(text).toContain('UNION');
+      expect(text).toMatch(/EXISTS\s*\(/);
+      expect(text).toMatch(/FROM\s+ambassador_referrals\s+r/);
+      expect(text).toMatch(/r\.program_id\s*=/);
+    });
+
+    it('rejects a programme outside the caller scope, and never runs the recap query', async () => {
+      mockPrismaRead.admin.findUnique.mockResolvedValueOnce(assignedAdminRecord('some-other-program-id'));
+
+      await expect(
+        controller.getRecap(assignedActor, { programId }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockPrismaRead.$queryRaw).not.toHaveBeenCalled();
+    });
+
+    it('allows a programme inside the caller scope', async () => {
+      mockPrismaRead.admin.findUnique.mockResolvedValueOnce(assignedAdminRecord(programId));
+
+      const result = await controller.getRecap(assignedActor, { programId });
+
+      expect(mockPrismaRead.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(result.stage).toBe('applied');
+    });
+
+    it('resolves a slug programId the same way findAll does, via program.findFirst', async () => {
+      mockPrismaRead.program.findFirst.mockResolvedValueOnce({ id: programId });
+
+      await controller.getRecap(platformActor, { programId: 'meys-7th' });
+
+      expect(mockPrismaRead.program.findFirst).toHaveBeenCalledWith({ where: { slug: 'meys-7th' }, select: { id: true } });
+      const { values } = extractSql();
+      // resolvedProgramId (not the slug) is what reaches the query.
+      expect(values[1]).toBe(programId);
+    });
+
+    it('404s when the slug does not resolve to any programme', async () => {
+      mockPrismaRead.program.findFirst.mockResolvedValueOnce(null);
+
+      await expect(controller.getRecap(platformActor, { programId: 'no-such-slug' })).rejects.toThrow('Program not found');
+    });
+
+    it('rejects from later than to before running any query', async () => {
+      await expect(
+        controller.getRecap(platformActor, { programId, from: '2026-07-30', to: '2026-07-01' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrismaRead.$queryRaw).not.toHaveBeenCalled();
+    });
+
+    it('defaults to the last 6 WIB calendar months ending with the current one', async () => {
+      await controller.getRecap(platformActor, { programId });
+
+      const { values } = extractSql();
+      const monthKeys = values[0] as string[];
+      expect(monthKeys).toHaveLength(6);
+
+      const now = new Date();
+      const currentKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+      // Loose check tolerant of the WIB offset shifting the calendar day
+      // (never the month, seven hours can't cross a month boundary except
+      // right at 1st/last-day edges) — the meaningful assertion is the
+      // window is 6 long and ends at "now"'s month.
+      expect(monthKeys[5].slice(0, 4)).toBe(currentKey.slice(0, 4));
+    });
+
+    it('builds exactly the calendar months spanning an explicit from/to', async () => {
+      await controller.getRecap(platformActor, { programId, from: '2026-07-01', to: '2026-09-15' });
+
+      const { values } = extractSql();
+      expect(values[0]).toEqual(['2026-07', '2026-08', '2026-09']);
+    });
+
+    it('maps the requested stage to its hardcoded timestamp column, never the raw query value', async () => {
+      await controller.getRecap(platformActor, { programId, stage: 'completed' });
+
+      const { text, values } = extractSql();
+      expect(text).toContain('IS NOT NULL');
+      const rawColumns = values
+        .filter((value): value is { strings: string[] } => typeof value === 'object' && value !== null && 'strings' in value)
+        .map((value) => value.strings[0]);
+      expect(rawColumns.length).toBeGreaterThan(0);
+      expect(rawColumns.every((column) => column === 'completed_at')).toBe(true);
+    });
+
+    it('rolls up rows into per-ambassador shape, fills zeros, and sums totals from the SQL rows', async () => {
+      mockPrismaRead.$queryRaw.mockResolvedValueOnce([
+        { ambassadorId: 'amb-a', ambassadorName: 'Amber Ali', referralCode: 'AMB1', monthKey: '2026-07', count: 3 },
+        { ambassadorId: 'amb-a', ambassadorName: 'Amber Ali', referralCode: 'AMB1', monthKey: '2026-08', count: 2 },
+        // amb-b has zero referrals across the whole window — the SQL's
+        // CROSS JOIN guarantees this row exists rather than being absent.
+        { ambassadorId: 'amb-b', ambassadorName: 'Budi Santoso', referralCode: 'AMB2', monthKey: '2026-07', count: 0 },
+        { ambassadorId: 'amb-b', ambassadorName: 'Budi Santoso', referralCode: 'AMB2', monthKey: '2026-08', count: 0 },
+      ]);
+
+      const result = await controller.getRecap(platformActor, { programId, from: '2026-07-01', to: '2026-08-31' });
+
+      expect(result.months.map((m) => m.key)).toEqual(['2026-07', '2026-08']);
+
+      const budi = result.rows.find((row) => row.ambassadorId === 'amb-b');
+      expect(budi?.counts).toEqual({ '2026-07': 0, '2026-08': 0 });
+      expect(budi?.total).toBe(0);
+
+      const amber = result.rows.find((row) => row.ambassadorId === 'amb-a');
+      expect(amber?.counts).toEqual({ '2026-07': 3, '2026-08': 2 });
+      expect(amber?.total).toBe(5);
+
+      // Rows sorted by name — Amber before Budi.
+      expect(result.rows.map((row) => row.ambassadorId)).toEqual(['amb-a', 'amb-b']);
+
+      expect(result.totals.byMonth).toEqual({ '2026-07': 3, '2026-08': 2 });
+      expect(result.totals.total).toBe(5);
+      // Totals must equal the sum of every row's own total.
+      const rowSum = result.rows.reduce((sum, row) => sum + row.total, 0);
+      expect(result.totals.total).toBe(rowSum);
     });
   });
 });

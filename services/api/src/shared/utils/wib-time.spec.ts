@@ -9,6 +9,7 @@ import {
     startOfWibMonth,
     startOfWibWeek,
     wibDateKey,
+    wibMonthKey,
 } from './wib-time';
 
 describe('wib-time', () => {
@@ -128,6 +129,21 @@ describe('wib-time', () => {
 
         it('still reports the earlier date before the 17:00 UTC rollover', () => {
             expect(wibDateKey(new Date('2026-07-14T16:59:59Z'))).toBe('2026-07-14');
+        });
+    });
+
+    describe('wibMonthKey', () => {
+        // The ambassador recap's whole point is that a referral logged just
+        // after midnight WIB on the 1st must land in the NEW month, not the
+        // previous one it would fall into under UTC bucketing.
+        it('buckets 06:00 WIB on the 1st into the new month, not the previous UTC day/month', () => {
+            // 23:00 UTC on 2026-07-31 is 06:00 WIB on 2026-08-01.
+            expect(wibMonthKey(new Date('2026-07-31T23:00:00.000Z'))).toBe('2026-08');
+        });
+
+        it('still reports the previous month just before the WIB rollover', () => {
+            // 16:59:59 UTC on 2026-07-31 is 23:59:59 WIB, still July.
+            expect(wibMonthKey(new Date('2026-07-31T16:59:59.000Z'))).toBe('2026-07');
         });
     });
 

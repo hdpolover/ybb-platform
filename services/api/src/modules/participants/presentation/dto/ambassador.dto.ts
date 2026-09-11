@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsUUID, IsString, IsPhoneNumber, IsOptional, IsEmail, IsNotEmpty, IsDateString, MaxLength } from 'class-validator';
+import { IsUUID, IsString, IsPhoneNumber, IsOptional, IsEmail, IsNotEmpty, IsDateString, IsIn, MaxLength } from 'class-validator';
 import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
 
 export class ApplyAmbassadorDto {
@@ -123,6 +123,42 @@ export class AmbassadorReferralAnalyticsQueryDto {
     from?: string;
 
     @ApiPropertyOptional({ description: 'End of the stage-reached window (WIB calendar day, inclusive through 23:59:59.999 WIB), e.g. 2026-07-30' })
+    @IsOptional()
+    @IsDateString()
+    to?: string;
+}
+
+// The 5 stage-reached buckets the monthly recap can be pivoted on. Mirrors
+// StageReachedCounts in ambassador-admin.controller.ts findOne() — same 5
+// stages, same "reached", not "currently at" semantics, deliberately
+// excluding profileCompletedAt for the same reason findOne() does.
+export const AMBASSADOR_RECAP_STAGES = ['referred', 'registered', 'applied', 'accepted', 'completed'] as const;
+export type AmbassadorRecapStage = (typeof AMBASSADOR_RECAP_STAGES)[number];
+
+/**
+ * Query params for GET /admin/ambassadors/recap.
+ *
+ * programId is a plain @IsString(), not @IsUUID(), because — like findAll()'s
+ * programId — it may arrive as a slug; the controller resolves it the same
+ * way findAll() does before anything touches the database.
+ */
+export class AmbassadorRecapQueryDto {
+    @ApiProperty({ description: 'Program id or slug', example: 'meys-7th' })
+    @IsString()
+    @IsNotEmpty()
+    programId: string;
+
+    @ApiPropertyOptional({ description: 'Stage-reached bucket', enum: AMBASSADOR_RECAP_STAGES, default: 'applied' })
+    @IsOptional()
+    @IsIn(AMBASSADOR_RECAP_STAGES)
+    stage?: AmbassadorRecapStage;
+
+    @ApiPropertyOptional({ description: 'Start of the recap window (WIB calendar day), e.g. 2026-07-01. Defaults to 6 calendar months back.' })
+    @IsOptional()
+    @IsDateString()
+    from?: string;
+
+    @ApiPropertyOptional({ description: 'End of the recap window (WIB calendar day, inclusive). Defaults to today.' })
     @IsOptional()
     @IsDateString()
     to?: string;

@@ -68,6 +68,11 @@ export function wibDateKey(date: Date): string {
   return toWibWallClock(date).toISOString().slice(0, 10);
 }
 
+/** The WIB calendar month of an instant, as YYYY-MM. */
+export function wibMonthKey(date: Date): string {
+  return toWibWallClock(date).toISOString().slice(0, 7);
+}
+
 /** The WIB wall-clock time of an instant, as HH:mm (24h). */
 export function wibTimeKey(date: Date): string {
   return toWibWallClock(date).toISOString().slice(11, 16);

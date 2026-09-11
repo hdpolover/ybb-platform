@@ -10,6 +10,7 @@ import { Button } from "@/src/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/ui/table";
 import { getAmbassador, getAmbassadorReferrals, type AmbassadorDetail, type AmbassadorReferral } from "@/src/shared/api-client";
+import { getRecentMonthOptions, type MonthOption } from "@/src/shared/month-options";
 import { cn, parseApiDate } from "@/lib/utils";
 import { FilterField } from "@/src/ui/filter-grid";
 import { Input } from "@/src/ui/input";
@@ -33,30 +34,6 @@ function formatDate(value?: string | null) {
 function formatDuration(value?: number | null) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "—";
   return `${value} day${value === 1 ? "" : "s"}`;
-}
-
-type MonthOption = { key: string; label: string; from: string; to: string };
-
-/** YYYY-MM-DD for a UTC calendar date, so month boundaries don't drift with the viewer's timezone. */
-function toIsoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-/** Last `count` calendar months (oldest first, current month last) as recap quick-picks. */
-function getRecentMonthOptions(count: number): MonthOption[] {
-  const now = new Date();
-  const options: MonthOption[] = [];
-  for (let i = count - 1; i >= 0; i--) {
-    const monthStart = new Date(Date.UTC(now.getFullYear(), now.getMonth() - i, 1));
-    const monthEnd = new Date(Date.UTC(now.getFullYear(), now.getMonth() - i + 1, 0));
-    options.push({
-      key: toIsoDate(monthStart).slice(0, 7),
-      label: monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }),
-      from: toIsoDate(monthStart),
-      to: toIsoDate(monthEnd),
-    });
-  }
-  return options;
 }
 
 const RECENT_MONTH_COUNT = 6;
