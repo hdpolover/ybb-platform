@@ -4009,6 +4009,29 @@ export type AmbassadorDetail = Ambassador & {
       accepted: number;
       completed: number;
     }>;
+    // Only present when the detail call is made with `from`/`to`. Unlike
+    // statusCounts(ByProgram) above (current status, one bucket per referral),
+    // each of these counts "reached this stage inside the window" — a single
+    // referral can land in several of the five buckets at once. Do not treat
+    // these as interchangeable with statusCounts; they answer a different
+    // question ("how many touched APPLIED in July") not "where do referrals
+    // stand today".
+    reachedCounts?: {
+      referred: number;
+      registered: number;
+      applied: number;
+      accepted: number;
+      completed: number;
+    };
+    reachedCountsByProgram?: Array<{
+      programId: string;
+      programName: string;
+      referred: number;
+      registered: number;
+      applied: number;
+      accepted: number;
+      completed: number;
+    }>;
     averageConversionDays: number | null;
   };
 };
@@ -4099,8 +4122,18 @@ export function deleteAmbassador(id: string): Promise<unknown> {
   return request<unknown>(`/admin/ambassadors/${id}`, { method: "DELETE" });
 }
 
-export function getAmbassador(id: string): Promise<AmbassadorDetail> {
-  return request<AmbassadorDetail>(`/admin/ambassadors/${id}`);
+/**
+ * `from`/`to` are optional ISO date strings (YYYY-MM-DD). When supplied, the
+ * API additionally returns `analytics.reachedCounts(ByProgram)` scoped to
+ * that window, alongside the untouched all-time fields — omit both to get
+ * exactly today's default response.
+ */
+export function getAmbassador(id: string, params?: { from?: string; to?: string }): Promise<AmbassadorDetail> {
+  const q = new URLSearchParams();
+  if (params?.from) q.set("from", params.from);
+  if (params?.to) q.set("to", params.to);
+  const qs = q.toString();
+  return request<AmbassadorDetail>(`/admin/ambassadors/${id}${qs ? `?${qs}` : ""}`);
 }
 
 export async function getAmbassadorReferrals(id: string, page = 1): Promise<{ data: AmbassadorReferral[]; meta: AmbassadorReferralsMeta }> {

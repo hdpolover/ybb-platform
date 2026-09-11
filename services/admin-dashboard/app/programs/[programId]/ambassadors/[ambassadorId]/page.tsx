@@ -10,7 +10,9 @@ import { Button } from "@/src/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/src/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/src/ui/table";
 import { getAmbassador, getAmbassadorReferrals, type AmbassadorDetail, type AmbassadorReferral } from "@/src/shared/api-client";
-import { parseApiDate } from "@/lib/utils";
+import { cn, parseApiDate } from "@/lib/utils";
+import { FilterField } from "@/src/ui/filter-grid";
+import { Input } from "@/src/ui/input";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -33,6 +35,32 @@ function formatDuration(value?: number | null) {
   return `${value} day${value === 1 ? "" : "s"}`;
 }
 
+type MonthOption = { key: string; label: string; from: string; to: string };
+
+/** YYYY-MM-DD for a UTC calendar date, so month boundaries don't drift with the viewer's timezone. */
+function toIsoDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/** Last `count` calendar months (oldest first, current month last) as recap quick-picks. */
+function getRecentMonthOptions(count: number): MonthOption[] {
+  const now = new Date();
+  const options: MonthOption[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const monthStart = new Date(Date.UTC(now.getFullYear(), now.getMonth() - i, 1));
+    const monthEnd = new Date(Date.UTC(now.getFullYear(), now.getMonth() - i + 1, 0));
+    options.push({
+      key: toIsoDate(monthStart).slice(0, 7),
+      label: monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }),
+      from: toIsoDate(monthStart),
+      to: toIsoDate(monthEnd),
+    });
+  }
+  return options;
+}
+
+const RECENT_MONTH_COUNT = 6;
+
 export default function AmbassadorDetailPage({
   params,
 }: {
@@ -54,18 +82,27 @@ export default function AmbassadorDetailPage({
   const [error, setError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"link" | "code" | null>(null);
 
+  // Recap date range — both null means "no range selected", the default
+  // all-time/current-status view. Both are always set together (month
+  // presets and the two raw inputs both go through setRange).
+  const [rangeFrom, setRangeFrom] = useState<string | null>(null);
+  const [rangeTo, setRangeTo] = useState<string | null>(null);
+  const hasRange = Boolean(rangeFrom && rangeTo);
+
+  const monthOptions = useMemo(() => getRecentMonthOptions(RECENT_MONTH_COUNT), []);
+
   const loadAmbassador = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getAmbassador(ambassadorId);
+      const data = await getAmbassador(ambassadorId, hasRange ? { from: rangeFrom!, to: rangeTo! } : undefined);
       setAmbassador(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load ambassador detail");
     } finally {
       setLoading(false);
     }
-  }, [ambassadorId]);
+  }, [ambassadorId, hasRange, rangeFrom, rangeTo]);
 
   const loadReferrals = useCallback(async (page = 1) => {
     setReferralLoading(true);
@@ -80,10 +117,30 @@ export default function AmbassadorDetailPage({
     }
   }, [ambassadorId]);
 
+  // Re-fetches whenever the recap range changes (loadAmbassador's identity
+  // changes with it). Kept separate from the referrals effect below so
+  // picking a range never touches the paginated referrals table.
   useEffect(() => {
     void loadAmbassador();
+  }, [loadAmbassador]);
+
+  useEffect(() => {
     void loadReferrals();
-  }, [loadAmbassador, loadReferrals]);
+  }, [loadReferrals]);
+
+  const selectMonth = useCallback(
+    (option: MonthOption) => {
+      const isActive = rangeFrom === option.from && rangeTo === option.to;
+      setRangeFrom(isActive ? null : option.from);
+      setRangeTo(isActive ? null : option.to);
+    },
+    [rangeFrom, rangeTo],
+  );
+
+  const clearRange = useCallback(() => {
+    setRangeFrom(null);
+    setRangeTo(null);
+  }, []);
 
   // Referrals now span every programme of the brand an ambassador's code touches
   // (not just this ambassador's home programme), so the ambassador-wide totals from
@@ -101,11 +158,19 @@ export default function AmbassadorDetailPage({
   // than one page — numbers that look authoritative and are quietly wrong.
   // The aggregate is computed server-side over every referral the ambassador
   // has, then narrowed to the programme this page is scoped to.
+  //
+  // With no range selected this is unchanged from before: current-status
+  // buckets from statusCountsByProgram, one bucket per referral. With a
+  // range selected it switches to reachedCountsByProgram — "reached this
+  // stage inside the window" — where a referral can count toward several
+  // stages at once. hasRange is what the cards key their mode off of, so
+  // this must stay in lockstep with it.
   const stageCounts = useMemo(() => {
     const empty = { referred: 0, registered: 0, applied: 0, accepted: 0, completed: 0 };
-    const forProgram = ambassador?.analytics?.statusCountsByProgram?.find(
-      (entry) => entry.programId === programId,
-    );
+    const source = hasRange
+      ? ambassador?.analytics?.reachedCountsByProgram
+      : ambassador?.analytics?.statusCountsByProgram;
+    const forProgram = source?.find((entry) => entry.programId === programId);
     if (!forProgram) return empty;
     return {
       referred: forProgram.referred,
@@ -114,9 +179,19 @@ export default function AmbassadorDetailPage({
       accepted: forProgram.accepted,
       completed: forProgram.completed,
     };
-  }, [ambassador, programId]);
+  }, [ambassador, programId, hasRange]);
+
+  // Audit Snapshot (right rail) is not one of the five range-aware cards —
+  // it always reads all-time current status, so it can't silently start
+  // meaning something else when a range is picked.
+  const allTimeCompleted = useMemo(
+    () => ambassador?.analytics?.statusCountsByProgram?.find((entry) => entry.programId === programId)?.completed ?? 0,
+    [ambassador, programId],
+  );
 
   const avgConversionDays = ambassador?.analytics?.averageConversionDays ?? null;
+
+  const rangeLabel = hasRange ? `${formatDate(rangeFrom)} – ${formatDate(rangeTo)}` : null;
 
   const handleCopy = async (type: "link" | "code", value?: string | null) => {
     if (!value) return;
@@ -243,12 +318,82 @@ export default function AmbassadorDetailPage({
                 <CardHeader>
                   <CardTitle className="text-base">Referred Participants</CardTitle>
                   <CardDescription>
-                    Stage counts below are scoped to {ambassador.programName ?? program?.programName ?? "this programme"}. The
-                    same referral code can bring participants into other programmes of this brand — see the
-                    Programme column below for the full list.
+                    {hasRange ? (
+                      <>
+                        Showing how many referrals reached each stage between <span className="font-medium text-zinc-700">{rangeLabel}</span>,
+                        scoped to {ambassador.programName ?? program?.programName ?? "this programme"}. A referral can count toward
+                        several stages here — this is not the same as current status.
+                      </>
+                    ) : (
+                      <>
+                        Stage counts below are scoped to {ambassador.programName ?? program?.programName ?? "this programme"}. The
+                        same referral code can bring participants into other programmes of this brand — see the
+                        Programme column below for the full list.
+                      </>
+                    )}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="space-y-2.5 rounded-lg border border-zinc-200 bg-zinc-50/60 p-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">Recap range</span>
+                      {monthOptions.map((option) => {
+                        const isActive = rangeFrom === option.from && rangeTo === option.to;
+                        return (
+                          <button
+                            key={option.key}
+                            type="button"
+                            aria-pressed={isActive}
+                            onClick={() => selectMonth(option)}
+                            className={cn(
+                              "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                              isActive
+                                ? "border-blue-600 bg-blue-600 text-white"
+                                : "border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-100",
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <FilterField label="From" htmlFor="ambassador-range-from" className="w-36">
+                        <Input
+                          id="ambassador-range-from"
+                          type="date"
+                          value={rangeFrom ?? ""}
+                          max={rangeTo ?? undefined}
+                          onChange={(e) => setRangeFrom(e.target.value || null)}
+                          className="h-9 text-sm"
+                        />
+                      </FilterField>
+                      <FilterField label="To" htmlFor="ambassador-range-to" className="w-36">
+                        <Input
+                          id="ambassador-range-to"
+                          type="date"
+                          value={rangeTo ?? ""}
+                          min={rangeFrom ?? undefined}
+                          onChange={(e) => setRangeTo(e.target.value || null)}
+                          className="h-9 text-sm"
+                        />
+                      </FilterField>
+                      {hasRange ? (
+                        <Button variant="outline" size="sm" onClick={clearRange} className="h-9">
+                          Clear range
+                        </Button>
+                      ) : null}
+                      <span
+                        className={cn(
+                          "ml-auto inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium",
+                          hasRange ? "bg-blue-50 text-blue-700" : "bg-zinc-200 text-zinc-600",
+                        )}
+                      >
+                        {hasRange ? `Reached in range · ${rangeLabel}` : "All-time · current status"}
+                      </span>
+                    </div>
+                  </div>
+
                   <div className="grid gap-3 md:grid-cols-5">
                     {[
                       { label: "Referred", value: stageCounts.referred },
@@ -356,7 +501,7 @@ export default function AmbassadorDetailPage({
                   <div className="flex items-center gap-3 rounded-lg border border-zinc-200 px-4 py-3">
                     <UserRound className="h-4 w-4 text-blue-500" />
                     <div>
-                      <div className="font-medium text-zinc-900">{stageCounts.completed}</div>
+                      <div className="font-medium text-zinc-900">{allTimeCompleted}</div>
                       <div className="text-xs text-zinc-500">Completed referrals</div>
                     </div>
                   </div>

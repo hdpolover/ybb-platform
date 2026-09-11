@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsUUID, IsString, IsPhoneNumber, IsOptional, IsEmail, IsNotEmpty, MaxLength } from 'class-validator';
+import { IsUUID, IsString, IsPhoneNumber, IsOptional, IsEmail, IsNotEmpty, IsDateString, MaxLength } from 'class-validator';
 import { IsEnglishName, IsEnglishText } from '@shared/validators/english-text.validator';
 
 export class ApplyAmbassadorDto {
@@ -98,6 +98,34 @@ export class UpdateAmbassadorAdminDto {
     @IsOptional()
     @IsString()
     notes?: string;
+}
+
+// Ambassador detail's optional monthly-recap window (AmbassadorAdminController
+// findOne()). Free-text from/to reaching Prisma unvalidated has bitten this repo
+// before (see other admin @Query() DTOs), so both are format-checked here and
+// the controller itself rejects from > to (a class-validator decorator can't
+// see a sibling field's value without a custom @Validate, and one field pair
+// didn't earn a repo-wide cross-field validator).
+/**
+ * Optional stage-reached window for GET /admin/ambassadors/:id.
+ *
+ * Note what attaching this DTO changes beyond validation: the global
+ * ValidationPipe runs with forbidNonWhitelisted, so that route now REJECTS any
+ * query param other than the two below, where previously it had no @Query() at
+ * all and ignored everything. Every current caller sends only from/to, so
+ * nothing breaks today - but a future caller appending a cache-buster or a
+ * tracking param will get a 400, not a silently ignored value.
+ */
+export class AmbassadorReferralAnalyticsQueryDto {
+    @ApiPropertyOptional({ description: 'Start of the stage-reached window (WIB calendar day), e.g. 2026-07-01' })
+    @IsOptional()
+    @IsDateString()
+    from?: string;
+
+    @ApiPropertyOptional({ description: 'End of the stage-reached window (WIB calendar day, inclusive through 23:59:59.999 WIB), e.g. 2026-07-30' })
+    @IsOptional()
+    @IsDateString()
+    to?: string;
 }
 
 export class AmbassadorDashboardDto {

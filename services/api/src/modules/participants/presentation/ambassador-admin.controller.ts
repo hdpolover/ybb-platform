@@ -34,10 +34,11 @@ import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
 import { createAmbassadorShareToken } from '../application/utils/ambassador-share-token.util';
 import { Logger } from '@nestjs/common';
-import { CreateAmbassadorAdminDto, UpdateAmbassadorAdminDto } from './dto/ambassador.dto';
+import { CreateAmbassadorAdminDto, UpdateAmbassadorAdminDto, AmbassadorReferralAnalyticsQueryDto } from './dto/ambassador.dto';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { assertAmbassadorAccess, assertAmbassadorCreateAccess, resolveAmbassadorProgramScope } from '../application/utils/ambassador-access.util';
+import { buildWibDateRangeFilter, parseWibFilterDate } from '@shared/utils/wib-time';
 
 @ApiTags('Ambassadors')
 @Controller('admin/ambassadors')
@@ -93,8 +94,34 @@ export class AmbassadorAdminController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get ambassador detail (Admin)' })
-  async findOne(@Param('id') id: string, @CurrentUser() actor: CurrentUserData) {
+  @ApiQuery({ name: 'from', required: false, description: 'Start of the stage-reached window (WIB calendar day)' })
+  @ApiQuery({ name: 'to', required: false, description: 'End of the stage-reached window (WIB calendar day, inclusive)' })
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser() actor: CurrentUserData,
+    @Query() query: AmbassadorReferralAnalyticsQueryDto,
+  ) {
     await assertAmbassadorAccess(this.prismaRead, actor, id);
+
+    // from > to can't be caught by a class-validator decorator on either field
+    // alone (each only sees its own value), so it's checked here, the same way
+    // assertValidGender() above hand-checks a rule format decorators can't
+    // express. Compared as WIB filter dates rather than raw `Date` so a
+    // same-day from/to pair (both date-only) doesn't get flagged: they parse
+    // to the same WIB midnight and are equal, not "from after to".
+    if (query.from && query.to) {
+      const fromInstant = parseWibFilterDate(query.from);
+      const toInstant = parseWibFilterDate(query.to);
+      if (fromInstant.getTime() > toInstant.getTime()) {
+        throw new BadRequestException('from must not be later than to');
+      }
+    }
+
+    // Undefined when neither from nor to is supplied — the trigger for
+    // whether the new reachedCounts fields appear in the response at all. No
+    // params must reproduce today's response byte-for-byte, so this can't
+    // just be an empty range object.
+    const reachedWindow = buildWibDateRangeFilter(query.from, query.to);
     const ambassador = await this.prisma.ambassador.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -127,6 +154,17 @@ export class AmbassadorAdminController {
         // with more referrals than one page.
         programId: true,
         program: { select: { name: true } },
+        // Per-stage timestamps, needed only to bucket reachedCounts /
+        // reachedCountsByProgram by WHEN a referral reached a stage, as
+        // opposed to statusCounts below which buckets by its CURRENT status.
+        // profileCompletedAt is deliberately not selected: it isn't one of
+        // the 5 stages this recap covers and statusCounts has no
+        // profile-completed bucket to mirror either.
+        referredAt: true,
+        registeredAt: true,
+        appliedAt: true,
+        acceptedAt: true,
+        completedAt: true,
       },
     });
 
@@ -149,6 +187,36 @@ export class AmbassadorAdminController {
       { programId: string; programName: string; referred: number; registered: number; applied: number; accepted: number; completed: number }
     > = {};
 
+    // Every field below is a STAGE-REACHED count, unlike statusCounts above:
+    // a referral is counted in every stage bucket whose own timestamp falls
+    // in [from, to], not just the bucket matching its current status. That's
+    // the whole point — a referral that applied in July and got accepted in
+    // August must still show up in July's "applied" count for the monthly
+    // recap, which a current-status snapshot can never give ops.
+    type StageReachedCounts = { referred: number; registered: number; applied: number; accepted: number; completed: number };
+    const zeroStageReachedCounts = (): StageReachedCounts => ({ referred: 0, registered: 0, applied: 0, accepted: 0, completed: 0 });
+    const reachedCounts: StageReachedCounts = zeroStageReachedCounts();
+    const reachedCountsByProgram: Record<string, { programId: string; programName: string } & StageReachedCounts> = {};
+
+    // Maps each stage bucket to the referral column that timestamps it.
+    // Deliberately 5 entries, not 6: profileCompletedAt exists on the model
+    // but isn't one of the requested recap stages, and statusCounts above has
+    // no profile-completed bucket for this to mirror.
+    const stageTimestampFields: Record<keyof StageReachedCounts, 'referredAt' | 'registeredAt' | 'appliedAt' | 'acceptedAt' | 'completedAt'> = {
+      referred: 'referredAt',
+      registered: 'registeredAt',
+      applied: 'appliedAt',
+      accepted: 'acceptedAt',
+      completed: 'completedAt',
+    };
+
+    const isWithinReachedWindow = (timestamp: Date | null): boolean => {
+      if (!reachedWindow || !timestamp) return false;
+      if (reachedWindow.gte && timestamp.getTime() < reachedWindow.gte.getTime()) return false;
+      if (reachedWindow.lte && timestamp.getTime() > reachedWindow.lte.getTime()) return false;
+      return true;
+    };
+
     referrals.forEach((referral) => {
       if (referral.status in statusCounts) {
         statusCounts[referral.status as keyof typeof statusCounts] += 1;
@@ -170,6 +238,20 @@ export class AmbassadorAdminController {
       if (referral.status in bucket) {
         bucket[referral.status as 'referred' | 'registered' | 'applied' | 'accepted' | 'completed'] += 1;
       }
+
+      if (reachedWindow) {
+        const reachedBucket = (reachedCountsByProgram[referral.programId] ??= {
+          programId: referral.programId,
+          programName: referral.program?.name ?? 'Unknown programme',
+          ...zeroStageReachedCounts(),
+        });
+        (Object.keys(stageTimestampFields) as Array<keyof StageReachedCounts>).forEach((stage) => {
+          if (isWithinReachedWindow(referral[stageTimestampFields[stage]])) {
+            reachedCounts[stage] += 1;
+            reachedBucket[stage] += 1;
+          }
+        });
+      }
     });
 
     const brandUrl = ambassador.program.brand.websiteUrl || 'ybb.co';
@@ -185,6 +267,16 @@ export class AmbassadorAdminController {
         statusCounts,
         statusCountsByProgram: Object.values(statusCountsByProgram),
         averageConversionDays: conversionCount > 0 ? Math.round(conversionTotal / conversionCount) : null,
+        // Only present when from/to was supplied — an ambassador detail
+        // fetched with no window must be byte-identical to before this
+        // feature existed, so these keys can't just be zeroed, they must be
+        // absent.
+        ...(reachedWindow
+          ? {
+              reachedCounts,
+              reachedCountsByProgram: Object.values(reachedCountsByProgram),
+            }
+          : {}),
       },
     };
   }

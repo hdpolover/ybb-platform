@@ -1,6 +1,6 @@
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { CreateAmbassadorAdminDto, UpdateAmbassadorAdminDto } from './ambassador.dto';
+import { CreateAmbassadorAdminDto, UpdateAmbassadorAdminDto, AmbassadorReferralAnalyticsQueryDto } from './ambassador.dto';
 
 const basePayload = {
   email: 'jane@example.com',
@@ -84,5 +84,31 @@ describe('UpdateAmbassadorAdminDto', () => {
     const dto = plainToInstance(UpdateAmbassadorAdminDto, { institution: 'b'.repeat(256) });
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'institution')).toBe(true);
+  });
+});
+
+describe('AmbassadorReferralAnalyticsQueryDto', () => {
+  it('passes with both from/to omitted', async () => {
+    const dto = plainToInstance(AmbassadorReferralAnalyticsQueryDto, {});
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
+  });
+
+  it('passes with valid date-only from/to', async () => {
+    const dto = plainToInstance(AmbassadorReferralAnalyticsQueryDto, { from: '2026-07-01', to: '2026-07-30' });
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects an unparseable from date', async () => {
+    const dto = plainToInstance(AmbassadorReferralAnalyticsQueryDto, { from: 'not-a-date' });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'from')).toBe(true);
+  });
+
+  it('rejects an unparseable to date', async () => {
+    const dto = plainToInstance(AmbassadorReferralAnalyticsQueryDto, { to: '2026-13-45' });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'to')).toBe(true);
   });
 });
