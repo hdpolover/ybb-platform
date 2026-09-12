@@ -194,6 +194,64 @@ describe('SaveSubmissionSectionHandler', () => {
         expect(mockTx.participantApplication.update).not.toHaveBeenCalled();
     });
 
+    // Editing has to stop at the deadline, not at submission. The draft guard
+    // above only bites AFTER submitting, so without this a participant who
+    // never submits could keep rewriting essays indefinitely - and admins
+    // submit those stragglers by hand, so what they submit must be frozen.
+    describe('submission deadline lock', () => {
+        beforeEach(() => {
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({
+                id: 'participant-1',
+                userId: 'user-1',
+            });
+            mockLockedRow({ status: 'draft' });
+        });
+
+        it('refuses to edit a still-draft application once the deadline has passed', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                programId: 'prog-1',
+                program: { name: 'MEYS 6th', applicationDeadline: new Date('2026-01-01T00:00:00.000Z') },
+            });
+
+            await expect(
+                handler.execute(
+                    new SaveSubmissionSectionCommand('user-1', 'essays', { 'essay-1': 'late rewrite' }),
+                ),
+            ).rejects.toThrow(BadRequestException);
+            expect(mockTx.participantApplication.update).not.toHaveBeenCalled();
+        });
+
+        it('still allows editing before the deadline', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                programId: 'prog-1',
+                program: { name: 'MEYS 6th', applicationDeadline: new Date('2099-01-01T00:00:00.000Z') },
+            });
+
+            const result = await handler.execute(
+                new SaveSubmissionSectionCommand('user-1', 'essays', { 'essay-1': 'in time' }),
+            );
+
+            expect(result.success).toBe(true);
+            expect(mockTx.participantApplication.update).toHaveBeenCalled();
+        });
+
+        it('leaves a program with no deadline unrestricted, exactly as submitting does', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                programId: 'prog-1',
+                program: { name: 'No Deadline Program', applicationDeadline: null },
+            });
+
+            const result = await handler.execute(
+                new SaveSubmissionSectionCommand('user-1', 'essays', { 'essay-1': 'fine' }),
+            );
+
+            expect(result.success).toBe(true);
+        });
+    });
+
     it('should throw NotFoundException when no participant found', async () => {
         mockPortalCacheService.getParticipantProfile.mockResolvedValue(null);
 
