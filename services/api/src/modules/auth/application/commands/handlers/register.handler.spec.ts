@@ -313,6 +313,9 @@ describe('RegisterHandler', () => {
         expect(mockPrismaService.participantApplication.findMany).toHaveBeenCalledWith({
             where: { participantId: 'participant-id-123', program: { brandId: 'category-id-123' } },
             include: { program: true },
+            // Pinned: unordered, Postgres may return a different first row per
+            // request, which flips a multi-edition participant's landing program.
+            orderBy: { createdAt: 'desc' },
         });
     });
 

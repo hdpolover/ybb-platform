@@ -413,6 +413,11 @@ export async function getRegisteredPrograms(
       program: { brandId },
     },
     include: { program: true },
+    // Match get-user-profile.handler.ts and firebase-login.handler.ts, which
+    // both pin this. Unordered, Postgres returns rows however it likes, so the
+    // login response and a later /me could disagree about which application
+    // comes first and bounce a multi-edition participant between programs.
+    orderBy: { createdAt: 'desc' },
   });
 
   return applications.map((app) => ({

@@ -226,6 +226,9 @@ describe('LoginHandler', () => {
     expect(mockPrismaService.participantApplication.findMany).toHaveBeenCalledWith({
       where: { participantId: 'participant-1', program: { brandId: 'brand-1' } },
       include: { program: true },
+      // Pinned: unordered, Postgres may return a different first row per
+      // request, which flips a multi-edition participant's landing program.
+      orderBy: { createdAt: 'desc' },
     });
     expect(result.user.registeredPrograms).toEqual([
       expect.objectContaining({ programId: 'program-1', programSlug: 'brand-one-program' }),
