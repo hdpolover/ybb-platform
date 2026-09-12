@@ -10,7 +10,14 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          # Must stay ABOVE the Node heap cap in Dockerfile.prod
+          # (--max-old-space-size=512), not equal to it. RSS is heap plus
+          # native allocations, V8 metadata and buffers, so a container limit
+          # equal to the heap cap means a full old space gets the process
+          # OOM-killed instead of garbage collected. 1.5x the heap is the
+          # usual ratio. A limit is a ceiling, not a reservation, so the extra
+          # 256M costs nothing until it is actually used.
+          memory: 768M
     environment:
       NODE_ENV: production
       # Internal APIs
