@@ -5,6 +5,10 @@ services:
       dockerfile: Dockerfile.prod
     container_name: ybb-prod-file
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 3G
     environment:
       PYTHON_ENV: production
       SERVICE_PORT: 8001
@@ -48,6 +52,10 @@ services:
     image: machines/filestash:latest
     container_name: ybb-prod-filestash
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 384M
     ports:
       # Loopback only — reachable through an SSH tunnel, never from the internet.
       - "127.0.0.1:8334:8334"

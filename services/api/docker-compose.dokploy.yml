@@ -11,6 +11,10 @@ services:
       context: .
       dockerfile: Dockerfile.prod
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
     # No ports exposed to host, only via Traefik
     environment:
       NODE_ENV: ${NODE_ENV:-production}

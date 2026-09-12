@@ -5,6 +5,10 @@ services:
       dockerfile: Dockerfile.prod
     container_name: ybb-prod-payment
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 384M
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-production}
       GIN_MODE: ${GIN_MODE:-release}
