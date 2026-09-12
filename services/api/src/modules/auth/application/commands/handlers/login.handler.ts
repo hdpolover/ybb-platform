@@ -311,6 +311,10 @@ export class LoginHandler {
           brandId,
           programId: command.programId,
           programSlug: command.programSlug,
+          // The BFF puts the brand's currently-open program on every login, so
+          // without this a returning participant gets enrolled in whichever
+          // edition happens to be open today. See the guard's comment.
+          skipCreateIfBrandApplicationExists: true,
           metaCapiService: this.metaCapiService,
           userEmail: user.email,
           userId: user.id,

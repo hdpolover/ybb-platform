@@ -476,6 +476,10 @@ export class FirebaseLoginHandler {
             programId: requestedProgram?.id,
             applicationCategory: command.applicationCategory,
             fallbackToLatestOpenProgram: !requestedProgram && !existingBrandApplication,
+            // existingBrandApplication already suppressed the FALLBACK, but an
+            // explicitly requested program (which the BFF always sends) walked
+            // straight past it and enrolled returning participants anyway.
+            skipCreateIfBrandApplicationExists: true,
             metaCapiService: this.metaCapiService,
             userEmail: user.email,
             userId: user.id,

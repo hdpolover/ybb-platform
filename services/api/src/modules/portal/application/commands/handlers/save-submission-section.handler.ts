@@ -5,6 +5,8 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { normalizePhoneCountryCode } from '@shared/utils/phone-country-code';
 import { extractAndSanitizePhone } from '@shared/utils/phone-e164';
 import { PrismaTransactionClient } from '@shared/types/prisma-transaction.type';
+import { isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
+import { wibDateKey } from '@shared/utils/wib-time';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { SaveSubmissionSectionCommand } from '../../queries/portal-queries';
 import { SubmissionSection } from '../../../presentation/dto/save-submission-section.dto';
@@ -47,10 +49,35 @@ export class SaveSubmissionSectionHandler {
         const application = await this.prisma.participantApplication.findFirst({
             where: currentApplicationWhere(participant.id, programId),
             orderBy: currentApplicationOrderBy,
-            select: { id: true, programId: true },
+            select: {
+                id: true,
+                programId: true,
+                program: { select: { name: true, applicationDeadline: true } },
+            },
         });
 
         if (!application) throw new NotFoundException('No active application found');
+
+        // Editing closes WITH the submission deadline, not with submission.
+        //
+        // The `status !== 'draft'` guard below only bites AFTER a participant
+        // submits, which is the one case already settled. A participant who
+        // never submits stays in `draft` forever and, without this, could keep
+        // rewriting essays indefinitely past the deadline. Admins submit those
+        // stragglers on their behalf, so what they submit has to be frozen at
+        // the same instant everyone else's was.
+        //
+        // Same shared resolver as every submit path (inclusive through the end
+        // of the deadline's WIB calendar day), so "too late to edit" and "too
+        // late to submit" cannot drift apart. A program with no deadline set is
+        // unrestricted, exactly as it is for submitting.
+        const applicationDeadline = application.program?.applicationDeadline ?? null;
+        if (isPastSubmissionDeadline(applicationDeadline)) {
+            throw new BadRequestException(
+                `The submission deadline for "${application.program?.name ?? 'this program'}" was ` +
+                `${wibDateKey(applicationDeadline as Date)} (WIB). This application can no longer be edited.`,
+            );
+        }
 
         await this.prisma.$transaction(async (tx) => {
             // Row lock: personalData/essayAnswers/uploadedFiles are @db.Json
