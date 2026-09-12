@@ -3,6 +3,27 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: ybb-prod-shared-rabbitmq
     restart: always
+    deploy:
+      resources:
+        limits:
+          # The broker was the last unbounded service on the host. Its own
+          # vm_memory_high_watermark defaults to 0.4 of *available* memory,
+          # which with no container limit resolved to 13.46 GB: a backlog
+          # could have grown into a third of the host before the broker
+          # applied any back-pressure at all.
+          #
+          # These two settings are coupled, and getting only one of them
+          # right is worse than neither. The watermark is where RabbitMQ
+          # BLOCKS PUBLISHERS; the container limit is where the kernel KILLS
+          # the process. If the limit sits below the watermark, the broker
+          # never throttles and simply dies instead, taking every consumer
+          # channel with it. RabbitMQ 3.13 reads the cgroup limit and
+          # recomputes the relative watermark from it, so 1G here puts the
+          # watermark at ~400M and leaves ~600M of slack above it. Verify
+          # after deploy with `rabbitmqctl status`: the "computed to" figure
+          # must drop to ~0.4 gb. If it still reports the host figure, pin
+          # vm_memory_high_watermark.absolute in a conf file instead.
+          memory: 1G
     ports:
       - "5672:5672" # Optional to expose if needed by services outside dokploy network (unlikely)
       # Management UI, LOOPBACK ONLY — not routable from the internet, and the
