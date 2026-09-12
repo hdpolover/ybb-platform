@@ -33,6 +33,20 @@ jobs:
       # graph, which constructs JwtStrategy, which fails with "requires a secret
       # or key" without it.
       #
+      # RABBITMQ_URL / REDIS_PASSWORD: config/env.validation.ts runs as
+      # ConfigModule.forRoot's `validate` hook and THROWS on either one being
+      # absent or empty. The same three bootstrap consumer-module specs that
+      # need JWT_SECRET build the real DI graph, so they hit that hook and
+      # failed with "Invalid environment configuration - refusing to start"
+      # (8 suites / 22 tests). That validation is deliberate - it exists so a
+      # misconfigured deploy crash-loops instead of silently connecting to
+      # guest:guest or an unauthenticated Redis - so the fix belongs here, in
+      # the job env, not in a weaker rule.
+      #
+      # These two must stay OBVIOUSLY fake. The real Redis password is a
+      # load-bearing typo that nothing may "correct", and a plausible-looking
+      # value here would be an invitation to copy it somewhere that connects.
+      #
       # This is what the first version of this workflow got wrong. It was
       # "verified" locally with `env -u DATABASE_URL`, which unsets the shell
       # variable but leaves services/api/.env in place - so Prisma and Nest both
@@ -40,6 +54,8 @@ jobs:
       # the .env file is moved aside too, which is how these two were found.
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
       JWT_SECRET: ci-verify-only-not-a-real-secret
+      RABBITMQ_URL: amqp://ci-verify-only:ci-verify-only@127.0.0.1:5672/
+      REDIS_PASSWORD: ci-verify-only-not-a-real-password
     steps:
       - uses: actions/checkout@v4
 
