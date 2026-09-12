@@ -34,6 +34,7 @@ describe('auth-program-linking.util', () => {
       },
       participantApplication: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
       },
       programParticipationInfo: {
@@ -264,6 +265,68 @@ describe('auth-program-linking.util', () => {
         select: { id: true },
       });
       expect(result).toEqual({ status: 'created', program: baseProgram, applicationId: 'application-new-1' });
+    });
+
+    // Regression for the MEYS 6th/7th incident: the BFF attaches the brand's
+    // currently-open program to EVERY login, so while two editions overlapped,
+    // logging in enrolled 6th participants into the 7th. The phantom draft then
+    // won the frontend's active-program selection and hid their real
+    // application's documents.
+    it('does not enrol a returning participant into a different open edition on login', async () => {
+      const prisma = createPrismaMock();
+      // The 7th: open, and the participant has no application for it yet.
+      prisma.program.findUnique.mockResolvedValue(baseProgram);
+      prisma.participantApplication.findUnique.mockResolvedValue(null);
+      // ...but they already hold an application on this brand (the 6th).
+      prisma.participantApplication.findFirst.mockResolvedValue({ id: 'application-6th' });
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        skipCreateIfBrandApplicationExists: true,
+      });
+
+      expect(prisma.participantApplication.create).not.toHaveBeenCalled();
+      // missing_target, so toProgramRegistrationInfo yields undefined and the
+      // client is never told to switch programs.
+      expect(result).toEqual({ status: 'missing_target' });
+      expect(toProgramRegistrationInfo(result)).toBeUndefined();
+    });
+
+    it('still creates the first application in the brand when the login guard is set', async () => {
+      const prisma = createPrismaMock();
+      prisma.program.findUnique.mockResolvedValue(baseProgram);
+      prisma.participantApplication.findUnique.mockResolvedValue(null);
+      prisma.participantApplication.findFirst.mockResolvedValue(null);
+      prisma.programParticipationInfo.findMany.mockResolvedValue([]);
+      prisma.participantApplication.create.mockResolvedValue({ id: 'application-new-1' });
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        skipCreateIfBrandApplicationExists: true,
+      });
+
+      expect(result.status).toBe('created');
+    });
+
+    it('leaves registration untouched: no brand lookup when the guard is off', async () => {
+      const prisma = createPrismaMock();
+      prisma.program.findUnique.mockResolvedValue(baseProgram);
+      prisma.participantApplication.findUnique.mockResolvedValue(null);
+      prisma.programParticipationInfo.findMany.mockResolvedValue([]);
+      prisma.participantApplication.create.mockResolvedValue({ id: 'application-new-1' });
+
+      await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+      });
+
+      expect(prisma.participantApplication.findFirst).not.toHaveBeenCalled();
+      expect(prisma.participantApplication.create).toHaveBeenCalled();
     });
 
     it('throws when the requested application category is not offered by the program', async () => {

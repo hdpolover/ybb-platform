@@ -33,6 +33,7 @@ describe('LoginHandler', () => {
     },
     participantApplication: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
     },

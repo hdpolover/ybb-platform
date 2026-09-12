@@ -39,6 +39,9 @@ type EnsureProgramApplicationParams = {
   programSlug?: string;
   applicationCategory?: ApplicationCategory;
   fallbackToLatestOpenProgram?: boolean;
+  // Set by the LOGIN paths only. Registration leaves it off: enrolling is
+  // exactly what registration is for. See the guard in ensureProgramApplication.
+  skipCreateIfBrandApplicationExists?: boolean;
   // Conversion-tracking twin of an `ApplicationCreated` pixel fire from the
   // frontend — see the emit call at the bottom of this function for why it's
   // passed in here rather than injected: this file is a set of plain
@@ -249,6 +252,38 @@ export async function ensureProgramApplication(
 
   if (existingApplication) {
     return { status: 'existing', program: targetProgram };
+  }
+
+  // A returning participant must never be ENROLLED by the mere act of logging
+  // in.
+  //
+  // The BFF attaches the brand's currently-open program to every login request
+  // (auth-context resolves it, newest-first), so once two editions overlap -
+  // MEYS 6th running to December while the 7th opened in August - every 6th
+  // participant who logged in silently got a phantom draft application on the
+  // 7th. That draft then won the frontend's active-program selection for being
+  // the newest, so they landed on an empty 2027 application and could not
+  // reach their 2026 invitation letter at all. 1,816 MEYS participants were
+  // carrying one by the time it was reported.
+  //
+  // Joining a second edition is a deliberate act with its own registration
+  // flow; a login is not it. 'missing_target' is the honest result - there is
+  // no program for THIS login to pin - and it makes toProgramRegistrationInfo
+  // return undefined, so the client keeps its own selection rather than being
+  // moved onto a program the participant never chose.
+  if (params.skipCreateIfBrandApplicationExists) {
+    const brandApplication = await prisma.participantApplication.findFirst({
+      where: {
+        participantId: params.participantId,
+        program: { brandId: params.brandId },
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (brandApplication) {
+      return { status: 'missing_target' };
+    }
   }
 
   if (!isProgramRegistrationOpen(targetProgram)) {
