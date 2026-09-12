@@ -34,6 +34,11 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+      # Pins vm_memory_high_watermark absolutely. The relative default did NOT
+      # follow the container limit on this host (see 90-memory.conf), which
+      # left the broker unable to throttle below the point the kernel kills it.
+      # Sorts after the image's own 10-defaults.conf, so it wins.
+      - ./90-memory.conf:/etc/rabbitmq/conf.d/90-memory.conf:ro
     networks:
       - dokploy-network
     # NOT exposed through Traefik. The management UI used to answer on
