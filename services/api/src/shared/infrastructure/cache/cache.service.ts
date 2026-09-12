@@ -271,7 +271,16 @@ export class CacheService implements OnModuleInit {
    */
   async invalidateKey(key: string): Promise<void> {
     const startTime = Date.now();
-    await this.cacheManager.del(key);
+    // Same reasoning as `set`: a store failure here must not fail the WRITE
+    // that triggered the invalidation. A stale entry expires on its TTL, which
+    // is a far smaller problem than 500ing the mutation that just succeeded.
+    try {
+      await this.cacheManager.del(key);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Cache del failed for "${keyPrefix(key)}", entry left to expire: ${message}`);
+      return;
+    }
     this.metricsService?.recordDelete();
     this.metricsService?.recordLatency('delete', Date.now() - startTime);
   }
@@ -280,8 +289,21 @@ export class CacheService implements OnModuleInit {
    * Invalidate multiple keys
    */
   async invalidateKeys(keys: string[]): Promise<void> {
-    await Promise.all(keys.map((key) => this.cacheManager.del(key)));
-    keys.forEach(() => this.metricsService?.recordDelete());
+    // Promise.all would reject the whole batch on the first failing key AND
+    // propagate to the caller's write. Settle instead, so one bad key neither
+    // skips the others nor fails the mutation.
+    const results = await Promise.allSettled(keys.map((key) => this.cacheManager.del(key)));
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        this.metricsService?.recordDelete();
+        return;
+      }
+      const reason = result.reason;
+      const message = reason instanceof Error ? reason.message : String(reason);
+      this.logger.error(
+        `Cache del failed for "${keyPrefix(keys[index])}", entry left to expire: ${message}`,
+      );
+    });
   }
 
   /**
@@ -289,7 +311,19 @@ export class CacheService implements OnModuleInit {
    */
   async get<T>(key: string): Promise<T | undefined> {
     const startTime = Date.now();
-    const result = await this.cacheManager.get<T>(key);
+    // cache-manager swallows store errors on `get` today, so this catch is
+    // belt-and-braces rather than the load-bearing half (that is `set`). It
+    // exists so a future store, or a client configured to reject rather than
+    // queue, degrades to a MISS instead of failing the request.
+    let result: T | undefined;
+    try {
+      result = await this.cacheManager.get<T>(key);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Cache get failed for "${keyPrefix(key)}", treating as a miss: ${message}`);
+      this.metricsService?.recordMiss();
+      return undefined;
+    }
 
     if (result !== undefined && result !== null) {
       this.metricsService?.recordHit();
@@ -304,9 +338,36 @@ export class CacheService implements OnModuleInit {
   /**
    * Set cached value (with metrics tracking)
    */
+  /**
+   * A cache WRITE must never fail the request that populated it.
+   *
+   * cache-manager v7 is asymmetric here: `get` swallows store errors and
+   * returns undefined (indistinguishable from a miss), while `set` REJECTS.
+   * So a Redis read failure is invisible and a Redis write failure 500s
+   * whatever route happened to be filling the cache - across 60 call sites,
+   * including the portal documents list.
+   *
+   * That asymmetry produced a genuinely baffling bug shape: a participant with
+   * two programmes switching between them changed the cache key
+   * (PORTAL_DOCUMENTS is keyed by userId AND programId), which forced a miss,
+   * which forced a `set`, which threw. The read path that had been served from
+   * cache moments earlier kept working, so it presented as "switching
+   * programmes gives an error" rather than as anything Redis-shaped.
+   *
+   * The value is already computed by the time we get here, so a failed write
+   * costs a cache miss next time and nothing else. Log and carry on.
+   */
   async set<T>(key: string, value: T, ttl?: number): Promise<void> {
     const startTime = Date.now();
-    await this.cacheManager.set(key, value, ttl);
+    try {
+      await this.cacheManager.set(key, value, ttl);
+    } catch (error) {
+      // keyPrefix, not the key: these carry user ids and jtis, and a store
+      // outage would otherwise emit one line per request per key.
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Cache set failed for "${keyPrefix(key)}", continuing uncached: ${message}`);
+      return;
+    }
     this.metricsService?.recordSet();
     this.metricsService?.recordLatency('set', Date.now() - startTime);
   }
