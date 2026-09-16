@@ -48,37 +48,42 @@ export class ApplicationRepository implements IApplicationRepository {
       | 'scoreStatus';
     sortOrder?: 'asc' | 'desc';
   }): Prisma.ParticipantApplicationOrderByWithRelationInput[] {
+    // Tie-breakers are createdAt + id, never updatedAt. Scoring writes
+    // updatedAt, so an updatedAt tie-breaker makes already-scored rows jump
+    // to the top of their group while reviewers work through the list, and
+    // the positional "#" column (which mentors split work by) stops meaning
+    // anything.
     const sortOrder: Prisma.SortOrder = filters?.sortOrder === 'asc' ? 'asc' : 'desc';
 
     if (!filters?.sortBy) {
-      return [{ updatedAt: 'desc' }, { createdAt: 'desc' }];
+      return [{ updatedAt: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }];
     }
 
     switch (filters.sortBy) {
       case 'createdAt':
-        return [{ createdAt: sortOrder }, { updatedAt: 'desc' }];
+        return [{ createdAt: sortOrder }, { id: 'asc' }];
       case 'submittedAt':
-        return [{ submittedAt: sortOrder }, { updatedAt: 'desc' }];
+        return [{ submittedAt: sortOrder }, { createdAt: 'asc' }, { id: 'asc' }];
       case 'participantName':
-        return [{ participant: { fullName: sortOrder } }, { updatedAt: 'desc' }];
+        return [{ participant: { fullName: sortOrder } }, { createdAt: 'asc' }, { id: 'asc' }];
       case 'country':
-        return [{ participant: { originCountry: sortOrder } }, { updatedAt: 'desc' }];
+        return [{ participant: { originCountry: sortOrder } }, { createdAt: 'asc' }, { id: 'asc' }];
       case 'status':
-        return [{ status: sortOrder }, { updatedAt: 'desc' }];
+        return [{ status: sortOrder }, { createdAt: 'asc' }, { id: 'asc' }];
       case 'registrationPaymentStatus':
-        return [{ registrationPaymentStatus: sortOrder }, { updatedAt: 'desc' }];
+        return [{ registrationPaymentStatus: sortOrder }, { createdAt: 'asc' }, { id: 'asc' }];
       case 'programPaymentStatus':
-        return [{ programPaymentStatus: sortOrder }, { updatedAt: 'desc' }];
+        return [{ programPaymentStatus: sortOrder }, { createdAt: 'asc' }, { id: 'asc' }];
       case 'scoreTotal':
         // Unscored applications (scoreTotal IS NULL) must always sort last,
         // regardless of asc/desc — otherwise they'd bunch at the top of an
         // ascending sort, ahead of every actually-scored application.
-        return [{ scoreTotal: { sort: sortOrder, nulls: 'last' } }, { updatedAt: 'desc' }];
+        return [{ scoreTotal: { sort: sortOrder, nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }];
       case 'scoreStatus':
-        return [{ scoreStatus: { sort: sortOrder, nulls: 'last' } }, { updatedAt: 'desc' }];
+        return [{ scoreStatus: { sort: sortOrder, nulls: 'last' } }, { createdAt: 'asc' }, { id: 'asc' }];
       case 'updatedAt':
       default:
-        return [{ updatedAt: sortOrder }, { createdAt: 'desc' }];
+        return [{ updatedAt: sortOrder }, { createdAt: 'desc' }, { id: 'asc' }];
     }
   }
 

@@ -36,8 +36,13 @@ export const fullyFundedFilterParsers = {
   registrationPaymentStatus: parseAsStringEnum([...REGISTRATION_PAYMENT_STATUS_VALUES])
     .withDefault("paid")
     .withOptions({ clearOnDefault: true }),
-  sortBy: parseAsStringEnum([...SORT_BY_VALUES]).withDefault("updatedAt").withOptions({ clearOnDefault: true }),
-  sortOrder: parseAsStringEnum([...SORT_ORDER_VALUES]).withDefault("desc").withOptions({ clearOnDefault: true }),
+  // Registration order (oldest first), NOT "last updated": scoring an
+  // application bumps updatedAt, so an updatedAt sort reshuffles the list
+  // under the reviewer and the "#" column stops meaning anything. Mentors
+  // split work by row number ("caca: 1-200, ethan: 201-400"), so the order
+  // has to be immutable while scoring happens.
+  sortBy: parseAsStringEnum([...SORT_BY_VALUES]).withDefault("createdAt").withOptions({ clearOnDefault: true }),
+  sortOrder: parseAsStringEnum([...SORT_ORDER_VALUES]).withDefault("asc").withOptions({ clearOnDefault: true }),
   page: parseAsInteger.withDefault(1).withOptions({ clearOnDefault: true }),
   pageSize: parseAsInteger.withDefault(DEFAULT_PAGE_SIZE).withOptions({ clearOnDefault: true }),
 };
