@@ -371,8 +371,10 @@ export class ApplicationsController {
   @ApiQuery({ name: 'registrationPaymentStatus', enum: PaymentStatus, required: false })
   @ApiQuery({ name: 'programPaymentStatus', enum: PaymentStatus, required: false })
   @ApiQuery({ name: 'scoreStatus', enum: ScoreStatus, required: false })
-  @ApiQuery({ name: 'sortBy', required: false, enum: ['updatedAt', 'createdAt', 'submittedAt', 'participantName', 'country', 'status', 'registrationPaymentStatus', 'programPaymentStatus'] })
-  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
+  // No sortBy/sortOrder here, deliberately: the export is always written in
+  // the admin list's default order (createdAt ASC, id ASC) so that export row
+  // N is screen row N. These two were documented for years and never read by
+  // the handler, which is exactly how the export's real order got mis-stated.
   @ApiQuery({ name: 'startDate', required: false, description: 'Applied from date (YYYY-MM-DD)' })
   @ApiQuery({ name: 'endDate', required: false, description: 'Applied until date (YYYY-MM-DD)' })
   @ApiResponse({ status: 200, description: 'CSV file stream' })

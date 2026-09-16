@@ -8,9 +8,9 @@
  *    programPaymentStatus filters
  *  - M105: groupBy (not findMany+distinct) for program-id resolution
  *  - M115: the keyset pagination scan — the critical regression test, pinning that
- *    every row is visited exactly once across tied submittedAt values and the
- *    NULL-submittedAt (draft) trailing group, even when batch boundaries land
- *    mid-tie.
+ *    every row is visited exactly once even when batch boundaries land mid-tie,
+ *    and that rows come out in the admin list's own order (createdAt ASC, id ASC)
+ *    so export row N is screen row N.
  *
  * The handler's row/where/pagination logic is exercised directly via its private
  * methods (cast to `any`) rather than only through `execute()` + a mocked
@@ -234,7 +234,7 @@ describe('ExportApplicationsHandler', () => {
         });
     });
 
-    describe('streamRows — keyset pagination (M115)', () => {
+    describe('streamRows — keyset pagination (M115), in list order', () => {
         const ACTIVE_WHERE = { deletedAt: null, user: { isActive: true, deletedAt: null } };
         const TIED_SUBMITTED_AT = new Date('2026-01-01T00:00:00Z');
 
@@ -247,14 +247,14 @@ describe('ExportApplicationsHandler', () => {
             });
         }
 
-        // The regression test: OFFSET pagination re-sorted on submittedAt, which is
-        // NULL for every draft and non-unique for submitted rows, so ties/NULLs
-        // straddling a batch boundary silently duplicated or dropped rows. This
-        // fixture forces exactly that: 2500 submitted rows sharing ONE identical
-        // submittedAt timestamp (batch boundaries at 1000 and 2000 land mid-tie),
-        // plus 1500 draft rows with submittedAt=NULL (batch boundary at 1000 lands
-        // mid-group there too). Without the keyset fix this reliably fails.
-        it('visits every row exactly once — no duplicates, no drops — across tied submittedAt values and NULL-submittedAt drafts straddling batch boundaries', async () => {
+        // The regression test: OFFSET pagination silently duplicated or dropped
+        // rows when ties straddled a batch boundary (M115). The fixture forces
+        // exactly that, and harder than the submittedAt version did: all 4000
+        // rows share ONE identical createdAt, so EVERY batch boundary lands
+        // mid-tie and only the `id` half of the keyset separates them. Drafts
+        // (submittedAt NULL) and submitted rows are one undivided group now,
+        // because createdAt is NOT NULL for both.
+        it('visits every row exactly once — no duplicates, no drops — with every batch boundary landing mid-tie on createdAt', async () => {
             const submittedApps = Array.from({ length: 2500 }, (_, i) =>
                 draftOrSubmittedApp(`s-${String(i + 1).padStart(5, '0')}`, TIED_SUBMITTED_AT));
             const draftApps = Array.from({ length: 1500 }, (_, i) =>
@@ -281,10 +281,16 @@ describe('ExportApplicationsHandler', () => {
             expect(new Set(ids).size).toBe(allApps.length); // no duplicates
             expect(new Set(ids)).toEqual(new Set(allApps.map((a) => a.id as string))); // no drops
 
+            // The export's row numbers are only meaningful if the order is the
+            // one the admin list shows: (createdAt ASC, id ASC). With createdAt
+            // tied across the whole fixture, that reduces to id ASC.
+            expect(ids).toEqual([...ids].sort());
+
             // Pins that batching actually happened (not a single unbounded fetch):
-            // phase 1 (2500 rows / 1000) = 3 calls, phase 2 (1500 rows / 1000) = 2 calls.
+            // 4000 rows / 1000 = 4 full batches, then a 5th short read ends it.
             const paginatedCalls = (prisma.participantApplication.findMany as jest.Mock).mock.calls;
             expect(paginatedCalls.length).toBe(5);
+            expect(paginatedCalls.every(([args]) => JSON.stringify(args.orderBy) === JSON.stringify([{ createdAt: 'asc' }, { id: 'asc' }]))).toBe(true);
         });
 
         it('produces zero rows without throwing when there are no matching applications', async () => {

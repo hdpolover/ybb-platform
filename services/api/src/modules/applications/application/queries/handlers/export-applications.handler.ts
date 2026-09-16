@@ -449,20 +449,23 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
     }
 
     /**
-     * Two-phase keyset scan over the export's applications, yielding rows
-     * one at a time (no full-table buffering).
+     * Keyset scan over the export's applications, yielding rows one at a
+     * time (no full-table buffering), in the SAME order the admin list
+     * shows by default: registration order, oldest first.
      *
-     * OFFSET pagination (the previous approach) re-sorts on `submittedAt`,
-     * which is NULL for every draft application and non-unique across
-     * submitted ones — ties or NULLs straddling a batch boundary duplicate
-     * or drop rows (audit M115). A keyset scan visits every row exactly
-     * once regardless of ties/NULLs:
+     * The order is (createdAt ASC, id ASC), and both keys are immutable, so
+     * row N of the export is row N of the screen under the same filters.
+     * That is the whole point: mentors divide the queue by row number, and
+     * an export that disagrees with the screen is worse than no export.
      *
-     *  - Phase 1 walks rows with submittedAt IS NOT NULL, ordered
-     *    (submittedAt DESC, id ASC), cursoring on the last row's
-     *    (submittedAt, id) pair.
-     *  - Phase 2 walks the NULL-submittedAt rows (drafts) as a distinct
-     *    trailing group, ordered by id ASC, cursoring on the last id.
+     * This replaced a two-phase scan keyed on `submittedAt`, which needed a
+     * separate trailing phase precisely because submittedAt is NULL for
+     * every draft (audit M115). `createdAt` is NOT NULL for every row, so
+     * one phase covers drafts and submissions alike.
+     *
+     * OFFSET pagination is still wrong here for the original reason: ties
+     * or NULLs straddling a batch boundary duplicate or drop rows. A keyset
+     * cursor on a (sort key, id) pair visits every row exactly once.
      */
     private async *streamRows(
         baseWhere: Prisma.ParticipantApplicationWhereInput,
@@ -470,28 +473,26 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
     ): AsyncGenerator<ExportRow> {
         const BATCH_SIZE = ExportApplicationsHandler.BATCH_SIZE;
 
-        // Phase 1 — submittedAt IS NOT NULL.
-        let submittedCursor: { submittedAt: Date; id: string } | null = null;
+        let cursor: { createdAt: Date; id: string } | null = null;
         for (;;) {
-            const where: Prisma.ParticipantApplicationWhereInput = submittedCursor
+            const where: Prisma.ParticipantApplicationWhereInput = cursor
                 ? {
                     AND: [
                         baseWhere,
-                        { submittedAt: { not: null } },
                         {
                             OR: [
-                                { submittedAt: { lt: submittedCursor.submittedAt } },
-                                { submittedAt: submittedCursor.submittedAt, id: { gt: submittedCursor.id } },
+                                { createdAt: { gt: cursor.createdAt } },
+                                { createdAt: cursor.createdAt, id: { gt: cursor.id } },
                             ],
                         },
                     ],
                 }
-                : { ...baseWhere, submittedAt: { not: null } };
+                : baseWhere;
 
             const batch = (await this.prisma.participantApplication.findMany({
                 where,
                 take: BATCH_SIZE,
-                orderBy: [{ submittedAt: 'desc' }, { id: 'asc' }],
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
                 select: EXPORT_SELECT,
             })) as unknown as ApplicationExportPayload[];
 
@@ -501,34 +502,15 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
 
             if (batch.length < BATCH_SIZE) break;
             const last = batch[batch.length - 1];
-            submittedCursor = { submittedAt: last.submittedAt as unknown as Date, id: last.id };
-        }
-
-        // Phase 2 — submittedAt IS NULL (drafts), as a distinct trailing group.
-        let draftCursorId: string | null = null;
-        for (;;) {
-            const where: Prisma.ParticipantApplicationWhereInput = draftCursorId
-                ? { AND: [baseWhere, { submittedAt: null }, { id: { gt: draftCursorId } }] }
-                : { ...baseWhere, submittedAt: null };
-
-            const batch = (await this.prisma.participantApplication.findMany({
-                where,
-                take: BATCH_SIZE,
-                orderBy: [{ id: 'asc' }],
-                select: EXPORT_SELECT,
-            })) as unknown as ApplicationExportPayload[];
-
-            for (const app of batch) {
-                yield this.buildRow(app, ctx);
-            }
-
-            if (batch.length < BATCH_SIZE) break;
-            draftCursorId = batch[batch.length - 1].id;
+            cursor = { createdAt: last.createdAt as unknown as Date, id: last.id };
         }
     }
 
     private buildColumns(dynamicDefs: DynamicColumnDef[]): Partial<Column>[] {
         return [
+            // Mirrors the admin list's "#" column so a reviewer can be told
+            // "do 1-200" and find the same 200 rows in either place.
+            { header: '#', key: 'rowNumber', width: 6 },
             { header: 'Application ID', key: 'id', width: 36 },
             { header: 'Program', key: 'program', width: 28 },
             { header: 'Participant Name', key: 'participantName', width: 24 },
@@ -595,8 +577,9 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
         // pipeline. Any error here must be surfaced, not swallowed.
         (async () => {
             try {
+                let rowNumber = 0;
                 for await (const row of this.streamRows(where, ctx)) {
-                    worksheet.addRow(row).commit();
+                    worksheet.addRow({ ...row, rowNumber: ++rowNumber }).commit();
                 }
                 worksheet.commit();
                 await workbook.commit();
