@@ -31,3 +31,30 @@ describe('ApplicationRepository - findByProgram createdAt filter', () => {
     expect(includedInstant >= gte && includedInstant <= lte).toBe(true);
   });
 });
+
+describe('ApplicationRepository - stable list ordering', () => {
+  let findMany: jest.Mock;
+  let repo: ApplicationRepository;
+
+  beforeEach(() => {
+    findMany = jest.fn().mockResolvedValue([]);
+    const prismaStub = {
+      participantApplication: { findMany, count: jest.fn().mockResolvedValue(0) },
+    } as unknown as PrismaService;
+    repo = new ApplicationRepository(prismaStub, {} as ApplicationMapper);
+  });
+
+  // Scoring writes updatedAt. If it is anywhere in the ordering for a sort the
+  // reviewer queue uses, scored rows jump up the list mid-review and the
+  // positional "#" column (how mentors divide the queue) stops being stable.
+  it.each(['createdAt', 'submittedAt', 'participantName', 'status', 'scoreStatus'] as const)(
+    'never tie-breaks a %s sort on updatedAt',
+    async sortBy => {
+      await repo.findByProgram('program-1', { sortBy, sortOrder: 'asc' });
+
+      const { orderBy } = findMany.mock.calls[0][0];
+      expect(JSON.stringify(orderBy)).not.toContain('updatedAt');
+      expect(orderBy[orderBy.length - 1]).toEqual({ id: 'asc' });
+    },
+  );
+});
