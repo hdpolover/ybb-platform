@@ -6,6 +6,7 @@ import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
 import { LandingActivityResponseDto } from './dto/landing-activity.dto';
 import { ListAnnouncementsQueryDto } from './dto/landing-announcements-query.dto';
 import { Public } from '../../shared/decorators/public.decorator';
+import type { MappedAnnouncement } from './strategies/announcements.strategy';
 import { BrandDomain } from '../../shared/decorators/brand-domain.decorator';
 
 @ApiTags('Landing')
@@ -130,6 +131,24 @@ export class LandingController {
     @BrandDomain() brandDomain?: string,
   ): Promise<LandingPageResponseDto> {
     return this.landingService.getAnnouncements(brandDomain, query);
+  }
+
+  @Get('announcements/:key')
+  @ApiOperation({
+    summary: 'Get a single announcement',
+    description:
+      'Looks up one announcement by its slug, or by id for a UUID-shaped key (older links, and system announcements, which have no slug). ' +
+      'Applies the same public visibility rules as the announcements feed for the resolved brand: anything the feed would not list is a 404.',
+  })
+  @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
+  @ApiResponse({ status: 200, description: 'The announcement, in the same item shape as the feed, including slug (null for system announcements)' })
+  @ApiNotFoundResponse({ description: 'No publicly visible announcement with that slug or id for this brand' })
+  @ApiBadRequestResponse({ description: 'Invalid brand identification' })
+  async getAnnouncementDetail(
+    @Param('key') key: string,
+    @BrandDomain() brandDomain?: string,
+  ): Promise<MappedAnnouncement> {
+    return this.landingService.getAnnouncementDetail(key, brandDomain);
   }
 
   @Get('faqs')

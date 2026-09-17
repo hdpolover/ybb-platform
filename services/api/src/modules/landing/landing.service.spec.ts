@@ -29,6 +29,7 @@ describe('LandingService', () => {
   const mockStrategy = {
     getData: jest.fn(),
     getProgramData: jest.fn(),
+    getAnnouncementDetail: jest.fn(),
   };
 
   const mockLandingSnapshotService = {
@@ -145,6 +146,19 @@ describe('LandingService', () => {
         mockPrismaService.brand.findFirst.mockResolvedValue({ id: 'cat-1' });
         await service.getHome();
         expect(mockStrategy.getData).toHaveBeenCalledWith({ id: 'cat-1' });
+    });
+
+    it('getAnnouncementDetail passes the key and resolved brand to AnnouncementsStrategy', async () => {
+        mockPrismaService.brand.findFirst.mockResolvedValue({ id: 'cat-1' });
+        mockStrategy.getAnnouncementDetail.mockResolvedValue({ id: 'a-1', slug: 'hello' });
+        await expect(service.getAnnouncementDetail('hello')).resolves.toEqual({ id: 'a-1', slug: 'hello' });
+        expect(mockStrategy.getAnnouncementDetail).toHaveBeenCalledWith({ id: 'cat-1' }, 'hello');
+    });
+
+    it('getAnnouncementDetail throws NotFoundException when nothing public matches', async () => {
+        mockPrismaService.brand.findFirst.mockResolvedValue({ id: 'cat-1' });
+        mockStrategy.getAnnouncementDetail.mockResolvedValue(null);
+        await expect(service.getAnnouncementDetail('draft-slug')).rejects.toThrow(NotFoundException);
     });
 
     it('getProgramDetail should call ProgramsStrategy.getProgramData', async () => {

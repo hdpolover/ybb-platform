@@ -4,9 +4,11 @@ describe('AnnouncementsStrategy', () => {
   const mockPrisma = {
     systemAnnouncement: {
       findMany: jest.fn(),
+      findFirst: jest.fn(),
     },
     programAnnouncement: {
       findMany: jest.fn(),
+      findFirst: jest.fn(),
       count: jest.fn(),
     },
     program: {
@@ -296,6 +298,158 @@ describe('AnnouncementsStrategy', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('getAnnouncementDetail', () => {
+    const brand = { id: 'brand-1' } as never;
+    const uuid = '20069fca-e516-429f-a3bc-e88d80ce2021';
+    const programRow = {
+      id: uuid,
+      slug: 'kwon-hae-suk-explores-ai',
+      title: 'Kwon Hae-suk Explores AI',
+      content: '<p>Body</p>',
+      imageUrl: null,
+      publishDate: new Date('2026-09-01T00:00:00.000Z'),
+      category: 'News',
+      tags: ['ai'],
+      isPinned: false,
+      program: { name: 'Korea Youth Summit', slug: 'kys-2026' },
+    };
+
+    const makeStrategy = () =>
+      new AnnouncementsStrategy(mockPrisma as never, mockCacheService as never, mockLandingSnapshotService as never);
+
+    beforeEach(() => {
+      mockPrisma.programAnnouncement.findFirst.mockResolvedValue(null);
+      mockPrisma.systemAnnouncement.findFirst.mockResolvedValue(null);
+    });
+
+    // The detail page must never show what the feed hides, or a draft becomes
+    // readable by anyone who guesses its slug.
+    const publicVisibility = {
+      isActive: true,
+      deletedAt: null,
+      targetAudience: 'all',
+      publishDate: { lte: expect.any(Date) },
+      program: { brandId: 'brand-1', isPublished: true, isVisibleToUsers: true },
+    };
+
+    it('looks a non-UUID key up by slug, with the same visibility filter as the feed', async () => {
+      mockPrisma.programAnnouncement.findFirst.mockResolvedValue(programRow);
+
+      const result = await makeStrategy().getAnnouncementDetail(brand, 'kwon-hae-suk-explores-ai');
+
+      expect(mockPrisma.programAnnouncement.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { slug: 'kwon-hae-suk-explores-ai', ...publicVisibility } }),
+      );
+      expect(result).toEqual(
+        expect.objectContaining({
+          id: uuid,
+          slug: 'kwon-hae-suk-explores-ai',
+          title: 'Kwon Hae-suk Explores AI',
+          author: 'Korea Youth Summit',
+          href: '/programs/kys-2026',
+        }),
+      );
+      expect(mockPrisma.systemAnnouncement.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('looks a UUID key up by id so old /announcements/<uuid> links keep resolving', async () => {
+      mockPrisma.programAnnouncement.findFirst.mockResolvedValue(programRow);
+
+      await makeStrategy().getAnnouncementDetail(brand, uuid.toUpperCase());
+
+      expect(mockPrisma.programAnnouncement.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: uuid, ...publicVisibility } }),
+      );
+    });
+
+    it('falls back to a system announcement for a UUID that is not a program announcement', async () => {
+      mockPrisma.systemAnnouncement.findFirst.mockResolvedValue({
+        id: uuid,
+        title: 'Platform update',
+        summary: 'Maintenance',
+        content: '<p>Maintenance</p>',
+        metadata: {},
+        publishedAt: new Date('2026-09-01T00:00:00.000Z'),
+        actionUrl: null,
+        type: 'maintenance',
+      });
+
+      const result = await makeStrategy().getAnnouncementDetail(brand, uuid);
+
+      expect(mockPrisma.systemAnnouncement.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: uuid,
+          isPublished: true,
+          deletedAt: null,
+          OR: [{ brandId: 'brand-1' }, { brandId: null }],
+        },
+      });
+      expect(result).toEqual(expect.objectContaining({ id: uuid, slug: null, title: 'Platform update' }));
+    });
+
+    it('never falls back to system announcements for a slug key', async () => {
+      await expect(makeStrategy().getAnnouncementDetail(brand, 'no-such-slug')).resolves.toBeNull();
+      expect(mockPrisma.systemAnnouncement.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('caches a hit under the landing:announcements:<brand>: prefix that announcement writes already clear', async () => {
+      mockPrisma.programAnnouncement.findFirst.mockResolvedValue(programRow);
+
+      await makeStrategy().getAnnouncementDetail(brand, 'kwon-hae-suk-explores-ai');
+
+      expect(mockCacheService.set).toHaveBeenCalledWith(
+        'landing:announcements:brand-1:detail:kwon-hae-suk-explores-ai',
+        expect.objectContaining({ id: uuid }),
+        expect.any(Number),
+      );
+    });
+
+    it('serves a cache hit without touching the database', async () => {
+      mockCacheService.get.mockResolvedValueOnce({ id: uuid, slug: 'cached' });
+
+      await expect(makeStrategy().getAnnouncementDetail(brand, 'cached')).resolves.toEqual({ id: uuid, slug: 'cached' });
+      expect(mockPrisma.programAnnouncement.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('does not cache a miss, so arbitrary URLs cannot mint cache keys', async () => {
+      await expect(makeStrategy().getAnnouncementDetail(brand, 'nope')).resolves.toBeNull();
+      expect(mockCacheService.set).not.toHaveBeenCalled();
+    });
+
+    it('rejects empty and over-long keys without querying', async () => {
+      await expect(makeStrategy().getAnnouncementDetail(brand, '   ')).resolves.toBeNull();
+      await expect(makeStrategy().getAnnouncementDetail(brand, 'a'.repeat(256))).resolves.toBeNull();
+      expect(mockCacheService.get).not.toHaveBeenCalled();
+      expect(mockPrisma.programAnnouncement.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('includes slug on feed items: program slug, null for system announcements', async () => {
+      mockPrisma.systemAnnouncement.findMany.mockResolvedValue([
+        {
+          id: 'sys-1',
+          title: 'System',
+          summary: null,
+          content: '<p>x</p>',
+          metadata: {},
+          publishedAt: new Date('2026-09-02T00:00:00.000Z'),
+          actionUrl: null,
+          type: 'general',
+        },
+      ]);
+      mockPrisma.programAnnouncement.findMany.mockResolvedValue([programRow]);
+
+      const result = (await makeStrategy().getData(brand)) as {
+        sections: Array<{ type: string; data?: Array<{ id: string; slug: string | null }> }>;
+      };
+      const items = result.sections.find((section) => section.type === 'announcement_list')?.data ?? [];
+
+      expect(items.map((item) => [item.id, item.slug])).toEqual([
+        ['sys-1', null],
+        [uuid, 'kwon-hae-suk-explores-ai'],
+      ]);
     });
   });
 });

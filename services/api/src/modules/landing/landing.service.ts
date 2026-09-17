@@ -5,7 +5,7 @@ import { HomeStrategy } from './strategies/home.strategy';
 import { AboutStrategy } from './strategies/about.strategy';
 import { ProgramsStrategy } from './strategies/programs.strategy';
 import { PartnersSponsorsStrategy } from './strategies/partners-sponsors.strategy';
-import { AnnouncementsStrategy } from './strategies/announcements.strategy';
+import { AnnouncementsStrategy, MappedAnnouncement } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
 import { ActivityStrategy } from './strategies/activity.strategy';
@@ -177,6 +177,15 @@ export class LandingService {
   async getAnnouncements(url?: string, query: ListAnnouncementsQueryDto = {}): Promise<LandingPageResponseDto> {
     const brand = await this.resolveBrand(url);
     return this.announcementsStrategy.getAnnouncements(brand, query) as Promise<LandingPageResponseDto>;
+  }
+
+  async getAnnouncementDetail(key: string, url?: string): Promise<MappedAnnouncement> {
+    const brand = await this.resolveBrand(url);
+    const announcement = await this.announcementsStrategy.getAnnouncementDetail(brand, key);
+    if (!announcement) {
+      throw new NotFoundException('Announcement not found');
+    }
+    return announcement;
   }
 
   async getFaqs(url?: string, page: number = 1, limit: number = DEFAULT_FAQ_LIMIT, search?: string): Promise<LandingPageResponseDto> {

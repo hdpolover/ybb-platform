@@ -30,6 +30,13 @@ import {
   richTextToPlainText,
   toDateTimeLocalValue,
 } from "./program-announcement-utils";
+import {
+  ANNOUNCEMENT_SLUG_MAX_LENGTH,
+  announcementPublicPath,
+  slugConflictMessage,
+  toAnnouncementSlug,
+  validateAnnouncementSlug,
+} from "./announcement-slug";
 
 type EditorMode = "create" | "edit";
 
@@ -61,6 +68,11 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
   const [loaded, setLoaded] = useState(mode === "create");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
+  const [slug, setSlug] = useState("");
+  // Create mode: the slug follows the title until the admin edits it by hand.
+  // Edit mode starts "touched" so a title edit never moves a live URL.
+  const [slugTouched, setSlugTouched] = useState(mode === "edit");
+  const [slugError, setSlugError] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("general");
   const [targetAudience, setTargetAudience] = useState("all");
@@ -88,6 +100,48 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
     () => getProgramAnnouncementStatus({ isActive, publishDate }),
     [isActive, publishDate],
   );
+  // Judged on the SAVED record, not the form: what matters is whether the old
+  // URL is already public, not whether the admin is about to publish.
+  const savedIsLive = useMemo(
+    () =>
+      announcement
+        ? getProgramAnnouncementStatus({
+            isActive: announcement.isActive,
+            publishDate: announcement.publishDate,
+          }) === "published"
+        : false,
+    [announcement],
+  );
+  const slugChangedOnLive = Boolean(
+    mode === "edit" && announcement?.slug && savedIsLive && slug !== announcement.slug,
+  );
+
+  const handleTitleChange = useCallback(
+    (value: string) => {
+      setTitle(value);
+      if (mode === "create" && !slugTouched) {
+        setSlug(toAnnouncementSlug(value));
+        setSlugError(null);
+      }
+    },
+    [mode, slugTouched],
+  );
+
+  const handleSlugChange = useCallback(
+    (value: string) => {
+      const next = value.toLowerCase().replace(/\s+/g, "-");
+      setSlug(next);
+      setSlugError(null);
+      // Clearing the field in create mode hands control back to the title.
+      if (mode === "create" && next === "") {
+        setSlugTouched(false);
+        setSlug(toAnnouncementSlug(title));
+        return;
+      }
+      setSlugTouched(true);
+    },
+    [mode, title],
+  );
 
   useEffect(() => {
     if (mode !== "edit" || !params.id) {
@@ -105,6 +159,8 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
 
         setAnnouncement(data);
         setTitle(data.title);
+        setSlug(data.slug ?? "");
+        setSlugTouched(true);
         setContent(data.content);
         setCategory(data.category ?? "general");
         setTargetAudience(data.targetAudience);
@@ -182,6 +238,14 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
       return;
     }
 
+    const trimmedSlug = slug.trim();
+    const slugValidation = validateAnnouncementSlug(trimmedSlug, { allowEmpty: mode === "create" });
+    if (slugValidation) {
+      setSlugError(slugValidation);
+      toast.error(slugValidation);
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -197,6 +261,15 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
         imageUrl: mode === "edit" ? normalizedImageUrl ?? null : normalizedImageUrl,
         publishDate: dateTimeLocalToIsoString(publishDate) ?? new Date().toISOString(),
         isActive,
+        // Create: omit when empty and let the API generate one from the title.
+        // Edit: only send a slug the admin actually changed.
+        ...(mode === "edit"
+          ? trimmedSlug !== announcement?.slug
+            ? { slug: trimmedSlug }
+            : {}
+          : trimmedSlug
+            ? { slug: trimmedSlug }
+            : {}),
       };
 
       const saved =
@@ -207,11 +280,18 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
       toast.success(mode === "edit" ? "Announcement updated." : "Announcement created.");
       router.push(`/programs/${params.programId}/announcements/${saved.id}`);
     } catch (error) {
+      const conflict = slugConflictMessage(error, trimmedSlug);
+      if (conflict) {
+        setSlugError(conflict);
+        toast.error(conflict);
+        return;
+      }
       toast.error(error instanceof Error ? error.message : "Failed to save announcement.");
     } finally {
       setSaving(false);
     }
   }, [
+    announcement?.slug,
     category,
     content,
     imageUrl,
@@ -223,6 +303,7 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
     resolvedProgramId,
     router,
     sendEmail,
+    slug,
     tagsInput,
     targetAudience,
     title,
@@ -287,7 +368,7 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
           <input
             type="text"
             value={title}
-            onChange={(event) => setTitle(event.target.value)}
+            onChange={(event) => handleTitleChange(event.target.value)}
             placeholder="Announcement title…"
             maxLength={255}
             className="mb-6 block w-full border-0 border-b border-zinc-200 bg-transparent pb-3 text-2xl font-bold text-zinc-900 placeholder:text-zinc-300 outline-none focus:border-blue-400"
@@ -312,6 +393,48 @@ export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
         </main>
 
         <aside className="w-full shrink-0 overflow-y-auto border-t border-zinc-200 bg-white px-5 py-5 lg:w-80 lg:border-l lg:border-t-0">
+          <section className="space-y-2">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+              Link
+            </h2>
+            <div>
+              <label htmlFor="announcement-slug" className="mb-1 block text-[11px] font-medium text-zinc-700">
+                Slug
+              </label>
+              <input
+                id="announcement-slug"
+                type="text"
+                value={slug}
+                onChange={(event) => handleSlugChange(event.target.value)}
+                placeholder={mode === "create" ? "generated from the title" : ""}
+                maxLength={ANNOUNCEMENT_SLUG_MAX_LENGTH}
+                spellCheck={false}
+                autoCapitalize="off"
+                aria-invalid={slugError ? true : undefined}
+                aria-describedby="announcement-slug-help"
+                className={`${inputCls} font-mono ${slugError ? "border-red-400 focus:border-red-500 focus:ring-red-100" : ""}`}
+              />
+            </div>
+            <div id="announcement-slug-help" className="space-y-1.5">
+              <p className="break-all font-mono text-[10px] text-zinc-500">
+                {slug ? announcementPublicPath(slug) : announcementPublicPath("…")}
+              </p>
+              {mode === "create" && !slugTouched && (
+                <p className="text-[10px] text-zinc-400">Follows the title until you edit it.</p>
+              )}
+              {slugError && <p className="text-[10px] text-red-600">{slugError}</p>}
+              {slugChangedOnLive && (
+                <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[10px] leading-4 text-amber-800">
+                  This announcement is already live. Changing the slug breaks links that use{" "}
+                  <span className="break-all font-mono">{announcementPublicPath(announcement?.slug ?? "")}</span>.
+                  Links that use the announcement ID keep working.
+                </p>
+              )}
+            </div>
+          </section>
+
+          <div className="my-4 border-t border-zinc-100" />
+
           <section className="space-y-3">
             <h2 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
               Classification

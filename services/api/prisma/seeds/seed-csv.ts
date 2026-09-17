@@ -1,5 +1,5 @@
 
-import { prisma, log, error } from './utils';
+import { prisma, log, error, toUrlSlug } from './utils';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -179,8 +179,14 @@ export async function seedFromCSV() {
             continue;
         }
 
-        await prisma.programAnnouncement.create({
-            data: {
+        // The legacy row id keeps the slug unique even for repeated titles, and
+        // upserting on it makes a re-run a no-op instead of a unique violation.
+        const slug = `${toUrlSlug(title) || 'announcement'}-${row[0]}`;
+        await prisma.programAnnouncement.upsert({
+            where: { slug },
+            update: {},
+            create: {
+                slug,
                 programId: programId,
                 title: title,
                 content: content,

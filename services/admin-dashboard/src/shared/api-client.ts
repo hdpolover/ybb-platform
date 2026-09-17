@@ -722,6 +722,8 @@ export type ProgramAnnouncement = {
   id: string;
   programId: string;
   title: string;
+  /** Public URL key: /announcements/<slug> on the participant site. */
+  slug: string;
   content: string;
   category: string | null;
   targetAudience: string;
@@ -2161,6 +2163,8 @@ export function createProgramAnnouncement(
   programId: string,
   input: {
     title: string;
+    /** Omit to have the API generate one from the title. 409 if taken. */
+    slug?: string;
     content: string;
     category?: string;
     targetAudience?: string;
@@ -2182,6 +2186,8 @@ export function updateProgramAnnouncement(
   id: string,
   input: {
     title?: string;
+    /** Only changes the slug when provided. A title edit never does. 409 if taken. */
+    slug?: string;
     content?: string;
     category?: string | null;
     targetAudience?: string;

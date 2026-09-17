@@ -342,7 +342,10 @@ model ProgramAnnouncement {
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
-  slug            String?   @db.VarChar(255)
+  // Public URL key: /announcements/<slug>. Globally unique (soft-deleted rows
+  // included, so a restored row can never collide). Generated from the title on
+  // create; a title edit never changes it. See 20260917120000_program_announcement_slug_unique.
+  slug            String    @unique @db.VarChar(255)
   metaTitle       String?   @map("meta_title") @db.VarChar(255)
   metaDescription String?   @map("meta_description") @db.VarChar(255)
   legacyId        Int?      @unique @map("legacy_id")

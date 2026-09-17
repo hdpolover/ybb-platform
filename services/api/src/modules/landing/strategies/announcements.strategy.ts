@@ -6,6 +6,7 @@ import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
 import { Brand, Prisma } from '@prisma/client';
 import { LandingSnapshotService } from '../services/landing-snapshot.service';
 import { buildRichTextPreview } from '@shared/utils/rich-text';
+import { isUuid } from '@shared/utils/url-slug';
 import {
   DEFAULT_ANNOUNCEMENTS_LIMIT,
   MAX_ANNOUNCEMENTS_LIMIT,
@@ -15,6 +16,9 @@ import {
 const MAX_SYSTEM_ANNOUNCEMENTS = 10;
 const MAX_FACET_SAMPLE = 1000;
 const MAX_FACET_TAGS = 20;
+// Matches program_announcements.slug VarChar(255); anything longer cannot exist,
+// so it is rejected before it reaches the database or the cache key.
+const MAX_ANNOUNCEMENT_KEY_LENGTH = 255;
 
 interface AnnouncementFilters {
   search?: string;
@@ -24,9 +28,12 @@ interface AnnouncementFilters {
   year?: number;
 }
 
-interface MappedAnnouncement {
+export interface MappedAnnouncement {
   [key: string]: unknown;
   id: string;
+  // Program announcements only. System announcements have no slug and are
+  // addressed by id; the frontend falls back to the id when this is null.
+  slug: string | null;
   title: string;
   excerpt: string;
   content: string;
@@ -103,6 +110,128 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
     return result;
   }
 
+  /**
+   * One announcement for /announcements/<key>, where key is a slug or, for old
+   * links and system announcements, a UUID id.
+   *
+   * Visibility is exactly the list's: a program announcement must be active,
+   * published (publishDate <= now), audience 'all', not deleted, and belong to a
+   * published + visible program of this brand. A system announcement must be
+   * published, not deleted, and either global or this brand's. Anything the
+   * list would not show returns null, so a draft cannot be read by guessing
+   * its slug.
+   *
+   * Only hits are cached. Caching misses would let arbitrary URLs mint Redis
+   * keys, and a scheduled announcement going live would stay 404 until the TTL.
+   * The key sits under landing:announcements:<brand>: so every existing
+   * announcement/brand invalidation already clears it.
+   */
+  async getAnnouncementDetail(category: Brand | null, rawKey: string): Promise<MappedAnnouncement | null> {
+    const key = (rawKey ?? '').trim();
+    if (!key || key.length > MAX_ANNOUNCEMENT_KEY_LENGTH) return null;
+
+    const cacheKey = CACHE_KEYS.LANDING_ANNOUNCEMENT_DETAIL(category?.id ?? 'default', key);
+    const cached = await this.cacheService.get<MappedAnnouncement>(cacheKey);
+    if (cached) return cached;
+
+    const found = await this.findAnnouncementDetail(category, key);
+    if (found) {
+      await this.cacheService.set(cacheKey, found, CACHE_TTL.LONG);
+    }
+    return found;
+  }
+
+  private async findAnnouncementDetail(category: Brand | null, key: string): Promise<MappedAnnouncement | null> {
+    const now = new Date();
+    const byId = isUuid(key);
+    // Lowercased so the cache entry and the query agree on one canonical id.
+    const lookup = byId ? { id: key.toLowerCase() } : { slug: key };
+
+    const programAnnouncement = await this.prisma.programAnnouncement.findFirst({
+      where: {
+        ...lookup,
+        ...this.publicProgramAnnouncementWhere(category, now),
+      },
+      include: {
+        program: {
+          select: { name: true, slug: true },
+        },
+      },
+    });
+    if (programAnnouncement) return this.mapProgramAnnouncement(programAnnouncement);
+
+    if (!byId) return null;
+
+    const systemAnnouncement = await this.prisma.systemAnnouncement.findFirst({
+      where: {
+        id: key.toLowerCase(),
+        isPublished: true,
+        deletedAt: null,
+        OR: [{ brandId: category?.id ?? undefined }, { brandId: null }],
+      },
+    });
+    return systemAnnouncement ? this.mapSystemAnnouncement(systemAnnouncement) : null;
+  }
+
+  // Shared by the list and the detail lookup so the two can never disagree
+  // about what the public may see.
+  private publicProgramWhere(category: Brand | null): Prisma.ProgramWhereInput {
+    return {
+      ...(category?.id ? { brandId: category.id } : {}),
+      isPublished: true,
+      isVisibleToUsers: true,
+    };
+  }
+
+  private publicProgramAnnouncementWhere(category: Brand | null, now: Date): Prisma.ProgramAnnouncementWhereInput {
+    return {
+      isActive: true,
+      deletedAt: null,
+      targetAudience: 'all',
+      publishDate: { lte: now },
+      program: this.publicProgramWhere(category),
+    };
+  }
+
+  private mapSystemAnnouncement(
+    announcement: Prisma.SystemAnnouncementGetPayload<Record<string, never>>,
+  ): MappedAnnouncement {
+    const meta = (announcement.metadata as Record<string, unknown>) ?? {};
+    const tags = this.extractSystemTags(meta);
+
+    return {
+      id: announcement.id,
+      slug: null,
+      title: announcement.title,
+      excerpt: announcement.summary ?? buildRichTextPreview(announcement.content, 160),
+      content: announcement.content,
+      image: (meta.imageUrl as string) ?? null,
+      author: (meta.author as string) ?? null,
+      date: announcement.publishedAt,
+      href: announcement.actionUrl ?? null,
+      category: announcement.type,
+      tags,
+    };
+  }
+
+  private mapProgramAnnouncement(
+    announcement: Prisma.ProgramAnnouncementGetPayload<{ include: { program: { select: { name: true; slug: true } } } }>,
+  ): MappedAnnouncement {
+    return {
+      id: announcement.id,
+      slug: announcement.slug,
+      title: announcement.title,
+      excerpt: buildRichTextPreview(announcement.content, 160),
+      content: announcement.content,
+      image: announcement.imageUrl,
+      author: announcement.program.name,
+      date: announcement.publishDate,
+      href: announcement.program.slug ? `/programs/${announcement.program.slug}` : null,
+      category: announcement.category ?? 'general',
+      tags: announcement.tags,
+    };
+  }
+
   private normalizePage(page?: number): number {
     const raw = Number(page);
     return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 1;
@@ -177,16 +306,10 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
     // published and visible on the website, including completed/past editions. We gate on
     // isVisibleToUsers (NOT isActive) so past programs — which stop accepting applications
     // and therefore have isActive=false — still surface their news.
-    const programWhere: Prisma.ProgramWhereInput = {
-      ...(category?.id ? { brandId: category.id } : {}),
-      isPublished: true,
-      isVisibleToUsers: true,
-    };
+    const programWhere = this.publicProgramWhere(category);
 
     const programAnnouncementWhere: Prisma.ProgramAnnouncementWhereInput = {
-      isActive: true,
-      deletedAt: null,
-      targetAudience: 'all',
+      ...this.publicProgramAnnouncementWhere(category, now),
       publishDate: { lte: now, ...(range ? { gte: range.gte, lt: range.lt } : {}) },
       program: filters.programId ? { ...programWhere, id: filters.programId } : programWhere,
       ...(filters.category ? { category: { equals: filters.category, mode: 'insensitive' } } : {}),
@@ -282,36 +405,13 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
       return true;
     });
 
-    const mappedSystem: MappedAnnouncement[] = systemAnnouncements.map((announcement) => {
-      const meta = (announcement.metadata as Record<string, unknown>) ?? {};
-      const tags = this.extractSystemTags(meta);
+    const mappedSystem: MappedAnnouncement[] = systemAnnouncements.map((announcement) =>
+      this.mapSystemAnnouncement(announcement),
+    );
 
-      return {
-        id: announcement.id,
-        title: announcement.title,
-        excerpt: announcement.summary ?? buildRichTextPreview(announcement.content, 160),
-        content: announcement.content,
-        image: (meta.imageUrl as string) ?? null,
-        author: (meta.author as string) ?? null,
-        date: announcement.publishedAt,
-        href: announcement.actionUrl ?? null,
-        category: announcement.type,
-        tags,
-      };
-    });
-
-    const mappedProgram: MappedAnnouncement[] = programAnnouncements.map((announcement) => ({
-      id: announcement.id,
-      title: announcement.title,
-      excerpt: buildRichTextPreview(announcement.content, 160),
-      content: announcement.content,
-      image: announcement.imageUrl,
-      author: announcement.program.name,
-      date: announcement.publishDate,
-      href: announcement.program.slug ? `/programs/${announcement.program.slug}` : null,
-      category: announcement.category ?? 'general',
-      tags: announcement.tags,
-    }));
+    const mappedProgram: MappedAnnouncement[] = programAnnouncements.map((announcement) =>
+      this.mapProgramAnnouncement(announcement),
+    );
 
     // Page 1 merges the (small, unpaginated) system feed into the paginated program
     // feed and re-sorts by date, matching the pre-pagination merge behavior. Page 2+

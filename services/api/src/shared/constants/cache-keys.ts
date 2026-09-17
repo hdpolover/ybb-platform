@@ -42,6 +42,12 @@ export const CACHE_KEYS = {
     programId: string,
     year: string,
   ) => `landing:announcements:${brandId}:${page}:${limit}:${search}:${category}:${tag}:${programId}:${year}`,
+  // Single announcement by slug or id (GET /landing/announcements/:key). Kept
+  // under the landing:announcements:<brandId>: prefix on purpose so the
+  // existing `landing:announcements:*` / `landing:announcements:${brandId}:*`
+  // busts clear it with no extra wiring. `detail` can never collide with the
+  // LIST key above, whose third segment is always a page number.
+  LANDING_ANNOUNCEMENT_DETAIL: (brandId: string, key: string) => `landing:announcements:${brandId}:detail:${key}`,
   LANDING_FAQS: (brandId: string, page: number, limit: number, search: string) => `landing:faqs:${brandId}:${page}:${limit}:${search}`,
   LANDING_SETTINGS: (brandId: string) => `landing:settings:${brandId}`,
   LANDING_ACTIVITY: (brandId: string) => `landing:activity:${brandId}`,

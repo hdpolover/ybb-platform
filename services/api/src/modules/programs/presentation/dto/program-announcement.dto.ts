@@ -1,6 +1,23 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsArray, IsNumber, Min, Max, IsDateString, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsArray, IsNumber, Min, Max, IsDateString, MaxLength, Matches, ValidateBy, ValidationOptions } from 'class-validator';
 import { Type } from 'class-transformer';
+import { isUuid, URL_SLUG_MAX_LENGTH, URL_SLUG_PATTERN } from '@shared/utils/url-slug';
+
+// The public page resolves /announcements/<key> as an id when the key is
+// UUID-shaped and as a slug otherwise, so a UUID-shaped slug would be
+// unreachable by its own URL.
+function IsNotUuidShaped(validationOptions?: ValidationOptions): PropertyDecorator {
+  return ValidateBy(
+    {
+      name: 'isNotUuidShaped',
+      validator: {
+        validate: (value: unknown) => typeof value !== 'string' || !isUuid(value),
+        defaultMessage: () => 'slug must not look like a UUID',
+      },
+    },
+    validationOptions,
+  );
+}
 
 export class CreateProgramAnnouncementDto {
   @ApiProperty({ description: 'Announcement title' })
@@ -8,6 +25,23 @@ export class CreateProgramAnnouncementDto {
   @IsNotEmpty()
   @MaxLength(255)
   title: string;
+
+  @ApiPropertyOptional({
+    description:
+      'URL slug for /announcements/<slug>: lowercase letters, digits and single hyphens. ' +
+      'Generated from the title when omitted on create. Changing it on a published ' +
+      'announcement breaks links that use the old slug.',
+    example: 'kwon-hae-suk-explores-ai-for-inclusive-global-communities',
+    maxLength: URL_SLUG_MAX_LENGTH,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(URL_SLUG_MAX_LENGTH)
+  @Matches(URL_SLUG_PATTERN, {
+    message: 'slug may only contain lowercase letters, digits and single hyphens, and cannot start or end with a hyphen',
+  })
+  @IsNotUuidShaped()
+  slug?: string;
 
   @ApiProperty({ description: 'Announcement body content' })
   @IsString()
@@ -94,6 +128,9 @@ export class ProgramAnnouncementResponseDto {
 
   @ApiProperty()
   title: string;
+
+  @ApiProperty({ example: 'kwon-hae-suk-explores-ai-for-inclusive-global-communities' })
+  slug: string;
 
   @ApiProperty()
   content: string;

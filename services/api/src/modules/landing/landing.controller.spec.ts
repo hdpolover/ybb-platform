@@ -15,6 +15,7 @@ describe('LandingController', () => {
     getProgramDetail: jest.fn(),
     getPartnersSponsors: jest.fn(),
     getAnnouncements: jest.fn(),
+    getAnnouncementDetail: jest.fn(),
     getActivity: jest.fn(),
   };
 
@@ -79,6 +80,13 @@ describe('LandingController', () => {
       await controller.getActivity(undefined);
 
       expect(mockService.getActivity).toHaveBeenCalledWith(undefined);
+    });
+  });
+
+  describe('getAnnouncementDetail', () => {
+    it('passes the slug-or-id key and brand domain to the service', async () => {
+      await controller.getAnnouncementDetail('kwon-hae-suk-explores-ai', 'koreayouthsummit.com');
+      expect(mockService.getAnnouncementDetail).toHaveBeenCalledWith('kwon-hae-suk-explores-ai', 'koreayouthsummit.com');
     });
   });
 });
