@@ -20,6 +20,7 @@ import { calculatePortalTotalRequired } from '../../utils/calculate-portal-total
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 import { isPastSubmissionDeadline, resolveSubmissionCutoff } from '@shared/utils/submission-deadline.util';
 import { effectiveStart, getCategoryRegistrationPhase, hasTierPeriodEnded } from '@shared/utils/tier-period.util';
+import { cancelClosedWindowRegistrationInvoices } from '../../utils/cancel-closed-window-invoices';
 
 @Injectable()
 @QueryHandler(GetPortalDashboardQuery)
@@ -180,6 +181,15 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         let announcements: { id: string; title: string; date: Date | null; preview: string; isRead: boolean }[] = [];
 
         if (latestApplication) {
+            // Best-effort: clear dead invoices from a since-closed window (see
+            // cancel-closed-window-invoices.ts). Never throws.
+            await cancelClosedWindowRegistrationInvoices(
+                this.prisma,
+                latestApplication.id,
+                latestApplication.applicationCategory,
+                new Date(),
+            );
+
             // Audit M55: announcement previews are a separate read (Prisma has no
             // prefix projection). Started here and awaited below so it overlaps the
             // guidebook lookups instead of adding a round trip to the critical path.

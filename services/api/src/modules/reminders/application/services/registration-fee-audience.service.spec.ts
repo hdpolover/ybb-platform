@@ -1,6 +1,7 @@
 // src/modules/reminders/application/services/registration-fee-audience.service.spec.ts
 import { RegistrationFeeAudienceService } from './registration-fee-audience.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { ApplicationCategory } from '@prisma/client';
 
 function buildRow(over: Partial<Record<string, unknown>> = {}) {
   return {
@@ -20,16 +21,21 @@ function buildRow(over: Partial<Record<string, unknown>> = {}) {
 
 describe('RegistrationFeeAudienceService', () => {
   let findFirst: jest.Mock;
+  let tierFindMany: jest.Mock;
   let findMany: jest.Mock;
   let count: jest.Mock;
   let service: RegistrationFeeAudienceService;
 
   beforeEach(() => {
     findFirst = jest.fn().mockResolvedValue({ id: 'tier-1' });
+    // No registration_fee tiers by default -> closedRegistrationCategories
+    // returns [] -> buildWhere's window clause is a no-op, matching the
+    // pre-window-check behaviour for every test that doesn't set this up.
+    tierFindMany = jest.fn().mockResolvedValue([]);
     findMany = jest.fn().mockResolvedValue([buildRow()]);
     count = jest.fn().mockResolvedValue(1);
     service = new RegistrationFeeAudienceService({
-      programPricingTier: { findFirst },
+      programPricingTier: { findFirst, findMany: tierFindMany },
       participantApplication: { findMany, count },
     } as unknown as PrismaService);
   });
@@ -89,6 +95,62 @@ describe('RegistrationFeeAudienceService', () => {
       // still in `draft`. Restricting to submitted applications would produce
       // an almost-empty audience.
       expect(service.buildWhere('prog-1').status).not.toHaveProperty('in');
+    });
+  });
+
+  describe('buildWhere — category window exclusion', () => {
+    it('adds no filter when no category is closed', () => {
+      const where = service.buildWhere('prog-1', []);
+      expect(where).not.toHaveProperty('OR');
+    });
+
+    it('excludes the closed category but keeps an uncategorised application in', () => {
+      const where = service.buildWhere('prog-1', [ApplicationCategory.fully_funded]);
+      expect(where.OR).toEqual([
+        { applicationCategory: null },
+        { applicationCategory: { notIn: ['fully_funded'] } },
+      ]);
+    });
+  });
+
+  describe('closedRegistrationCategories — via preview/findRecipients', () => {
+    const CLOSED_PERIOD = [{ startDate: new Date('2000-01-01'), endDate: new Date('2000-01-31') }];
+    const OPEN_PERIOD = [{ startDate: new Date('2000-01-01'), endDate: new Date('2099-01-01') }];
+
+    it('excludes a closed-category application and still includes an open one', async () => {
+      tierFindMany.mockResolvedValue([
+        { allowedCategories: ['fully_funded'], validityPeriods: CLOSED_PERIOD },
+        { allowedCategories: ['self_funded'], validityPeriods: OPEN_PERIOD },
+      ]);
+
+      await service.preview('prog-1');
+
+      const where = findMany.mock.calls[0][0].where;
+      expect(where.OR).toEqual([
+        { applicationCategory: null },
+        { applicationCategory: { notIn: ['fully_funded'] } },
+      ]);
+    });
+
+    it('leaves the query unfiltered by category when nothing has closed', async () => {
+      tierFindMany.mockResolvedValue([
+        { allowedCategories: ['fully_funded'], validityPeriods: OPEN_PERIOD },
+        { allowedCategories: ['self_funded'], validityPeriods: OPEN_PERIOD },
+      ]);
+
+      await service.findRecipients('prog-1');
+
+      const where = findMany.mock.calls[0][0].where;
+      expect(where).not.toHaveProperty('OR');
+    });
+
+    it('a tier with no validity periods is left alone (not treated as closed)', async () => {
+      tierFindMany.mockResolvedValue([{ allowedCategories: ['fully_funded'], validityPeriods: [] }]);
+
+      await service.preview('prog-1');
+
+      const where = findMany.mock.calls[0][0].where;
+      expect(where).not.toHaveProperty('OR');
     });
   });
 

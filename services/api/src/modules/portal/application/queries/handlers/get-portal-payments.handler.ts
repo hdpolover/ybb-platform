@@ -16,6 +16,7 @@ import { effectiveStart, resolveTierPeriod } from '@shared/utils/tier-period.uti
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 import { resolveInvoiceRevenue, RevenueInvoiceMoneyInput } from '@modules/stats/revenue/utils/revenue-money.util';
 import { getRegistrationFeeWindowRejection, REGISTRATION_WINDOW_CLOSED } from '../../utils/registration-fee-window';
+import { cancelClosedWindowRegistrationInvoices } from '../../utils/cancel-closed-window-invoices';
 
 function getFeeTypePriority(feeType?: string | null): number {
     const normalized = String(feeType ?? '').toLowerCase();
@@ -211,6 +212,12 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
             currency = application.program.currency;
             const now = new Date();
             const currentCategory = application.applicationCategory as ApplicationCategory | null;
+
+            // Best-effort: clear dead invoices from a since-closed window (see
+            // cancel-closed-window-invoices.ts). Never throws; the invoices
+            // fetched above may still show `unpaid` for this one request and
+            // catch up on the next load.
+            await cancelClosedWindowRegistrationInvoices(this.prisma, application.id, currentCategory, now);
 
             // Keep only the newest invoice per tier so a tier appears once with the latest state.
             const latestInvoiceByTier = new Map<string, (typeof application.invoices)[number]>();
