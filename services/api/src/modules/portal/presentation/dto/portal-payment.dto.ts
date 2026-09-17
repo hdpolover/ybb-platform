@@ -65,6 +65,12 @@ export class PaymentItemDto {
 
     @ApiPropertyOptional({ description: 'Whether participant can initiate payment for this item' })
     canPay?: boolean;
+
+    @ApiPropertyOptional({
+        description:
+            "True when this is a registration fee whose category registration window has closed: it can no longer be paid, and the participant's route forward is a category switch.",
+    })
+    windowClosed?: boolean;
 }
 
 export class AvailablePaymentDto {
@@ -103,6 +109,16 @@ export class AvailablePaymentDto {
 
     @ApiPropertyOptional({ description: 'Ordering hint from pricing tier' })
     sequenceOrder?: number;
+
+    @ApiPropertyOptional({
+        description: 'False when this payment option cannot be started now (e.g. its registration window has closed). Absent means payable.',
+    })
+    canPay?: boolean;
+
+    @ApiPropertyOptional({
+        description: "True when this is a registration fee whose category registration window has closed.",
+    })
+    windowClosed?: boolean;
 }
 
 export class PortalPaymentResponseDto {

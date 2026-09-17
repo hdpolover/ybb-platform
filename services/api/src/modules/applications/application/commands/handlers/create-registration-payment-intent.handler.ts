@@ -15,6 +15,7 @@ import { resolveUsdInIdrRate } from '@modules/portal/application/utils/resolve-u
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { invalidateParticipantPortalCache } from '@shared/utils/invalidate-participant-portal-cache.util';
+import { getRegistrationFeeWindowRejection } from '@modules/portal/application/utils/registration-fee-window';
 
 type CreateIntentResponse = Awaited<ReturnType<PaymentGrpcClient['createIntent']>>;
 
@@ -138,7 +139,13 @@ export class CreateRegistrationPaymentIntentHandler {
         isActive: true,
         feeType: 'registration_fee',
       },
-      select: { price: true, currency: true, usdPrice: true },
+      select: {
+        price: true,
+        currency: true,
+        usdPrice: true,
+        allowedCategories: true,
+        validityPeriods: { select: { startDate: true, endDate: true }, orderBy: { startDate: 'asc' } },
+      },
     });
 
     if (!tier) {
@@ -146,6 +153,8 @@ export class CreateRegistrationPaymentIntentHandler {
         'No active registration fee tier found for this application.',
       );
     }
+
+    await this.warnIfRegistrationWindowClosed(application.id, application.programId, application.applicationCategory, tier);
 
     // Dual-pricing snapshot: usdPrice is canonical (USD). Fall back to the
     // legacy price/currency for tiers not yet migrated to dual pricing.
@@ -232,5 +241,47 @@ export class CreateRegistrationPaymentIntentHandler {
     );
 
     return intent;
+  }
+
+  /**
+   * The participant payment paths refuse a registration fee once its category
+   * window has closed (registration-fee-window.ts). This route is admin-only
+   * and has no override flag, and admins use it precisely for the exceptions
+   * (a late payer the programme agreed to accept, a reconciliation), so it is
+   * deliberately NOT blocked. It is logged instead, so a Fully Funded fee
+   * collected after Fully Funded closed is traceable to the admin action that
+   * took it rather than looking like the participant-side bug came back.
+   * Never throws: a lookup failure must not stop the admin.
+   */
+  private async warnIfRegistrationWindowClosed(
+    applicationId: string,
+    programId: string,
+    category: string | null | undefined,
+    tier: Parameters<typeof getRegistrationFeeWindowRejection>[0]['tier'],
+  ): Promise<void> {
+    try {
+      const registrationTiers = await this.prisma.programPricingTier.findMany({
+        where: { programId, isActive: true, deletedAt: null, feeType: 'registration_fee' },
+        select: {
+          allowedCategories: true,
+          validityPeriods: { select: { startDate: true, endDate: true }, orderBy: { startDate: 'asc' } },
+        },
+      });
+      const rejection = getRegistrationFeeWindowRejection({
+        category,
+        tier,
+        registrationTiers,
+        now: new Date(),
+      });
+      if (rejection) {
+        this.logger.warn(
+          `[create-registration-payment-intent] admin override: creating a registration intent outside the registration window (${rejection.errorCode}) applicationId=${applicationId} programId=${programId} category=${category ?? 'none'}`,
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `[create-registration-payment-intent] registration window check failed for application ${applicationId}, proceeding: ${(error as Error)?.message}`,
+      );
+    }
   }
 }

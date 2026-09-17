@@ -1,4 +1,5 @@
 import {
+    BadRequestException,
     ForbiddenException,
     Injectable,
     NotFoundException,
@@ -13,6 +14,12 @@ import { EnsurePortalPaymentInvoiceResponseDto } from '../../../presentation/dto
 import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 import { targetFieldsOf } from '@shared/utils/prisma-error.util';
+import {
+    getRegistrationFeeWindowRejection,
+    isRegistrationFeeTierOffCategory,
+    REGISTRATION_FEE_CATEGORY_MISMATCH,
+    RegistrationFeeWindowInput,
+} from '../../utils/registration-fee-window';
 
 /**
  * True when `error` is the P2002 raised by
@@ -58,6 +65,16 @@ export class EnsurePortalPaymentInvoiceHandler {
                     select: {
                         usdInIdr: true,
                         brandId: true,
+                        // The category registration window (see
+                        // registration-fee-window.ts). Only read for a
+                        // registration_fee tier.
+                        pricingTiers: {
+                            where: { isActive: true, deletedAt: null, feeType: 'registration_fee' },
+                            select: {
+                                allowedCategories: true,
+                                validityPeriods: { select: { startDate: true, endDate: true }, orderBy: { startDate: 'asc' } },
+                            },
+                        },
                     },
                 },
             },
@@ -83,6 +100,7 @@ export class EnsurePortalPaymentInvoiceHandler {
                 idrPrice: true,
                 feeType: true,
                 allowedCategories: true,
+                validityPeriods: { select: { startDate: true, endDate: true }, orderBy: { startDate: 'asc' } },
             },
         });
 
@@ -91,11 +109,34 @@ export class EnsurePortalPaymentInvoiceHandler {
         }
 
         const currentCategory = application.applicationCategory as ApplicationCategory | null;
-        // registration_fee is payable by all participant categories — the submit gate
-        // requires it from everyone regardless of allowedCategories, so we must not
-        // block any category here. For other fee types (full_fee, etc.) the
-        // allowedCategories restriction still applies.
         const isRegistrationFee = tier.feeType === 'registration_fee';
+        const registrationWindow: RegistrationFeeWindowInput = {
+            category: currentCategory,
+            tier,
+            registrationTiers: application.program?.pricingTiers ?? [],
+            now: new Date(),
+        };
+
+        // A registration_fee tier must belong to the participant's category.
+        // Without this a participant could pay a different category's fee -
+        // including the (cheaper) Fully Funded fee after Fully Funded closed,
+        // by requesting that tier directly.
+        //
+        // Scoped to categories that HAVE registration tiers of their own. June
+        // 2026 made registration_fee payable by every category because the
+        // submit gate requires a registration fee from everyone: a category
+        // with no tier of its own must still be able to pay the programme's,
+        // or it is required-to-pay and forbidden-to-pay at once. That case is
+        // left exactly as it was.
+        if (isRegistrationFee && isRegistrationFeeTierOffCategory(registrationWindow)) {
+            throw new ForbiddenException({
+                message: 'This registration fee is for a different category than your application.',
+                errorCode: REGISTRATION_FEE_CATEGORY_MISMATCH,
+            });
+        }
+
+        // For other fee types (full_fee, etc.) the allowedCategories
+        // restriction always applies.
         if (
             !isRegistrationFee &&
             currentCategory &&
@@ -147,6 +188,17 @@ export class EnsurePortalPaymentInvoiceHandler {
                 source: 'existing',
                 message: 'Invoice is ready',
             };
+        }
+
+        // No NEW registration-fee invoice once the category's registration
+        // window is not open. Existing invoices are returned above on purpose
+        // (detail/receipt pages resolve through here); paying one is refused by
+        // ConfirmPortalPaymentHandler under the same rule.
+        if (isRegistrationFee) {
+            const rejection = getRegistrationFeeWindowRejection(registrationWindow);
+            if (rejection) {
+                throw new BadRequestException(rejection);
+            }
         }
 
         // Dual-pricing snapshots: prefer the explicit usdPrice/idrPrice fields

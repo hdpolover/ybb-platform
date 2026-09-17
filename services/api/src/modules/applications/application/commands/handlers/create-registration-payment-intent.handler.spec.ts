@@ -28,7 +28,7 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
   const mockPaymentClient = { createIntent: jest.fn(), getIntentsByReference: jest.fn() };
   const mockPrisma = {
     participant: { findUnique: jest.fn() },
-    programPricingTier: { findFirst: jest.fn() },
+    programPricingTier: { findFirst: jest.fn(), findMany: jest.fn() },
     program: { findUnique: jest.fn() },
     brandSetting: { findFirst: jest.fn() },
   };
@@ -71,6 +71,7 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
     mockPaymentClient.createIntent.mockResolvedValue({ intent_id: 'pi-1', status: 'REQUIRES_PAYMENT_METHOD' });
     mockPaymentClient.getIntentsByReference.mockResolvedValue({ intents: [] });
     mockRegistrationFeeGate.isRegistrationFeePaid.mockResolvedValue(false);
+    mockPrisma.programPricingTier.findMany.mockResolvedValue([]);
   });
 
   // ── guard rails ───────────────────────────────────────────────────────────
@@ -129,6 +130,57 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
         }),
       }),
     );
+  });
+
+  // ── registration window (admin override) ─────────────────────────────────
+  //
+  // The participant paths refuse a registration fee once its category window
+  // has closed. This admin-only route is how staff take the exceptions, so it
+  // must keep working - and must leave a trace when it does.
+  describe('registration window', () => {
+    const lapsed = [{ startDate: new Date('2020-01-01T00:00:00Z'), endDate: new Date('2020-02-01T00:00:00Z') }];
+    let warn: jest.SpyInstance;
+
+    beforeEach(() => {
+      warn = jest.spyOn((handler as unknown as { logger: { warn: () => void } }).logger, 'warn').mockImplementation(() => undefined);
+      mockAppRepository.findById.mockResolvedValue(makeApp({ applicationCategory: 'fully_funded' }));
+      mockPrisma.programPricingTier.findFirst.mockResolvedValue({
+        price: 10, currency: 'USD', usdPrice: 10, allowedCategories: ['fully_funded'], validityPeriods: lapsed,
+      });
+    });
+
+    it('still creates the intent after the category window closed, and logs the override', async () => {
+      mockPrisma.programPricingTier.findMany.mockResolvedValue([
+        { allowedCategories: ['fully_funded'], validityPeriods: lapsed },
+      ]);
+
+      await handler.execute(command);
+
+      expect(mockPaymentClient.createIntent).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('REGISTRATION_WINDOW_CLOSED'));
+    });
+
+    it('does not log while the window is open', async () => {
+      const running = [{ startDate: new Date('2020-01-01T00:00:00Z'), endDate: new Date('2099-01-01T00:00:00Z') }];
+      mockPrisma.programPricingTier.findFirst.mockResolvedValue({
+        price: 10, currency: 'USD', usdPrice: 10, allowedCategories: ['fully_funded'], validityPeriods: running,
+      });
+      mockPrisma.programPricingTier.findMany.mockResolvedValue([
+        { allowedCategories: ['fully_funded'], validityPeriods: running },
+      ]);
+
+      await handler.execute(command);
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('proceeds when the window lookup itself fails', async () => {
+      mockPrisma.programPricingTier.findMany.mockRejectedValue(new Error('db down'));
+
+      await handler.execute(command);
+
+      expect(mockPaymentClient.createIntent).toHaveBeenCalledTimes(1);
+    });
   });
 
   // ── duplicate-intent guard (audit M119) ────────────────────────────────────

@@ -15,6 +15,7 @@ import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
 import { effectiveStart, resolveTierPeriod } from '@shared/utils/tier-period.util';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 import { resolveInvoiceRevenue, RevenueInvoiceMoneyInput } from '@modules/stats/revenue/utils/revenue-money.util';
+import { getRegistrationFeeWindowRejection, REGISTRATION_WINDOW_CLOSED } from '../../utils/registration-fee-window';
 
 function getFeeTypePriority(feeType?: string | null): number {
     const normalized = String(feeType ?? '').toLowerCase();
@@ -250,6 +251,31 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 });
             const applicableTierIds = new Set(applicableTiers.map((tier) => tier.id));
 
+            // Registration window per tier (registration-fee-window.ts). A lapsed
+            // registration tier used to fall through resolveTierPeriod to its
+            // last period and be listed as payable "overdue" indefinitely, which
+            // is how the Fully Funded fee kept being paid after Fully Funded
+            // registration closed. It stays listed (the participant needs to see
+            // why they are stuck) but is no longer payable or counted as due.
+            const registrationTiers = application.program.pricingTiers.filter(
+                (tier) => tier.feeType === 'registration_fee',
+            );
+            const registrationWindowState = (tier: (typeof applicableTiers)[number]) => {
+                if (tier.feeType !== 'registration_fee') {
+                    return { payable: true, windowClosed: false };
+                }
+                const rejection = getRegistrationFeeWindowRejection({
+                    category: currentCategory,
+                    tier,
+                    registrationTiers,
+                    now,
+                });
+                return {
+                    payable: !rejection,
+                    windowClosed: rejection?.errorCode === REGISTRATION_WINDOW_CLOSED,
+                };
+            };
+
             // Build a map of orphan invoices by feeType: invoices whose pricingTier
             // is no longer in `applicableTiers` (because the tier was deactivated,
             // deleted, or excluded after a category switch). These still represent
@@ -345,9 +371,13 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                 const startDate = period?.startDate;
                 const dueDate = period?.endDate;
                 const sequenceOrder = getFeeTypePriority(tier.feeType) * 1000 + tier.order;
+                const windowState = registrationWindowState(tier);
 
                 if (invoice) {
                     const normalizedStatus = String(invoice.status).toLowerCase();
+                    // paid/processing are past the point a window can matter.
+                    const blockedByWindow =
+                        !windowState.payable && normalizedStatus !== 'paid' && normalizedStatus !== 'processing';
                     const tierPrices = resolveTierDualPrices(tier);
                     // Prefer the invoice's own snapshot — it's frozen at intent
                     // creation. Fall back to the tier only for legacy invoices
@@ -384,7 +414,9 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                                 || normalizedStatus === 'failed'
                                 || normalizedStatus === 'cancelled'
                             )
-                            && Number(invoice.amount) > 0,
+                            && Number(invoice.amount) > 0
+                            && !blockedByWindow,
+                        ...(blockedByWindow && windowState.windowClosed ? { windowClosed: true } : {}),
                     };
 
                     const totalContribution = resolveTotalContribution(invoice, currency, application.program?.usdInIdr);
@@ -393,7 +425,10 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                         totalPaid += totalContribution;
                     } else {
                         outstanding.push(item);
-                        totalDue += totalContribution;
+                        // Not due if it can no longer be paid.
+                        if (!blockedByWindow) {
+                            totalDue += totalContribution;
+                        }
                     }
 
                     continue;
@@ -416,7 +451,12 @@ export class GetPortalPaymentsHandler implements IQueryHandler<GetPortalPayments
                     startDate: startDate || undefined,
                     dueDate: dueDate || undefined,
                     sequenceOrder,
+                    ...(windowState.payable ? {} : { canPay: false }),
+                    ...(windowState.windowClosed ? { windowClosed: true } : {}),
                 });
+                if (!windowState.payable) {
+                    continue;
+                }
                 // Same M60 currency-mixing bug as the invoice branch above, for tiers
                 // that don't have an invoice yet: `tier.price`/`tier.currency` are the
                 // legacy single-currency fields and can disagree with the programme's

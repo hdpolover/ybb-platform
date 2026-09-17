@@ -19,7 +19,7 @@ import { fetchProgramAnnouncementPreviews } from '@shared/utils/announcement-pre
 import { calculatePortalTotalRequired } from '../../utils/calculate-portal-total-required';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 import { isPastSubmissionDeadline, resolveSubmissionCutoff } from '@shared/utils/submission-deadline.util';
-import { effectiveStart, hasTierPeriodEnded } from '@shared/utils/tier-period.util';
+import { effectiveStart, getCategoryRegistrationPhase, hasTierPeriodEnded } from '@shared/utils/tier-period.util';
 
 @Injectable()
 @QueryHandler(GetPortalDashboardQuery)
@@ -207,21 +207,14 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
             );
             const bothTiersActive = hasSelfFundedTier && hasFullyFundedTier;
 
-            // Fully Funded registration is "closed" when at least one FF tier
-            // exists AND every FF tier is configured with validity windows that
-            // have all ended. A tier with no validityPeriods counts as "not
-            // closed" (windows are open-ended / not yet configured).
+            // Fully Funded registration is "closed" when every FF window has
+            // ended. Same shared rule as the switch-category guard (which this
+            // flag must agree with, or the UI offers a switch the API refuses),
+            // signup and payments. No programme dates: a tier without
+            // validityPeriods keeps counting as "not closed", as it always has.
             const now = new Date();
-            const ffTiers = tiers.filter(
-                (tier) => Array.isArray(tier.allowedCategories) && tier.allowedCategories.includes('fully_funded'),
-            );
             const fullyFundedRegistrationClosed =
-                ffTiers.length > 0 &&
-                ffTiers.every(
-                    (tier) =>
-                        (tier.validityPeriods?.length ?? 0) > 0 &&
-                        (tier.validityPeriods ?? []).every((period) => hasTierPeriodEnded(period, now)),
-                );
+                getCategoryRegistrationPhase(tiers, 'fully_funded', now) === 'closed';
 
             // Deadline shown in the "submit your application form" reminder.
             // Scoped to the application's OWN category: a Self Funded

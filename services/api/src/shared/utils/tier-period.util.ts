@@ -111,3 +111,151 @@ export function resolveTierPeriod<T extends TierValidityPeriod>(
     const fallbackLatest = periods.length > 0 ? periods[periods.length - 1] : undefined;
     return byReference ?? activeOrUpcoming ?? fallbackLatest;
 }
+
+/**
+ * Lifecycle phase of ONE application category's registration window.
+ *
+ *  - 'open':         some registration_fee tier allowing the category has a
+ *                    window containing `now`
+ *  - 'upcoming':     none is open, but at least one window starts later
+ *  - 'closed':       every window for the category has ended
+ *  - 'unconfigured': no active registration_fee tier allows the category at
+ *                    all. This is NOT closure: programmes that never set up
+ *                    per-category pricing must keep working exactly as before,
+ *                    so callers treat it as "no category-level gate".
+ */
+export type CategoryRegistrationPhase = 'open' | 'upcoming' | 'closed' | 'unconfigured';
+
+/**
+ * The tier fields the category phase reads. `isActive`/`deletedAt`/`feeType`
+ * are optional because several callers already scope their Prisma query to
+ * active, non-deleted registration_fee tiers and do not select them again; an
+ * absent field is read as "the query already filtered on it".
+ */
+export type CategoryPhaseTier = {
+    feeType?: string | null;
+    isActive?: boolean | null;
+    deletedAt?: Date | null;
+    allowedCategories?: readonly string[] | null;
+    validityPeriods?: readonly TierValidityPeriod[] | null;
+};
+
+/**
+ * The programme-level registration dates, used ONLY for a tier that carries no
+ * validity periods of its own. Null on either side means unbounded on that
+ * side, matching isProgramRegistrationOpen.
+ */
+export type ProgramRegistrationDates = {
+    registrationOpenDate?: Date | null;
+    registrationCloseDate?: Date | null;
+};
+
+type PhaseWindow = { start: number; end: number };
+
+function programWindow(dates: ProgramRegistrationDates | undefined): PhaseWindow {
+    // No programme dates supplied at all: the caller has asked for the tier
+    // windows only, and a tier with none is not a closed tier. This is the
+    // long-standing reading of the switch-category guard and the dashboard
+    // flag, which never consulted programme dates.
+    const open = dates?.registrationOpenDate ?? null;
+    const close = dates?.registrationCloseDate ?? null;
+    return {
+        start: open ? startOfWibDay(open).getTime() : -Infinity,
+        end: close ? endOfWibDay(close).getTime() : Infinity,
+    };
+}
+
+function tierWindows(tier: CategoryPhaseTier, programDates: ProgramRegistrationDates | undefined): PhaseWindow[] {
+    const periods = tier.validityPeriods ?? [];
+    if (periods.length === 0) {
+        // Mirrors ybb-program-next lib/registration/isRegistrationOpen.ts
+        // getTierWindows: a tier without windows is governed by the programme's
+        // registration dates. Deliberately NOT applied when the tier's windows
+        // have all lapsed - that tier really did close.
+        return [programWindow(programDates)];
+    }
+    return periods.map((period) => ({
+        start: effectiveStart(period, periods).getTime(),
+        end: endOfWibDay(period.endDate).getTime(),
+    }));
+}
+
+/**
+ * Single server-side answer to "may someone register/pay under `category`
+ * right now", derived from the registration_fee pricing tiers.
+ *
+ * Why this exists: the pricing tier's validity periods ARE the per-category
+ * registration deadline (admins set the Fully Funded and Self Funded windows
+ * by editing each tier's periods). The programme's own registrationCloseDate is
+ * a single date for the whole edition and in practice tracks the LAST
+ * category to close, so it cannot express "Fully Funded closed, Self Funded
+ * still open". Signup and payment only checked that programme date, which is
+ * how MEYS/CYS 2026 kept creating Fully Funded accounts and taking the Fully
+ * Funded fee after that window ended. The switch-category guard and the
+ * dashboard flag had their own copy of the rule; they now route through here.
+ *
+ * Window semantics are the ones resolveTierPeriod uses: start = effectiveStart
+ * (WIB midnight unless exactly chained to a preceding period), end = WIB
+ * end-of-day inclusive. A period whose effective start is after its end can
+ * never be open; it reads as ended once its end passes, exactly as
+ * hasTierPeriodEnded always did.
+ *
+ * `programDates`: pass the programme's registration dates to make a tier
+ * without periods follow them (signup, payments). Omit to read such a tier as
+ * open-ended (the historical switch/dashboard behaviour).
+ *
+ * Category matching is strict (`allowedCategories` must contain it), matching
+ * the switch handler this replaced; a tier with an empty list gates nobody.
+ */
+export function getCategoryRegistrationPhase(
+    tiers: readonly CategoryPhaseTier[] | null | undefined,
+    category: string,
+    now: Date,
+    programDates?: ProgramRegistrationDates,
+): CategoryRegistrationPhase {
+    const categoryTiers = (tiers ?? []).filter(
+        (tier) => Array.isArray(tier.allowedCategories) && tier.allowedCategories.includes(category),
+    );
+    return getTiersRegistrationPhase(categoryTiers, now, programDates);
+}
+
+/**
+ * The same phase over an explicit set of tiers, with no category filter. Used
+ * where the tier in question is already known (e.g. the one a participant is
+ * trying to pay) rather than derived from a category. Inactive, deleted and
+ * non-registration tiers are ignored exactly as above; none left is
+ * 'unconfigured'.
+ */
+export function getTiersRegistrationPhase(
+    tiers: readonly CategoryPhaseTier[] | null | undefined,
+    now: Date,
+    programDates?: ProgramRegistrationDates,
+): CategoryRegistrationPhase {
+    const registrationTiers = (tiers ?? []).filter(
+        (tier) =>
+            tier.isActive !== false &&
+            !tier.deletedAt &&
+            (tier.feeType === undefined || tier.feeType === 'registration_fee'),
+    );
+    if (registrationTiers.length === 0) {
+        return 'unconfigured';
+    }
+
+    const nowMs = now.getTime();
+    const windows = registrationTiers.flatMap((tier) => tierWindows(tier, programDates));
+    if (windows.some((w) => w.start <= nowMs && nowMs <= w.end)) {
+        return 'open';
+    }
+    if (windows.some((w) => w.end >= nowMs)) {
+        // Not open and not ended: it starts later.
+        return 'upcoming';
+    }
+    return 'closed';
+}
+
+/** Whether `phase` permits creating a new registration under the category or
+ * minting/paying its registration fee. 'unconfigured' deliberately passes: no
+ * tier, no category-level gate. */
+export function isCategoryRegistrationAvailable(phase: CategoryRegistrationPhase): boolean {
+    return phase === 'open' || phase === 'unconfigured';
+}

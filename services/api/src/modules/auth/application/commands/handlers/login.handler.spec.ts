@@ -43,6 +43,10 @@ describe('LoginHandler', () => {
     programParticipationInfo: {
       findMany: jest.fn(),
     },
+    // ensureProgramApplication's per-category registration window check.
+    programPricingTier: {
+      findMany: jest.fn(),
+    },
     userIdentity: {
       update: jest.fn(),
     },
@@ -152,6 +156,7 @@ describe('LoginHandler', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
     });
     mockPrismaService.programParticipationInfo.findMany.mockResolvedValue([]);
+    mockPrismaService.programPricingTier.findMany.mockResolvedValue([]);
     // findFirst handles email-based auth lookups (case-insensitive)
     mockPrismaService.user.findFirst.mockImplementation(async ({ where }: any) => {
       if (where?.brandId === 'brand-1') {

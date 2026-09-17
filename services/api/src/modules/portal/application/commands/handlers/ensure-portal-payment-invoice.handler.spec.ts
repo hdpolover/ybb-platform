@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EnsurePortalPaymentInvoiceHandler } from './ensure-portal-payment-invoice.handler';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -249,5 +250,123 @@ describe('EnsurePortalPaymentInvoiceHandler', () => {
         await expect(
             handler.execute(new EnsurePortalPaymentInvoiceCommand('user-1', 'tier-1', 'program-1')),
         ).rejects.toBe(unrelatedConflict);
+    });
+
+    // MEYS/CYS 2026: the Fully Funded fee kept being invoiced after Fully
+    // Funded registration closed, because nothing here read the tier windows.
+    describe('registration window and category', () => {
+        const lapsed = [{ startDate: new Date('2020-01-01T00:00:00Z'), endDate: new Date('2020-02-01T00:00:00Z') }];
+        const running = [{ startDate: new Date('2020-01-01T00:00:00Z'), endDate: new Date('2099-12-31T00:00:00Z') }];
+        const upcoming = [{ startDate: new Date('2099-01-01T00:00:00Z'), endDate: new Date('2099-12-31T00:00:00Z') }];
+
+        const ffTier = (validityPeriods: typeof lapsed) => ({
+            id: 'tier-ff',
+            name: 'Fully Funded Registration',
+            price: '10',
+            currency: 'USD',
+            usdPrice: '10',
+            idrPrice: null,
+            feeType: 'registration_fee',
+            allowedCategories: ['fully_funded'],
+            validityPeriods,
+        });
+
+        const arrange = (category: string, ffPeriods: typeof lapsed, sfPeriods: typeof lapsed = running) => {
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({ id: 'participant-1', userId: 'user-1' });
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                programId: 'program-1',
+                applicationCategory: category,
+                program: {
+                    usdInIdr: '16000',
+                    pricingTiers: [
+                        { allowedCategories: ['fully_funded'], validityPeriods: ffPeriods },
+                        { allowedCategories: ['self_funded'], validityPeriods: sfPeriods },
+                    ],
+                },
+            });
+            mockPrisma.programPricingTier.findFirst.mockResolvedValue(ffTier(ffPeriods));
+            mockPrisma.applicationInvoice.create.mockResolvedValue({ id: 'invoice-new' });
+        };
+
+        const rejectionOf = (promise: Promise<unknown>) => promise.then(() => null, (e: unknown) => e);
+
+        it('refuses a NEW Fully Funded registration invoice once that window has closed', async () => {
+            arrange('fully_funded', lapsed);
+            mockPrisma.applicationInvoice.findFirst.mockResolvedValue(null);
+
+            const error = await rejectionOf(handler.execute(new EnsurePortalPaymentInvoiceCommand('user-1', 'tier-ff', 'program-1')));
+
+            expect(error).toBeInstanceOf(BadRequestException);
+            expect((error as BadRequestException).getResponse()).toMatchObject({ errorCode: 'REGISTRATION_WINDOW_CLOSED' });
+            expect(mockPrisma.applicationInvoice.create).not.toHaveBeenCalled();
+        });
+
+        it('refuses with REGISTRATION_WINDOW_NOT_OPEN before the window opens', async () => {
+            arrange('fully_funded', upcoming);
+            mockPrisma.applicationInvoice.findFirst.mockResolvedValue(null);
+
+            const error = await rejectionOf(handler.execute(new EnsurePortalPaymentInvoiceCommand('user-1', 'tier-ff', 'program-1')));
+
+            expect((error as BadRequestException).getResponse()).toMatchObject({ errorCode: 'REGISTRATION_WINDOW_NOT_OPEN' });
+            expect(mockPrisma.applicationInvoice.create).not.toHaveBeenCalled();
+        });
+
+        it('still returns an existing paid/processing registration invoice after the window closed', async () => {
+            arrange('fully_funded', lapsed);
+            mockPrisma.applicationInvoice.findFirst.mockResolvedValueOnce({ id: 'invoice-paid' });
+
+            const result = await handler.execute(new EnsurePortalPaymentInvoiceCommand('user-1', 'tier-ff', 'program-1'));
+
+            expect(result).toMatchObject({ invoice_id: 'invoice-paid', source: 'existing' });
+        });
+
+        it('still returns an existing invoice for the tier (detail pages resolve through here)', async () => {
+            arrange('fully_funded', lapsed);
+            mockPrisma.applicationInvoice.findFirst
+                .mockResolvedValueOnce(null) // no paid/processing registration fee
+                .mockResolvedValueOnce({ id: 'invoice-unpaid' });
+
+            const result = await handler.execute(new EnsurePortalPaymentInvoiceCommand('user-1', 'tier-ff', 'program-1'));
+
+            expect(result).toMatchObject({ invoice_id: 'invoice-unpaid', source: 'existing' });
+            expect(mockPrisma.applicationInvoice.create).not.toHaveBeenCalled();
+        });
+
+        it('creates the invoice while the window is open', async () => {
+            arrange('fully_funded', running);
+            mockPrisma.applicationInvoice.findFirst.mockResolvedValue(null);
+
+            const result = await handler.execute(new EnsurePortalPaymentInvoiceCommand('user-1', 'tier-ff', 'program-1'));
+
+            expect(result).toMatchObject({ invoice_id: 'invoice-new', source: 'created' });
+        });
+
+        it('403s a Self Funded participant requesting the Fully Funded registration tier', async () => {
+            arrange('self_funded', running);
+            mockPrisma.applicationInvoice.findFirst.mockResolvedValue(null);
+
+            const error = await rejectionOf(handler.execute(new EnsurePortalPaymentInvoiceCommand('user-1', 'tier-ff', 'program-1')));
+
+            expect(error).toBeInstanceOf(ForbiddenException);
+            expect((error as ForbiddenException).getResponse()).toMatchObject({ errorCode: 'REGISTRATION_FEE_CATEGORY_MISMATCH' });
+            expect(mockPrisma.applicationInvoice.findFirst).not.toHaveBeenCalled();
+        });
+
+        it('keeps the June 2026 rule: a category with no registration tier may pay another category\'s', async () => {
+            arrange('self_funded', running);
+            // No Self Funded tier at all this time.
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                programId: 'program-1',
+                applicationCategory: 'self_funded',
+                program: { usdInIdr: '16000', pricingTiers: [{ allowedCategories: ['fully_funded'], validityPeriods: running }] },
+            });
+            mockPrisma.applicationInvoice.findFirst.mockResolvedValue(null);
+
+            const result = await handler.execute(new EnsurePortalPaymentInvoiceCommand('user-1', 'tier-ff', 'program-1'));
+
+            expect(result).toMatchObject({ source: 'created' });
+        });
     });
 });

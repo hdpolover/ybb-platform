@@ -6,7 +6,7 @@ import { SwitchApplicationCategoryCommand } from '../switch-application-category
 import { ApplicationResponseDto } from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { ApplicationStatus } from '@core/entities/participant-application.entity';
-import { hasTierPeriodEnded } from '@shared/utils/tier-period.util';
+import { getCategoryRegistrationPhase } from '@shared/utils/tier-period.util';
 import { PaymentStatus } from '@prisma/client';
 
 @Injectable()
@@ -122,34 +122,16 @@ export class SwitchApplicationCategoryHandler {
 
     // Fully Funded "registration closed" guard.
     //
-    // Definition (must match the dashboard flag): among the active
-    // registration_fee FF tiers, a tier exists AND every such tier is
-    // configured with validity windows AND all those windows have ended
-    // (per `hasTierPeriodEnded`, WIB end-of-day inclusive). A tier with no
-    // validityPeriods counts as "not closed".
+    // The rule lives in getCategoryRegistrationPhase, shared with signup, the
+    // payment handlers and the dashboard flag, so "has Fully Funded closed"
+    // has one answer everywhere. No programme dates are passed on purpose: a
+    // tier with no validityPeriods keeps counting as "not closed" here, which
+    // is what this guard has always done. 'upcoming' is likewise not blocked.
     //
     // Only ever blocks switching INTO fully_funded — switching to
     // self_funded must never be affected.
-    const isFullyFundedClosed = (): boolean => {
-      const now = new Date();
-      const ffTiers = application.program.pricingTiers.filter(
-        (tier) =>
-          tier.isActive &&
-          tier.deletedAt === null &&
-          tier.feeType === 'registration_fee' &&
-          tier.allowedCategories &&
-          (tier.allowedCategories as unknown as string[]).includes('fully_funded'),
-      );
-      if (ffTiers.length === 0) {
-        return false;
-      }
-      return ffTiers.every((tier) => {
-        const periods = (tier as unknown as {
-          validityPeriods?: { startDate: Date; endDate: Date }[];
-        }).validityPeriods ?? [];
-        return periods.length > 0 && periods.every((period) => hasTierPeriodEnded(period, now));
-      });
-    };
+    const isFullyFundedClosed = (): boolean =>
+      getCategoryRegistrationPhase(application.program.pricingTiers, 'fully_funded', new Date()) === 'closed';
 
     if (targetCategory === 'fully_funded' && isFullyFundedClosed()) {
       throw new BadRequestException({
