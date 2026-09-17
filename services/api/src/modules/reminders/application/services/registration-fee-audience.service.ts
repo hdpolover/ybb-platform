@@ -1,8 +1,9 @@
 // src/modules/reminders/application/services/registration-fee-audience.service.ts
 import { Injectable } from '@nestjs/common';
-import { ApplicationStatus, PaymentStatus, Prisma } from '@prisma/client';
+import { ApplicationCategory, ApplicationStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { ACTIVE_PARTICIPANT_WHERE } from '@shared/utils/active-participant.filter';
+import { getCategoryRegistrationPhase } from '@shared/utils/tier-period.util';
 import { ParticipantReminderRecipient } from '../../../../common/types/events';
 import { REMINDER_AUDIENCE_PREVIEW_LIMIT } from '../../reminder.constants';
 
@@ -48,7 +49,13 @@ import { REMINDER_AUDIENCE_PREVIEW_LIMIT } from '../../reminder.constants';
  * Deactivated/soft-deleted accounts (ACTIVE_PARTICIPANT_WHERE — the shared
  * predicate for exports and automated emails), soft-deleted applications, and
  * withdrawn/rejected applications, who are out of the funnel and must not be
- * chased for money.
+ * chased for money. Also excluded: an application whose OWN category's
+ * registration window has closed (getCategoryRegistrationPhase — the same
+ * rule the payment path enforces, PR #217). The server refuses that payment
+ * outright, so reminding them to make it is just noise; see
+ * closedRegistrationCategories/buildWhere below. This is a per-application
+ * check and does not touch the program-level allowedCategories carve-out
+ * described above.
  */
 
 const EXCLUDED_APPLICATION_STATUSES = [
@@ -118,6 +125,9 @@ export class RegistrationFeeAudienceService {
    * Deliberately ignores the tier's allowedCategories: the gate that actually
    * blocks submission ignores them too, so a fully_funded participant facing a
    * self_funded-only tier really is blocked, and really should be reminded.
+   * (This is a program-wide check for whether a fee exists at all; the
+   * per-application category window check lives in closedRegistrationCategories
+   * / buildWhere below and is a separate, narrower concern.)
    */
   async hasActiveRegistrationFee(programId: string): Promise<boolean> {
     const tier = await this.prisma.programPricingTier.findFirst({
@@ -132,7 +142,42 @@ export class RegistrationFeeAudienceService {
     return tier !== null;
   }
 
-  buildWhere(programId: string): Prisma.ParticipantApplicationWhereInput {
+  /**
+   * Categories whose registration window has closed (getCategoryRegistrationPhase,
+   * the same rule the payment path enforces — see registration-fee-window.ts).
+   * An application stuck in one of these categories can never pay the fee the
+   * reminder is chasing, so it must not be nagged. A category with no
+   * validity periods, or with a period that hasn't started/ended yet, is NOT
+   * closed and is left out of the returned list.
+   */
+  private async closedRegistrationCategories(
+    programId: string,
+    now: Date,
+  ): Promise<ApplicationCategory[]> {
+    const tiers = await this.prisma.programPricingTier.findMany({
+      where: { programId, isActive: true, deletedAt: null, feeType: 'registration_fee' },
+      select: {
+        allowedCategories: true,
+        validityPeriods: { select: { startDate: true, endDate: true } },
+      },
+    });
+    if (tiers.length === 0) return [];
+    return Object.values(ApplicationCategory).filter(
+      (category) => getCategoryRegistrationPhase(tiers, category, now) === 'closed',
+    );
+  }
+
+  /**
+   * `closedCategories` (from closedRegistrationCategories) excludes an
+   * application whose OWN category is in the list. An application with no
+   * category yet is never excluded by this — it hasn't picked a category to
+   * be closed out of. Empty `closedCategories` adds no clause at all, keeping
+   * this identical to the pre-window-check behaviour.
+   */
+  buildWhere(
+    programId: string,
+    closedCategories: readonly ApplicationCategory[] = [],
+  ): Prisma.ParticipantApplicationWhereInput {
     return {
       programId,
       deletedAt: null,
@@ -149,6 +194,12 @@ export class RegistrationFeeAudienceService {
           pricingTier: { feeType: 'registration_fee' },
         },
       },
+      // `notIn` alone would also drop every NULL applicationCategory row
+      // (SQL three-valued logic), which is wrong — a not-yet-categorised
+      // application isn't closed out of anything.
+      ...(closedCategories.length > 0
+        ? { OR: [{ applicationCategory: null }, { applicationCategory: { notIn: [...closedCategories] } }] }
+        : {}),
     };
   }
 
@@ -161,7 +212,8 @@ export class RegistrationFeeAudienceService {
       return { registrationFeeConfigured: false, count: 0, members: [], listLimit };
     }
 
-    const where = this.buildWhere(programId);
+    const closedCategories = await this.closedRegistrationCategories(programId, new Date());
+    const where = this.buildWhere(programId, closedCategories);
     const [count, rows] = await Promise.all([
       this.prisma.participantApplication.count({ where }),
       this.prisma.participantApplication.findMany({
@@ -192,8 +244,9 @@ export class RegistrationFeeAudienceService {
       return [];
     }
 
+    const closedCategories = await this.closedRegistrationCategories(programId, new Date());
     const rows = await this.prisma.participantApplication.findMany({
-      where: this.buildWhere(programId),
+      where: this.buildWhere(programId, closedCategories),
       select: AUDIENCE_ROW_SELECT,
       orderBy: { createdAt: 'asc' },
     });
