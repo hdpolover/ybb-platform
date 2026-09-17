@@ -384,6 +384,49 @@ describe('LoginHandler', () => {
     ]);
   });
 
+  // MEYS 6th/7th: a participant already holding a phantom draft on the edition
+  // the BFF requests must not have the login response name that edition, or
+  // the client pins its program selector to it on every login.
+  it('names no program in programRegistration when the participant holds another application in the brand', async () => {
+    // beforeEach: application-1 exists on the requested program-1.
+    mockPrismaService.participantApplication.findFirst.mockResolvedValue({ id: 'application-older' });
+
+    const command = new LoginCommand(
+      'same@example.com',
+      'password123',
+      '127.0.0.1',
+      'Mozilla/5.0',
+      'brand-1',
+      'program-1',
+    );
+
+    const result = await handler.execute(command);
+
+    expect(result.programRegistration).toBeUndefined();
+    expect(mockPrismaService.participantApplication.create).not.toHaveBeenCalled();
+  });
+
+  it('still names the program when its application is the only one in the brand', async () => {
+    mockPrismaService.participantApplication.findFirst.mockResolvedValue(null);
+
+    const command = new LoginCommand(
+      'same@example.com',
+      'password123',
+      '127.0.0.1',
+      'Mozilla/5.0',
+      'brand-1',
+      'program-1',
+    );
+
+    const result = await handler.execute(command);
+
+    expect(result.programRegistration).toEqual({
+      status: 'existing',
+      programId: 'program-1',
+      programName: 'Brand One Program',
+    });
+  });
+
   it('rejects login when the brand-scoped account does not exist', async () => {
     mockPrismaService.user.findFirst.mockResolvedValueOnce(null);
 

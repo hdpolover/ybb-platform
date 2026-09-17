@@ -20,6 +20,15 @@ import { Prisma } from '@prisma/client';
  *   one. Ordering withdrawn rows last rather than filtering them out means a
  *   participant whose only application is withdrawn still sees it, while a
  *   participant with both always gets the live one.
+ * - Among live applications, prefer one the participant actually SUBMITTED
+ *   (`submittedAt desc nulls last`). A brand running two editions at once
+ *   leaves a participant holding a submitted/accepted application on one and
+ *   an untouched draft on the other; the draft is the one webhooks and logins
+ *   happen to have touched most recently, so recency alone landed MEYS 2026
+ *   participants on an empty 2027 draft with no invitation letter. Mirrors
+ *   the engagement ranking in ybb-program-next's resolveActiveProgramId, so a
+ *   request that carries no programId resolves the same application the
+ *   dashboard would have picked.
  * - Break the remaining tie on `updatedAt desc`.
  *
  * `updatedAt` is deliberately the LAST key, not the first. It is `@updatedAt`,
@@ -44,5 +53,6 @@ export const currentApplicationWhere = (
 
 export const currentApplicationOrderBy: Prisma.ParticipantApplicationOrderByWithRelationInput[] = [
   { withdrawnAt: { sort: 'asc', nulls: 'first' } },
+  { submittedAt: { sort: 'desc', nulls: 'last' } },
   { updatedAt: 'desc' },
 ];
