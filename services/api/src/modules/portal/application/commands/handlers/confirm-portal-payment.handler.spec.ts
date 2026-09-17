@@ -498,6 +498,95 @@ describe('ConfirmPortalPaymentHandler', () => {
         expect(mockPaymentClient.createIntent).toHaveBeenCalledTimes(1);
     });
 
+    // ── registration window (MEYS/CYS 2026 Fully Funded closed) ──────────────
+    // Invoices are minted lazily and never expire, so an unpaid Fully Funded
+    // invoice created while that window was open stayed payable after it closed.
+    describe('registration window guard', () => {
+        const lapsed = [{ startDate: new Date('2020-01-01T00:00:00Z'), endDate: new Date('2020-02-01T00:00:00Z') }];
+        const running = [{ startDate: new Date('2020-01-01T00:00:00Z'), endDate: new Date('2099-12-31T00:00:00Z') }];
+
+        const makeFullyFundedInvoice = (ffPeriods: typeof lapsed, status = 'unpaid') => {
+            const base = makeRegistrationInvoice();
+            return {
+                ...base,
+                status,
+                pricingTier: { ...base.pricingTier, allowedCategories: ['fully_funded'], validityPeriods: ffPeriods },
+                application: {
+                    ...base.application,
+                    applicationCategory: 'fully_funded',
+                    program: {
+                        ...base.application.program,
+                        pricingTiers: [
+                            { allowedCategories: ['fully_funded'], validityPeriods: ffPeriods },
+                            { allowedCategories: ['self_funded'], validityPeriods: running },
+                        ],
+                    },
+                },
+            };
+        };
+
+        beforeEach(() => {
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({ id: 'participant-1', userId: 'user-1' });
+            mockPaymentClient.createIntent.mockResolvedValue({ intent_id: 'intent-1' });
+            mockPaymentClient.processPayment.mockResolvedValue({
+                status: 'PENDING',
+                transaction_id: 'tx-1',
+                action: { type: 'redirect', url: 'https://checkout.xendit.co/invoice/test' },
+            });
+            mockPrisma.applicationInvoice.update.mockResolvedValue(undefined);
+        });
+
+        it.each(['unpaid', 'failed', 'cancelled'])(
+            'rejects a %s Fully Funded registration invoice after the Fully Funded window closed',
+            async (status) => {
+                mockPrisma.applicationInvoice.findUnique.mockResolvedValue(makeFullyFundedInvoice(lapsed, status));
+
+                const error = await handler
+                    .execute(new ConfirmPortalPaymentCommand('user-1', 'invoice-reg', 'gateway', 'xendit_credit_card'))
+                    .catch((e: unknown) => e);
+
+                expect(error).toBeInstanceOf(BadRequestException);
+                expect((error as BadRequestException).getResponse()).toMatchObject({
+                    errorCode: 'REGISTRATION_WINDOW_CLOSED',
+                });
+                expect(mockPaymentClient.createIntent).not.toHaveBeenCalled();
+            },
+        );
+
+        it('allows the same invoice while the Fully Funded window is open', async () => {
+            mockPrisma.applicationInvoice.findUnique.mockResolvedValue(makeFullyFundedInvoice(running));
+
+            await handler.execute(
+                new ConfirmPortalPaymentCommand('user-1', 'invoice-reg', 'gateway', 'xendit_credit_card'),
+            );
+
+            expect(mockPaymentClient.createIntent).toHaveBeenCalledTimes(1);
+        });
+
+        it('leaves an in-flight processing invoice on its own "continue the existing payment" path', async () => {
+            mockPrisma.applicationInvoice.findUnique.mockResolvedValue(makeFullyFundedInvoice(lapsed, 'processing'));
+
+            await expect(
+                handler.execute(new ConfirmPortalPaymentCommand('user-1', 'invoice-reg', 'gateway', 'xendit_credit_card')),
+            ).rejects.toThrow(/already has a pending payment/);
+        });
+
+        it('does not gate a category with no registration tier of its own on another category\'s window', async () => {
+            const invoice = makeFullyFundedInvoice(lapsed);
+            // Only a Self Funded tier exists; the Fully Funded participant pays it
+            // (the June 2026 deadlock fix) and that tier is open.
+            invoice.pricingTier = { ...invoice.pricingTier, allowedCategories: ['self_funded'], validityPeriods: running };
+            invoice.application.program.pricingTiers = [{ allowedCategories: ['self_funded'], validityPeriods: running }];
+            mockPrisma.applicationInvoice.findUnique.mockResolvedValue(invoice);
+
+            await handler.execute(
+                new ConfirmPortalPaymentCommand('user-1', 'invoice-reg', 'gateway', 'xendit_credit_card'),
+            );
+
+            expect(mockPaymentClient.createIntent).toHaveBeenCalledTimes(1);
+        });
+    });
+
     // ── manual-payment proof ownership (audit M45) ─────────────────────────────
     // Previously proofFileId/proofFileUrl were forwarded to the payment service
     // verbatim: nothing checked the file belonged to the caller, and nothing

@@ -21,6 +21,7 @@
  */
 
 import { effectiveStart, resolveTierPeriod } from '@shared/utils/tier-period.util';
+import { getRegistrationFeeWindowRejection } from './registration-fee-window';
 
 type TotalRequiredInvoice = {
     status: string;
@@ -94,9 +95,25 @@ export function calculatePortalTotalRequired(
 ): { amount: number; currency: string; hasOutstanding: boolean } {
     const currency = String(programCurrency || 'USD').toUpperCase();
 
-    // (1) Existing unpaid/failed invoices — unchanged historical behavior.
+    // Registration window for the participant's category, same rule as the
+    // payments list and the payment handlers (registration-fee-window.ts). A
+    // registration fee that can no longer be paid is not "required": counting
+    // it raised a "Payment Required" alert the participant could never clear.
+    const applicableRegistrationTier = registrationTiers.find((tier) => isTierApplicable(tier, category));
+    const registrationWindowBlocked = applicableRegistrationTier
+        ? getRegistrationFeeWindowRejection({
+            category,
+            tier: applicableRegistrationTier,
+            registrationTiers,
+            now,
+        }) !== null
+        : false;
+
+    // (1) Existing unpaid/failed invoices, minus registration fees whose window
+    // has closed.
     const invoiceTotal = invoices
         .filter((invoice) => REQUIRED_INVOICE_STATUSES.has(String(invoice.status).toLowerCase()))
+        .filter((invoice) => !(registrationWindowBlocked && invoice.pricingTier?.feeType === 'registration_fee'))
         .reduce((sum, invoice) => sum + toFiniteAmount(invoice.amount), 0);
 
     // (2) Registration fee owed but not yet invoiced.
@@ -112,8 +129,8 @@ export function calculatePortalTotalRequired(
     });
 
     let uninvoicedRegistrationFee = 0;
-    if (!alreadyHasRegistrationInvoice) {
-        const applicableTier = registrationTiers.find((tier) => isTierApplicable(tier, category));
+    if (!alreadyHasRegistrationInvoice && !registrationWindowBlocked) {
+        const applicableTier = applicableRegistrationTier;
         if (applicableTier && hasWindowStarted(applicableTier.validityPeriods, now)) {
             uninvoicedRegistrationFee = resolveTierAmount(applicableTier, currency);
         }

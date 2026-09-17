@@ -16,6 +16,7 @@ import {
 } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { resolveUsdInIdrRate } from '../../utils/resolve-usd-in-idr-rate';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
+import { getRegistrationFeeWindowRejection } from '../../utils/registration-fee-window';
 
 @Injectable()
 export class ConfirmPortalPaymentHandler {
@@ -64,12 +65,23 @@ export class ConfirmPortalPaymentHandler {
                     select: {
                         participantId: true,
                         programId: true,
+                        applicationCategory: true,
                         program: {
                             select: {
                                 name: true,
                                 currency: true,
                                 usdInIdr: true,
                                 brandId: true,
+                                pricingTiers: {
+                                    where: { isActive: true, deletedAt: null, feeType: 'registration_fee' },
+                                    select: {
+                                        allowedCategories: true,
+                                        validityPeriods: {
+                                            select: { startDate: true, endDate: true },
+                                            orderBy: { startDate: 'asc' },
+                                        },
+                                    },
+                                },
                                 brand: {
                                     select: {
                                         landingUrl: true,
@@ -94,6 +106,11 @@ export class ConfirmPortalPaymentHandler {
                         isActive: true,
                         deletedAt: true,
                         feeType: true,
+                        allowedCategories: true,
+                        validityPeriods: {
+                            select: { startDate: true, endDate: true },
+                            orderBy: { startDate: 'asc' },
+                        },
                     },
                 },
             },
@@ -123,6 +140,24 @@ export class ConfirmPortalPaymentHandler {
             const alreadyPaid = await this.registrationFeeGate.isRegistrationFeePaid(invoice.applicationId);
             if (alreadyPaid) {
                 throw new BadRequestException('Registration fee has already been paid.');
+            }
+
+            // Registration window guard. Invoices are minted lazily and never
+            // expire, so an unpaid/failed/cancelled Fully Funded invoice created
+            // while that window was open stayed payable forever after it closed
+            // - the other half of how the Fully Funded fee kept being collected.
+            // Only reached for those three statuses: paid and processing are
+            // rejected above, and an in-flight gateway payment settles through
+            // the payment service's webhook, never through this handler, so it
+            // is not interrupted.
+            const rejection = getRegistrationFeeWindowRejection({
+                category: invoice.application.applicationCategory,
+                tier: invoice.pricingTier,
+                registrationTiers: invoice.application.program.pricingTiers ?? [],
+                now: new Date(),
+            });
+            if (rejection) {
+                throw new BadRequestException(rejection);
             }
         }
 

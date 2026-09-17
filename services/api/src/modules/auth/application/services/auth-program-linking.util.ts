@@ -3,6 +3,10 @@ import { ApplicationCategory, Participant, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../../shared/infrastructure/prisma/prisma.service';
 import { MetaCapiService } from '../../../meta/meta-capi.service';
 import { parseAdAttribution } from './ad-attribution.util';
+import {
+  getCategoryRegistrationPhase,
+  isCategoryRegistrationAvailable,
+} from '../../../../shared/utils/tier-period.util';
 
 const AUTH_TARGET_PROGRAM_SELECT = {
   id: true,
@@ -53,11 +57,27 @@ type EnsureProgramApplicationParams = {
   userId?: string;
 };
 
+/**
+ * Set when the participant asked for a category whose registration window has
+ * closed (or not opened) and the application was created under another
+ * category that IS open. The client must tell them: an old Fully Funded ad or
+ * link otherwise leaves someone believing they applied Fully Funded.
+ */
+export type CategoryFallback = {
+  requested: ApplicationCategory;
+  assigned: ApplicationCategory;
+};
+
 type EnsureProgramApplicationResult =
   | { status: 'missing_target' }
   | { status: 'closed'; program: AuthTargetProgram }
   | { status: 'existing'; program: AuthTargetProgram }
-  | { status: 'created'; program: AuthTargetProgram; applicationId: string };
+  | {
+      status: 'created';
+      program: AuthTargetProgram;
+      applicationId: string;
+      categoryFallback?: CategoryFallback;
+    };
 
 /**
  * Auth-response-facing view of a program-linking outcome that the client needs
@@ -74,6 +94,7 @@ export type ProgramRegistrationInfo = {
   status: 'closed' | 'existing' | 'created';
   programId: string;
   programName: string;
+  categoryFallback?: CategoryFallback;
 };
 
 export function toProgramRegistrationInfo(
@@ -87,6 +108,9 @@ export function toProgramRegistrationInfo(
     status: result.status,
     programId: result.program.id,
     programName: result.program.name,
+    ...(result.status === 'created' && result.categoryFallback
+      ? { categoryFallback: result.categoryFallback }
+      : {}),
   };
 }
 
@@ -363,6 +387,66 @@ export async function ensureProgramApplication(
     }
   }
 
+  // Per-category registration window.
+  //
+  // isProgramRegistrationOpen above only knows the programme-wide close date,
+  // which tracks the LAST category to close (Self Funded). The Fully Funded
+  // deadline lives on the Fully Funded registration_fee tier's validity
+  // periods, and until this check nothing on the server read it: MEYS and CYS
+  // 2026 went on creating Fully Funded applications (and taking the Fully
+  // Funded fee) after that window ended, from old ads and bookmarked
+  // ?applicationCategory=fully_funded links.
+  //
+  // This never throws. register.handler has already committed the user by the
+  // time it gets here, so an exception would leave an account with no
+  // application and a failed-looking signup. Instead:
+  //  - chosen category open, or no tier configured for it: unchanged.
+  //  - otherwise, another OPEN category exists: create under that one and
+  //    report categoryFallback when the participant explicitly asked, so the
+  //    client can say so. A default pick is corrected silently.
+  //  - chosen category's windows all ended and nothing else is open: 'closed',
+  //    exactly as if the programme itself had closed.
+  //  - chosen category merely upcoming with nothing open: unchanged. Payment
+  //    stays gated until the window opens, and refusing here would regress
+  //    programmes that open programme registration before the fee window.
+  const now = new Date();
+  const registrationTiers = await prisma.programPricingTier.findMany({
+    where: {
+      programId: targetProgram.id,
+      isActive: true,
+      deletedAt: null,
+      feeType: 'registration_fee',
+    },
+    select: {
+      allowedCategories: true,
+      validityPeriods: { select: { startDate: true, endDate: true }, orderBy: { startDate: 'asc' } },
+    },
+  });
+  const phaseOf = (category: ApplicationCategory) =>
+    getCategoryRegistrationPhase(registrationTiers, category, now, targetProgram);
+  const chosenPhase = phaseOf(applicationCategory);
+  let categoryFallback: CategoryFallback | undefined;
+
+  if (!isCategoryRegistrationAvailable(chosenPhase)) {
+    // Only categories the programme actually offers are candidates. Self
+    // Funded first: it is the default everywhere else in this file.
+    const offered = (category: ApplicationCategory) =>
+      participationInfos.length === 0 ||
+      participationInfos.some((participationInfo) => participationInfo.category === category);
+    const openAlternative = [ApplicationCategory.self_funded, ApplicationCategory.fully_funded].find(
+      (category) => category !== applicationCategory && offered(category) && phaseOf(category) === 'open',
+    );
+
+    if (openAlternative) {
+      if (params.applicationCategory) {
+        categoryFallback = { requested: applicationCategory, assigned: openAlternative };
+      }
+      applicationCategory = openAlternative;
+    } else if (chosenPhase === 'closed') {
+      return { status: 'closed', program: targetProgram };
+    }
+  }
+
   const createdApplication = await prisma.participantApplication.create({
     data: {
       participantId: params.participantId,
@@ -411,7 +495,12 @@ export async function ensureProgramApplication(
     }
   })();
 
-  return { status: 'created', program: targetProgram, applicationId: createdApplication.id };
+  return {
+    status: 'created',
+    program: targetProgram,
+    applicationId: createdApplication.id,
+    ...(categoryFallback ? { categoryFallback } : {}),
+  };
 }
 
 export type RegisteredProgramInfo = {

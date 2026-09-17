@@ -1,5 +1,14 @@
 // src/shared/utils/tier-period.util.spec.ts
-import { effectiveStart, hasTierPeriodEnded, resolveTierPeriod, TierValidityPeriod } from './tier-period.util';
+import {
+    CategoryPhaseTier,
+    effectiveStart,
+    getCategoryRegistrationPhase,
+    getTiersRegistrationPhase,
+    hasTierPeriodEnded,
+    isCategoryRegistrationAvailable,
+    resolveTierPeriod,
+    TierValidityPeriod,
+} from './tier-period.util';
 
 describe('tier-period.util', () => {
     const period = (startDate: string, endDate: string): TierValidityPeriod => ({
@@ -177,6 +186,174 @@ describe('start-boundary widening', () => {
         const openingMorning = wib('2026-09-08T02:00:00Z'); // 09:00 WIB
 
         expect(resolveTierPeriod([batch1, batch2], openingMorning, openingMorning)).toBe(batch2);
+    });
+});
+
+// The per-category registration deadline. MEYS/CYS 2026 kept accepting Fully
+// Funded signups and the Fully Funded fee after that tier's window ended,
+// because signup and payment only consulted the programme-wide close date.
+describe('getCategoryRegistrationPhase', () => {
+    const FF = 'fully_funded';
+    const SF = 'self_funded';
+    const d = (iso: string) => new Date(iso);
+    const tier = (overrides: Partial<CategoryPhaseTier> = {}): CategoryPhaseTier => ({
+        feeType: 'registration_fee',
+        isActive: true,
+        deletedAt: null,
+        allowedCategories: [FF],
+        validityPeriods: [{ startDate: d('2026-07-01T00:00:00Z'), endDate: d('2026-08-31T00:00:00Z') }],
+        ...overrides,
+    });
+
+    // WIB day 31 Aug runs 2026-08-30T17:00Z .. 2026-08-31T16:59:59.999Z.
+    const DURING = d('2026-08-15T05:00:00Z');
+    const LAST_EVENING_WIB = d('2026-08-31T16:00:00Z'); // 23:00 WIB on the end day
+    const NEXT_MORNING_WIB = d('2026-08-31T17:00:00Z'); // 00:00 WIB the day after
+    const BEFORE = d('2026-06-20T00:00:00Z');
+
+    it('is open while a period contains now', () => {
+        expect(getCategoryRegistrationPhase([tier()], FF, DURING)).toBe('open');
+    });
+
+    it('stays open through WIB end-of-day on the last day, and closes at WIB midnight', () => {
+        expect(getCategoryRegistrationPhase([tier()], FF, LAST_EVENING_WIB)).toBe('open');
+        expect(getCategoryRegistrationPhase([tier()], FF, NEXT_MORNING_WIB)).toBe('closed');
+    });
+
+    it('is upcoming before the first period starts', () => {
+        expect(getCategoryRegistrationPhase([tier()], FF, BEFORE)).toBe('upcoming');
+    });
+
+    it('opens at WIB midnight of an opening day stored at 23:59 WIB (2026-09-01 incident)', () => {
+        const t = tier({ validityPeriods: [{ startDate: d('2026-09-08T16:59:00Z'), endDate: d('2026-09-20T00:00:00Z') }] });
+        expect(getCategoryRegistrationPhase([t], FF, d('2026-09-08T02:00:00Z'))).toBe('open');
+    });
+
+    it('does not open an exactly-chained period before its handover instant', () => {
+        const handover = d('2026-09-04T16:59:00Z');
+        const t = tier({
+            validityPeriods: [
+                { startDate: d('2026-08-31T17:00:00Z'), endDate: handover },
+                { startDate: handover, endDate: d('2026-09-30T00:00:00Z') },
+            ],
+        });
+        // Still open, through the first period - the phase does not care which.
+        expect(getCategoryRegistrationPhase([t], FF, d('2026-09-04T10:00:00Z'))).toBe('open');
+    });
+
+    it('reads a gap between two periods as upcoming, not closed', () => {
+        const t = tier({
+            validityPeriods: [
+                { startDate: d('2026-07-01T00:00:00Z'), endDate: d('2026-07-10T00:00:00Z') },
+                { startDate: d('2026-08-01T00:00:00Z'), endDate: d('2026-08-10T00:00:00Z') },
+            ],
+        });
+        expect(getCategoryRegistrationPhase([t], FF, d('2026-07-20T00:00:00Z'))).toBe('upcoming');
+    });
+
+    it('is open when ANY tier allowing the category is open', () => {
+        const lapsed = tier();
+        const extension = tier({ validityPeriods: [{ startDate: d('2026-09-01T00:00:00Z'), endDate: d('2026-09-30T00:00:00Z') }] });
+        expect(getCategoryRegistrationPhase([lapsed, extension], FF, d('2026-09-10T00:00:00Z'))).toBe('open');
+    });
+
+    it('scopes to the requested category: a lapsed FF tier leaves SF open', () => {
+        const ff = tier();
+        const sf = tier({ allowedCategories: [SF], validityPeriods: [{ startDate: d('2026-07-01T00:00:00Z'), endDate: d('2026-11-30T00:00:00Z') }] });
+        const now = d('2026-09-17T00:00:00Z');
+        expect(getCategoryRegistrationPhase([ff, sf], FF, now)).toBe('closed');
+        expect(getCategoryRegistrationPhase([ff, sf], SF, now)).toBe('open');
+    });
+
+    it('is unconfigured when no tier allows the category', () => {
+        expect(getCategoryRegistrationPhase([tier({ allowedCategories: [SF] })], FF, DURING)).toBe('unconfigured');
+        expect(getCategoryRegistrationPhase([], FF, DURING)).toBe('unconfigured');
+        expect(getCategoryRegistrationPhase(undefined, FF, DURING)).toBe('unconfigured');
+    });
+
+    it('matches allowedCategories strictly: an empty list gates nobody', () => {
+        expect(getCategoryRegistrationPhase([tier({ allowedCategories: [] })], FF, DURING)).toBe('unconfigured');
+        expect(getCategoryRegistrationPhase([tier({ allowedCategories: null })], FF, DURING)).toBe('unconfigured');
+    });
+
+    it('ignores inactive, deleted and non-registration tiers', () => {
+        const open = { validityPeriods: [{ startDate: d('2026-07-01T00:00:00Z'), endDate: d('2026-12-31T00:00:00Z') }] };
+        const now = d('2026-09-17T00:00:00Z');
+        expect(getCategoryRegistrationPhase([tier(), tier({ ...open, isActive: false })], FF, now)).toBe('closed');
+        expect(getCategoryRegistrationPhase([tier(), tier({ ...open, deletedAt: d('2026-09-01T00:00:00Z') })], FF, now)).toBe('closed');
+        expect(getCategoryRegistrationPhase([tier(), tier({ ...open, feeType: 'program_fee_1' })], FF, now)).toBe('closed');
+    });
+
+    it('treats absent isActive/deletedAt/feeType as already filtered by the query', () => {
+        const bare: CategoryPhaseTier = { allowedCategories: [FF], validityPeriods: tier().validityPeriods };
+        expect(getCategoryRegistrationPhase([bare], FF, DURING)).toBe('open');
+    });
+
+    describe('tier without validity periods', () => {
+        const noPeriods = tier({ validityPeriods: [] });
+
+        it('is open-ended when no programme dates are passed (historical switch/dashboard reading)', () => {
+            expect(getCategoryRegistrationPhase([noPeriods], FF, d('2030-01-01T00:00:00Z'))).toBe('open');
+            expect(getCategoryRegistrationPhase([tier({ validityPeriods: null })], FF, DURING)).toBe('open');
+        });
+
+        it('follows the programme registration window when programme dates are passed', () => {
+            const dates = { registrationOpenDate: d('2026-07-01T00:00:00Z'), registrationCloseDate: d('2026-08-31T00:00:00Z') };
+            expect(getCategoryRegistrationPhase([noPeriods], FF, BEFORE, dates)).toBe('upcoming');
+            expect(getCategoryRegistrationPhase([noPeriods], FF, DURING, dates)).toBe('open');
+            expect(getCategoryRegistrationPhase([noPeriods], FF, LAST_EVENING_WIB, dates)).toBe('open');
+            expect(getCategoryRegistrationPhase([noPeriods], FF, NEXT_MORNING_WIB, dates)).toBe('closed');
+        });
+
+        it('reads a null programme date as unbounded on that side', () => {
+            const openEnded = { registrationOpenDate: d('2026-07-01T00:00:00Z'), registrationCloseDate: null };
+            expect(getCategoryRegistrationPhase([noPeriods], FF, d('2030-01-01T00:00:00Z'), openEnded)).toBe('open');
+            expect(getCategoryRegistrationPhase([noPeriods], FF, BEFORE, { registrationOpenDate: null, registrationCloseDate: null })).toBe('open');
+        });
+
+        it('does NOT fall back to programme dates when the tier has periods that all lapsed', () => {
+            const dates = { registrationOpenDate: null, registrationCloseDate: d('2026-12-31T00:00:00Z') };
+            expect(getCategoryRegistrationPhase([tier()], FF, NEXT_MORNING_WIB, dates)).toBe('closed');
+        });
+    });
+
+    // Pins the rule the switch-category guard and dashboard flag used before
+    // they were routed through here: closed only when a tier exists, every
+    // tier has periods, and every period ended.
+    it('agrees with the previous FF-closed rule used by switch/dashboard', () => {
+        const now = d('2026-09-17T00:00:00Z');
+        const lapsed = tier();
+        const noPeriods = tier({ validityPeriods: [] });
+        const future = tier({ validityPeriods: [{ startDate: d('2026-10-01T00:00:00Z'), endDate: d('2026-10-31T00:00:00Z') }] });
+        const previousRule = (tiers: CategoryPhaseTier[]) =>
+            tiers.length > 0 &&
+            tiers.every((t) => (t.validityPeriods?.length ?? 0) > 0 && t.validityPeriods!.every((p) => hasTierPeriodEnded(p, now)));
+
+        for (const set of [[lapsed], [lapsed, noPeriods], [lapsed, future], [future], [noPeriods], [lapsed, lapsed]]) {
+            expect(getCategoryRegistrationPhase(set, FF, now) === 'closed').toBe(previousRule(set));
+        }
+    });
+
+    it('isCategoryRegistrationAvailable passes open and unconfigured only', () => {
+        expect(isCategoryRegistrationAvailable('open')).toBe(true);
+        expect(isCategoryRegistrationAvailable('unconfigured')).toBe(true);
+        expect(isCategoryRegistrationAvailable('upcoming')).toBe(false);
+        expect(isCategoryRegistrationAvailable('closed')).toBe(false);
+    });
+});
+
+describe('getTiersRegistrationPhase', () => {
+    const d = (iso: string) => new Date(iso);
+    const periods = [{ startDate: d('2026-07-01T00:00:00Z'), endDate: d('2026-08-31T00:00:00Z') }];
+
+    it('ignores allowedCategories entirely', () => {
+        expect(getTiersRegistrationPhase([{ allowedCategories: [], validityPeriods: periods }], d('2026-08-01T00:00:00Z'))).toBe('open');
+        expect(getTiersRegistrationPhase([{ allowedCategories: ['self_funded'], validityPeriods: periods }], d('2026-09-10T00:00:00Z'))).toBe('closed');
+    });
+
+    it('is unconfigured with nothing usable', () => {
+        expect(getTiersRegistrationPhase([], d('2026-08-01T00:00:00Z'))).toBe('unconfigured');
+        expect(getTiersRegistrationPhase([{ isActive: false, validityPeriods: periods }], d('2026-08-01T00:00:00Z'))).toBe('unconfigured');
     });
 });
 });

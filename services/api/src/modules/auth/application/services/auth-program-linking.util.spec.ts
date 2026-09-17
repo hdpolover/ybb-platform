@@ -40,6 +40,12 @@ describe('auth-program-linking.util', () => {
       programParticipationInfo: {
         findMany: jest.fn(),
       },
+      // Registration-fee tiers for the per-category window check. Empty by
+      // default = no category-level gate, so tests about other rules are
+      // unaffected by it.
+      programPricingTier: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       participant: {
         findUnique: jest.fn(),
         create: jest.fn(),
@@ -455,6 +461,215 @@ describe('auth-program-linking.util', () => {
       );
 
       expect(result).toBeUndefined();
+    });
+  });
+
+  // MEYS/CYS 2026: Fully Funded registration closed (its tier's validity
+  // periods ended) while the programme-wide close date, which follows Self
+  // Funded, was still ahead. Signup only checked the programme date, so old
+  // ?applicationCategory=fully_funded links kept creating FF applications.
+  describe('ensureProgramApplication per-category registration window', () => {
+    const NOW = new Date('2026-09-17T05:00:00.000Z');
+    const lapsed = [{ startDate: new Date('2026-07-01T00:00:00.000Z'), endDate: new Date('2026-09-05T00:00:00.000Z') }];
+    const running = [{ startDate: new Date('2026-07-01T00:00:00.000Z'), endDate: new Date('2026-11-30T00:00:00.000Z') }];
+    const future = [{ startDate: new Date('2026-10-01T00:00:00.000Z'), endDate: new Date('2026-11-30T00:00:00.000Z') }];
+    const ffTier = (validityPeriods: typeof lapsed) => ({ allowedCategories: [ApplicationCategory.fully_funded], validityPeriods });
+    const sfTier = (validityPeriods: typeof lapsed) => ({ allowedCategories: [ApplicationCategory.self_funded], validityPeriods });
+
+    beforeEach(() => {
+      jest.useFakeTimers({ now: NOW, doNotFake: ['nextTick', 'setImmediate'] });
+    });
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    function openProgramPrisma(tiers: unknown[], participationInfos: unknown[] = []) {
+      const prisma = createPrismaMock();
+      prisma.program.findUnique.mockResolvedValue(baseProgram);
+      prisma.participantApplication.findUnique.mockResolvedValue(null);
+      prisma.programParticipationInfo.findMany.mockResolvedValue(participationInfos);
+      prisma.programPricingTier.findMany.mockResolvedValue(tiers);
+      prisma.participantApplication.create.mockResolvedValue({ id: 'application-new-1' });
+      return prisma;
+    }
+
+    const createdCategory = (prisma: ReturnType<typeof createPrismaMock>) =>
+      prisma.participantApplication.create.mock.calls[0][0].data.applicationCategory;
+
+    it('reads only active, non-deleted registration_fee tiers of the target program', async () => {
+      const prisma = openProgramPrisma([]);
+      await ensureProgramApplication(prisma, { participantId: 'participant-1', brandId: 'brand-1', programId: 'program-1' });
+
+      expect(prisma.programPricingTier.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { programId: 'program-1', isActive: true, deletedAt: null, feeType: 'registration_fee' },
+        }),
+      );
+    });
+
+    it('creates under Self Funded and reports the fallback when a closed Fully Funded is requested', async () => {
+      const prisma = openProgramPrisma([ffTier(lapsed), sfTier(running)]);
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        applicationCategory: ApplicationCategory.fully_funded,
+      });
+
+      expect(createdCategory(prisma)).toBe(ApplicationCategory.self_funded);
+      const fallback = { requested: ApplicationCategory.fully_funded, assigned: ApplicationCategory.self_funded };
+      expect(result).toEqual({
+        status: 'created',
+        program: baseProgram,
+        applicationId: 'application-new-1',
+        categoryFallback: fallback,
+      });
+      expect(toProgramRegistrationInfo(result)).toEqual({
+        status: 'created',
+        programId: baseProgram.id,
+        programName: baseProgram.name,
+        categoryFallback: fallback,
+      });
+    });
+
+    it('keeps the requested Fully Funded while its window is open', async () => {
+      const prisma = openProgramPrisma([ffTier(running), sfTier(running)]);
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        applicationCategory: ApplicationCategory.fully_funded,
+      });
+
+      expect(createdCategory(prisma)).toBe(ApplicationCategory.fully_funded);
+      expect(result).not.toHaveProperty('categoryFallback');
+    });
+
+    it('silently picks the open category when none was requested and the default has closed', async () => {
+      // The participation-info default prefers Fully Funded.
+      const prisma = openProgramPrisma(
+        [ffTier(lapsed), sfTier(running)],
+        [
+          { category: ApplicationCategory.fully_funded, isActive: true },
+          { category: ApplicationCategory.self_funded, isActive: true },
+        ],
+      );
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+      });
+
+      expect(createdCategory(prisma)).toBe(ApplicationCategory.self_funded);
+      expect(result).not.toHaveProperty('categoryFallback');
+    });
+
+    it('returns closed without creating when the requested category closed and nothing else is open', async () => {
+      const prisma = openProgramPrisma([ffTier(lapsed), sfTier(lapsed)]);
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        applicationCategory: ApplicationCategory.fully_funded,
+      });
+
+      expect(result).toEqual({ status: 'closed', program: baseProgram });
+      expect(prisma.participantApplication.create).not.toHaveBeenCalled();
+    });
+
+    it('does not fall back to a category the programme does not offer', async () => {
+      const prisma = openProgramPrisma(
+        [ffTier(lapsed), sfTier(running)],
+        [{ category: ApplicationCategory.fully_funded, isActive: true }],
+      );
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        applicationCategory: ApplicationCategory.fully_funded,
+      });
+
+      expect(result.status).toBe('closed');
+      expect(prisma.participantApplication.create).not.toHaveBeenCalled();
+    });
+
+    it('does not fall back to a category with no registration tier at all', async () => {
+      const prisma = openProgramPrisma([sfTier(lapsed)]);
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        applicationCategory: ApplicationCategory.self_funded,
+      });
+
+      expect(result.status).toBe('closed');
+    });
+
+    it('leaves a category with no registration tier ungated', async () => {
+      const prisma = openProgramPrisma([sfTier(running)]);
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        applicationCategory: ApplicationCategory.fully_funded,
+      });
+
+      expect(createdCategory(prisma)).toBe(ApplicationCategory.fully_funded);
+      expect(result.status).toBe('created');
+    });
+
+    it('keeps an upcoming category when nothing is open yet', async () => {
+      const prisma = openProgramPrisma([ffTier(future), sfTier(future)]);
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        applicationCategory: ApplicationCategory.fully_funded,
+      });
+
+      expect(createdCategory(prisma)).toBe(ApplicationCategory.fully_funded);
+      expect(result).not.toHaveProperty('categoryFallback');
+    });
+
+    it('moves an upcoming request to an open category', async () => {
+      const prisma = openProgramPrisma([ffTier(future), sfTier(running)]);
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        applicationCategory: ApplicationCategory.fully_funded,
+      });
+
+      expect(createdCategory(prisma)).toBe(ApplicationCategory.self_funded);
+      expect(result).toHaveProperty('categoryFallback', {
+        requested: ApplicationCategory.fully_funded,
+        assigned: ApplicationCategory.self_funded,
+      });
+    });
+
+    it('never consults tier windows when the programme itself is closed', async () => {
+      const prisma = createPrismaMock();
+      prisma.program.findUnique.mockResolvedValue({ ...baseProgram, allowRegistration: false });
+      prisma.participantApplication.findUnique.mockResolvedValue(null);
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        applicationCategory: ApplicationCategory.fully_funded,
+      });
+
+      expect(result.status).toBe('closed');
+      expect(prisma.programPricingTier.findMany).not.toHaveBeenCalled();
     });
   });
 });

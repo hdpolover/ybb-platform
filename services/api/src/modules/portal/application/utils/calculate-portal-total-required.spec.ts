@@ -134,4 +134,40 @@ describe('calculatePortalTotalRequired', () => {
 
         expect(result).toEqual({ amount: 0, currency: 'USD', hasOutstanding: false });
     });
+
+    // MEYS/CYS 2026: a registration fee that can no longer be paid must not
+    // raise a "Payment Required" alert the participant can never clear.
+    describe('closed registration window', () => {
+        const lapsedWindow = () => [
+            { startDate: new Date(Date.now() - 3 * 86400000 * 30), endDate: new Date(Date.now() - 2 * 86400000 * 30) },
+        ];
+        const ffTier = (validityPeriods = lapsedWindow()) =>
+            regTier({ allowedCategories: ['fully_funded'], price: 10, usdPrice: 10, validityPeriods });
+
+        it('does not add an uninvoiced fee whose category window has closed', () => {
+            const result = calculatePortalTotalRequired('fully_funded', [], [ffTier()], 'USD', now);
+            expect(result).toEqual({ amount: 0, currency: 'USD', hasOutstanding: false });
+        });
+
+        it('does not count an unpaid registration invoice whose category window has closed', () => {
+            const invoices = [{ status: 'unpaid', amount: 10, pricingTier: { feeType: 'registration_fee' } }];
+            const result = calculatePortalTotalRequired('fully_funded', invoices, [ffTier()], 'USD', now);
+            expect(result.amount).toBe(0);
+        });
+
+        it('still counts other unpaid invoices while the registration window is closed', () => {
+            const invoices = [
+                { status: 'unpaid', amount: 10, pricingTier: { feeType: 'registration_fee' } },
+                { status: 'unpaid', amount: 200, pricingTier: { feeType: 'program_fee_1' } },
+            ];
+            const result = calculatePortalTotalRequired('fully_funded', invoices, [ffTier()], 'USD', now);
+            expect(result.amount).toBe(200);
+        });
+
+        it('still counts the unpaid registration invoice while the window is open', () => {
+            const invoices = [{ status: 'unpaid', amount: 10, pricingTier: { feeType: 'registration_fee' } }];
+            const result = calculatePortalTotalRequired('fully_funded', invoices, [ffTier(openWindow())], 'USD', now);
+            expect(result.amount).toBe(10);
+        });
+    });
 });

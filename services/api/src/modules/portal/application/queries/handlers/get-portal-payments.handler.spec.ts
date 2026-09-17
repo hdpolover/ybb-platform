@@ -212,4 +212,99 @@ describe('GetPortalPaymentsHandler', () => {
         expect(result.stats.currency).toBe('IDR');
         expect(result.stats.totalDue).toBe(175800);
     });
+
+    // MEYS/CYS 2026: once every Fully Funded registration period had ended,
+    // resolveTierPeriod fell back to the last period and the tier was listed as
+    // payable "overdue", so participants kept paying the Fully Funded fee.
+    describe('lapsed registration window', () => {
+        const lapsedPeriod = () => [{
+            startDate: new Date('2020-01-01T00:00:00Z'),
+            endDate: new Date('2020-02-01T00:00:00Z'),
+        }];
+
+        const arrange = (invoices: unknown[]) => {
+            const sfTier = registrationTier({ id: 'sf', order: 1, allowedCategories: ['self_funded'], price: 15, usdPrice: 15, idrPrice: 263700 });
+            const ffTier = registrationTier({
+                id: 'ff', order: 2, allowedCategories: ['fully_funded'], price: 10, usdPrice: 10, idrPrice: 175800,
+                validityPeriods: lapsedPeriod(),
+            });
+            mockCacheService.get.mockResolvedValue(null);
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({ id: 'participant-1' });
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                applicationCategory: 'fully_funded',
+                invoices,
+                program: { id: 'prog-1', currency: 'USD', usdInIdr: 17580, pricingTiers: [sfTier, ffTier] },
+            });
+            return { sfTier, ffTier };
+        };
+
+        it('lists an uninvoiced lapsed Fully Funded fee as not payable, window closed, and not due', async () => {
+            arrange([]);
+
+            const result = await handler.execute(new GetPortalPaymentsQuery('user-1', undefined));
+
+            const ffMethod = result.availableMethods.find((m) => m.id === 'ff');
+            expect(ffMethod).toMatchObject({ canPay: false, windowClosed: true });
+            expect(result.stats.totalDue).toBe(0);
+        });
+
+        it('marks an unpaid Fully Funded invoice on a lapsed window as not payable and excludes it from totalDue', async () => {
+            const { ffTier } = arrange([]);
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                applicationCategory: 'fully_funded',
+                invoices: [{
+                    id: 'inv-ff', amount: 10, currency: 'USD', amountUsd: 10, amountIdr: 175800, status: 'unpaid',
+                    paidAt: null, createdAt: new Date('2020-01-15T00:00:00Z'), paymentMethod: null, pricingTierId: 'ff',
+                    exchangeRateSnapshot: null, feeProvider: null, netAmount: null, pricingTier: { ...ffTier },
+                }],
+                program: { id: 'prog-1', currency: 'USD', usdInIdr: 17580, pricingTiers: [ffTier] },
+            });
+
+            const result = await handler.execute(new GetPortalPaymentsQuery('user-1', undefined));
+
+            const item = result.outstanding.find((o) => o.id === 'inv-ff');
+            expect(item).toMatchObject({ canPay: false, windowClosed: true });
+            expect(result.stats.totalDue).toBe(0);
+        });
+
+        it('keeps a processing Fully Funded invoice as it was (no windowClosed flag)', async () => {
+            const { ffTier } = arrange([]);
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                applicationCategory: 'fully_funded',
+                invoices: [{
+                    id: 'inv-ff', amount: 10, currency: 'USD', amountUsd: 10, amountIdr: 175800, status: 'processing',
+                    paidAt: null, createdAt: new Date('2020-01-15T00:00:00Z'), paymentMethod: null, pricingTierId: 'ff',
+                    exchangeRateSnapshot: null, feeProvider: null, netAmount: null, pricingTier: { ...ffTier },
+                }],
+                program: { id: 'prog-1', currency: 'USD', usdInIdr: 17580, pricingTiers: [ffTier] },
+            });
+
+            const result = await handler.execute(new GetPortalPaymentsQuery('user-1', undefined));
+
+            const item = result.outstanding.find((o) => o.id === 'inv-ff');
+            expect(item?.canPay).toBe(false);
+            expect(item).not.toHaveProperty('windowClosed');
+        });
+
+        it('leaves an open Self Funded fee payable', async () => {
+            const { sfTier } = arrange([]);
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                id: 'app-1',
+                applicationCategory: 'self_funded',
+                invoices: [],
+                program: { id: 'prog-1', currency: 'USD', usdInIdr: 17580, pricingTiers: [sfTier] },
+            });
+
+            const result = await handler.execute(new GetPortalPaymentsQuery('user-1', undefined));
+
+            const sfMethod = result.availableMethods.find((m) => m.id === 'sf');
+            expect(sfMethod).toBeDefined();
+            expect(sfMethod).not.toHaveProperty('canPay');
+            expect(sfMethod).not.toHaveProperty('windowClosed');
+            expect(result.stats.totalDue).toBe(15);
+        });
+    });
 });

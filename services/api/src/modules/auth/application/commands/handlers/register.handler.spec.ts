@@ -69,6 +69,10 @@ describe('RegisterHandler', () => {
     programParticipationInfo: {
       findMany: jest.fn(),
     },
+    // ensureProgramApplication's per-category registration window check.
+    programPricingTier: {
+      findMany: jest.fn(),
+    },
     userIdentity: {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
@@ -173,6 +177,7 @@ describe('RegisterHandler', () => {
     // re-fetch.
     mockPrismaService.participantApplication.findMany.mockResolvedValue([]);
     mockPrismaService.programParticipationInfo.findMany.mockResolvedValue([]);
+    mockPrismaService.programPricingTier.findMany.mockResolvedValue([]);
   });
 
   it('should be defined', () => {
