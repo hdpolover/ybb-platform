@@ -213,4 +213,149 @@ describe('Program announcement handlers', () => {
       expect(mockLandingCacheInvalidation.invalidate).toHaveBeenCalledWith('brand-99', homeAndSettingsOptions);
     });
   });
+
+  describe('slugs', () => {
+    const uniqueViolation = (fields: string[] = ['slug']) =>
+      Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+        clientVersion: 'test',
+        meta: { target: fields },
+      });
+
+    const takenSlugs = (...slugs: string[]) => {
+      mockPrisma.programAnnouncement.count.mockImplementation(async ({ where }: { where: { slug: string } }) =>
+        slugs.includes(where.slug) ? 1 : 0,
+      );
+    };
+
+    beforeEach(() => {
+      mockPrisma.program.findUnique.mockResolvedValue({ id: 'program-1', brandId: 'brand-1' });
+      mockPrisma.programAnnouncement.create.mockImplementation(async ({ data }: { data: object }) => ({ id: 'a-1', ...data }));
+      mockPrisma.programAnnouncement.update.mockImplementation(async ({ data }: { data: object }) => ({ id: 'a-1', ...data }));
+    });
+
+    const create = (dto: { title: string; slug?: string }) =>
+      new CreateProgramAnnouncementHandler(mockPrisma as never, mockLandingCacheInvalidation as never).execute(
+        new CreateProgramAnnouncementCommand('program-1', { content: '<p>x</p>', ...dto }, 'admin-1'),
+      );
+
+    const update = (dto: { title?: string; slug?: string }) =>
+      new UpdateProgramAnnouncementHandler(mockPrisma as never, mockLandingCacheInvalidation as never).execute(
+        new UpdateProgramAnnouncementCommand('a-1', dto, 'admin-1'),
+      );
+
+    it('generates the slug from the title on create', async () => {
+      takenSlugs();
+      await create({ title: 'Kwon Hae-suk Explores AI for Inclusive Global Communities' });
+      expect(mockPrisma.programAnnouncement.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ slug: 'kwon-hae-suk-explores-ai-for-inclusive-global-communities' }),
+      });
+    });
+
+    it('suffixes a generated slug that is already taken', async () => {
+      takenSlugs('big-news', 'big-news-2');
+      await create({ title: 'Big News' });
+      expect(mockPrisma.programAnnouncement.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ slug: 'big-news-3' }),
+      });
+    });
+
+    // PrismaService's soft-delete extension adds deletedAt: null to findFirst
+    // but not to count(), and the unique index covers soft-deleted rows. A
+    // findFirst-based check would hand out a deleted row's slug and 500 on insert.
+    it('checks availability with count() and no deletedAt filter, so soft-deleted rows still hold their slug', async () => {
+      takenSlugs();
+      await create({ title: 'Big News' });
+      expect(mockPrisma.programAnnouncement.count).toHaveBeenCalledWith({ where: { slug: 'big-news' } });
+    });
+
+    it('falls back to announcement-<8 chars> when the title has no Latin letters or digits', async () => {
+      takenSlugs();
+      await create({ title: '한국 청년 서밋' });
+      const { data } = mockPrisma.programAnnouncement.create.mock.calls[0][0];
+      expect(data.slug).toMatch(/^announcement-[0-9a-f]{8}$/);
+    });
+
+    it('uses an explicit slug verbatim', async () => {
+      takenSlugs();
+      await create({ title: 'Anything', slug: 'my-custom-slug' });
+      expect(mockPrisma.programAnnouncement.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ slug: 'my-custom-slug' }),
+      });
+    });
+
+    it('409s on an explicit slug that is taken, instead of silently suffixing it', async () => {
+      takenSlugs('my-custom-slug');
+      await expect(create({ title: 'Anything', slug: 'my-custom-slug' })).rejects.toMatchObject({ status: 409 });
+      expect(mockPrisma.programAnnouncement.create).not.toHaveBeenCalled();
+    });
+
+    it('409s when an explicit slug loses a race at the unique index', async () => {
+      takenSlugs();
+      mockPrisma.programAnnouncement.create.mockRejectedValueOnce(uniqueViolation());
+      await expect(create({ title: 'Anything', slug: 'my-custom-slug' })).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('retries a generated slug that loses a race at the unique index', async () => {
+      const taken: string[] = [];
+      mockPrisma.programAnnouncement.count.mockImplementation(async ({ where }: { where: { slug: string } }) =>
+        taken.includes(where.slug) ? 1 : 0,
+      );
+      mockPrisma.programAnnouncement.create.mockImplementationOnce(async () => {
+        taken.push('big-news'); // the other admin's insert landed first
+        throw uniqueViolation();
+      });
+
+      await create({ title: 'Big News' });
+
+      expect(mockPrisma.programAnnouncement.create).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.programAnnouncement.create.mock.calls[1][0].data.slug).toBe('big-news-2');
+    });
+
+    it('does not swallow unique violations on other columns', async () => {
+      takenSlugs();
+      mockPrisma.programAnnouncement.create.mockRejectedValue(uniqueViolation(['legacy_id']));
+      await expect(create({ title: 'Big News' })).rejects.toMatchObject({ code: 'P2002' });
+      expect(mockPrisma.programAnnouncement.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('never changes the slug when only the title is edited', async () => {
+      mockPrisma.programAnnouncement.findUnique.mockResolvedValue({ id: 'a-1', programId: 'program-1', slug: 'old-slug' });
+      await update({ title: 'A Completely Different Title' });
+      const { data } = mockPrisma.programAnnouncement.update.mock.calls[0][0];
+      expect(data).not.toHaveProperty('slug');
+      expect(mockPrisma.programAnnouncement.count).not.toHaveBeenCalled();
+    });
+
+    it('does not re-check or rewrite an unchanged slug', async () => {
+      mockPrisma.programAnnouncement.findUnique.mockResolvedValue({ id: 'a-1', programId: 'program-1', slug: 'old-slug' });
+      await update({ slug: 'old-slug' });
+      expect(mockPrisma.programAnnouncement.update.mock.calls[0][0].data).not.toHaveProperty('slug');
+      expect(mockPrisma.programAnnouncement.count).not.toHaveBeenCalled();
+    });
+
+    it('changes the slug when a different one is provided, excluding this row from the check', async () => {
+      mockPrisma.programAnnouncement.findUnique.mockResolvedValue({ id: 'a-1', programId: 'program-1', slug: 'old-slug' });
+      takenSlugs();
+      await update({ slug: 'new-slug' });
+      expect(mockPrisma.programAnnouncement.count).toHaveBeenCalledWith({
+        where: { slug: 'new-slug', id: { not: 'a-1' } },
+      });
+      expect(mockPrisma.programAnnouncement.update.mock.calls[0][0].data).toEqual({ slug: 'new-slug' });
+    });
+
+    it('409s when the new slug belongs to another announcement', async () => {
+      mockPrisma.programAnnouncement.findUnique.mockResolvedValue({ id: 'a-1', programId: 'program-1', slug: 'old-slug' });
+      takenSlugs('new-slug');
+      await expect(update({ slug: 'new-slug' })).rejects.toMatchObject({ status: 409 });
+      expect(mockPrisma.programAnnouncement.update).not.toHaveBeenCalled();
+    });
+
+    it('409s when the new slug loses a race at the unique index', async () => {
+      mockPrisma.programAnnouncement.findUnique.mockResolvedValue({ id: 'a-1', programId: 'program-1', slug: 'old-slug' });
+      takenSlugs();
+      mockPrisma.programAnnouncement.update.mockRejectedValueOnce(uniqueViolation());
+      await expect(update({ slug: 'new-slug' })).rejects.toMatchObject({ status: 409 });
+    });
+  });
 });

@@ -1,4 +1,4 @@
-import { prisma, log, error } from './utils';
+import { prisma, log, error, seedAnnouncementSlug } from './utils';
 import { BRANDS } from './seed-brands';
 import { CYS_2026_DATA } from './data/cys-2026-data';
 import { buildLegacySubmissionFormFields } from './data/shared-submission-form-fields';
@@ -255,6 +255,7 @@ export async function seedCYSPrograms() {
   await prisma.programAnnouncement.createMany({
     data: announcements.map(a => ({
       programId: cys2026.id,
+      slug: seedAnnouncementSlug(cys2026.slug, a.title),
       ...a,
     })),
   });

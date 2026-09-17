@@ -201,18 +201,31 @@ async function main() {
     // Legacy announcement slugs are unreliable (mangled — missing leading letters — plus
     // duplicates and nulls). Regenerate from the title with deterministic global uniqueness.
     // Old site is being retired, so there is no legacy URL/SEO continuity to preserve.
-    const seen = new Map();
+    //
+    // Since 20260917120000_program_announcement_slug_unique the slug is NOT NULL, globally
+    // unique, and it IS the public URL (/announcements/<slug>). So a re-run must:
+    //   * keep the slug an already-migrated row has (it may have been edited in the admin,
+    //     and the link may be shared) — hence the reuse below and no slug in DO UPDATE;
+    //   * never hand a new row a slug an admin-created announcement already owns, or the
+    //     INSERT fails on the unique index — hence seeding `taken` from the table.
+    const slugByLegacy = new Map((await pg.query(
+      `SELECT legacy_id, slug FROM program_announcements WHERE legacy_id IS NOT NULL`)).rows.map((r) => [r.legacy_id, r.slug]));
+    const taken = new Set((await pg.query(`SELECT slug FROM program_announcements`)).rows.map((r) => r.slug));
     const annSlug = new Map();
     for (const r of [...annRows].sort((a, b) => a.id - b.id)) {
-      const base = slugify(r.title || '') || `announcement-${r.id}`;
-      const n = (seen.get(base) || 0) + 1; seen.set(base, n);
-      annSlug.set(r.id, n === 1 ? base : `${base}-${n}`);
+      const stored = slugByLegacy.get(r.id);
+      if (stored) { annSlug.set(r.id, stored); continue; }
+      const base = slugify(r.title || '').slice(0, 200).replace(/-+$/, '') || `announcement-${r.id}`;
+      let slug = base, n = 1;
+      while (taken.has(slug)) slug = `${base}-${++n}`;
+      taken.add(slug);
+      annSlug.set(r.id, slug);
     }
     for (const r of annRows) {
       const pid = progId(r.program_id);
       await pg.query(`INSERT INTO program_announcements (program_id,title,content,image_url,category,tags,slug,meta_title,meta_description,target_audience,publish_date,is_active,legacy_id,created_at,updated_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now(),now())
-        ON CONFLICT (legacy_id) DO UPDATE SET program_id=EXCLUDED.program_id,title=EXCLUDED.title,content=EXCLUDED.content,image_url=EXCLUDED.image_url,category=EXCLUDED.category,tags=EXCLUDED.tags,slug=EXCLUDED.slug,meta_title=EXCLUDED.meta_title,meta_description=EXCLUDED.meta_description,is_active=EXCLUDED.is_active,updated_at=now()`,
+        ON CONFLICT (legacy_id) DO UPDATE SET program_id=EXCLUDED.program_id,title=EXCLUDED.title,content=EXCLUDED.content,image_url=EXCLUDED.image_url,category=EXCLUDED.category,tags=EXCLUDED.tags,meta_title=EXCLUDED.meta_title,meta_description=EXCLUDED.meta_description,is_active=EXCLUDED.is_active,updated_at=now()`,
         [pid, r.title || '(untitled)', r.content || '', r.img_url || null, 'News', splitTags(r.tags),
          annSlug.get(r.id), r.meta_title || null, r.meta_description || null, 'all', r.created_at || now, boolFrom(r.is_active), r.id]);
       bump('announcements');

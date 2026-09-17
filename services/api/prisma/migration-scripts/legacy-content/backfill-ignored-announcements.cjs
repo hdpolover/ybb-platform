@@ -50,6 +50,8 @@ async function main() {
   const allSlugs = new Set((await pg.query(`SELECT slug FROM program_announcements WHERE slug IS NOT NULL`)).rows.map((r) => r.slug));
   // Reuse the existing slug for an already-migrated announcement (stable re-runs).
   const slugByLegacy = new Map((await pg.query(`SELECT legacy_id, slug FROM program_announcements WHERE legacy_id IS NOT NULL AND slug IS NOT NULL`)).rows.map((r) => [r.legacy_id, r.slug]));
+  // The slug is the public URL and NOT NULL + unique (20260917120000_program_announcement_slug_unique),
+  // so the conflict branch below never rewrites it.
   const uniqSlug = (base) => { let s = base, n = 1; while (allSlugs.has(s)) s = `${base}-${++n}`; allSlugs.add(s); return s; };
 
   let inserted = 0, skippedNoProg = 0;
@@ -61,7 +63,7 @@ async function main() {
     await pg.query(
       `INSERT INTO program_announcements (program_id,title,content,image_url,category,tags,slug,meta_title,meta_description,target_audience,publish_date,is_active,legacy_id,created_at,updated_at)
        VALUES ($1,$2,$3,$4,'News',$5,$6,$7,$8,'all',$9,true,$10,now(),now())
-       ON CONFLICT (legacy_id) DO UPDATE SET program_id=EXCLUDED.program_id,title=EXCLUDED.title,content=EXCLUDED.content,image_url=EXCLUDED.image_url,tags=EXCLUDED.tags,slug=EXCLUDED.slug,meta_title=EXCLUDED.meta_title,meta_description=EXCLUDED.meta_description,is_active=EXCLUDED.is_active,updated_at=now()`,
+       ON CONFLICT (legacy_id) DO UPDATE SET program_id=EXCLUDED.program_id,title=EXCLUDED.title,content=EXCLUDED.content,image_url=EXCLUDED.image_url,tags=EXCLUDED.tags,meta_title=EXCLUDED.meta_title,meta_description=EXCLUDED.meta_description,is_active=EXCLUDED.is_active,updated_at=now()`,
       [info.programId, r.title || '(untitled)', r.content || '', r.img_url || null, splitTags(r.tags),
        slug, r.meta_title || null, r.meta_description || null, r.created_at || new Date(), r.id]);
     inserted++;

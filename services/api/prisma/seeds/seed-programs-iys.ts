@@ -1,4 +1,4 @@
-import { prisma, log, error } from './utils';
+import { prisma, log, error, seedAnnouncementSlug } from './utils';
 import { BRANDS } from './seed-brands';
 import { buildLegacySubmissionFormFields } from './data/shared-submission-form-fields';
 import { ApplicationCategory, PricingFeeType, FaqCategory } from '@prisma/client';
@@ -521,6 +521,7 @@ export async function seedIYSPrograms() {
     data: [
       {
         programId: iys2026.id,
+        slug: seedAnnouncementSlug(iys2026.slug, "Registration Extended!"),
         title: "Registration Extended!",
         content: "Due to high demand, we are extending the registration deadline by 5 days.",
         category: "News",
@@ -530,6 +531,7 @@ export async function seedIYSPrograms() {
       },
       {
         programId: iys2026.id,
+        slug: seedAnnouncementSlug(iys2026.slug, "Keynote Speaker Revealed"),
         title: "Keynote Speaker Revealed",
         content: "We are thrilled to announce Prof. Ahmet Yilmaz as our opening keynote speaker.",
         category: "Update",
