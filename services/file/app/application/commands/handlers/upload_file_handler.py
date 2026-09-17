@@ -35,6 +35,26 @@ class UploadFileHandler:
     MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
     MAX_DOCUMENT_SIZE = 10 * 1024 * 1024  # 10MB
 
+    # Content types that carry no real information about the file. Browsers and
+    # some Android pickers send an empty type for a perfectly ordinary PDF or
+    # photo, and multipart parsers then default it to application/octet-stream,
+    # which the allowlist below rejected with "File type application/octet-stream
+    # not allowed" - one of the shapes the "cannot upload agreement letter"
+    # reports took. For these only, the type is inferred from the extension.
+    GENERIC_CONTENT_TYPES = {'', 'application/octet-stream', 'binary/octet-stream'}
+
+    # Deliberately narrow: the formats a participant actually uploads (signed
+    # copies, documents, phone photos). Anything else with a generic type is
+    # still rejected, because a guessed type is only safe for the common cases.
+    CONTENT_TYPE_BY_EXTENSION = {
+        'pdf': 'application/pdf',
+        'doc': 'application/msword',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+    }
+
     # Matches files.original_filename VARCHAR(255) — original_filename is displayed back to
     # users, so overlength names are rejected here rather than silently truncated.
     MAX_FILENAME_LENGTH = 255
@@ -64,6 +84,25 @@ class UploadFileHandler:
         'programs/thumbnails',
     ]
     
+    @classmethod
+    def resolve_content_type(cls, content_type: str | None, filename: str | None) -> str:
+        """Return the content type to validate and store for an upload.
+
+        A specific reported type is kept (normalised: lowercased, parameters
+        dropped). A generic or missing one is inferred from the filename's
+        extension when that extension is in CONTENT_TYPE_BY_EXTENSION; otherwise
+        the reported type is returned unchanged so the allowlist rejects it with
+        an honest message.
+        """
+        reported = (content_type or '').split(';', 1)[0].strip().lower()
+        if reported not in cls.GENERIC_CONTENT_TYPES:
+            return reported
+        _, ext = os.path.splitext(filename or '')
+        inferred = cls.CONTENT_TYPE_BY_EXTENSION.get(ext.lstrip('.').lower())
+        if inferred:
+            return inferred
+        return reported or 'application/octet-stream'
+
     def __init__(
         self,
         storage_service: IStorageService,
@@ -90,6 +129,11 @@ class UploadFileHandler:
         # Reject filenames that would overflow files.original_filename (VARCHAR(255))
         if len(command.filename) > self.MAX_FILENAME_LENGTH:
             raise InvalidFilenameException(len(command.filename), self.MAX_FILENAME_LENGTH)
+
+        # Resolve before validating, and store the resolved type everywhere below
+        # (object Content-Type, files.mime_type, file_type), so a PDF sent as
+        # octet-stream is served back as a PDF rather than a download blob.
+        command.content_type = self.resolve_content_type(command.content_type, command.filename)
 
         # Confirm allowed file types
         allowed_types = self.ALLOWED_IMAGE_TYPES + self.ALLOWED_DOCUMENT_TYPES
