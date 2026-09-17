@@ -64,12 +64,11 @@ type EnsureProgramApplicationResult =
  * to surface to the user (e.g. "registration for X has closed") AND to sync its
  * client-side active-program selector to (see ybb_active_program_id in
  * ybb-program-next/lib/dashboard/activeProgram.ts). 'created' and 'existing'
- * both carry a real programId a participant just authenticated against, so the
- * frontend can pin its selector to it before the stale localStorage value
- * (from an earlier session on a different program) wins by default.
- * 'missing_target' covers both "no program was requested" (the common case)
- * and "fallback found nothing open", which are indistinguishable and not
- * worth surfacing.
+ * both carry a real programId a participant just authenticated against.
+ * 'missing_target' covers "no program was requested" (the common case),
+ * "fallback found nothing open", and - on login - "the participant holds more
+ * than one application in this brand, so this login does not get to pick
+ * between them". None of those are worth surfacing.
  */
 export type ProgramRegistrationInfo = {
   status: 'closed' | 'existing' | 'created';
@@ -251,6 +250,34 @@ export async function ensureProgramApplication(
   });
 
   if (existingApplication) {
+    // The guard below stops login CREATING a phantom application, but everyone
+    // who logged in before it shipped already holds one - and this early return
+    // handed it straight back as 'existing'. toProgramRegistrationInfo turns
+    // that into programRegistration.programId = the newer edition, and the
+    // login page pinned ybb_active_program_id to it, so those participants kept
+    // landing on the empty 2027 draft on every single login.
+    //
+    // Same rule as the guard: when the participant holds ANY other live
+    // application in this brand, a login has no business choosing between
+    // them. 'missing_target' leaves the choice to the client, which ranks by
+    // engagement. A participant whose only application is this one still gets
+    // 'existing', so single-edition logins are unchanged.
+    if (params.skipCreateIfBrandApplicationExists) {
+      const otherBrandApplication = await prisma.participantApplication.findFirst({
+        where: {
+          participantId: params.participantId,
+          program: { brandId: params.brandId },
+          deletedAt: null,
+          id: { not: existingApplication.id },
+        },
+        select: { id: true },
+      });
+
+      if (otherBrandApplication) {
+        return { status: 'missing_target' };
+      }
+    }
+
     return { status: 'existing', program: targetProgram };
   }
 

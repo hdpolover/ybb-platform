@@ -38,6 +38,18 @@ describe('current application resolution rule', () => {
             expect(currentApplicationOrderBy[0]).toEqual({ withdrawnAt: { sort: 'asc', nulls: 'first' } });
         });
 
+        // MEYS 6th/7th: a participant holding a submitted 2026 application and an
+        // untouched 2027 draft was resolved to the draft whenever a request
+        // carried no programId, because the draft was the most recently touched
+        // row. Submission is the engagement signal; drafts have none.
+        it('prefers a submitted application over a draft, before recency', () => {
+            expect(currentApplicationOrderBy[1]).toEqual({ submittedAt: { sort: 'desc', nulls: 'last' } });
+            const submittedIndex = currentApplicationOrderBy.findIndex((key) => 'submittedAt' in key);
+            const updatedIndex = currentApplicationOrderBy.findIndex((key) => 'updatedAt' in key);
+            expect(submittedIndex).toBeGreaterThan(0);
+            expect(submittedIndex).toBeLessThan(updatedIndex);
+        });
+
         // updatedAt is @updatedAt, so reconciliation sweeps, webhook consumers and
         // admin edits all bump it. It means "most recently touched by anything",
         // not "the one the participant cares about", so it must never outrank a

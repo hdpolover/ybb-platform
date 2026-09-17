@@ -209,6 +209,83 @@ describe('auth-program-linking.util', () => {
       expect(prisma.participantApplication.create).not.toHaveBeenCalled();
     });
 
+    // Regression for the participants the create-guard came too late for: they
+    // already HELD a phantom 7th draft, so the early 'existing' return named the
+    // 7th as this login's program and the client pinned itself to it on every
+    // login, hiding their 6th-edition invitation letter.
+    it('does not name an existing application as the login program when the participant holds another in the brand', async () => {
+      const prisma = createPrismaMock();
+      prisma.program.findUnique.mockResolvedValue(baseProgram);
+      // The phantom 7th draft on the requested (open) program.
+      prisma.participantApplication.findUnique.mockResolvedValue({
+        id: 'application-7th',
+        participantId: 'participant-1',
+        programId: 'program-1',
+      });
+      // ...and their real 6th-edition application in the same brand.
+      prisma.participantApplication.findFirst.mockResolvedValue({ id: 'application-6th' });
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        skipCreateIfBrandApplicationExists: true,
+      });
+
+      expect(prisma.participantApplication.findFirst).toHaveBeenCalledWith({
+        where: {
+          participantId: 'participant-1',
+          program: { brandId: 'brand-1' },
+          deletedAt: null,
+          id: { not: 'application-7th' },
+        },
+        select: { id: true },
+      });
+      expect(result).toEqual({ status: 'missing_target' });
+      expect(toProgramRegistrationInfo(result)).toBeUndefined();
+      expect(prisma.participantApplication.create).not.toHaveBeenCalled();
+    });
+
+    it('still returns existing on login when that application is the only one in the brand', async () => {
+      const prisma = createPrismaMock();
+      prisma.program.findUnique.mockResolvedValue(baseProgram);
+      prisma.participantApplication.findUnique.mockResolvedValue({
+        id: 'application-1',
+        participantId: 'participant-1',
+        programId: 'program-1',
+      });
+      prisma.participantApplication.findFirst.mockResolvedValue(null);
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+        skipCreateIfBrandApplicationExists: true,
+      });
+
+      expect(result).toEqual({ status: 'existing', program: baseProgram });
+      expect(toProgramRegistrationInfo(result)).toEqual({
+        status: 'existing',
+        programId: 'program-1',
+        programName: 'Program 1',
+      });
+    });
+
+    it('does not look for other applications on an existing hit when the guard is off', async () => {
+      const prisma = createPrismaMock();
+      prisma.program.findUnique.mockResolvedValue(baseProgram);
+      prisma.participantApplication.findUnique.mockResolvedValue({ id: 'application-1' });
+
+      const result = await ensureProgramApplication(prisma, {
+        participantId: 'participant-1',
+        brandId: 'brand-1',
+        programId: 'program-1',
+      });
+
+      expect(result.status).toBe('existing');
+      expect(prisma.participantApplication.findFirst).not.toHaveBeenCalled();
+    });
+
     it('returns closed and does not create an application when registration is closed', async () => {
       const prisma = createPrismaMock();
       prisma.program.findUnique.mockResolvedValue({
