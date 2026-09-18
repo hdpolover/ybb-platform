@@ -2,7 +2,7 @@
  * Unit tests for GetDocumentReviewQueueHandler.
  *
  * Covers the two things this handler must never get wrong: the ordering
- * clause (never updatedAt, nulls fall back to generated_at deterministically)
+ * clause (never updatedAt, nulls sort first so the pre-existing backlog drains before new uploads)
  * and the file url resolution (never the raw stored url when a private
  * presign fails, never /v1/files/:id/download).
  */
@@ -33,7 +33,7 @@ function buildRow(overrides: Record<string, unknown> = {}) {
 }
 
 describe('GetDocumentReviewQueueHandler', () => {
-  it('orders by signedCopyUploadedAt asc with nulls last, then generatedAt, then id, never updatedAt', async () => {
+  it('orders by signedCopyUploadedAt asc with nulls first, then generatedAt, then id, never updatedAt', async () => {
     const row = buildRow();
     const prisma = {
       participantDocument: {
@@ -52,7 +52,7 @@ describe('GetDocumentReviewQueueHandler', () => {
 
     const call = prisma.participantDocument.findMany.mock.calls[0][0];
     expect(call.orderBy).toEqual([
-      { signedCopyUploadedAt: { sort: 'asc', nulls: 'last' } },
+      { signedCopyUploadedAt: { sort: 'asc', nulls: 'first' } },
       { generatedAt: 'asc' },
       { id: 'asc' },
     ]);

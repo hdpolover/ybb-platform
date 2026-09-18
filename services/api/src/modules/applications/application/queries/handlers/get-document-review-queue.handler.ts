@@ -41,15 +41,20 @@ export class GetDocumentReviewQueueHandler {
     // Never order by updatedAt (see plan): reviewing a row writes it, which
     // would reshuffle the queue under a reviewer mid-session. Order on
     // signedCopyUploadedAt instead, an upload-time stamp reviewing never
-    // touches. Nulls (the 285 pre-existing rows, uploaded before this column
-    // existed) sort last and are ordered among themselves by generatedAt,
-    // which is set once at row creation and is equally immutable, so the
-    // fallback cannot reshuffle either. `id` breaks any remaining tie.
+    // touches.
+    //
+    // Nulls sort FIRST on purpose. They are the ~285 documents uploaded before
+    // this column existed, i.e. the people who have been waiting longest with
+    // no way to be reviewed at all. Sorting them last would put the entire
+    // existing backlog behind every new upload, which is the opposite of what
+    // this queue is for. They are ordered among themselves by generatedAt,
+    // set once at row creation and equally immutable, so the fallback cannot
+    // reshuffle either. `id` breaks any remaining tie.
     const [rows, total] = await Promise.all([
       this.prisma.participantDocument.findMany({
         where,
         orderBy: [
-          { signedCopyUploadedAt: { sort: 'asc', nulls: 'last' } },
+          { signedCopyUploadedAt: { sort: 'asc', nulls: 'first' } },
           { generatedAt: 'asc' },
           { id: 'asc' },
         ],
