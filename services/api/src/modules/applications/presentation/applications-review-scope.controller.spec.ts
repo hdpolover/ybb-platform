@@ -34,6 +34,7 @@ import { GetApplicationReviewHandler } from '../application/queries/handlers/get
 import { UpsertApplicationReviewHandler } from '../application/commands/handlers/upsert-application-review.handler';
 import { RegistrationFeeMismatchesHandler } from '../application/queries/handlers/registration-fee-mismatches.handler';
 import { ReviewDocumentHandler } from '../application/commands/handlers/review-document.handler';
+import { GetDocumentReviewQueueHandler } from '../application/queries/handlers/get-document-review-queue.handler';
 
 const noop = { execute: jest.fn() };
 
@@ -93,6 +94,7 @@ async function bootstrap(readPrisma: unknown, reviewHandler: { execute: jest.Moc
       { provide: UpsertApplicationReviewHandler, useValue: noop },
       { provide: RegistrationFeeMismatchesHandler, useValue: noop },
       { provide: ReviewDocumentHandler, useValue: noop },
+      { provide: GetDocumentReviewQueueHandler, useValue: noop },
     ],
   })
     .overrideGuard(JwtAuthGuard)

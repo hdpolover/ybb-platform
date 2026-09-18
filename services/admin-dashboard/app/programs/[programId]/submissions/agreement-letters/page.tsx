@@ -1,7 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { AgreementLettersTable } from "@/app/components/submissions/AgreementLettersTable";
+import { DocumentReviewQueue } from "@/app/components/submissions/DocumentReviewQueue";
 
 export default function AgreementLettersPage({
   params,
@@ -15,11 +15,12 @@ export default function AgreementLettersPage({
       <div className="space-y-1">
         <h1 className="text-2xl font-bold text-zinc-900">Agreement Letters</h1>
         <p className="text-sm text-zinc-600">
-          Track generation and signature status of agreement letters for confirmed participants in this program.
+          Review signed agreement letters uploaded by participants: view the file, then approve, decline, or
+          request a revision.
         </p>
       </div>
 
-      <AgreementLettersTable />
+      <DocumentReviewQueue programId={programId} />
     </div>
   );
 }

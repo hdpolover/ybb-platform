@@ -2139,6 +2139,57 @@ export function submitApplication(applicationId: string, participantId: string):
   });
 }
 
+// ─── Agreement Letter Review Queue (Phase 2) ─────────────────────────────────
+
+export type DocumentReviewStatus = "uploaded" | "approved" | "rejected" | "revision_requested";
+export type DocumentReviewAction = "approve" | "reject" | "request_revision";
+
+export interface DocumentReviewQueueItem {
+  id: string;
+  applicationId: string;
+  documentName: string;
+  submissionStatus: DocumentReviewStatus;
+  submissionNote: string | null;
+  signedCopyUrl: string | null;
+  signedCopyUploadedAt: string | null;
+  generatedAt: string;
+  reviewedBy: string | null;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  participantName: string;
+  participantEmail: string | null;
+  programName: string;
+}
+
+export async function listDocumentReviewQueue(params: {
+  programId: string;
+  status?: DocumentReviewStatus;
+  limit?: number;
+  offset?: number;
+}): Promise<{ items: DocumentReviewQueueItem[]; total: number }> {
+  const q = new URLSearchParams();
+  q.set("programId", params.programId);
+  if (params.status) q.set("status", params.status);
+  if (params.limit !== undefined) q.set("limit", String(params.limit));
+  if (params.offset !== undefined) q.set("offset", String(params.offset));
+  const raw = await request<{ items: DocumentReviewQueueItem[]; total: number }>(
+    `/applications/documents/review-queue?${q}`,
+  );
+  return { items: raw.items ?? [], total: raw.total ?? 0 };
+}
+
+export function reviewDocument(
+  applicationId: string,
+  documentId: string,
+  action: DocumentReviewAction,
+  note?: string,
+): Promise<{ id: string; submissionStatus: DocumentReviewStatus }> {
+  return request(`/applications/${encodeURIComponent(applicationId)}/documents/${encodeURIComponent(documentId)}/review`, {
+    method: "POST",
+    body: JSON.stringify({ action, note }),
+  });
+}
+
 // ─── Program Announcements ────────────────────────────────────────────────────
 
 export function listProgramAnnouncements(

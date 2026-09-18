@@ -81,6 +81,10 @@ import { UpsertApplicationReviewCommand } from '../application/commands/upsert-a
 import { ReviewDocumentHandler } from '../application/commands/handlers/review-document.handler';
 import { ReviewDocumentCommand } from '../application/commands/review-document.command';
 
+// Document review queue (agreement letter review, Phase 2)
+import { GetDocumentReviewQueueHandler } from '../application/queries/handlers/get-document-review-queue.handler';
+import { GetDocumentReviewQueueQuery, DocumentReviewStatus } from '../application/queries/get-document-review-queue.query';
+
 // DTOs
 import { CreateApplicationRequestDto } from './dto/create-application-request.dto';
 import { UpdateApplicationRequestDto } from './dto/update-application-request.dto';
@@ -181,6 +185,7 @@ export class ApplicationsController {
     private readonly upsertApplicationReviewHandler: UpsertApplicationReviewHandler,
     private readonly registrationFeeMismatchesHandler: RegistrationFeeMismatchesHandler,
     private readonly reviewDocumentHandler: ReviewDocumentHandler,
+    private readonly getDocumentReviewQueueHandler: GetDocumentReviewQueueHandler,
   ) { }
 
   /**
@@ -627,6 +632,44 @@ export class ApplicationsController {
       ApplicationsController.parseOffset(offset),
     );
     return this.registrationFeeMismatchesHandler.execute(query);
+  }
+
+  @Get('documents/review-queue')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'List agreement letters for admin review, program-scoped (admin)' })
+  @ApiQuery({ name: 'programId', required: true })
+  @ApiQuery({ name: 'status', required: false, enum: ['uploaded', 'approved', 'rejected', 'revision_requested'] })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'offset', required: false, type: Number })
+  async getDocumentReviewQueue(
+    @Query('programId') programId: string,
+    @Query('status') status?: DocumentReviewStatus,
+    @Query('limit') limit?: number,
+    @Query('offset') offset?: number,
+    @Req() req?: { user?: { adminId?: string } },
+  ) {
+    if (!programId) {
+      throw new BadRequestException('programId is required.');
+    }
+    if (status && !['uploaded', 'approved', 'rejected', 'revision_requested'].includes(status)) {
+      throw new BadRequestException('Invalid status filter.');
+    }
+
+    // Same scoping as the plain list endpoint: a brand/assigned-scope admin
+    // can only run this against a program they're actually allowed to see.
+    const scoped = await this.resolveScopedFilters(req ?? {}, undefined, programId);
+    if (scoped.programIds) {
+      throw new ForbiddenException('Specify a programId you have access to.');
+    }
+
+    const query = new GetDocumentReviewQueueQuery(
+      scoped.programId as string,
+      status ?? 'uploaded',
+      ApplicationsController.parseLimit(limit),
+      ApplicationsController.parseOffset(offset),
+    );
+    return this.getDocumentReviewQueueHandler.execute(query);
   }
 
   @Get(':id')
