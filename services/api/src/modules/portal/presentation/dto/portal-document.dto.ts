@@ -24,6 +24,12 @@ export class DocumentItemDto {
 
     @ApiProperty({ required: false }) signedCopyUrl?: string;
     @ApiProperty({ required: false }) submissionStatus?: string;
+    @ApiProperty({ required: false, description: 'Reviewer note shown verbatim for rejected/revision_requested' })
+    submissionNote?: string;
+    @ApiProperty({ required: false }) signedCopyUploadedAt?: Date;
+    @ApiProperty({ required: false, description: 'Admin id (admins.id) who reviewed this document' })
+    reviewedBy?: string;
+    @ApiProperty({ required: false }) reviewedAt?: Date;
     @ApiProperty() documentType: string; // 'agreement_letter' | 'complementary_document' | 'program_resource' | 'letter_of_acceptance'
     @ApiProperty()
     updatedAt: Date;

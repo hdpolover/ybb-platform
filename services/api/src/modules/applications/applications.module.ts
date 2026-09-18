@@ -17,6 +17,7 @@ import { SwitchApplicationCategoryHandler } from './application/commands/handler
 import { CreateRegistrationPaymentIntentHandler } from './application/commands/handlers/create-registration-payment-intent.handler';
 import { AdminUpdateSubmissionHandler } from './application/commands/handlers/admin-update-submission.handler';
 import { UpsertApplicationReviewHandler } from './application/commands/handlers/upsert-application-review.handler';
+import { ReviewDocumentHandler } from './application/commands/handlers/review-document.handler';
 
 // Query Handlers
 import { GetApplicationHandler } from './application/queries/handlers/get-application.handler';
@@ -58,6 +59,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
     CreateRegistrationPaymentIntentHandler,
     AdminUpdateSubmissionHandler,
     UpsertApplicationReviewHandler,
+    ReviewDocumentHandler,
 
     // Query Handlers
     GetApplicationHandler,

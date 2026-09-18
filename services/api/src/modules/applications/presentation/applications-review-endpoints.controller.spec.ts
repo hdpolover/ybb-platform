@@ -36,6 +36,7 @@ import { ExportApplicationsHandler } from '../application/queries/handlers/expor
 import { GetApplicationReviewHandler } from '../application/queries/handlers/get-application-review.handler';
 import { UpsertApplicationReviewHandler } from '../application/commands/handlers/upsert-application-review.handler';
 import { RegistrationFeeMismatchesHandler } from '../application/queries/handlers/registration-fee-mismatches.handler';
+import { ReviewDocumentHandler } from '../application/commands/handlers/review-document.handler';
 import { GetApplicationReviewQuery } from '../application/queries/get-application-review.query';
 import { UpsertApplicationReviewCommand } from '../application/commands/upsert-application-review.command';
 
@@ -59,6 +60,7 @@ function buildProviders(overrides: Record<string, unknown> = {}) {
     { provide: GetApplicationReviewHandler, useValue: overrides.getApplicationReviewHandler ?? noopHandler },
     { provide: UpsertApplicationReviewHandler, useValue: overrides.upsertApplicationReviewHandler ?? noopHandler },
     { provide: RegistrationFeeMismatchesHandler, useValue: overrides.registrationFeeMismatchesHandler ?? noopHandler },
+    { provide: ReviewDocumentHandler, useValue: overrides.reviewDocumentHandler ?? noopHandler },
   ];
 }
 

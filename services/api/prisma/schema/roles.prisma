@@ -57,6 +57,7 @@ model Admin {
   deletedAmbassadors    Ambassador[]             @relation("AdminAmbassadorDeleter")
   applicationReviews    ApplicationReview[]
   overriddenReviews     ApplicationReview[]      @relation("ApplicationReviewOverrideBy")
+  reviewedDocuments     ParticipantDocument[]
   createdScoringSchemas ScoringSchema[]
 
   @@index([userId])

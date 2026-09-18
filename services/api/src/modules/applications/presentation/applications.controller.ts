@@ -77,6 +77,10 @@ import { resolveActingAdminId } from '@shared/utils/resolve-acting-admin-id';
 import { UpsertApplicationReviewHandler } from '../application/commands/handlers/upsert-application-review.handler';
 import { UpsertApplicationReviewCommand } from '../application/commands/upsert-application-review.command';
 
+// Document review command (agreement letter review, Phase 1)
+import { ReviewDocumentHandler } from '../application/commands/handlers/review-document.handler';
+import { ReviewDocumentCommand } from '../application/commands/review-document.command';
+
 // DTOs
 import { CreateApplicationRequestDto } from './dto/create-application-request.dto';
 import { UpdateApplicationRequestDto } from './dto/update-application-request.dto';
@@ -84,6 +88,7 @@ import { ReviewApplicationRequestDto } from './dto/review-application-request.dt
 import { SwitchApplicationCategoryRequestDto } from './dto/switch-application-category-request.dto';
 import { AdminUpdateSubmissionDto } from './dto/admin-update-submission.dto';
 import { UpsertApplicationReviewRequestDto } from './dto/upsert-application-review-request.dto';
+import { ReviewDocumentRequestDto } from './dto/review-document-request.dto';
 import { ApplicationResponseDto, ApplicationListResponseDto } from '../application/dto/application-response.dto';
 import { RegistrationFeeMismatchListResponseDto } from '../application/dto/registration-fee-mismatch-response.dto';
 import { ApplicationReviewResponseDto } from '../application/dto/application-review-response.dto';
@@ -175,6 +180,7 @@ export class ApplicationsController {
     private readonly getApplicationReviewHandler: GetApplicationReviewHandler,
     private readonly upsertApplicationReviewHandler: UpsertApplicationReviewHandler,
     private readonly registrationFeeMismatchesHandler: RegistrationFeeMismatchesHandler,
+    private readonly reviewDocumentHandler: ReviewDocumentHandler,
   ) { }
 
   /**
@@ -875,6 +881,39 @@ export class ApplicationsController {
     );
 
     return this.upsertApplicationReviewHandler.execute(command);
+  }
+
+  @Post(':applicationId/documents/:documentId/review')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Review a participant-uploaded signed agreement letter (admin only)' })
+  @ApiResponse({ status: 200, description: 'Document reviewed' })
+  @ApiResponse({ status: 400, description: 'Missing note on reject/request_revision' })
+  @ApiResponse({ status: 404, description: 'Application or document not found' })
+  @ApiResponse({ status: 409, description: 'Document is not in a reviewable state' })
+  // Mirrors assertCanReviewApplication's programme-scope rule (see review()
+  // below): the acting admin must be scoped to the programme the
+  // APPLICATION belongs to, read from the row, never trusted from the path.
+  @AuditTrail({ entityType: 'ParticipantDocument', action: ChangeType.update, idParam: 'documentId' })
+  async reviewDocument(
+    @Param('applicationId') applicationId: string,
+    @Param('documentId') documentId: string,
+    @Body() dto: ReviewDocumentRequestDto,
+    @CurrentUser() user: CurrentUserData,
+    @Req() req: { user?: { adminId?: string } },
+  ) {
+    await this.assertCanReviewApplication(req, applicationId);
+
+    const command = new ReviewDocumentCommand(
+      applicationId,
+      documentId,
+      resolveActingAdminId(user),
+      dto.action,
+      dto.note,
+    );
+
+    return this.reviewDocumentHandler.execute(command);
   }
 
   @Post(':id/review')

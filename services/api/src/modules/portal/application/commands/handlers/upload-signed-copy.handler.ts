@@ -39,6 +39,25 @@ export class UploadSignedCopyHandler implements ICommandHandler<UploadSignedCopy
         });
         if (!application) throw new NotFoundException('Application not found');
 
+        // Upsert ParticipantDocument
+        // NOTE: TOCTOU risk — a native prisma.upsert() would be safer, but the
+        // ParticipantDocument model has no @@unique([applicationId, templateId])
+        // constraint (templateId is nullable), so Prisma's upsert() cannot be
+        // used here. A DB-level unique partial index on (applicationId, templateId)
+        // WHERE templateId IS NOT NULL would allow migrating to the atomic form.
+        const existing = await this.prisma.participantDocument.findFirst({
+            where: { applicationId: application.id, templateId },
+        });
+
+        // An approved document is locked: no re-upload once an admin has
+        // signed off on it. Checked before the storage write so a locked
+        // document never burns an upload. After rejected/revision_requested,
+        // re-upload is allowed and resets the status to 'uploaded' for
+        // re-review.
+        if (existing?.submissionStatus === 'approved') {
+            throw new BadRequestException('This document has already been approved and cannot be re-uploaded.');
+        }
+
         // Upload file
         const program = await this.prisma.program.findUnique({
             where: { id: template.programId },
@@ -53,15 +72,7 @@ export class UploadSignedCopyHandler implements ICommandHandler<UploadSignedCopy
             program.id,
         );
 
-        // Upsert ParticipantDocument
-        // NOTE: TOCTOU risk — a native prisma.upsert() would be safer, but the
-        // ParticipantDocument model has no @@unique([applicationId, templateId])
-        // constraint (templateId is nullable), so Prisma's upsert() cannot be
-        // used here. A DB-level unique partial index on (applicationId, templateId)
-        // WHERE templateId IS NOT NULL would allow migrating to the atomic form.
-        const existing = await this.prisma.participantDocument.findFirst({
-            where: { applicationId: application.id, templateId },
-        });
+        const uploadedAt = new Date();
 
         if (existing) {
             await this.prisma.participantDocument.update({
@@ -70,6 +81,9 @@ export class UploadSignedCopyHandler implements ICommandHandler<UploadSignedCopy
                     signedCopyUrl: uploadResult.url,
                     submissionStatus: 'uploaded',
                     submissionNote: null,
+                    signedCopyUploadedAt: uploadedAt,
+                    reviewedBy: null,
+                    reviewedAt: null,
                 },
             });
         } else {
@@ -82,6 +96,7 @@ export class UploadSignedCopyHandler implements ICommandHandler<UploadSignedCopy
                     fileUrl: template.templateUrl ?? '',
                     signedCopyUrl: uploadResult.url,
                     submissionStatus: 'uploaded',
+                    signedCopyUploadedAt: uploadedAt,
                     isPublic: false,
                 },
             });
