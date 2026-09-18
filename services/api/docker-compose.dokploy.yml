@@ -1,10 +1,21 @@
-# DATABASE_HOST selects which Postgres this stack talks to. It defaults to the
-# `postgres-api` service defined below, which is how this ran until 2026-09-10.
-# Production now sets it to the standalone Dokploy Postgres service
+# DATABASE_HOST selects which Postgres this stack talks to. It MUST be set:
+# production points at the standalone Dokploy Postgres service
 # (ybb-platform-postgres-api-...), because holding the production database
 # inside this compose project meant one Delete click in the panel destroyed it.
-# The postgres-api service is kept defined here as the rollback: unset
-# DATABASE_HOST and this stack points back at it.
+#
+# Until 2026-09-18 this file also defined a `postgres-api` service and defaulted
+# DATABASE_HOST to it, kept as the rollback for that 2026-09-10 extraction. It
+# has been removed, because it had stopped being a rollback and become a hazard:
+# its data froze at the moment of the extraction, so pointing back at it would
+# serve stale data AS production, while it kept running as a byte-plausible copy
+# of the live database under the SAME database name and credentials on the same
+# host. A session mistook it for production and ran every analytical query
+# against week-old data before the mismatch surfaced.
+#
+# There is deliberately no default now: an unset DATABASE_HOST fails the deploy
+# loudly instead of silently resolving to something that is not production.
+# The old data volume (postgres_api_data_prod) is NOT deleted by this change; it
+# stays on disk until someone removes it explicitly.
 services:
   api:
     build:
@@ -19,7 +30,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-4000}
-      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@${DATABASE_HOST:-postgres-api}:5432/${DATABASE_NAME}
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@${DATABASE_HOST:?DATABASE_HOST must be set}:5432/${DATABASE_NAME}
       REDIS_URL: redis://default:${REDIS_PASSWORD}@${REDIS_HOST:-ybb-platform-redis-service-omv9vw}:6379
       REDIS_HOST: ${REDIS_HOST:-ybb-platform-redis-service-omv9vw}
       REDIS_PORT: 6379
@@ -91,8 +102,6 @@ services:
       # Release tasks run once, in api-release below, not on every boot.
       SKIP_RELEASE_TASKS: "true"
     depends_on:
-      postgres-api:
-        condition: service_healthy
       api-release:
         condition: service_completed_successfully
     # Readiness is defined ONCE, as a HEALTHCHECK in Dockerfile.prod, so compose
@@ -117,7 +126,7 @@ services:
     restart: "no"
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@${DATABASE_HOST:-postgres-api}:5432/${DATABASE_NAME}
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@${DATABASE_HOST:?DATABASE_HOST must be set}:5432/${DATABASE_NAME}
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
       RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY: ${RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY:-false}
       RABBITMQ_QUEUE_CLEANUP_TARGETS: ${RABBITMQ_QUEUE_CLEANUP_TARGETS:-audit_log_queue,reporting_queue}
@@ -130,54 +139,11 @@ services:
     # The entrypoint runs the release tasks and then execs this, so the
     # container exits 0 as soon as they finish.
     command: ["node", "-e", "process.exit(0)"]
-    depends_on:
-      postgres-api:
-        condition: service_healthy
     networks:
       - dokploy-network
 
-  postgres-api:
-    image: postgres:15-alpine
-    restart: always
-    environment:
-      POSTGRES_USER: ${DATABASE_USER}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
-      POSTGRES_DB: ${DATABASE_NAME}
-      # Safety switch for automatic seeding (Default: false)
-      ENABLE_DB_SEEDING: ${ENABLE_DB_SEEDING:-false}
-    # Tuned for the shared 32GB host (stock defaults were sized for a 1GB
-    # toy install). See "Postgres tuning" section in DOCKPLOY_DEPLOYMENT.md
-    # for rationale and the pg_stat_statements activation step this requires.
-    command:
-      [
-        "postgres",
-        "-c", "shared_buffers=1GB",
-        "-c", "effective_cache_size=3GB",
-        "-c", "work_mem=16MB",
-        "-c", "maintenance_work_mem=256MB",
-        "-c", "random_page_cost=1.1",
-        "-c", "track_io_timing=on",
-        "-c", "shared_preload_libraries=pg_stat_statements",
-        "-c", "pg_stat_statements.track=all",
-        "-c", "log_min_duration_statement=500"
-      ]
-    # work_mem=16MB raises parallel-query shared memory usage (Postgres uses
-    # /dev/shm for parallel workers); Docker's 64MB default shm can be
-    # exhausted by a couple of concurrent parallel hash joins, causing
-    # "could not resize shared memory segment: No space left on device".
-    shm_size: 1gb
-    volumes:
-      - postgres_api_data_prod:/var/lib/postgresql/data
-      - ./database-dump:/docker-entrypoint-initdb.d:rw
-    networks:
-      - dokploy-network
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Daily local dump of postgres-api into the postgres_api_backups volume on
+  # Daily local dump of whatever DATABASE_HOST points at (the standalone
+  # Postgres service) into the postgres_api_backups volume on
   # this VPS (7 daily / 4 weekly / 3 monthly, pruned by the image itself).
   # This is on-host only, not off-site. To add off-site sync later, point an
   # AWS_* / rclone sidecar at this same named volume, or swap this image for
@@ -192,7 +158,7 @@ services:
       # below. A backup sidecar still pointed at the old host backs up a frozen
       # copy while the live database goes unbacked - which inverts the whole
       # point of the move.
-      POSTGRES_HOST: ${DATABASE_HOST:-postgres-api}
+      POSTGRES_HOST: ${DATABASE_HOST:?DATABASE_HOST must be set}
       POSTGRES_DB: ${DATABASE_NAME}
       POSTGRES_USER: ${DATABASE_USER}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
@@ -204,9 +170,6 @@ services:
       HEALTHCHECK_PORT: 8080
     volumes:
       - postgres_api_backups:/backups
-    depends_on:
-      postgres-api:
-        condition: service_healthy
     networks:
       - dokploy-network
 
