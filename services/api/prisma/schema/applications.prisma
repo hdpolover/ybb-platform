@@ -434,9 +434,15 @@ model ParticipantDocument {
   downloadCount Int     @default(0) @map("download_count")
 
   // Signed copy (for agreement_letter type documents)
-  signedCopyUrl    String? @map("signed_copy_url") @db.VarChar(500)
-  submissionStatus String  @default("not_required") @map("submission_status") @db.VarChar(50)
-  submissionNote   String? @map("submission_note") @db.Text
+  // submissionStatus values: not_required, uploaded, approved, rejected,
+  // revision_requested. Stored as varchar (not a DB enum), matching the
+  // column's existing type, so new values need no migration of their own.
+  signedCopyUrl         String?   @map("signed_copy_url") @db.VarChar(500)
+  submissionStatus      String    @default("not_required") @map("submission_status") @db.VarChar(50)
+  submissionNote        String?   @map("submission_note") @db.Text
+  signedCopyUploadedAt  DateTime? @map("signed_copy_uploaded_at") @db.Timestamptz(6)
+  reviewedBy            String?   @map("reviewed_by") @db.Uuid
+  reviewedAt            DateTime? @map("reviewed_at") @db.Timestamptz(6)
 
   // Meta
   generatedAt DateTime  @default(now()) @map("generated_at") @db.Timestamptz(6)
@@ -455,6 +461,7 @@ model ParticipantDocument {
   application     ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   template        DocumentTemplate?      @relation(fields: [templateId], references: [id])
   loaReleaseBatch LoaReleaseBatch?       @relation(fields: [loaReleaseBatchId], references: [id])
+  reviewer        Admin?                 @relation(fields: [reviewedBy], references: [id])
 
   @@index([applicationId])
   @@index([type])

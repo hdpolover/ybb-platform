@@ -100,6 +100,7 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                     select: {
                         id: true, name: true, type: true, fileUrl: true,
                         signedCopyUrl: true, submissionStatus: true, submissionNote: true,
+                        signedCopyUploadedAt: true, reviewedBy: true, reviewedAt: true,
                         generatedAt: true, templateId: true,
                         // LOA on-demand fields (Task 9)
                         documentNumber: true, downloadCount: true, firstDownloadedAt: true,
@@ -161,6 +162,10 @@ export class GetPortalDocumentsHandler implements IQueryHandler<GetPortalDocumen
                         status: participantDoc?.submissionStatus ?? 'pending_upload',
                         signedCopyUrl: participantDoc?.signedCopyUrl ?? undefined,
                         submissionStatus: participantDoc?.submissionStatus ?? 'pending_upload',
+                        submissionNote: participantDoc?.submissionNote ?? undefined,
+                        signedCopyUploadedAt: participantDoc?.signedCopyUploadedAt ?? undefined,
+                        reviewedBy: participantDoc?.reviewedBy ?? undefined,
+                        reviewedAt: participantDoc?.reviewedAt ?? undefined,
                         documentType: 'agreement_letter',
                         updatedAt: tmpl.updatedAt,
                     });
