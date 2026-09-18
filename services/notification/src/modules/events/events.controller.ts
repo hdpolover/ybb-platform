@@ -286,6 +286,97 @@ export class EventsController {
     );
   }
 
+  @EventPattern('notification.document_approved')
+  async handleDocumentApproved(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'notification.document_approved',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received notification.document_approved event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        const documentName = getString(payload, 'document_name');
+        if (!email || !documentName) return;
+
+        await this.emailService.sendDocumentApprovedEmail(email, {
+          name: getString(payload, 'participant_name') || 'Participant',
+          program: getString(payload, 'program_name'),
+          documentName,
+          brand: payload.brand ?? undefined,
+        });
+      },
+    );
+  }
+
+  @EventPattern('notification.document_rejected')
+  async handleDocumentRejected(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'notification.document_rejected',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received notification.document_rejected event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        const documentName = getString(payload, 'document_name');
+        const note = getString(payload, 'note');
+        if (!email || !documentName || !note) return;
+
+        await this.emailService.sendDocumentRejectedEmail(email, {
+          name: getString(payload, 'participant_name') || 'Participant',
+          program: getString(payload, 'program_name'),
+          documentName,
+          note,
+          brand: payload.brand ?? undefined,
+        });
+      },
+    );
+  }
+
+  @EventPattern('notification.document_revision_requested')
+  async handleDocumentRevisionRequested(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'notification.document_revision_requested',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received notification.document_revision_requested event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        const documentName = getString(payload, 'document_name');
+        const note = getString(payload, 'note');
+        if (!email || !documentName || !note) return;
+
+        await this.emailService.sendDocumentRevisionRequestedEmail(email, {
+          name: getString(payload, 'participant_name') || 'Participant',
+          program: getString(payload, 'program_name'),
+          documentName,
+          note,
+          brand: payload.brand ?? undefined,
+        });
+      },
+    );
+  }
+
   @EventPattern('notification.receipt_requested')
   async handleReceiptRequested(
     @Payload() data: unknown,

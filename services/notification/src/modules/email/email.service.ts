@@ -645,6 +645,97 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
+  // Agreement-letter (and other participant-document) review outcomes.
+  // Approve carries no note; reject/request_revision always do (the API
+  // enforces that), and the note is the whole reason these emails exist.
+  async sendDocumentApprovedEmail(
+    to: string,
+    data: {
+      name: string;
+      program?: string;
+      documentName: string;
+      brand?: any;
+    },
+  ) {
+    const templateData = {
+      name: data.name,
+      program: data.program,
+      documentName: data.documentName,
+      documentsUrl: this.resolveDocumentsUrl(data.brand),
+      brand: data.brand,
+    };
+    const fallbackSubject = data.brand?.name
+      ? `Your ${data.documentName} Has Been Approved - ${data.brand.name}`
+      : `Your ${data.documentName} Has Been Approved`;
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'document_approved',
+      fallbackTemplateName: 'document-approved',
+      fallbackSubject,
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
+  async sendDocumentRejectedEmail(
+    to: string,
+    data: {
+      name: string;
+      program?: string;
+      documentName: string;
+      note: string;
+      brand?: any;
+    },
+  ) {
+    const templateData = {
+      name: data.name,
+      program: data.program,
+      documentName: data.documentName,
+      note: data.note,
+      documentsUrl: this.resolveDocumentsUrl(data.brand),
+      brand: data.brand,
+    };
+    const fallbackSubject = data.brand?.name
+      ? `Update on Your ${data.documentName} - ${data.brand.name}`
+      : `Update on Your ${data.documentName}`;
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'document_rejected',
+      fallbackTemplateName: 'document-rejected',
+      fallbackSubject,
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
+  async sendDocumentRevisionRequestedEmail(
+    to: string,
+    data: {
+      name: string;
+      program?: string;
+      documentName: string;
+      note: string;
+      brand?: any;
+    },
+  ) {
+    const templateData = {
+      name: data.name,
+      program: data.program,
+      documentName: data.documentName,
+      note: data.note,
+      documentsUrl: this.resolveDocumentsUrl(data.brand),
+      brand: data.brand,
+    };
+    const fallbackSubject = data.brand?.name
+      ? `Revision Needed for Your ${data.documentName} - ${data.brand.name}`
+      : `Revision Needed for Your ${data.documentName}`;
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'document_revision_requested',
+      fallbackTemplateName: 'document-revision-requested',
+      fallbackSubject,
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
   // On-demand "send me my receipt" email — distinct from
   // sendPaymentSuccessEmail because it can be triggered by an admin long
   // after the payment happened, so it must never say "payment successful".

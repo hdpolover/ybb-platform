@@ -468,6 +468,224 @@ describe('EventsController.handleApplicationAccepted', () => {
   });
 });
 
+describe('EventsController.handleDocumentApproved', () => {
+  let controller: EventsController;
+  let sendDocumentApprovedEmail: jest.Mock;
+
+  beforeEach(() => {
+    sendDocumentApprovedEmail = jest.fn().mockResolvedValue(undefined);
+    controller = new EventsController(
+      { sendDocumentApprovedEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess: jest.fn().mockResolvedValue({
+          shouldProcess: true,
+          dedupeKey: 'key',
+          reason: 'new',
+        }),
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+      {
+        emit: jest.fn().mockResolvedValue(true),
+      } as unknown as RabbitMQProducerService,
+    );
+  });
+
+  it('resolves the template and sends the approval email', async () => {
+    const payload = {
+      email: 'jane@example.com',
+      participant_name: 'Jane Doe',
+      program_name: 'YBB Summit 2026',
+      document_name: 'Agreement Letter',
+      application_id: 'app-1',
+      document_id: 'doc-1',
+      outcome: 'approved',
+      note: null,
+    };
+
+    await controller.handleDocumentApproved(payload, makeContext());
+
+    expect(sendDocumentApprovedEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({
+        name: 'Jane Doe',
+        program: 'YBB Summit 2026',
+        documentName: 'Agreement Letter',
+      }),
+    );
+  });
+
+  it('does nothing when the payload has no email', async () => {
+    const payload = { document_name: 'Agreement Letter' };
+
+    await controller.handleDocumentApproved(payload, makeContext());
+
+    expect(sendDocumentApprovedEmail).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the payload has no document_name', async () => {
+    const payload = { email: 'jane@example.com' };
+
+    await controller.handleDocumentApproved(payload, makeContext());
+
+    expect(sendDocumentApprovedEmail).not.toHaveBeenCalled();
+  });
+
+  it('does not crash the consumer when the send fails', async () => {
+    sendDocumentApprovedEmail.mockRejectedValueOnce(new Error('smtp down'));
+    const payload = {
+      email: 'jane@example.com',
+      document_name: 'Agreement Letter',
+    };
+
+    await expect(
+      controller.handleDocumentApproved(payload, makeContext()),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe('EventsController.handleDocumentRejected', () => {
+  let controller: EventsController;
+  let sendDocumentRejectedEmail: jest.Mock;
+
+  beforeEach(() => {
+    sendDocumentRejectedEmail = jest.fn().mockResolvedValue(undefined);
+    controller = new EventsController(
+      { sendDocumentRejectedEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess: jest.fn().mockResolvedValue({
+          shouldProcess: true,
+          dedupeKey: 'key',
+          reason: 'new',
+        }),
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+      {
+        emit: jest.fn().mockResolvedValue(true),
+      } as unknown as RabbitMQProducerService,
+    );
+  });
+
+  it('resolves the template and sends the rejection email with the note', async () => {
+    const payload = {
+      email: 'jane@example.com',
+      participant_name: 'Jane Doe',
+      program_name: 'YBB Summit 2026',
+      document_name: 'Agreement Letter',
+      outcome: 'rejected',
+      note: 'The signature page is missing.',
+    };
+
+    await controller.handleDocumentRejected(payload, makeContext());
+
+    expect(sendDocumentRejectedEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({
+        name: 'Jane Doe',
+        documentName: 'Agreement Letter',
+        note: 'The signature page is missing.',
+      }),
+    );
+  });
+
+  it('does nothing when the payload has no note', async () => {
+    const payload = {
+      email: 'jane@example.com',
+      document_name: 'Agreement Letter',
+    };
+
+    await controller.handleDocumentRejected(payload, makeContext());
+
+    expect(sendDocumentRejectedEmail).not.toHaveBeenCalled();
+  });
+
+  it('does not crash the consumer when the send fails', async () => {
+    sendDocumentRejectedEmail.mockRejectedValueOnce(new Error('smtp down'));
+    const payload = {
+      email: 'jane@example.com',
+      document_name: 'Agreement Letter',
+      note: 'Missing page.',
+    };
+
+    await expect(
+      controller.handleDocumentRejected(payload, makeContext()),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe('EventsController.handleDocumentRevisionRequested', () => {
+  let controller: EventsController;
+  let sendDocumentRevisionRequestedEmail: jest.Mock;
+
+  beforeEach(() => {
+    sendDocumentRevisionRequestedEmail = jest.fn().mockResolvedValue(undefined);
+    controller = new EventsController(
+      { sendDocumentRevisionRequestedEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess: jest.fn().mockResolvedValue({
+          shouldProcess: true,
+          dedupeKey: 'key',
+          reason: 'new',
+        }),
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+      {
+        emit: jest.fn().mockResolvedValue(true),
+      } as unknown as RabbitMQProducerService,
+    );
+  });
+
+  it('resolves the template and sends the revision-requested email with the note', async () => {
+    const payload = {
+      email: 'jane@example.com',
+      participant_name: 'Jane Doe',
+      program_name: 'YBB Summit 2026',
+      document_name: 'Agreement Letter',
+      outcome: 'revision_requested',
+      note: 'Please re-scan page 2, it is blurry.',
+    };
+
+    await controller.handleDocumentRevisionRequested(payload, makeContext());
+
+    expect(sendDocumentRevisionRequestedEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({
+        name: 'Jane Doe',
+        documentName: 'Agreement Letter',
+        note: 'Please re-scan page 2, it is blurry.',
+      }),
+    );
+  });
+
+  it('does nothing when the payload has no note', async () => {
+    const payload = {
+      email: 'jane@example.com',
+      document_name: 'Agreement Letter',
+    };
+
+    await controller.handleDocumentRevisionRequested(payload, makeContext());
+
+    expect(sendDocumentRevisionRequestedEmail).not.toHaveBeenCalled();
+  });
+
+  it('does not crash the consumer when the send fails', async () => {
+    sendDocumentRevisionRequestedEmail.mockRejectedValueOnce(
+      new Error('smtp down'),
+    );
+    const payload = {
+      email: 'jane@example.com',
+      document_name: 'Agreement Letter',
+      note: 'Blurry scan.',
+    };
+
+    await expect(
+      controller.handleDocumentRevisionRequested(payload, makeContext()),
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe('EventsController.handleSubmissionReminder', () => {
   let controller: EventsController;
   let sendSubmissionReminderEmail: jest.Mock;
