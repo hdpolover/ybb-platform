@@ -16,11 +16,25 @@ export class DocumentItemDto {
     @ApiProperty()
     fileUrl?: string;
 
-    @ApiProperty({ enum: ['pending_upload', 'under_review', 'verified', 'rejected', 'optional', 'available'] })
+    // For agreement letters this mirrors submissionStatus exactly (see
+    // get-portal-documents.handler.ts's `participantDoc?.submissionStatus ??
+    // 'pending_upload'`), so the two fields cannot drift for that
+    // documentType. 'available' and 'verified' are produced only for the
+    // other branches (program resources, complementary docs, the LOA tile),
+    // never for agreement letters.
+    @ApiProperty({
+        enum: [
+            'not_required',
+            'pending_upload',
+            'uploaded',
+            'approved',
+            'rejected',
+            'revision_requested',
+            'available',
+            'verified',
+        ],
+    })
     status: string;
-
-    @ApiProperty({ required: false })
-    rejectionReason?: string;
 
     @ApiProperty({ required: false }) signedCopyUrl?: string;
     @ApiProperty({ required: false }) submissionStatus?: string;

@@ -32,6 +32,7 @@ import { GetApplicationReviewHandler } from '../application/queries/handlers/get
 import { UpsertApplicationReviewHandler } from '../application/commands/handlers/upsert-application-review.handler';
 import { RegistrationFeeMismatchesHandler } from '../application/queries/handlers/registration-fee-mismatches.handler';
 import { ReviewDocumentHandler } from '../application/commands/handlers/review-document.handler';
+import { GetDocumentReviewQueueHandler } from '../application/queries/handlers/get-document-review-queue.handler';
 
 const noopHandler = { execute: jest.fn() };
 
@@ -61,6 +62,7 @@ function buildProviders(overrides: Record<string, unknown> = {}) {
     { provide: UpsertApplicationReviewHandler, useValue: overrides.upsertApplicationReviewHandler ?? noopHandler },
     { provide: RegistrationFeeMismatchesHandler, useValue: overrides.registrationFeeMismatchesHandler ?? noopHandler },
     { provide: ReviewDocumentHandler, useValue: overrides.reviewDocumentHandler ?? noopHandler },
+    { provide: GetDocumentReviewQueueHandler, useValue: overrides.getDocumentReviewQueueHandler ?? noopHandler },
   ];
 }
 

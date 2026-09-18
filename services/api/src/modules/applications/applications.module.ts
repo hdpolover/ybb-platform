@@ -5,6 +5,7 @@ import { ProgramsModule } from '@modules/programs/programs.module';
 import { ApplicationsController } from './presentation/applications.controller';
 import { PaymentModule } from '@modules/payments/payment.module';
 import { PaymentsModule } from '@modules/payments/payments.module';
+import { FilesModule } from '@modules/files/files.module';
 
 // Command Handlers
 import { CreateApplicationHandler } from './application/commands/handlers/create-application.handler';
@@ -25,6 +26,7 @@ import { ListApplicationsHandler } from './application/queries/handlers/list-app
 import { ExportApplicationsHandler } from './application/queries/handlers/export-applications.handler';
 import { GetApplicationReviewHandler } from './application/queries/handlers/get-application-review.handler';
 import { RegistrationFeeMismatchesHandler } from './application/queries/handlers/registration-fee-mismatches.handler';
+import { GetDocumentReviewQueueHandler } from './application/queries/handlers/get-document-review-queue.handler';
 
 // Infrastructure
 import { ApplicationRepository } from './infrastructure/persistence/application.repository';
@@ -46,7 +48,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
   // transitively, so pulling in the full surface here handed four consumer
   // containers their own queue pollers - the exact fan-out prisma.module.ts
   // was narrowed to prevent.
-  imports: [PrismaModule, AuthModule, ParticipantsModule, ProgramsModule, MetricsCoreModule, PaymentModule, PaymentsModule, CacheModule],
+  imports: [PrismaModule, AuthModule, ParticipantsModule, ProgramsModule, MetricsCoreModule, PaymentModule, PaymentsModule, CacheModule, FilesModule],
   controllers: [ApplicationsController],
   providers: [
     // Command Handlers
@@ -67,6 +69,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
     ExportApplicationsHandler,
     GetApplicationReviewHandler,
     RegistrationFeeMismatchesHandler,
+    GetDocumentReviewQueueHandler,
 
     // Infrastructure
     ApplicationMapper,
