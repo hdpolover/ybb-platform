@@ -167,6 +167,182 @@ No separate table was needed and no new boolean flag column was needed —
 paid-column state is sufficient to make every reconciler pass a safe no-op
 against imported data, verified against the actual WHERE clauses above.
 
+### Architecture finding: no second table to write, verified not assumed
+
+Investigated whether a Go-payment-service-owned row is *also* required for a
+migrated payment to read as "paid" everywhere the admin dashboard/portal
+check, per the task brief's explicit ask. Answer: **no** — `application_invoices`
+lives in the API's own Postgres (`services/api/prisma/schema/applications.prisma:252`,
+same `DATABASE_URL` as `participant_applications`), and every read path that
+displays payment status queries that table (or the application's own
+`registrationPaymentStatus`/`programPaymentStatus` columns) directly via
+Prisma, never through a Go-service RPC:
+
+- `services/api/src/modules/portal/application/queries/handlers/get-portal-dashboard.handler.ts:139,303`
+  — `this.prisma.participantApplication.findFirst({ select: { registrationPaymentStatus: true, ... } })`.
+- `services/api/src/modules/applications/application/dto/application-response.dto.ts:75-76`
+  — admin application list/detail DTO exposes `registrationPaymentStatus`/
+  `programPaymentStatus` straight off the Prisma row.
+- `services/api/src/modules/payments/infrastructure/services/payment-reconciliation.service.ts`,
+  `payment-events.controller.ts`, `registration-fee-gate.service.ts`,
+  `confirm-portal-payment.handler.ts` — all read/write the same two columns
+  directly, no Go-service call in the read path.
+
+The Go payment service (`services/payment/`) owns a **separate** database
+(`ybb_payments_db`) with its own `payment_intents`/`payment_transactions`
+tables (`payment_intents`/`payment_transactions` per migration `005_reset_payment_v2.sql`,
+superseding a v1 `payments` table that migration `014_drop_legacy_payments_table.sql`
+dropped outright — that dropped table is unrelated to the *legacy CI4* system's
+`payments` table this import reads from; same name, two different, unrelated
+systems, one already gone). Those tables are keyed by `external_intent_id`/
+`external_transaction_id`, which this import leaves `NULL` on every row by
+design (see "Payment isolation" above) — so no Go-service row is ever created
+or required for an imported invoice, and none is missing: nothing in the read
+paths above ever joins out to the Go service to render payment status.
+**Conclusion: writing `application_invoices` + the two `participant_applications`
+payment-status columns is sufficient by itself.** No second table needed, and
+none was written.
+
+### Payment import — implemented, with a schema caveat
+
+`migrate-legacy-participants.cjs` now imports legacy `payments` into
+`application_invoices`, one new row per legacy payment, and writes the parent
+application's `registration_payment_status`/`program_payment_status` to match
+(computed from *all* the participant's payments for that program, not just
+the newest one — see "Status aggregation" below). Implementation:
+
+- **Batched per legacy program** (once per `--program`, joined through
+  `participants` exactly like the existing agreement-letter/program-document
+  manifest queries), never per-participant-row — same precomputation pattern
+  as `tiersByProgramId`/`essaysByProgramId`.
+- **Tier resolution**: each payment's `program_payment_id` is matched against
+  `program_pricing_tiers.legacy_id` (the same map `tiersByProgramId` already
+  builds for essay/score import) to get both the new `pricing_tier_id` (NOT
+  NULL on `application_invoices`, so an unmatched payment cannot be inserted
+  and is reported as `invoicesUnmatchedTier` instead of guessed) and the fee
+  type, which decides registration vs program-fee category
+  (`registration_fee` -> `registrationPaymentStatus`; every other fee type ->
+  `programPaymentStatus` — the new schema has no separate program_fee_1 vs
+  program_fee_2 status column, only one "program fee" column).
+- **Status**: `mapPaymentRowStatus` (already existed, already fixed to never
+  emit `processing`) applied per payment row.
+- **Amount/currency authority**: taken from the legacy `payments` row itself
+  (the actual amount attempted/settled), not from the tier's *current* price
+  — a historical payment must reflect what was actually charged at the time,
+  which can differ from today's `program_pricing_tiers.price` after a later
+  price edit. `program_payments`/tier pricing is only used to resolve
+  *which* tier/category, never the amount.
+- **xendit_payment/midtrans_payment**: LEFT JOINed for one purpose only — an
+  informational `payment_method` label when `payments` itself doesn't carry
+  one. Once `external_intent_id`/`external_transaction_id` are unconditionally
+  `NULL` on every imported row (a hard, already-made decision — see above),
+  nothing else on those two gateway detail tables is relevant to import;
+  there was no second "authoritative" field to reconcile between the three
+  tables once external ids are intentionally dropped.
+- **`external_intent_id`/`external_transaction_id`**: always `NULL`, per the
+  existing decision — unchanged.
+- **`legacy_id`**: the legacy `payments.id`, unique per invoice row (one
+  legacy payment = one new invoice row, full retry history preserved) —
+  except see "unpaid supersession" below.
+
+**Schema caveat — be honest about what could not be verified**: this session,
+like the prior one (see "Real dry-run against prod/legacy — blocked, not
+run"), has no working legacy MySQL credentials (checked again: no legacy
+MySQL container on the VPS, no credentials in any running container's env).
+The column names used above (`payments.participant_id`, `.program_payment_id`,
+`.amount`, `.currency`, `.status`, `.paid_at`, `.payment_method`,
+`xendit_payment.payment_id`, `midtrans_payment.payment_id`) are **inferred**
+from the naming convention already verified elsewhere in this same script
+(`participant_essays.participant_id`/`.program_essay_id`,
+`program_payments` resolved via `program_pricing_tiers.legacy_id`), not
+sampled from a real legacy row. **This must be confirmed against one real
+`payments` row (`DESCRIBE payments; SELECT * FROM payments LIMIT 1;` and the
+same for `xendit_payment`/`midtrans_payment`) before the real cutover run.**
+If a column name differs, the query fails loudly (MySQL "unknown column"
+error) rather than silently importing wrong data — it does not fail
+partially or produce corrupt rows.
+
+### Status aggregation (multiple payment attempts per fee)
+
+A participant can have several legacy payment rows for the same fee (a failed
+attempt followed by a successful retry, or several never-completed PENDING
+attempts). Per category (registration/program), the aggregate status is the
+*best* one seen: `paid` beats `failed` beats `unpaid` — if the fee was ever
+completed, that's the truth for the category regardless of earlier failed or
+abandoned attempts. This never invents a `processing`/`refunded`/`cancelled`
+status; legacy `payment_status` has no equivalent codes for those (see
+`mapLegacyPayStatus`).
+
+**Backfill on re-run**: this computation now runs for an *already-migrated*
+application too (previously the script `continue`d immediately on finding an
+existing `legacy_id` match, skipping payment import entirely) — a re-run
+against an application created by an older version of this script (which
+hardcoded both payment-status columns to `'unpaid'`) backfills the correct
+status via `UPDATE ... WHERE id = $3`, and mints any invoice rows that don't
+exist yet by `legacy_id`.
+
+### Unpaid supersession (constraint-driven, not a data-loss shortcut)
+
+`application_invoices` has a partial unique index,
+`application_invoices_application_tier_unpaid_key` (migration
+`20260909100000_add_application_invoice_tier_unique_index`), on
+`(application_id, pricing_tier_id) WHERE status IN ('unpaid', 'processing')`
+— added to stop a real double-click race from minting two live UNPAID
+invoices for the same tier. It does not distinguish a live race from a
+historical import: inserting two literal-`'unpaid'` legacy payments for the
+same (application, tier) — e.g. two abandoned PENDING attempts — would hit
+this constraint. Only the **most recent** `'unpaid'` payment per tier is
+therefore inserted; earlier ones that also mapped to `'unpaid'` are counted
+in `invoicesSupersededUnpaid` and never written. This loses no settlement
+information: none of the superseded rows ever completed anything (that's
+what `'unpaid'` means here). `'paid'`/`'failed'` rows are **not** covered by
+that partial index (its predicate excludes them), so multiple paid/failed
+attempts for the same tier import in full, preserving real retry history for
+fees that did eventually settle.
+
+## Documents (agreement letters / program documents) — implemented
+
+Previously a documented gap ("Legacy -> new entity mapping" listed this as
+aspirational; `rehost-legacy-media.cjs`'s own README section called out
+`columnSkippedNoTargetRow`/"Known gap, by design" for exactly this reason —
+no `participant_documents` row existed yet for a rehosted letter/document to
+attach to). `migrate-legacy-participants.cjs` now creates that row, which
+means a subsequent `rehost-legacy-media.cjs` run against the same manifest no
+longer skips those two sources (nothing needed to change in that script — the
+gap was the missing target row, not its own logic).
+
+- Agreement letters (`participant_agreement_letters`) and program documents
+  (`participant_program_documents`) are already fetched once per legacy
+  program (batched, joined through `participants`) for the media manifest —
+  reused here rather than re-querying.
+- Runs once per program **after** every participant row has resolved (or
+  created) its application, via `applicationIdByLegacyParticipantId` (keyed
+  by the legacy `participants.id`, same key the manifest's own
+  `parent_legacy_id` column already uses).
+- `type` values: `'agreement_letter'` for letters, `'complementary_document'`
+  for program documents. **Correction to this README's own original mapping
+  table** ("Legacy -> new entity mapping" above says `type=requirement`) —
+  that value doesn't exist anywhere in the real `DocumentType` usage;
+  verified against `create-update-program-content.dto.ts:1506-1507,1587-1588`
+  and `upload-signed-copy.handler.ts:95`, whose actual enum is
+  `agreement_letter | complementary_document | letter_of_acceptance |
+  letter_of_invitation`. Left uncorrected in that earlier section on purpose
+  (history of what was believed before verification) — this section is the
+  corrected, implemented behavior.
+- `file_url` is the legacy URL **as-is** (`storage.ybbfoundation.com`,
+  pointing at the legacy host), matching the same "keep URL as-is, rehost
+  bytes lazily/separately" decision already made for
+  `participants.picture_url`/`.resume_url` in "Media / file URL rehosting"
+  above — not blocked on `rehost-legacy-media.cjs` having run first.
+- `legacy_id` = the letter's/document's own legacy id (already an existing
+  column on `participant_documents`, per "`legacy_id` columns needed" below —
+  no new migration needed for this).
+- A letter/document whose parent legacy participant has no resolved
+  application yet (shouldn't happen in a full run since letters/documents are
+  always joined through a `participants` row that the same program's row
+  loop just processed, but possible with `--limit` slicing) is counted as
+  `documentsUnmatchedApp`, never guessed or crashed on.
+
 ## Side-effect bypass
 
 No Prisma `$use` middleware exists (`prisma.service.ts` only chains two
@@ -391,6 +567,29 @@ Either way, the true legacy outcome is never lost: it is always recorded in
 of mode, so switching from `flatten` to `preserve` later needs a small
 migration script (read `legacy_outcome`, write `status`), not a re-import.
 
+## Completeness audit — what `--apply` actually writes today
+
+Exact line numbers in the current `migrate-legacy-participants.cjs`, not
+assumed from this README's prose:
+
+| Item | Implemented? | Where |
+|---|---|---|
+| Essay answers (`essay_answers` JSON) | **Yes** | Built at `migrate-legacy-participants.cjs:591-615`; written at `:649` (`JSON.stringify(essayAnswers)`, `participant_applications.essay_answers` column) |
+| Scores (`score_total`/`score_status`) | **Yes** | Computed at `:619-620`; written at `:652` (`scoreTotal, scoreStatus` params of the `participant_applications` INSERT) |
+| `participant_statuses`-derived application status | **Yes** | `mapApplicationStatus` at `:585`, written at `:647` (`appStatus` param); real legacy outcome preserved in `personal_data.legacy_outcome` regardless of `--status-mode` per "Application status mode" above |
+| Payments -> `application_invoices` | **Yes (this session)** | Precomputed per-program at (essay-order precompute block, `payments`/`xendit_payment`/`midtrans_payment` batched read, ~`:255-300`); category/status resolved at `:522-546`; invoice rows inserted at `:681-697`; parent `registration_payment_status`/`program_payment_status` written at `:647` (new app) or `:665-669` (`UPDATE`, already-existing app) — see "Payment import" above |
+| Agreement letters -> `participant_documents` | **Yes (this session)** | `:709-724` |
+| Program documents -> `participant_documents` | **Yes (this session)** | `:727-744` |
+
+Before this session, the last three rows were **not** implemented: payment
+status was hardcoded to `'unpaid'`/`'unpaid'` on every application insert (the
+old, single-string `VALUES (...,'unpaid','unpaid',...)` this session
+replaced with computed `$4`/`$5` params), no `application_invoices` rows were
+ever created, and agreement letters/program documents were recorded **only**
+in the media manifest CSV (never as a `participant_documents` row) — this
+matches `rehost-legacy-media.cjs`'s own README section 4 ("Known gap, by
+design") describing exactly that missing target row.
+
 ## Owner-required breakdown
 
 Every run (dry-run or apply) prints, per legacy program and as a grand
@@ -456,6 +655,91 @@ program-4 slice, because no real legacy data was available locally (see
 next section) — it validates the *mechanism* (dedupe, idempotency, status
 flattening, limit slicing, zero-write dry-run) with real executed SQL, not
 hand-derived expectations, but does not stand in for a real-data dry run.
+
+## Local apply test — payments/invoices/documents (this session)
+
+Separate run, done to verify the payment-import and document-import work in
+this session (the prior "Local apply test" above predates both). Fresh
+`postgres:16-alpine` + `mysql:8.0` in Docker (both destroyed after), real
+`prisma migrate deploy` (all 34 migrations, same as before). Synthetic legacy
+schema built by hand for `payments`/`xendit_payment`/`midtrans_payment`
+(column names per the "Payment import — schema caveat" inference above, since
+no real legacy schema was available to copy) plus the existing
+`users`/`participants`/`participant_statuses`/`participant_essays`/
+`participant_agreement_letters`/`participant_program_documents` tables.
+Seeded 2 programs (legacy id 1 and 4), 4 pricing tiers (2 per program:
+`registration_fee` + `program_fee_1`, `legacy_id` = synthetic
+`program_payments.id`), 1 essay, 5 users/participants across the two
+programs, 8 synthetic payments, and 1 agreement letter + 1 program document
+(program 4) — no real names, emails, or amounts.
+
+**Bugs this test caught before they could reach a real run** (fixed in this
+session, not left as findings-only):
+1. **`INSERT has more target columns than expressions`** — the
+   `participant_applications` INSERT's placeholder count was off by one after
+   replacing the hardcoded `'unpaid','unpaid'` literals with
+   `$4`/`$5` computed params; the VALUES clause still said `$16` where it
+   needed `$17`. Caught on the very first `--apply` row.
+2. **Partial-unique-index collision on a real retry case**: two abandoned
+   `PENDING` legacy payments for the same (application, tier) both mapped to
+   `'unpaid'` and the naive "keep first, skip rest" dedupe kept the *older*
+   attempt while my own README text claimed "most recent" — fixed to
+   explicitly `ORDER BY pay.created_at ASC, pay.id ASC` and keep the
+   last-seen entry per tier, verified by re-checking which `legacy_id` ended
+   up in the table (the later attempt, as intended).
+3. **`participant_documents.legacy_id` cross-table collision**: agreement
+   letters and program documents are two independent legacy auto-increment
+   sequences that both start at 1; inserting a program document's raw
+   `doc.id` as `legacy_id` collided with an agreement letter of the same id
+   and was silently absorbed by `ON CONFLICT (legacy_id) DO NOTHING`,
+   producing 1 document row instead of 2. Fixed by storing program documents
+   as `-doc.id` (negated) — verified afterward: both rows present with
+   distinct `legacy_id` (`1` and `-1`).
+
+**Results, after the fixes above, on a clean database:**
+- `--apply --program 1 --program 4`: `usersNew=5`, `participantsNew=5`,
+  `appsNew=5`, `invoicesNew=8`, `invoicesSupersededUnpaid=1` (the
+  two-PENDING-attempt case), `documentsNew=2` (1 letter + 1 program
+  document). A separate earlier run against the same seed data but with a
+  pre-existing native user planted first (email-dedupe path, same mechanism
+  as the original "Local apply test" above) also exercised `usersMatched=1`
+  correctly linking `legacy_id` onto the existing row rather than
+  duplicating it. Verified directly in Postgres: 8 `application_invoices`
+  rows, **0 in `'processing'`**, statuses matching the seeded legacy payment
+  outcomes exactly per participant (e.g. a participant with a paid
+  registration + pending program fee landed at
+  `registration_payment_status='paid'`, `program_payment_status='unpaid'`; a
+  participant with a failed-then-paid program fee landed at `'paid'` — paid
+  beats failed, per "Status aggregation" above).
+- **Idempotent rerun**: `--apply` again on the same data —
+  `usersNew=0, participantsNew=0, appsNew=0, invoicesNew=0, documentsNew=0`,
+  everything reported `matched`/`reused`/`skipped-existing`
+  (`invoicesSkippedExisting=8`, `documentsSkippedExisting=2`). Postgres row
+  counts identical before/after (5 users / 5 participants / 5 applications /
+  8 invoices / 2 documents), confirmed with a direct re-query, not just the
+  script's own printed counters.
+- **Paid-status verification through the real read path, not asserted**:
+  called the actual generated `@prisma/client` (via `@prisma/adapter-pg`,
+  the same driver adapter `prisma.service.ts` uses) with the *exact*
+  `currentApplicationWhere`/`currentApplicationOrderBy` helpers
+  (`current-application.query.ts:45-58`) and the `select` shape from
+  `get-portal-dashboard.handler.ts:55-61,139` (quoted verbatim into a
+  throwaway script, not reimplemented) against a participant whose legacy
+  registration payment was seeded as `PAID`. Result:
+  `{"status":"submitted","registrationPaymentStatus":"paid","programPaymentStatus":"unpaid"}`.
+  The same handler file's own lock-check
+  (`switchLockedStatuses = new Set(['processing','paid'])`,
+  `get-portal-dashboard.handler.ts:295,302-304`) treats `registrationPaymentStatus`
+  the same lowercase-string way this test's row satisfies. This is the real
+  Prisma query (real generated client, real driver adapter) the portal
+  dashboard runs, executed against this migration's actual output rows —
+  not a hand-written SQL assertion standing in for it.
+- No real legacy MySQL, prod Postgres, or any non-local database was written
+  to or read from during this test. Both Docker containers and the temporary
+  verification script were removed afterward; no generated Prisma client
+  artifacts were left behind (`node_modules/.prisma`/`node_modules/@prisma/client`
+  did not exist in this checkout before this test and were removed again
+  after).
 
 ## Real dry-run against prod/legacy — blocked, not run
 

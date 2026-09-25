@@ -95,6 +95,29 @@ function mapPaymentRowStatus(statusCode) {
   return mapLegacyPayStatus(statusCode);
 }
 
+// `program_pricing_tiers.fee_type` -> which application column a settled
+// invoice counts against. registration_fee is its own column; every other
+// fee type (program_fee_1/2, full_fee, custom_fee) rolls up into the single
+// programPaymentStatus column -- the new schema has no per-tier payment
+// status column, only registration vs "the program fee", matching the
+// legacy program_payments.category split called out in README "Status
+// mapping" (registration vs program_fee_1/program_fee_2).
+function invoiceCategoryForFeeType(feeType) {
+  return feeType === 'registration_fee' ? 'registration' : 'program';
+}
+
+// Aggregate several invoices' statuses for the same category (a participant
+// can have several legacy payment attempts -- retries, a failed try followed
+// by a successful one, etc.) into the single status the application column
+// gets. paid beats failed beats unpaid: if the participant ever completed
+// the fee, that's the truth for the category regardless of earlier failed
+// attempts. Never produces 'processing' or 'refunded'/'cancelled' -- legacy
+// payment_status has no equivalent codes for those (see mapLegacyPayStatus).
+const PAYMENT_STATUS_RANK = { unpaid: 0, failed: 1, paid: 2 };
+function combinePaymentStatus(a, b) {
+  return (PAYMENT_STATUS_RANK[b] ?? 0) > (PAYMENT_STATUS_RANK[a] ?? 0) ? b : a;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const apply = args.includes('--apply');
@@ -248,6 +271,68 @@ async function main() {
     legacyEssayOrderByProgramId.set(legacyProgramId, r);
   }
 
+  // Legacy payments, once per legacy program (batched via the same
+  // participants-join pattern as the agreement-letter/program-document
+  // manifest queries above), never per-participant-row inside the loop.
+  //
+  // SCHEMA CAVEAT (be honest, don't guess silently): this session has no
+  // working legacy MySQL credentials for live DESCRIBE/sampling (same
+  // blocker as README "Real dry-run against prod/legacy -- blocked, not
+  // run" -- checked again this session: no legacy MySQL container on the
+  // VPS, no credentials in any container env). Column names below
+  // (`payments.participant_id`, `.program_payment_id`, `.amount`,
+  // `.currency`, `.status`, `.paid_at`, `.payment_method`,
+  // `xendit_payment.payment_id`, `midtrans_payment.payment_id`) are inferred
+  // from the naming convention already VERIFIED elsewhere in this same
+  // script (participant_essays.participant_id/program_essay_id,
+  // program_payments resolved via program_pricing_tiers.legacy_id -- see
+  // README "Legacy -> new entity mapping" and "Payment isolation"), not
+  // sampled from a real row. MUST be confirmED against one real legacy
+  // `payments` row (`DESCRIBE payments; SELECT * FROM payments LIMIT 1`)
+  // confirmed against real data before the real cutover run -- see README
+  // "Payment import -- schema caveat".
+  //
+  // xendit_payment/midtrans_payment are LEFT JOINed only to fill the
+  // informational `payment_method` label when `payments` itself doesn't
+  // carry one -- external_transaction_id/external_intent_id are NEVER read
+  // from them, since every imported invoice leaves both NULL unconditionally
+  // (see README "Payment isolation"); nothing else on those two gateway
+  // tables is relevant once the external ids are intentionally dropped.
+  const paymentsByParticipantId = new Map(); // legacy participants.id -> [{id, program_payment_id, amount, currency, status, paid_at, payment_method}]
+  for (const legacyProgramId of activeProgramIds) {
+    const rows = await mq(
+      `SELECT pay.id, pay.participant_id, pay.program_payment_id, pay.amount, pay.currency, pay.status,
+              pay.paid_at, pay.created_at, pay.payment_method AS pay_payment_method,
+              xp.id AS xendit_id, mp.id AS midtrans_id
+       FROM payments pay
+       JOIN participants p ON p.id = pay.participant_id
+       LEFT JOIN xendit_payment xp ON xp.payment_id = pay.id
+       LEFT JOIN midtrans_payment mp ON mp.payment_id = pay.id
+       WHERE p.program_id = ?
+       ORDER BY pay.created_at ASC, pay.id ASC`,
+      [legacyProgramId],
+    );
+    for (const r of rows) {
+      const list = paymentsByParticipantId.get(r.participant_id) || [];
+      list.push({
+        id: r.id,
+        programPaymentId: r.program_payment_id,
+        amount: r.amount,
+        currency: r.currency || 'IDR',
+        status: r.status,
+        paidAt: r.paid_at,
+        createdAt: r.created_at,
+        paymentMethod: r.pay_payment_method || (r.xendit_id ? 'xendit' : null) || (r.midtrans_id ? 'midtrans' : null) || null,
+      });
+      paymentsByParticipantId.set(r.participant_id, list);
+    }
+  }
+
+  // Populated as applications are resolved (new or existing) in the per-row
+  // loop below; used after that loop to attach agreement letters / program
+  // documents (fetched once per program above) to the right application.
+  const applicationIdByLegacyParticipantId = new Map();
+
   // ---------- Existing new-prod users, for email-match reporting ----------
   const counts = {};
   const bump = (k, n = 1) => (counts[k] = (counts[k] || 0) + n);
@@ -259,6 +344,8 @@ async function main() {
       participants: 0, usersNew: 0, usersMatched: 0,
       participantsNew: 0, participantsReused: 0,
       appsNew: 0, appsSkippedExisting: 0, orphanNoStatus: 0, invalidEmail: 0, emptyName: 0, essayMismatchPrograms: 0,
+      invoicesNew: 0, invoicesSkippedExisting: 0, invoicesUnmatchedTier: 0, invoicesSupersededUnpaid: 0,
+      documentsNew: 0, documentsSkippedExisting: 0, documentsUnmatchedApp: 0,
     };
     perProgram[legacyProgramId] = stat;
 
@@ -400,19 +487,97 @@ async function main() {
       }
 
       // ---- Application (per legacy participants row = per program registration) ----
+      // Unlike the old version, an already-imported application is no longer a hard
+      // `continue`: invoice import (below) must still run against it on a re-run so a
+      // partial prior run (e.g. an older script version that hardcoded payment status
+      // to 'unpaid') gets backfilled, not silently skipped forever. `applicationId`
+      // carries through to the invoice step regardless of which branch resolved it.
+      let applicationId = null;
+      let isNewApplication = false;
       const existingApp = await pg.query(`SELECT id FROM participant_applications WHERE legacy_id = $1`, [row.id]);
       if (existingApp.rows.length) {
+        applicationId = existingApp.rows[0].id;
         stat.appsSkippedExisting++;
         bump('appsSkippedExisting');
-        continue;
-      }
-      if (apply) {
+      } else if (apply) {
         // Duplicate-guard: same participant already has an application for this program natively.
         const dupApp = await pg.query(
           `SELECT id FROM participant_applications WHERE participant_id = $1 AND program_id = $2`,
           [participantId, newProgramId],
         );
-        if (dupApp.rows.length) { stat.appsSkippedExisting++; bump('appsSkippedExisting'); continue; }
+        if (dupApp.rows.length) {
+          applicationId = dupApp.rows[0].id;
+          stat.appsSkippedExisting++;
+          bump('appsSkippedExisting');
+        } else {
+          isNewApplication = true;
+        }
+      } else {
+        // dry-run, no existing/dup row found yet -- would be new.
+        isNewApplication = true;
+      }
+
+      // ---- Payments -> invoices (computed for both new and already-existing
+      // applications, so a re-run backfills payment status onto a partial
+      // prior import instead of leaving it stuck at whatever the application
+      // was originally inserted with). See "Payment import" in README.
+      const paymentsForRow = paymentsByParticipantId.get(row.id) || [];
+      const tiers = tiersByProgramId.get(newProgramId) || [];
+      let registrationPaymentStatus = 'unpaid';
+      let programPaymentStatus = 'unpaid';
+      const invoiceInserts = [];
+      for (const payment of paymentsForRow) {
+        const tier = tiers.find((t) => t.legacy_id === payment.programPaymentId);
+        if (!tier) {
+          // No program_pricing_tiers.legacy_id matches this payment's program_payment_id --
+          // can't mint an invoice (pricing_tier_id is NOT NULL on application_invoices) --
+          // report instead of guessing a tier or silently dropping the payment.
+          stat.invoicesUnmatchedTier++;
+          bump('invoicesUnmatchedTier');
+          continue;
+        }
+        const invoiceStatus = mapPaymentRowStatus(payment.status);
+        const category = invoiceCategoryForFeeType(tier.fee_type);
+        if (category === 'registration') {
+          registrationPaymentStatus = combinePaymentStatus(registrationPaymentStatus, invoiceStatus);
+        } else {
+          programPaymentStatus = combinePaymentStatus(programPaymentStatus, invoiceStatus);
+        }
+        invoiceInserts.push({ payment, tier, invoiceStatus });
+      }
+      // `application_invoices_application_tier_unpaid_key` (partial unique index on
+      // (application_id, pricing_tier_id) WHERE status IN ('unpaid','processing') --
+      // see migration 20260909100000_add_application_invoice_tier_unique_index, added
+      // to stop concurrent ensure-invoice calls double-minting UNPAID rows) would
+      // reject a second literal-'unpaid' invoice for the same tier. A legacy
+      // participant can have several never-completed (PENDING) attempts for the same
+      // fee, all of which map to 'unpaid' (see mapLegacyPayStatus) -- only the most
+      // recent one per tier is actually inserted; the rest are real history but
+      // carry no distinct settlement information (nothing was ever completed on any
+      // of them), so they're reported, not silently dropped, and never written.
+      // 'paid'/'failed' rows are NOT covered by that partial index (predicate is
+      // 'unpaid'/'processing' only) so multiple of those per tier insert without
+      // conflict, preserving real retry history for tiers that did eventually settle.
+      {
+        // paymentsForRow is ordered created_at/id ASC (see the payments query above),
+        // so "keep the latest" means: for 'unpaid' rows, the LAST one seen per tier
+        // wins -- overwrite the map entry rather than skip-on-first-seen, so an
+        // earlier abandoned attempt never shadows a more recent one.
+        const unpaidByTier = new Map();
+        const nonUnpaid = [];
+        for (const item of invoiceInserts) {
+          if (item.invoiceStatus === 'unpaid') {
+            if (unpaidByTier.has(item.tier.id)) {
+              stat.invoicesSupersededUnpaid++;
+              bump('invoicesSupersededUnpaid');
+            }
+            unpaidByTier.set(item.tier.id, item);
+          } else {
+            nonUnpaid.push(item);
+          }
+        }
+        invoiceInserts.length = 0;
+        invoiceInserts.push(...nonUnpaid, ...unpaidByTier.values());
       }
 
       // 109 legacy participants rows (across all programs) have no participant_statuses
@@ -429,72 +594,174 @@ async function main() {
       // never lost even when the stored status is flattened to draft/submitted.
       const legacyOutcome = formStatus === FORM_STATUS.DRAFT ? null : legacyOutcomeLabel(generalStatus);
 
-      // Essay answers, keyed against new program_essays.legacy_id when matched,
-      // else by ordinal position, else a raw legacy-id fallback key.
-      const essayRows = await mq(
-        `SELECT program_essay_id, answer FROM participant_essays WHERE participant_id = ?`,
-        [row.id],
-      );
-      const newEssays = essaysByProgramId.get(newProgramId) || [];
-      const legacyEssayOrder = legacyEssayOrderByProgramId.get(legacyProgramId) || [];
-      const essayAnswers = {};
-      let essayMismatch = false;
-      for (const er of essayRows) {
-        const byLegacyId = newEssays.find((e) => e.legacy_id === er.program_essay_id);
-        if (byLegacyId) {
-          essayAnswers[byLegacyId.id] = er.answer;
-          continue;
+      if (isNewApplication) {
+        // Essay answers, keyed against new program_essays.legacy_id when matched,
+        // else by ordinal position, else a raw legacy-id fallback key.
+        const essayRows = await mq(
+          `SELECT program_essay_id, answer FROM participant_essays WHERE participant_id = ?`,
+          [row.id],
+        );
+        const newEssays = essaysByProgramId.get(newProgramId) || [];
+        const legacyEssayOrder = legacyEssayOrderByProgramId.get(legacyProgramId) || [];
+        const essayAnswers = {};
+        let essayMismatch = false;
+        for (const er of essayRows) {
+          const byLegacyId = newEssays.find((e) => e.legacy_id === er.program_essay_id);
+          if (byLegacyId) {
+            essayAnswers[byLegacyId.id] = er.answer;
+            continue;
+          }
+          const posIdx = legacyEssayOrder.findIndex((le) => le.id === er.program_essay_id);
+          if (posIdx >= 0 && newEssays[posIdx] && legacyEssayOrder.length === newEssays.length) {
+            essayAnswers[newEssays[posIdx].id] = er.answer;
+          } else {
+            essayMismatch = true;
+            essayAnswers[`legacy_essay_${er.program_essay_id}`] = er.answer;
+          }
         }
-        const posIdx = legacyEssayOrder.findIndex((le) => le.id === er.program_essay_id);
-        if (posIdx >= 0 && newEssays[posIdx] && legacyEssayOrder.length === newEssays.length) {
-          essayAnswers[newEssays[posIdx].id] = er.answer;
-        } else {
-          essayMismatch = true;
-          essayAnswers[`legacy_essay_${er.program_essay_id}`] = er.answer;
+        if (essayMismatch) { stat.essayMismatchPrograms = 1; }
+
+        // Scores (denormalized onto the application; legacy has no per-application
+        // separate row either — participants.score_total/score_status already is denormalized there).
+        const scoreTotal = row.score_total != null ? row.score_total : null;
+        const scoreStatus = mapScoreStatus(row.score_status);
+
+        const personalData = {
+          full_name: row.full_name || '',
+          nationality: row.nationality || null,
+          birthdate: row.birthdate ? String(row.birthdate) : null,
+          phone_country_code: row.country_code || null,
+          phone_number: row.phone_number || null,
+          institution: row.institution || null,
+          occupation: row.occupation || null,
+          gender: mapGender(row.gender),
+          // Preserves the real legacy decision outcome even when statusMode='flatten'
+          // collapses `status` itself to draft/submitted (see mapApplicationStatus).
+          legacy_outcome: legacyOutcome,
+          legacy_import: true,
+        };
+
+        stat.appsNew++;
+        bump('appsNew');
+        if (apply) {
+          const insApp = await pg.query(
+            `INSERT INTO participant_applications
+               (program_id, participant_id, status, registration_payment_status, program_payment_status,
+                application_category, personal_data, essay_answers, motivation_letter, achievements, experiences,
+                twibbon_link, score_total, score_status, submission_date, legacy_id, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,now())
+             ON CONFLICT (legacy_id) DO NOTHING
+             RETURNING id`,
+            [
+              newProgramId, participantId, appStatus, registrationPaymentStatus, programPaymentStatus,
+              mapCategory(row.category),
+              JSON.stringify(personalData), JSON.stringify(essayAnswers),
+              row.experiences || null, row.achievements || null, row.experiences || null,
+              row.twibbon_link || null, scoreTotal, scoreStatus,
+              formStatus !== FORM_STATUS.DRAFT ? (row.updated_at || row.created_at) : null,
+              row.id, row.created_at || new Date(),
+            ],
+          );
+          applicationId = insApp.rows.length
+            ? insApp.rows[0].id
+            : (await pg.query(`SELECT id FROM participant_applications WHERE legacy_id=$1`, [row.id])).rows[0].id;
         }
-      }
-      if (essayMismatch) { stat.essayMismatchPrograms = 1; }
-
-      // Scores (denormalized onto the application; legacy has no per-application
-      // separate row either — participants.score_total/score_status already is denormalized there).
-      const scoreTotal = row.score_total != null ? row.score_total : null;
-      const scoreStatus = mapScoreStatus(row.score_status);
-
-      const personalData = {
-        full_name: row.full_name || '',
-        nationality: row.nationality || null,
-        birthdate: row.birthdate ? String(row.birthdate) : null,
-        phone_country_code: row.country_code || null,
-        phone_number: row.phone_number || null,
-        institution: row.institution || null,
-        occupation: row.occupation || null,
-        gender: mapGender(row.gender),
-        // Preserves the real legacy decision outcome even when statusMode='flatten'
-        // collapses `status` itself to draft/submitted (see mapApplicationStatus).
-        legacy_outcome: legacyOutcome,
-        legacy_import: true,
-      };
-
-      stat.appsNew++;
-      bump('appsNew');
-      if (apply) {
+      } else if (apply && applicationId) {
+        // Already-migrated application: backfill payment status computed above in case
+        // an older script version (or a partial run) left it at the hardcoded default.
         await pg.query(
-          `INSERT INTO participant_applications
-             (program_id, participant_id, status, registration_payment_status, program_payment_status,
-              application_category, personal_data, essay_answers, motivation_letter, achievements, experiences,
-              twibbon_link, score_total, score_status, submission_date, legacy_id, created_at, updated_at)
-           VALUES ($1,$2,$3,'unpaid','unpaid',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
-           ON CONFLICT (legacy_id) DO NOTHING`,
-          [
-            newProgramId, participantId, appStatus, mapCategory(row.category),
-            JSON.stringify(personalData), JSON.stringify(essayAnswers),
-            row.experiences || null, row.achievements || null, row.experiences || null,
-            row.twibbon_link || null, scoreTotal, scoreStatus,
-            formStatus !== FORM_STATUS.DRAFT ? (row.updated_at || row.created_at) : null,
-            row.id, row.created_at || new Date(),
-          ],
+          `UPDATE participant_applications SET registration_payment_status = $1, program_payment_status = $2, updated_at = now() WHERE id = $3`,
+          [registrationPaymentStatus, programPaymentStatus, applicationId],
         );
       }
+
+      // Dry-run never inserts a real application row for a new application, so there's
+      // no real id to key documents off of yet -- use a truthy placeholder purely so the
+      // dry-run document counting below can still report "would attach" vs "no target app"
+      // accurately; it is never used for an actual write (guarded by `if (!apply)` there).
+      const applicationIdForMap = applicationId || (dryRun && isNewApplication ? `dry-run:${row.id}` : null);
+      if (applicationIdForMap) applicationIdByLegacyParticipantId.set(row.id, applicationIdForMap);
+
+      // ---- Invoices themselves: one application_invoices row per legacy payment row. ----
+      if (apply && applicationId) {
+        for (const { payment, tier, invoiceStatus } of invoiceInserts) {
+          const ins = await pg.query(
+            `INSERT INTO application_invoices
+               (application_id, pricing_tier_id, amount, currency, status, paid_at, payment_method, legacy_id, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
+             ON CONFLICT (legacy_id) DO NOTHING
+             RETURNING id`,
+            [
+              applicationId, tier.id, payment.amount, payment.currency, invoiceStatus,
+              invoiceStatus === 'paid' ? (payment.paidAt || payment.createdAt) : null,
+              payment.paymentMethod, payment.id, payment.createdAt || new Date(),
+            ],
+          );
+          if (ins.rows.length) { stat.invoicesNew++; bump('invoicesNew'); }
+          else { stat.invoicesSkippedExisting++; bump('invoicesSkippedExisting'); }
+        }
+      } else if (!apply) {
+        // dry-run: report what would be created without an applicationId to attach to yet.
+        stat.invoicesNew += invoiceInserts.length;
+        bump('invoicesNew', invoiceInserts.length);
+      }
+    }
+
+    // ---- Agreement letters / program documents -> participant_documents ----
+    // Runs once per program, after every row above has resolved (or created) its
+    // application, so `applicationIdByLegacyParticipantId` is fully populated for
+    // this program's participants (letters/programDocs are keyed by the legacy
+    // `participants.id`, i.e. `letter.participant_id`/`doc.participant_id` above,
+    // matching how the media manifest already keys `parent_legacy_id`).
+    for (const letter of letters) {
+      const applicationId = applicationIdByLegacyParticipantId.get(letter.participant_id);
+      if (!applicationId) {
+        stat.documentsUnmatchedApp++;
+        bump('documentsUnmatchedApp');
+        continue;
+      }
+      if (!apply) { stat.documentsNew++; bump('documentsNew'); continue; }
+      const ins = await pg.query(
+        `INSERT INTO participant_documents (application_id, name, type, file_url, legacy_id, generated_at)
+         VALUES ($1,$2,'agreement_letter',$3,$4,now())
+         ON CONFLICT (legacy_id) DO NOTHING
+         RETURNING id`,
+        [applicationId, 'Agreement Letter', letter.file_link, letter.id],
+      );
+      if (ins.rows.length) { stat.documentsNew++; bump('documentsNew'); }
+      else { stat.documentsSkippedExisting++; bump('documentsSkippedExisting'); }
+    }
+    for (const doc of programDocs) {
+      const applicationId = applicationIdByLegacyParticipantId.get(doc.participant_id);
+      if (!applicationId) {
+        stat.documentsUnmatchedApp++;
+        bump('documentsUnmatchedApp');
+        continue;
+      }
+      if (!apply) { stat.documentsNew++; bump('documentsNew'); continue; }
+      // 'complementary_document' matches the real DocumentType strings used elsewhere
+      // in the app (create-update-program-content.dto.ts) -- NOT 'requirement', which
+      // this migration's own README mapping table used before this was verified against
+      // actual code; see README "Documents -- type value correction".
+      //
+      // legacy_id = -doc.id (negated), NOT doc.id: participant_documents.legacy_id is a
+      // single table-wide unique column, but `participant_agreement_letters.id` and
+      // `participant_program_documents.id` are two independent legacy auto-increment
+      // sequences that both start at 1 -- inserting doc.id verbatim collided with the
+      // letter of the same id and was silently treated as "already exists" (caught by
+      // this session's own local apply test, see README "Local apply test"). Negation
+      // keeps both sequences unique against each other and against every other
+      // legacy_id-bearing table in this schema (which are all non-negative legacy ids),
+      // and is trivially reversible (abs(legacy_id) recovers the real legacy row id).
+      const ins = await pg.query(
+        `INSERT INTO participant_documents (application_id, name, type, file_url, legacy_id, generated_at)
+         VALUES ($1,$2,'complementary_document',$3,$4,now())
+         ON CONFLICT (legacy_id) DO NOTHING
+         RETURNING id`,
+        [applicationId, 'Program Document', doc.file_url, -doc.id],
+      );
+      if (ins.rows.length) { stat.documentsNew++; bump('documentsNew'); }
+      else { stat.documentsSkippedExisting++; bump('documentsSkippedExisting'); }
     }
   }
 
@@ -510,17 +777,23 @@ async function main() {
 
   console.log('\n=== Per-program breakdown (users matched-existing vs new-to-create, participants reused vs new, applications new vs skipped-existing) ===');
   let totalUsersMatched = 0, totalUsersNew = 0, totalParticipantsReused = 0, totalParticipantsNew = 0, totalAppsNew = 0, totalAppsSkipped = 0;
+  let totalInvoicesNew = 0, totalInvoicesSkipped = 0, totalInvoicesUnmatchedTier = 0, totalInvoicesSuperseded = 0;
+  let totalDocumentsNew = 0, totalDocumentsSkipped = 0, totalDocumentsUnmatchedApp = 0;
   for (const [pid, s] of Object.entries(perProgram)) {
     console.log(pid, JSON.stringify(s));
     totalUsersMatched += s.usersMatched; totalUsersNew += s.usersNew;
     totalParticipantsReused += s.participantsReused; totalParticipantsNew += s.participantsNew;
     totalAppsNew += s.appsNew; totalAppsSkipped += s.appsSkippedExisting;
+    totalInvoicesNew += s.invoicesNew; totalInvoicesSkipped += s.invoicesSkippedExisting; totalInvoicesUnmatchedTier += s.invoicesUnmatchedTier; totalInvoicesSuperseded += s.invoicesSupersededUnpaid;
+    totalDocumentsNew += s.documentsNew; totalDocumentsSkipped += s.documentsSkippedExisting; totalDocumentsUnmatchedApp += s.documentsUnmatchedApp;
   }
   console.log('\n=== Totals (raw counters) ===', JSON.stringify(counts));
   console.log('\n=== Owner-required breakdown (grand total) ===');
   console.log(`Users: matched-existing=${totalUsersMatched}  new-to-create=${totalUsersNew}`);
   console.log(`Participants: reused=${totalParticipantsReused}  new=${totalParticipantsNew}`);
   console.log(`Applications: new=${totalAppsNew}  skipped-existing=${totalAppsSkipped}`);
+  console.log(`Invoices: new=${totalInvoicesNew}  skipped-existing=${totalInvoicesSkipped}  unmatched-tier=${totalInvoicesUnmatchedTier}  superseded-unpaid=${totalInvoicesSuperseded}`);
+  console.log(`Documents (agreement letters + program documents): new=${totalDocumentsNew}  skipped-existing=${totalDocumentsSkipped}  no-target-application-yet=${totalDocumentsUnmatchedApp}`);
   console.log('Same-brand duplicate email groups (legacy):', dupSameBrand[0].n);
   console.log('Multi-brand same-email groups (expected, not dupes):', dupMultiBrand[0].n);
 
