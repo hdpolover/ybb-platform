@@ -602,3 +602,265 @@ plus the matching field on the `User` Prisma model in `schema/auth.prisma`.
 This script was never run with `--apply` and never sent a real email while
 being written — verification was limited to `node --check` (syntax) and
 confirming `pg`/`amqp-connection-manager` resolve as installed dependencies.
+
+## Legacy media rehost (separate script)
+
+`rehost-legacy-media.cjs` copies legacy media bytes into the new platform's
+object storage before `storage.ybbfoundation.com` is shut down, **as native
+file-service uploads** — same object-key layout, same `files` row, same
+participant-url representation a real upload through the app would produce.
+It reads the manifest CSV that `migrate-legacy-participants.cjs` writes
+(`table,legacy_id,url,parent_legacy_id`). It never deletes anything at the
+source and never writes to storage or Postgres without `--apply`.
+
+**Manifest now complete:** `migrate-legacy-participants.cjs` records all four
+media sources — `participants.picture_url`, `.resume_url`,
+`participant_agreement_letters.file_link`, `participant_program_documents.file_url`
+— via two additional batched (once per legacy program, never per participant
+row) read-only MySQL queries, joined through `participants` exactly like the
+existing `--program` filter lookup in this script. A 4th CSV column,
+`parent_legacy_id`, was added for the letter/document rows: their own
+`legacy_id` is the letter's/document's own id (matches the future
+`ParticipantDocument.legacyId`), not the participant's, so resolving the new
+program/participant context for the storage key needs the parent legacy
+`participants.id` (the per-registration row) carried separately. It's blank
+for the picture/resume rows, where `legacy_id` already **is** the participant.
+
+### Native key convention (verified in code, not the prior version's side namespace)
+
+Two contexts from `FilePathService.get_storage_path`
+(`services/file/app/application/services/file_path_service.py:26-106`),
+picked per source column since profile picture/resume live on the
+`Participant` profile (1:1 with `User`, not per-program) while agreement
+letters/program documents are per-application (per legacy `participants`
+per-registration row):
+
+| Source column | Category | Scope | Key |
+|---|---|---|---|
+| `participants.picture_url` | `avatars` | user | `{env}/{brandId}/users/{userId}/avatars/{fileId}.{ext}` |
+| `participants.resume_url` | `documents` | user | `{env}/{brandId}/users/{userId}/documents/{fileId}.{ext}` |
+| `participant_agreement_letters.file_link` | `signed-copies` | program-participant | `{env}/{brandId}/programs/{programId}/participants/{participantId}/signed-copies/{fileId}.{ext}` |
+| `participant_program_documents.file_url` | `documents` | program-participant | `{env}/{brandId}/programs/{programId}/participants/{participantId}/documents/{fileId}.{ext}` |
+
+Category values are taken verbatim from code, never invented:
+`signed-copies` matches `upload-signed-copy.handler.ts:71`'s own bucket for a
+participant's signed agreement letter; `documents`/`signed-copies` are the
+only two entries in `PRIVATE_CATEGORIES`
+(`services/api/src/shared/utils/private-file-key.ts:7`); `avatars` is
+`PARTICIPANT_UPLOAD_BUCKETS[0]`
+(`services/api/src/modules/files/presentation/files.controller.ts:50`). None
+of the four are in `UploadFileHandler.PUBLIC_CATEGORIES`
+(`upload_file_handler.py:63-80`), so every object this script writes gets no
+public-read ACL — same as a native upload to those categories (the script
+mirrors `PUBLIC_CATEGORIES` as an explicit allowlist rather than hardcoding
+"always private", so it stays correct if a category is ever added).
+
+`{env}` is `dev`/`staging`/`prod` per `--env` (new flag, default `production`
+-> `prod`, matching `file_path_service.py`'s own `prefix_map`). `{fileId}` is
+a **deterministic uuidv5** — `uuidv5(`${table}:${legacyId}:${url}`,
+NAMESPACE)` with a fixed namespace constant — never
+`crypto.randomUUID()`, which is random and would break idempotency. Re-running
+the exact same manifest row always recomputes the identical id and key. The
+`uuid` package used for this is already a `services/api` dependency
+(`package.json`); no new dependency was added, and no hand-rolled SHA-1
+uuidv5 was needed since a maintained implementation was already available.
+
+### Required side effects, matching a native upload (`--apply` only)
+
+1. **Object storage**: unchanged mechanics from before (dependency-free SigV4
+   PUT/HEAD/GET, byte-count + MD5/ETag verification, skip-if-size-matches) —
+   now writing to the native key above instead of a side `legacy/` namespace.
+2. **`files` row**, in the file service's OWN Postgres database (`FILE_DATABASE_URL`
+   — a DIFFERENT database from the API's `DATABASE_URL`; see
+   `services/file/.env.example`, `postgres-file` / `ybb_files_db` vs. the
+   API's `postgres-api` / `ybb_platform`). Columns mirror
+   `services/file/prisma/schema.prisma:16-45` exactly: `id` (the deterministic
+   uuid), `filename`/`original_filename`, `file_type`/`mime_type` (derived the
+   same way as `UploadFileHandler.execute`, `upload_file_handler.py:184-196`),
+   `file_size`, `storage_path` (unique — same key as above), `bucket` (the
+   PHYSICAL bucket, `MINIO_BUCKET`, not the category — matches
+   `upload_file_handler.py:172` assigning `bucket=real_bucket`), `user_id`,
+   `brand_id`, `program_id`, `metadata` (a small JSON marker:
+   `legacy_migration`, `legacy_table`, `legacy_id`, `context`), `status='READY'`.
+   `ON CONFLICT (id) DO NOTHING` is sufficient for idempotency since `id` and
+   `storage_path` are both derived from the same deterministic seed. This row
+   is **not optional bookkeeping** — `documents`/`signed-copies` are only
+   presignable because `get_presigned_url_internal_handler.py:47` calls
+   `file_repository.find_by_storage_path(...)` and 404s if no row exists at
+   that path, so without it a rehosted agreement letter or program document
+   would be permanently unreadable through the app's own private-file path.
+3. **Participant profile column** — `participants.profile_picture_url` /
+   `.resume_url` — written to the same CDN-style url a real upload produces
+   (`MinIOStorage.get_public_url`, `minio_storage.py:195-206`:
+   `{proto}://{MINIO_PUBLIC_ENDPOINT}/{key}`), but **only when the column is
+   currently `NULL`** — a participant who uploaded natively after the
+   historical import always wins; this script never overwrites that.
+4. **Known gap, by design**: agreement letters and program documents have no
+   `participant_documents` row to write a url into yet —
+   `migrate-legacy-participants.cjs` does not create one for legacy data (see
+   its own "Legacy -> new entity mapping" table above; that mapping is
+   currently aspirational, not implemented — out of this script's scope).
+   Bytes and the `files` row are still created for these two sources (both
+   idempotent, both cheap to do now, both keyed by the same deterministic
+   `legacyId`/`fileId`), so a future pass that DOES create
+   `participant_documents` rows (matching `ParticipantDocument.legacyId` to
+   the letter's/document's own legacy id) can link them without re-touching
+   storage. Verified end-to-end below: these two rows correctly report
+   `columnSkippedNoTargetRow` and skip the write rather than guessing a target.
+
+A manifest row whose legacy id doesn't resolve to an already-migrated
+Postgres row yet (that program hasn't had
+`migrate-legacy-participants.cjs --apply` run for it) is written to the retry
+CSV with an actionable message instead of silently skipped or crashing the
+batch.
+
+### `--source-dir` (preferred over HTTP — read this first)
+
+`--source-dir <path>` reads bytes from a local mirror of the legacy storage
+docroot instead of HTTP: `https://storage.ybbfoundation.com/<path>` maps 1:1
+onto `<path>` joined under `--source-dir`. This is the **preferred** source
+per the owner — a local cPanel export needs one download instead of ~64.5K
+throttled requests against a host that bans by volume (see "Sample findings"
+below, unchanged from before). `--rate`/`--breaker`/`--source-host` are all
+no-ops in this mode (nothing is fetched over HTTP at all). HTTP fetch remains
+the fallback when `--source-dir` is omitted, unchanged from the prior version
+(paced GET/HEAD, exponential backoff, circuit breaker).
+
+### Running on the VPS (real cutover — not run as part of this task)
+
+The intended real run is `ssh ybb-vps`, plain `node` (no container rebuild
+needed — `pg`, `mysql2`, `uuid` are already vendored under
+`services/api/node_modules`; no new dependency was added, so nothing else is
+required), `--source-dir /root/legacy-storage/storage.ybbfoundation.com`
+(the owner's local mirror of the legacy docroot), writing to the real
+DigitalOcean Spaces bucket via the file service's own live env:
+
+```
+docker exec <file-service-container> env | grep -E '^MINIO_|^DATABASE_URL'
+```
+
+`MINIO_ENDPOINT`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY`/`MINIO_BUCKET`/
+`MINIO_REGION`/`MINIO_SECURE`/`MINIO_PUBLIC_ENDPOINT` are the exact names this
+script already reads (verified against `services/file/.env.example` — these
+are what ops will find on the live container, so they copy across unchanged;
+no `SPACES_*` renaming was needed). The file service's own `DATABASE_URL`
+value from that same `docker exec` must be set as this script's
+`FILE_DATABASE_URL` — a deliberately different variable name, since this
+script also needs the API's own `DATABASE_URL` open at the same time (two
+different databases: `ybb_files_db` vs. `ybb_platform`). None of these
+values are ever printed or logged by this script.
+
+**This task did not run against the real VPS storage mirror or the real
+Spaces bucket.** Verification (below) used localstack for object storage and
+a throwaway local Postgres for both database roles — same shape as the "Local
+apply test" done for the main migration script, never the real infrastructure.
+
+### CLI
+
+```
+node rehost-legacy-media.cjs --manifest m.csv [--dry-run] --env production [--program <legacyProgramId>] [--limit N]
+                             [--concurrency 8] [--rate 4] [--breaker 15]
+                             [--source-dir /path/to/legacy-storage-mirror]
+                             [--source-host storage.ybbfoundation.com] [--retry-csv path.csv]
+node rehost-legacy-media.cjs --manifest m.csv --apply [...same flags]
+```
+
+- `--env` (default `production`): `development|staging|production` -> `dev|staging|prod` path segment.
+- `--dry-run` (default): resolves ids/keys and HEADs (or `stat`s, in `--source-dir`
+  mode) the source and the destination object; would-upload / would-skip only. It
+  never reads a body and never writes to Postgres.
+- `--apply`: if the key is absent it streams GET/read into PUT (one legacy request
+  per file in HTTP mode). If the key exists it checks size and skips on a match, or
+  re-uploads if the stored copy is truncated. Every upload is checked for byte count
+  and MD5 == ETag. On a confirmed-present object it upserts the `files` row and,
+  for picture/resume rows, the participant url column (see above). Requires both
+  `DATABASE_URL` and `FILE_DATABASE_URL`.
+- `--program`: filters manifest rows with a read-only legacy lookup
+  (`participants.program_id`, joined through `participant_id` for letters/documents) — unchanged.
+- `--source-dir`: local mirror of the legacy storage docroot (preferred; see above).
+- `--source-host`: allowlist of hosts to fetch from over HTTP. Ignored with `--source-dir`.
+- `--rate`/`--breaker`: unchanged (HTTP mode only) — global req/s cap and consecutive-failure circuit breaker.
+- `--retry-csv` (default `rehost-retry.csv` next to the manifest): `table,legacy_id,url,parent_legacy_id,error`,
+  written as failures/unresolved-context rows happen. Feed it back in as the next `--manifest`.
+- No npm dependency added: SigV4 signing and HEAD/PUT/GET use Node built-ins only;
+  `pg`/`mysql2`/`uuid` were already `services/api` dependencies.
+
+### Sample findings (2026-09-25, real legacy host, read-only) — unchanged
+
+Stratified random sample from legacy MySQL (session `READ ONLY`): 3,450 URLs
+(1,210 picture / 765 resume / all 259 letters / all 1,216 program documents).
+The column counts match the table in "Media / file URL rehosting" above
+(57,019 / 36,119 / 259 / 1,216).
+
+- **Hostnames:** `picture_url`, `file_link` and program-document `file_url` are
+  100% `storage.ybbfoundation.com`. **`resume_url` is not:** only 16.7% is on
+  the legacy host. The rest is Google Drive 45.6%, Google Docs 8.9%, malformed
+  8.2% (e.g. `https//name@mail.com`), LinkedIn 5.5%, Canva 2.5%, OneDrive and
+  about 50 other hosts. Third-party links are kept as-is and never rehosted.
+- **HEAD results (storage host, before the ban below):** 453/453 returned `200`.
+  Content types: `image/jpeg` 97%, `image/png` 2%, `text/html` <1%.
+  Profile pictures: avg 131 KB, median 37 KB, max 1.9 MB (n=450).
+- **The legacy host bans by request volume.** Connections from our IP started
+  getting reset (`ECONNRESET`, then connect timeouts) after about 1.5-2.5K
+  HEADs at concurrency 20 unpaced. This is the reason `--source-dir` is
+  preferred over HTTP for the real cutover.
+
+### Verification done (this task — localstack, throwaway Postgres, no real infra)
+
+- Started `localstack/localstack:3.0` (S3 only) and a throwaway
+  `postgres:16-alpine`, both in Docker, both destroyed after the test.
+  Created two databases on the same throwaway Postgres instance
+  (`ybb_api_test` mirroring the relevant slice of the API's schema —
+  `brands`/`programs`/`users`/`participants`/`participant_applications` with
+  `legacy_id` columns — and `ybb_files_test` mirroring
+  `services/file/prisma/schema.prisma`'s `files` table column-for-column) to
+  stand in for `DATABASE_URL` and `FILE_DATABASE_URL`.
+- Seeded 8 participants (legacy ids 101-108, one brand/program) and 2
+  applications (legacy ids 555/556, for the agreement-letter/program-document
+  rows) with real foreign keys, matching how `migrate-legacy-participants.cjs`
+  would have populated them.
+- Real legacy MySQL access is not available to this session (unchanged from
+  the main script's "Real dry-run against prod/legacy — blocked, not run"
+  finding) and `storage.ybbfoundation.com` was reachable but no known-valid
+  path could be constructed without it, so the source for this test was 20
+  synthetic files under a local `--source-dir` (16 picture/resume files
+  across the 8 participants + 2 agreement letters + 2 program documents,
+  including the private `signed-copies` and `documents` categories) — sizes
+  and content are synthetic, but every code path (context resolution, native
+  key construction, S3 PUT/HEAD, `files` row upsert, participant column
+  write, idempotency, retry-csv) is the same code that runs against a real
+  HTTP/legacy-host manifest row; only the byte source differs.
+- `--dry-run`: `20/20` resolved with `unresolved=0`, `would-upload=20`,
+  zero Postgres writes.
+- `--apply`: `uploaded=20 failed=0 aborted=0`; `files-row upserted=20`;
+  `participant-column written=16` (8 participants x 2 columns);
+  `no-target-row-yet(agreement/document)=4` (the 2 letters + 2 documents,
+  correctly deferred per the "Known gap" above). Verified directly against
+  both Postgres databases and via `aws s3 ls --endpoint-url` against
+  localstack: object keys, `files` row count/columns, and
+  `participants.profile_picture_url`/`.resume_url` all matched exactly
+  (see the key table above for the exact shape produced).
+- **Idempotent rerun**: `--apply` a second time on the same manifest gave
+  `uploaded=0 skipped(existing)=20`, `participant-column written=0`
+  (`already-set(skipped)=16`), and the `files` table's row count and every
+  row's `id` (the deterministic uuidv5) were byte-identical before and after.
+- **Masked/signed url parse-back** (proving the private-category path
+  actually works, not just asserting it): took the `signed-copies` object's
+  real `storage_path` from the test `files` row, built its CDN url via this
+  script's own `publicUrlFor()` (`{proto}://{MINIO_PUBLIC_ENDPOINT}/{key}`,
+  matching `MinIOStorage.get_public_url`), then ran a byte-for-byte
+  replica of `private-file-key.ts`'s `deriveStorageKeyFromUrl` +
+  `isPrivateCategoryKey` against that url in a throwaway script: the derived
+  key matched the original `storage_path` exactly, and
+  `isPrivateCategoryKey` returned `true` — the same two checks
+  `PrivateFileUrlResolver.resolve()` (`private-file-url-resolver.service.ts:23-34`)
+  runs before calling `get_presigned_url_internal_handler.py`, which would
+  then find this script's `files` row via `find_by_storage_path` and succeed.
+- **Unresolved-context handling**: a manifest row for a participant with no
+  matching migrated Postgres row, and a letter row missing
+  `parent_legacy_id`, were both run through `--dry-run`: both landed in the
+  retry CSV with a specific, actionable error message (not a generic
+  failure) and did not stop the rest of the batch.
+- The real Spaces bucket, the real VPS, and the real legacy host's bytes were
+  never touched by this verification. The localstack and Postgres containers
+  were removed afterwards; all temp files/manifests were deleted.

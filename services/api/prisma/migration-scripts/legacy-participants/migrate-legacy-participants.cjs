@@ -152,9 +152,15 @@ async function main() {
     await pg.query('BEGIN READ ONLY');
   }
 
-  const manifestRows = []; // {table, id, url} for the media-rehost manifest -- never downloaded here.
-  function recordMedia(table, legacyId, url) {
-    if (url) manifestRows.push({ table, id: legacyId, url });
+  // {table, id, url, parent} for the media-rehost manifest -- never downloaded here.
+  // `parent` is only meaningful for participant_agreement_letters/participant_program_documents
+  // (see below): it's the legacy `participants.id` (per-registration row) the letter/document
+  // belongs to, which rehost-legacy-media.cjs needs to resolve the new program_id/participant_id
+  // for the native storage key -- `legacy_id` on those two rows is the letter's/document's own
+  // id, not the participant's, so it can't be used for that lookup on its own.
+  const manifestRows = [];
+  function recordMedia(table, legacyId, url, parentLegacyId = null) {
+    if (url) manifestRows.push({ table, id: legacyId, url, parent: parentLegacyId });
   }
 
   console.log(`Mode: ${apply ? 'APPLY' : 'DRY-RUN'}  Programs: ${programIds.join(',')}  Batch size: ${batchSize}  Status mode: ${statusMode}${perProgramLimit ? `  Limit/program: ${perProgramLimit}` : ''}`);
@@ -271,6 +277,32 @@ async function main() {
       [legacyProgramId],
     );
     stat.participants = rows.length;
+
+    // Agreement letters + program documents manifest rows -- once per program (joined
+    // through participants), never per-row inside the loop below. Recorded unconditionally
+    // (dry-run and apply alike, regardless of whether this run creates/reuses a Participant
+    // profile) since these files are independent of the participant-profile dedupe logic --
+    // same manifest-only, never-downloaded contract as the picture/resume rows above.
+    const letters = await mq(
+      `SELECT al.id, al.file_link, al.participant_id
+       FROM participant_agreement_letters al
+       JOIN participants p ON p.id = al.participant_id
+       WHERE p.program_id = ?`,
+      [legacyProgramId],
+    );
+    for (const letter of letters) {
+      recordMedia('participant_agreement_letters.file_link', letter.id, letter.file_link, letter.participant_id);
+    }
+    const programDocs = await mq(
+      `SELECT pd.id, pd.file_url, pd.participant_id
+       FROM participant_program_documents pd
+       JOIN participants p ON p.id = pd.participant_id
+       WHERE p.program_id = ?`,
+      [legacyProgramId],
+    );
+    for (const doc of programDocs) {
+      recordMedia('participant_program_documents.file_url', doc.id, doc.file_url, doc.participant_id);
+    }
 
     for (const row of rows) {
       const email = normEmail(row.user_email);
@@ -493,8 +525,11 @@ async function main() {
   console.log('Multi-brand same-email groups (expected, not dupes):', dupMultiBrand[0].n);
 
   // ---------- Media rehost manifest (CSV: table,id,url) -- never downloaded here ----------
-  const csvEscape = (v) => `"${String(v).replace(/"/g, '""')}"`;
-  const csvLines = ['table,legacy_id,url', ...manifestRows.map((r) => `${csvEscape(r.table)},${csvEscape(r.id)},${csvEscape(r.url)}`)];
+  const csvEscape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csvLines = [
+    'table,legacy_id,url,parent_legacy_id',
+    ...manifestRows.map((r) => `${csvEscape(r.table)},${csvEscape(r.id)},${csvEscape(r.url)},${csvEscape(r.parent)}`),
+  ];
   fs.writeFileSync(manifestPath, csvLines.join('\n') + '\n');
   console.log(`\nMedia manifest written: ${manifestPath} (${manifestRows.length} rows, all storage.ybbfoundation.com URLs kept as-is, nothing downloaded)`);
 
