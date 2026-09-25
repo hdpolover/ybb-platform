@@ -1,6 +1,6 @@
 import { Inject, Injectable, OnModuleInit, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
-import { status as GrpcStatus } from '@grpc/grpc-js';
+import { Metadata, status as GrpcStatus } from '@grpc/grpc-js';
 import { lastValueFrom, ReplaySubject, toArray } from 'rxjs';
 import {
   FileService,
@@ -206,7 +206,10 @@ export class FileGrpcClient implements OnModuleInit {
                 storage_path: storagePath,
                 expiry_seconds: expirySeconds ?? 0,
               },
-              undefined,
+              // grpc-js rejects an undefined metadata slot with "Incorrect
+              // arguments passed" once options follow it, so every presign
+              // failed and private files (signed copies, documents) had no url.
+              new Metadata(),
               this.deadline(),
             ),
           ),

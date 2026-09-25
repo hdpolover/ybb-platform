@@ -1,6 +1,6 @@
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
-import { status as GrpcStatus } from '@grpc/grpc-js';
-import { throwError } from 'rxjs';
+import { Metadata, status as GrpcStatus } from '@grpc/grpc-js';
+import { of, throwError } from 'rxjs';
 import { FileGrpcClient } from './file-grpc-client.service';
 
 describe('FileGrpcClient.uploadFile error mapping', () => {
@@ -62,5 +62,21 @@ describe('FileGrpcClient.uploadFile error mapping', () => {
     await expect(client.uploadFile(Buffer.from('x'), { filename: 'a.jpg' } as any)).rejects.toBeInstanceOf(
       InternalServerErrorException,
     );
+  });
+});
+
+describe('FileGrpcClient.getPresignedUrlInternal', () => {
+  it('passes a real Metadata before the deadline options, since grpc-js rejects an undefined metadata slot', async () => {
+    const presign = jest.fn().mockReturnValue(of({ presigned_url: 'https://signed', expires_at_unix: 1 }));
+    const client = new FileGrpcClient({ getService: () => ({ GetPresignedUrlInternal: presign }) } as any);
+    client.onModuleInit();
+
+    await expect(client.getPresignedUrlInternal('prod/b/programs/p/signed-copies/f.pdf')).resolves.toMatchObject({
+      presigned_url: 'https://signed',
+    });
+    const [request, metadata, options] = presign.mock.calls[0];
+    expect(request).toEqual({ storage_path: 'prod/b/programs/p/signed-copies/f.pdf', expiry_seconds: 0 });
+    expect(metadata).toBeInstanceOf(Metadata);
+    expect(options.deadline).toBeInstanceOf(Date);
   });
 });
