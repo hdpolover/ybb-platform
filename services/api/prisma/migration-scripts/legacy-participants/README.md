@@ -428,6 +428,72 @@ touch. The per-(participant, program) duplicate-guard in the script (see
 "Applications" above) is what protects against creating a second application
 for those 125 people — it is not merely theoretical for this migration.
 
+## Legacy program 12 (MEYS) — missing program row, found and fixed
+
+`missingPrograms` (the `programByLegacyId` preflight in
+`migrate-legacy-participants.cjs`) warns `no new-prod program found with
+legacy_id in [12]` on every real run against prod. Verified directly, not
+inferred (read-only `docker exec psql` into `ybb-platform-postgres-api-*`
+and a temporary `mysql:8.0` container on `dokploy-network` against the real
+legacy DB — no SSH tunnel/socat proxy was needed this session since
+`docker exec` into the Postgres container itself avoids the overlay-network
+routing problem the prior session's socat attempt hit; no prod writes, no
+legacy writes):
+
+- **Full gap check** — `SELECT unnest(ARRAY[1,2,3,4,5,6,7,8,9,10,11,12,16,17,18,20])
+  EXCEPT SELECT legacy_id FROM programs WHERE legacy_id IS NOT NULL` against
+  prod returned exactly **one** id: `12`. Every other id in
+  `MAPPED_LEGACY_PROGRAM_IDS` already resolves to a real `programs` row.
+- **Legacy program 12** ("Middle East Youth Summit 2026", `program_category_id=3`
+  matching MEYS brand `legacy_id=3` / `52813193-96f0-42cf-89dd-27f33304a303`):
+  `start_date=2026-03-30`, `end_date=2026-04-02`, `year=2026`,
+  `theme='Global Muslim Youth Collaboration for Sustainable Development'`,
+  `is_active=0`, `is_registration_open=0` (legacy DB), ~23,709 legacy
+  `participants` rows, 28 legacy `program_announcements` rows.
+- **Confirmed distinct from "Middle East Youth Summit 6th"**: that new-prod
+  row (`cc4d7a9a-fcf4-41ae-acd2-54d867046856`, no `legacy_id`) is a real,
+  different, later event — `2026-12-07..2026-12-10`, currently `is_active=t`,
+  `allow_registration=t`, `status='published'`. Mapping legacy 12 onto it
+  would have corrupted both. All 5 MEYS-brand new-prod programs, for the
+  record: 2023 (`legacy_id=9032023`), 2024 (`9032024`), 2025 (`8`), 6th (no
+  `legacy_id`, Dec 2026), 7th (no `legacy_id`, Mar 2027).
+- **2025 edition (`legacy_id=8`) configuration mirrored** (a genuinely past,
+  closed edition, not the currently-open "6th"), read directly off that row:
+  `is_published=true`, `is_visible_to_users=true`, `is_active=false`,
+  `allow_registration=false`, `status='completed'`, `registration_open_date`
+  / `registration_close_date=NULL`, `currency='USD'`, `require_payment=false`.
+  `application_deadline` on that same row equals its own `start_date`
+  (`2025-12-01`) — legacy has no deadline-equivalent column, so the new
+  legacy-12 row's `application_deadline` is set the same way, to its own
+  `start_date` (`2026-03-30`).
+- **Announcement finding**: all 28 of legacy program 12's
+  `program_announcements` ids (276, 293–312, 318, 320, 322, 413–416) **already
+  exist** in prod's `program_announcements.legacy_id`, but every one of them
+  is attached to `program_id` = "Middle East Youth Summit 6th" — the same
+  wrong program the brief warned against mapping legacy 12 onto. So the
+  announcements were previously mis-migrated onto "6th" (verified by joining
+  prod `program_announcements.legacy_id` back to `programs.name`), not lost
+  and not attached anywhere correct. **Not fixed by this change** — re-pointing
+  28 already-live announcement rows from one program to another is a decision
+  for the owner (it changes what participants/admins of "6th" currently see),
+  not something this migration should do silently as a side effect of
+  creating the missing program row. Flagged here for a follow-up, scoped
+  separately.
+- **Fix implemented**: new Prisma migration
+  `20260925150000_backfill_legacy_program_12_meys` (idempotent — guarded by
+  `NOT EXISTS (... WHERE legacy_id = 12)` and `ON CONFLICT (legacy_id) DO
+  NOTHING`, same convention as `20260824091000_backfill_content_template_from_form_templates`)
+  inserts the missing `programs` row, brand resolved via `brands.legacy_id =
+  3` (same map `brandByLegacyCategoryId` already uses), all real legacy
+  fields cloned as above, publish/registration flags copied verbatim from the
+  2025 edition. Verified locally against a throwaway `postgres:16-alpine`
+  (destroyed after): first run inserts 1 row, second run is `INSERT 0 0` — a
+  true no-op. This has **not** been run against prod from this session —
+  it will apply the next time the normal `prisma migrate deploy` pipeline
+  runs there (per `ybb-deploy-topology`: migrations auto-run on API boot),
+  which resolves `migrate-legacy-participants.cjs`'s `programByLegacyId` gap
+  for program 12 before the real `--apply` cutover run needs it.
+
 ## Program-22 handling (Istanbul Youth Summit 2027)
 
 Legacy program 22 is **excluded from import entirely**. It is only used to
