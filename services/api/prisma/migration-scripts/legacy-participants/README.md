@@ -532,3 +532,73 @@ recent `participants.created_at` activity (today's date: 2026-09-25):
 recent registration (2026-08-27) is older than 17/20's, so it may be
 winding down, but the flags say it is still open. Treat all three the same
 way: incremental, idempotent, re-run at cutover.
+
+## Legacy password-reset notification (separate script)
+
+Follow-up to the "Open question for the owner" in "Auth / password migration
+— decision" above: the owner decided migrated participants **should** be
+proactively emailed a password-reset link. That send is deliberately kept out
+of `migrate-legacy-participants.cjs` (hard rule: no notification/email side
+effects in that script) and lives in its own script,
+`notify-legacy-password-reset.cjs`, in this same folder.
+
+**Scope**: `users.legacy_id IS NOT NULL AND password_hash IS NULL AND
+legacy_password_reset_sent_at IS NULL AND deleted_at IS NULL`, optionally
+narrowed further with `--program <legacyProgramId>` (repeatable), which joins
+`users -> participants -> participant_applications -> programs` and matches
+`programs.legacy_id`.
+
+**CLI**:
+```
+node notify-legacy-password-reset.cjs --dry-run [--program <legacyProgramId>] [--limit <n>]
+node notify-legacy-password-reset.cjs --apply    [--program <legacyProgramId>] [--limit <n>] [--rate <perMinute>]
+```
+- Default is `--dry-run` (reports the eligible-user count and a 10-row
+  sample only); `--apply` is required to write or send anything.
+- `--rate` (default 30/min) sleeps `60000/rate` ms between sends in `--apply`
+  to stay under whatever limit the notification pipeline/SMTP provider needs.
+- Only needs `DATABASE_URL` and `RABBITMQ_URL` — no `LEGACY_DB_*` vars, since
+  it never touches legacy MySQL (every row it acts on was already migrated).
+
+**Token/email mechanism reused verbatim** from
+`forgot-password.handler.ts` (see that file for line references — verified
+2026-09-25):
+- Token: `crypto.randomBytes(32).toString('hex')`, expiry `now() + 1 hour`.
+- Stored hashed: `users.password_reset_token = sha256(token)` using the same
+  `hashToken()` helper as `shared/utils/hash-token.util.ts` (which
+  `reset-password.handler.ts` uses on the verify side) — the raw token is
+  never persisted, only emitted in the event payload, exactly as the handler
+  does it.
+- Publishes the SAME RabbitMQ event: exchange `ybb.events` (topic), routing
+  key/pattern `user.forgot-password`, payload `{ email, name, token, brandId,
+  brand }`.
+- **Known deviation**: the `brand.contactEmail` / `brand.contactAddress`
+  fields the handler populates via `resolveActiveProgramContact()` (a 3-rule
+  active-program fallback in `active-program-resolver.ts`) are left `null`
+  here rather than reimplemented in raw SQL — replicating that fallback
+  correctly was judged out of scope for this script. Everything else in the
+  `brand` payload (name, colors, logo, website, social links, footer nav,
+  support email) is populated from `brands`/`brand_settings` directly.
+
+**RabbitMQ binding — confirmed already wired, no fix needed**: routing key
+`user.forgot-password` matches the existing `user.#` wildcard binding in
+`services/notification/src/main.ts` (the `bindings` array passed to
+`ensureRetryTopology()` in `bootstrap()`), consumed by
+`@EventPattern('user.forgot-password')` in
+`services/notification/src/modules/events/events.controller.ts`. Nothing
+needed to be added there.
+
+**Idempotency**: on a confirmed publish, sets
+`users.legacy_password_reset_sent_at = now()`. If the publish throws, that
+column is left `NULL` on purpose (matches `RabbitMQProducerService.emit()`'s
+own throw-on-failure contract) so the user stays eligible for the next run
+instead of silently being marked "sent" for a message that never went out.
+
+**New migration**: `20260925140000_add_legacy_password_reset_sent_at` adds
+`users.legacy_password_reset_sent_at TIMESTAMPTZ` (nullable, `IF NOT EXISTS`,
+same convention as `20260925130000_add_legacy_participant_migration_fields`),
+plus the matching field on the `User` Prisma model in `schema/auth.prisma`.
+
+This script was never run with `--apply` and never sent a real email while
+being written — verification was limited to `node --check` (syntax) and
+confirming `pg`/`amqp-connection-manager` resolve as installed dependencies.

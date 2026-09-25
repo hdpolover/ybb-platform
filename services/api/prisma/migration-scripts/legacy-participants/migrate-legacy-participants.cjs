@@ -344,7 +344,15 @@ async function main() {
           [
             userId, row.full_name || '', row.nickname || null, row.birthdate || null,
             mapGender(row.gender), row.country_code || null, row.phone_number || null,
-            row.nationality || null, row.nationality_code || null, row.origin_address || null,
+            row.nationality || null, null /* legacy nationality_code is actually a phone dial code
+              (e.g. "+234"), a duplicate of country_code, NOT an ISO country code -- verified
+              live: every legacy row with nationality_code="+234" has nationality="Nigeria" and
+              country_code="+234". It has no legitimate ISO-code data at all (also overflows the
+              new column's varchar(3): 57,694 legacy rows are >3 chars, e.g. "+234"). Writing it
+              through was both wrong and, for ~21% of rows, a hard INSERT failure. Left NULL until
+              a real ISO code can be derived (e.g. from the free-text `nationality` name via a
+              country-name lookup) -- open item, see README "Known data-quality gaps". */,
+            row.origin_address || null,
             row.current_address || null, row.institution || null, row.major || null, row.occupation || null,
             row.instagram_account || null, row.tshirt_size || null, row.education_level || null,
             row.knowledge_source || null, row.ref_code_ambassador || null, row.id, row.created_at || new Date(),
