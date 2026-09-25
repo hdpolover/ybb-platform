@@ -70,8 +70,12 @@ model User {
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
   // Migration Support
-  legacyId   Int?    @unique @map("legacy_id")
-  legacyType String? @map("legacy_type") @db.VarChar(20)
+  legacyId                  Int?      @unique @map("legacy_id")
+  legacyType                String?   @map("legacy_type") @db.VarChar(20)
+  // Set once notify-legacy-password-reset.cjs successfully sends this
+  // migrated account its one-time forgot-password email; null means not
+  // yet sent, which is how the script scopes idempotent reruns.
+  legacyPasswordResetSentAt DateTime? @map("legacy_password_reset_sent_at") @db.Timestamptz(6)
 
   // Relations
   brand                    Brand                     @relation(fields: [brandId], references: [id])
