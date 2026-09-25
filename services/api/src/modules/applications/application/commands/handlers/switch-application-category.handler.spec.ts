@@ -252,4 +252,190 @@ describe('SwitchApplicationCategoryHandler', () => {
     // Same non-atomicity concern as above, for the auto-cancel side.
     expectNoOuterWrites(mockPrisma);
   });
+
+  describe('admin exception: submitted / fully-funded-window-closed overrides', () => {
+    const submittedPaidApplication = (overrides: Record<string, unknown> = {}) => ({
+      ...buildApplication([
+        {
+          startDate: new Date(Date.now() - 2 * 86400000),
+          endDate: new Date(Date.now() - 86400000), // FF window closed
+        },
+      ]),
+      status: 'submitted',
+      applicationCategory: 'self_funded',
+      registrationPaymentStatus: 'paid',
+      statusHistory: [],
+      ...overrides,
+    });
+
+    it('lets an admin with overrideReason switch a SUBMITTED application: status unchanged, category changed, status_history appended', async () => {
+      mockPrisma.participantApplication.findUnique.mockResolvedValue(submittedPaidApplication());
+      mockTx.participantApplication.update.mockResolvedValue({
+        id: 'app-1',
+        status: 'submitted',
+        applicationCategory: 'fully_funded',
+      });
+
+      await handler.execute(
+        new SwitchApplicationCategoryCommand(
+          'app-1',
+          'fully_funded' as ApplicationCategory,
+          'admin-user',
+          'admin-1',
+          'Participant paid self-funded but should be fully-funded',
+        ),
+      );
+
+      expect(mockTx.participantApplication.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'app-1' },
+          data: expect.objectContaining({
+            applicationCategory: 'fully_funded',
+            statusHistory: [
+              expect.objectContaining({
+                status: 'submitted',
+                changedBy: 'admin-1',
+                reason:
+                  'Category changed self_funded → fully_funded by admin: Participant paid self-funded but should be fully-funded',
+              }),
+            ],
+          }),
+        }),
+      );
+      // The update must never touch `status` itself.
+      const callArgs = mockTx.participantApplication.update.mock.calls[0][0];
+      expect(callArgs.data.status).toBeUndefined();
+    });
+
+    it('lets an admin with overrideReason switch INTO fully_funded while the window is closed', async () => {
+      mockPrisma.participantApplication.findUnique.mockResolvedValue(submittedPaidApplication());
+      mockTx.participantApplication.update.mockResolvedValue({
+        id: 'app-1',
+        applicationCategory: 'fully_funded',
+      });
+
+      await expect(
+        handler.execute(
+          new SwitchApplicationCategoryCommand(
+            'app-1',
+            'fully_funded' as ApplicationCategory,
+            'admin-user',
+            'admin-1',
+            'Window closed but approved manually',
+          ),
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it('still 400s an admin WITHOUT overrideReason on a submitted application (no accidental full bypass)', async () => {
+      mockPrisma.participantApplication.findUnique.mockResolvedValue(submittedPaidApplication());
+
+      await expect(
+        handler.execute(
+          new SwitchApplicationCategoryCommand(
+            'app-1',
+            'fully_funded' as ApplicationCategory,
+            'admin-user',
+            'admin-1',
+            // no overrideReason
+          ),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockTx.participantApplication.update).not.toHaveBeenCalled();
+    });
+
+    it('still 400s a participant (non-admin) acting on a submitted application', async () => {
+      mockPrisma.participantApplication.findUnique.mockResolvedValue(
+        submittedPaidApplication({ registrationPaymentStatus: 'unpaid' }),
+      );
+
+      await expect(
+        handler.execute(
+          new SwitchApplicationCategoryCommand(
+            'app-1',
+            'fully_funded' as ApplicationCategory,
+            'u-1',
+            undefined,
+            'I want to switch', // a reason with no actingAdminId must not bypass anything
+          ),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockTx.participantApplication.update).not.toHaveBeenCalled();
+    });
+
+    it('still blocks a participant switching into fully_funded while the window is closed', async () => {
+      const draftApplication = {
+        ...buildApplication([
+          {
+            startDate: new Date(Date.now() - 2 * 86400000),
+            endDate: new Date(Date.now() - 86400000), // FF window closed
+          },
+        ]),
+        status: 'draft',
+      };
+      mockPrisma.participantApplication.findUnique.mockResolvedValue(draftApplication);
+
+      expect.assertions(3);
+      try {
+        await handler.execute(
+          new SwitchApplicationCategoryCommand('app-1', 'fully_funded' as ApplicationCategory, 'u-1'),
+        );
+      } catch (error) {
+        expect(error).toBeInstanceOf(BadRequestException);
+        const response = (error as BadRequestException).getResponse();
+        expect(response).toMatchObject({ errorCode: 'FULLY_FUNDED_REGISTRATION_CLOSED' });
+      }
+      expect(mockTx.participantApplication.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects the admin exception on a WITHDRAWN application even with overrideReason', async () => {
+      mockPrisma.participantApplication.findUnique.mockResolvedValue(
+        submittedPaidApplication({ status: 'withdrawn' }),
+      );
+
+      await expect(
+        handler.execute(
+          new SwitchApplicationCategoryCommand(
+            'app-1',
+            'fully_funded' as ApplicationCategory,
+            'admin-user',
+            'admin-1',
+            'Trying anyway',
+          ),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockTx.participantApplication.update).not.toHaveBeenCalled();
+    });
+
+    it('leaves a paid invoice untouched by the switch', async () => {
+      mockPrisma.participantApplication.findUnique.mockResolvedValue({
+        ...submittedPaidApplication(),
+        invoices: [
+          { id: 'inv-paid', status: 'paid', pricingTier: { feeType: 'registration_fee' } },
+        ],
+      });
+      mockTx.participantApplication.update.mockResolvedValue({
+        id: 'app-1',
+        applicationCategory: 'fully_funded',
+      });
+
+      await handler.execute(
+        new SwitchApplicationCategoryCommand(
+          'app-1',
+          'fully_funded' as ApplicationCategory,
+          'admin-user',
+          'admin-1',
+          'Fix miscategorised paid applicant',
+        ),
+      );
+
+      // Only `unpaid` invoices are ever passed to the cancel updateMany; a
+      // paid invoice must never appear in its `id: { in: [...] }` filter.
+      expect(mockTx.applicationInvoice.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: { in: expect.arrayContaining(['inv-paid']) } }),
+        }),
+      );
+    });
+  });
 });

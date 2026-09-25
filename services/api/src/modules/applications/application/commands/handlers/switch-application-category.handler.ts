@@ -7,7 +7,25 @@ import { ApplicationResponseDto } from '../../dto/application-response.dto';
 import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/application.mapper';
 import { ApplicationStatus } from '@core/entities/participant-application.entity';
 import { getCategoryRegistrationPhase } from '@shared/utils/tier-period.util';
-import { PaymentStatus } from '@prisma/client';
+import { PaymentStatus, Prisma } from '@prisma/client';
+
+// Non-draft statuses eligible for the admin status-lock override (see step 2
+// below). Judgement call: WITHDRAWN and REJECTED are deliberately excluded —
+// both are terminal outcomes where the application is no longer live for
+// this program, so reassigning its category is meaningless (WITHDRAWN) or
+// re-opens a decision that has already been made (REJECTED). SUBMITTED,
+// UNDER_REVIEW, INTERVIEW_SCHEDULED, WAITLISTED and ACCEPTED are all still
+// "in flight" for the program, so an admin fixing a miscategorised applicant
+// at any of those stages is a legitimate exception (the driving case is a
+// paid, SUBMITTED applicant). There is no soft-delete/cancelled status on
+// ParticipantApplication in this schema, so nothing further to exclude there.
+const ADMIN_STATUS_OVERRIDE_ELIGIBLE_STATUSES = new Set<string>([
+  ApplicationStatus.SUBMITTED,
+  ApplicationStatus.UNDER_REVIEW,
+  ApplicationStatus.INTERVIEW_SCHEDULED,
+  ApplicationStatus.WAITLISTED,
+  ApplicationStatus.ACCEPTED,
+]);
 
 @Injectable()
 export class SwitchApplicationCategoryHandler {
@@ -63,10 +81,30 @@ export class SwitchApplicationCategoryHandler {
       throw new ForbiddenException('You can only switch the category of your own application.');
     }
 
+    // Shared admin-exception gate: every override below requires BOTH an
+    // admin principal AND a non-empty stated reason. Participants can never
+    // satisfy this (actingAdminId is only ever set for admin callers), so
+    // participant behavior is unchanged regardless of what they pass as
+    // overrideReason.
+    const overrideReason = command.overrideReason?.trim() || undefined;
+    const canAdminOverride = Boolean(actingAdminId && overrideReason);
+
     // 2. Validate Status
-    // Category switch is only allowed while application is still in draft/editing stage.
+    // Category switch is only allowed while the application is still in the
+    // draft/editing stage — a deliberate stakeholder rule for participants.
+    // Admins get an audited exception: with a stated reason, they may switch
+    // a non-draft application PROVIDED its status is one where a category
+    // switch still makes sense (see ADMIN_STATUS_OVERRIDE_ELIGIBLE_STATUSES
+    // above). Status itself is never changed by this handler — only category.
     if (application.status !== ApplicationStatus.DRAFT) {
-       throw new BadRequestException('Cannot switch category after application has been submitted.');
+      const statusEligibleForOverride = ADMIN_STATUS_OVERRIDE_ELIGIBLE_STATUSES.has(application.status);
+      if (!canAdminOverride || !statusEligibleForOverride) {
+        throw new BadRequestException(
+          actingAdminId
+            ? 'Cannot switch category after application has been submitted. Provide an overrideReason to switch anyway.'
+            : 'Cannot switch category after application has been submitted.',
+        );
+      }
     }
 
     // 3. Validate Payments
@@ -85,9 +123,7 @@ export class SwitchApplicationCategoryHandler {
     // reason. The paid invoice itself is deliberately left untouched: any
     // price difference between the two categories is a finance reconciliation,
     // not something this handler should silently resolve.
-    const overrideReason = command.overrideReason?.trim() || undefined;
-    const canOverridePaymentLock = Boolean(actingAdminId && overrideReason);
-    if ((hasLockedRegistrationInvoice || hasLockedRegistrationPayment) && !canOverridePaymentLock) {
+    if ((hasLockedRegistrationInvoice || hasLockedRegistrationPayment) && !canAdminOverride) {
       throw new BadRequestException(
         actingAdminId
           ? 'Cannot switch category while a registration fee payment is processing or already paid. Provide an overrideReason to switch anyway.'
@@ -130,10 +166,16 @@ export class SwitchApplicationCategoryHandler {
     //
     // Only ever blocks switching INTO fully_funded — switching to
     // self_funded must never be affected.
+    //
+    // Admin exception: same gate as above (admin + non-empty overrideReason).
+    // This is the case that motivated this whole feature — a paid,
+    // already-submitted applicant needs to move into fully_funded while the
+    // window is closed — so it is deliberately overridable, unlike the
+    // window-is-open check itself which has no override for anyone.
     const isFullyFundedClosed = (): boolean =>
       getCategoryRegistrationPhase(application.program.pricingTiers, 'fully_funded', new Date()) === 'closed';
 
-    if (targetCategory === 'fully_funded' && isFullyFundedClosed()) {
+    if (targetCategory === 'fully_funded' && isFullyFundedClosed() && !canAdminOverride) {
       throw new BadRequestException({
         message: 'Fully Funded registration has closed.',
         errorCode: 'FULLY_FUNDED_REGISTRATION_CLOSED',
@@ -159,6 +201,27 @@ export class SwitchApplicationCategoryHandler {
       .filter((invoice) => String(invoice.status).toLowerCase() === 'unpaid')
       .map((invoice) => invoice.id);
 
+    // Audit trail (requirement: every admin-initiated switch, not just the
+    // exception path). `status` in the entry is deliberately the CURRENT
+    // (unchanged) status — this handler only ever changes applicationCategory,
+    // never status, and the history entry must not claim otherwise. Shape
+    // matches ApplicationStatusHistoryEntry / addStatusToHistory used
+    // elsewhere in this module (review/withdraw handlers).
+    const fromCategory = application.applicationCategory ?? 'none';
+    const statusHistoryEntry = actingAdminId
+      ? {
+          status: application.status,
+          changedAt: new Date().toISOString(),
+          changedBy: actingAdminId,
+          reason: overrideReason
+            ? `Category changed ${fromCategory} → ${targetCategory} by admin: ${overrideReason}`
+            : `Category changed ${fromCategory} → ${targetCategory} by admin`,
+        }
+      : undefined;
+    const existingStatusHistory = Array.isArray(application.statusHistory)
+      ? (application.statusHistory as unknown[])
+      : [];
+
     // 6. Perform Switch (and auto-cancel) atomically.
     const updatedApplication = await this.prisma.$transaction(async (tx) => {
       if (cancellableInvoiceIds.length > 0) {
@@ -182,6 +245,9 @@ export class SwitchApplicationCategoryHandler {
         data: {
           applicationCategory: targetCategory,
           updatedAt: new Date(),
+          ...(statusHistoryEntry
+            ? { statusHistory: [...existingStatusHistory, statusHistoryEntry] as Prisma.InputJsonValue }
+            : {}),
         },
       });
     });
