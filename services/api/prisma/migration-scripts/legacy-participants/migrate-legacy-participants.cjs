@@ -277,38 +277,32 @@ async function main() {
   //
   // SCHEMA CAVEAT (be honest, don't guess silently): this session has no
   // working legacy MySQL credentials for live DESCRIBE/sampling (same
-  // blocker as README "Real dry-run against prod/legacy -- blocked, not
-  // run" -- checked again this session: no legacy MySQL container on the
-  // VPS, no credentials in any container env). Column names below
-  // (`payments.participant_id`, `.program_payment_id`, `.amount`,
-  // `.currency`, `.status`, `.paid_at`, `.payment_method`,
-  // `xendit_payment.payment_id`, `midtrans_payment.payment_id`) are inferred
-  // from the naming convention already VERIFIED elsewhere in this same
-  // script (participant_essays.participant_id/program_essay_id,
-  // program_payments resolved via program_pricing_tiers.legacy_id -- see
-  // README "Legacy -> new entity mapping" and "Payment isolation"), not
-  // sampled from a real row. MUST be confirmED against one real legacy
-  // `payments` row (`DESCRIBE payments; SELECT * FROM payments LIMIT 1`)
-  // confirmed against real data before the real cutover run -- see README
-  // "Payment import -- schema caveat".
-  //
-  // xendit_payment/midtrans_payment are LEFT JOINed only to fill the
-  // informational `payment_method` label when `payments` itself doesn't
-  // carry one -- external_transaction_id/external_intent_id are NEVER read
-  // from them, since every imported invoice leaves both NULL unconditionally
-  // (see README "Payment isolation"); nothing else on those two gateway
-  // tables is relevant once the external ids are intentionally dropped.
-  const paymentsByParticipantId = new Map(); // legacy participants.id -> [{id, program_payment_id, amount, currency, status, paid_at, payment_method}]
+  // Column names below were VERIFIED directly against a live, read-only
+  // `DESCRIBE` of `payments`/`xendit_payment`/`midtrans_payment` on the real
+  // legacy DB this session (prior comment here claimed these were unverified
+  // guesses -- they were, and two were WRONG, now fixed against real schema):
+  // `payments` has NO `paid_at` column (real column is `payment_date`) and
+  // NO `payment_method` column (that's `payment_method_id`, an FK we don't
+  // need since we never carry gateway identity forward -- see below); it
+  // does have `is_deleted`, now filtered like every other legacy table in
+  // this script. `xendit_payment` has its own `payment_method` text column;
+  // `midtrans_payment` has `payment_type` (no `payment_method` column at
+  // all) -- both used only for the informational label, never for external
+  // ids (external_transaction_id/external_intent_id are NEVER read from
+  // them; every imported invoice leaves both NULL unconditionally, see
+  // README "Payment isolation").
+  const paymentsByParticipantId = new Map(); // legacy participants.id -> [{id, program_payment_id, amount, currency, status, paidAt, paymentMethod}]
   for (const legacyProgramId of activeProgramIds) {
     const rows = await mq(
       `SELECT pay.id, pay.participant_id, pay.program_payment_id, pay.amount, pay.currency, pay.status,
-              pay.paid_at, pay.created_at, pay.payment_method AS pay_payment_method,
+              pay.payment_date AS paid_at, pay.created_at,
+              xp.payment_method AS xendit_payment_method, mp.payment_type AS midtrans_payment_type,
               xp.id AS xendit_id, mp.id AS midtrans_id
        FROM payments pay
        JOIN participants p ON p.id = pay.participant_id
        LEFT JOIN xendit_payment xp ON xp.payment_id = pay.id
        LEFT JOIN midtrans_payment mp ON mp.payment_id = pay.id
-       WHERE p.program_id = ?
+       WHERE p.program_id = ? AND pay.is_deleted = 0
        ORDER BY pay.created_at ASC, pay.id ASC`,
       [legacyProgramId],
     );
@@ -322,7 +316,7 @@ async function main() {
         status: r.status,
         paidAt: r.paid_at,
         createdAt: r.created_at,
-        paymentMethod: r.pay_payment_method || (r.xendit_id ? 'xendit' : null) || (r.midtrans_id ? 'midtrans' : null) || null,
+        paymentMethod: r.xendit_payment_method || r.midtrans_payment_type || (r.xendit_id ? 'xendit' : null) || (r.midtrans_id ? 'midtrans' : null) || null,
       });
       paymentsByParticipantId.set(r.participant_id, list);
     }
@@ -374,7 +368,7 @@ async function main() {
       `SELECT al.id, al.file_link, al.participant_id
        FROM participant_agreement_letters al
        JOIN participants p ON p.id = al.participant_id
-       WHERE p.program_id = ?`,
+       WHERE p.program_id = ? AND al.is_deleted = 0`,
       [legacyProgramId],
     );
     for (const letter of letters) {
@@ -384,7 +378,7 @@ async function main() {
       `SELECT pd.id, pd.file_url, pd.participant_id
        FROM participant_program_documents pd
        JOIN participants p ON p.id = pd.participant_id
-       WHERE p.program_id = ?`,
+       WHERE p.program_id = ? AND pd.is_deleted = 0`,
       [legacyProgramId],
     );
     for (const doc of programDocs) {
