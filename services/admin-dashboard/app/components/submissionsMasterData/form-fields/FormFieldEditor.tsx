@@ -331,6 +331,10 @@ export function FormFieldEditor({
 
   const isEditing = !!initialField;
   const needsOptions = TYPES_WITH_OPTIONS.has(state.fieldType);
+  // System fields' type and storage key are owned by the shared system field
+  // catalog (Audit M12) and the API rejects a change to either, so the
+  // controls are locked here rather than let the admin hit that error.
+  const isSystemField = initialField?.source === "system";
 
   function patch<K extends keyof EditorState>(key: K, value: EditorState[K]) {
     setState((prev) => ({ ...prev, [key]: value }));
@@ -417,7 +421,9 @@ export function FormFieldEditor({
         helpText: normalizeRichText(state.helpText),
         mediaUrl: state.mediaUrl.trim() || undefined,
         mediaAlt: state.mediaAlt.trim() || undefined,
-        fieldType: state.fieldType,
+        // System fields' type comes from the catalog and is never editable
+        // here (see isSystemField above), so omit it from the payload.
+        fieldType: isSystemField ? undefined : state.fieldType,
       isRequired: state.isRequired,
       defaultValue: state.defaultValue.trim() || undefined,
       order: state.order,
@@ -438,7 +444,10 @@ export function FormFieldEditor({
       body.source = "custom";
     }
 
-    if (fieldNameChanged) {
+    // Same as fieldType above: the storage key for a system field is locked
+    // to the catalog, so never send a rename attempt for one even if the
+    // (disabled) control's value somehow diverges from the initial value.
+    if (fieldNameChanged && !isSystemField) {
       body.fieldName = fieldName;
     }
 
@@ -523,11 +532,19 @@ export function FormFieldEditor({
                 ))}
               </select>
             </Field>
-            <Field label="Field Type">
+            <Field
+              label="Field Type"
+              hint={
+                isSystemField
+                  ? "Comes from the shared system field catalog and can't be changed here. Add a custom field instead to collect a different type of data."
+                  : undefined
+              }
+            >
               <select
                 value={state.fieldType}
                 onChange={(e) => patch("fieldType", e.target.value)}
-                className={INPUT_CLS}
+                disabled={isSystemField}
+                className={isSystemField ? DISABLED_INPUT_CLS : INPUT_CLS}
               >
                 {FIELD_TYPE_OPTIONS.map((t) => (
                   <option key={t.value} value={t.value}>
@@ -595,12 +612,13 @@ export function FormFieldEditor({
                     }));
                   }}
                   placeholder="tshirt_size"
-                  className={INPUT_CLS}
+                  disabled={isSystemField}
+                  className={isSystemField ? DISABLED_INPUT_CLS : INPUT_CLS}
                 />
                 <p className="mt-1 text-[11px] text-zinc-500">
-                  Auto-generated from the label. Only change this if you need to align
-                  with an existing integration. Must start with a letter and use only
-                  lowercase letters, digits, and underscores.
+                  {isSystemField
+                    ? "Comes from the shared system field catalog and can't be changed here. Add a custom field instead to collect a different type of data."
+                    : "Auto-generated from the label. Only change this if you need to align with an existing integration. Must start with a letter and use only lowercase letters, digits, and underscores."}
                 </p>
               </div>
             )}
@@ -840,6 +858,12 @@ export function FormFieldEditor({
 
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
+// Locked-field variant: mutes the FILL (background + text), never the
+// outline — the border stays the same as an enabled input so the control
+// still reads as part of the form instead of fading out of the layout.
+const DISABLED_INPUT_CLS =
+  "block w-full rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm text-zinc-400 shadow-sm outline-none cursor-not-allowed";
 
 function Field({
   label,

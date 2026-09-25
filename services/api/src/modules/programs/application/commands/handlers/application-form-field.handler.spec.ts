@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { ConflictException, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import {
   CreateApplicationFormFieldHandler,
   UpdateApplicationFormFieldHandler,
@@ -376,8 +376,89 @@ describe('UpdateApplicationFormFieldHandler', () => {
 
   // Audit M12: mirrors create's catalog-is-source-of-truth guard on the
   // update path — a system-sourced field must not have its type or name
-  // overwritten by the client.
-  it('strips fieldType and fieldName from the update when the field is system-sourced', async () => {
+  // overwritten by the client. Previously this was silently stripped, which
+  // made the admin UI show a success toast while dropping the edit on the
+  // floor; it now throws instead (see the "throws when..." tests above), and
+  // only an unchanged resend of the same type/name passes through silently
+  // (see "allows a system field update when fieldType/fieldName match...").
+  it('rejects an attempt to change both fieldType and fieldName on a system-sourced field', async () => {
+    mockRepo.findFormFieldById.mockResolvedValue({
+      id: 'f1',
+      name: 'phone',
+      source: 'system',
+      type: 'phone',
+      programId: 'p1',
+    });
+
+    await expect(
+      handler.execute(
+        new UpdateApplicationFormFieldCommand(
+          'f1',
+          {
+            fieldType: FormFieldType.TEXT, // attempt to downgrade the catalog type
+            fieldName: 'not_phone', // attempt to rename away from the catalog key
+            label: 'Phone Number (edited)',
+          },
+          'u1',
+        ),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(mockValidator.validateCustomKey).not.toHaveBeenCalled();
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    expect(mockRepo.updateFormField).not.toHaveBeenCalled();
+  });
+
+  // Follow-up to Audit M12: silently stripping the edit made the admin UI
+  // look broken (success toast, nothing changed). An actual attempted change
+  // to type/key on a system field must now fail loudly instead.
+  it('throws when a system field update payload actually changes fieldType', async () => {
+    mockRepo.findFormFieldById.mockResolvedValue({
+      id: 'f1',
+      name: 'phone',
+      source: 'system',
+      type: 'phone',
+      programId: 'p1',
+    });
+
+    await expect(
+      handler.execute(
+        new UpdateApplicationFormFieldCommand(
+          'f1',
+          { fieldType: FormFieldType.TEXT },
+          'u1',
+        ),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(mockRepo.updateFormField).not.toHaveBeenCalled();
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('throws when a system field update payload actually changes fieldName', async () => {
+    mockRepo.findFormFieldById.mockResolvedValue({
+      id: 'f1',
+      name: 'phone',
+      source: 'system',
+      type: 'phone',
+      programId: 'p1',
+    });
+
+    await expect(
+      handler.execute(
+        new UpdateApplicationFormFieldCommand(
+          'f1',
+          { fieldName: 'not_phone' },
+          'u1',
+        ),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(mockRepo.updateFormField).not.toHaveBeenCalled();
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('allows a system field update when fieldType/fieldName match the existing value (idempotent resend)', async () => {
     mockRepo.findFormFieldById.mockResolvedValue({
       id: 'f1',
       name: 'phone',
@@ -391,9 +472,11 @@ describe('UpdateApplicationFormFieldHandler', () => {
       new UpdateApplicationFormFieldCommand(
         'f1',
         {
-          fieldType: FormFieldType.TEXT, // attempt to downgrade the catalog type
-          fieldName: 'not_phone', // attempt to rename away from the catalog key
+          fieldType: FormFieldType.PHONE,
+          fieldName: 'phone',
           label: 'Phone Number (edited)',
+          isRequired: true,
+          order: 3,
         },
         'u1',
       ),
@@ -403,7 +486,11 @@ describe('UpdateApplicationFormFieldHandler', () => {
     expect(mockPrisma.$transaction).not.toHaveBeenCalled();
     expect(mockRepo.updateFormField).toHaveBeenCalledWith(
       'f1',
-      expect.objectContaining({ label: 'Phone Number (edited)' }),
+      expect.objectContaining({
+        label: 'Phone Number (edited)',
+        isRequired: true,
+        order: 3,
+      }),
     );
     const [, updateData] = mockRepo.updateFormField.mock.calls[0];
     expect(updateData).not.toHaveProperty('type');

@@ -1,5 +1,5 @@
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
-import { ConflictException, Inject, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Logger } from '@nestjs/common';
 import { IProgramContentRepository } from '@core/interfaces/repositories/program-content.repository.interface';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import {
@@ -172,6 +172,26 @@ export class UpdateApplicationFormFieldHandler
     // name. Without this, a client could downgrade e.g. a phone field to text
     // or rename it away from its systemFieldKey through the update path even
     // though create blocks exactly that.
+    //
+    // A payload that actually tries to change type/key must fail loudly
+    // instead of being silently stripped — the admin UI was previously
+    // showing a success toast while dropping the edit on the floor. A stale
+    // client resending the SAME value (idempotent no-op) must still pass
+    // through untouched, so we only reject on an actual attempted change.
+    if (existing?.source === 'system') {
+      const fieldTypeChanged =
+        dto.fieldType !== undefined && dto.fieldType !== existing.type;
+      const fieldNameChanged =
+        dto.fieldName !== undefined && dto.fieldName !== existing.name;
+      if (fieldTypeChanged || fieldNameChanged) {
+        throw new BadRequestException({
+          code: 'system_field_type_or_key_locked',
+          message:
+            'Field type and storage key for system fields come from the shared system field catalog and cannot be changed here. Add a custom field instead to collect a different type of data.',
+        });
+      }
+    }
+
     const effectiveDto = existing?.source === 'system'
       ? { ...dto, fieldType: undefined, fieldName: undefined }
       : dto;
