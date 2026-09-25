@@ -2172,10 +2172,13 @@ export async function listDocumentReviewQueue(params: {
   if (params.status) q.set("status", params.status);
   if (params.limit !== undefined) q.set("limit", String(params.limit));
   if (params.offset !== undefined) q.set("offset", String(params.offset));
-  const raw = await request<{ items: DocumentReviewQueueItem[]; total: number }>(
+  // The controller returns { items, total, limit, offset }, but the TransformInterceptor
+  // rewrites that to { data: items, meta: { total, limit, offset } } on the wire, and
+  // request() keeps only `data`, so reading `.items` off it always came back empty.
+  const { data, meta } = await requestPaginated<DocumentReviewQueueItem>(
     `/applications/documents/review-queue?${q}`,
   );
-  return { items: raw.items ?? [], total: raw.total ?? 0 };
+  return { items: data, total: Number(meta?.total ?? data.length) };
 }
 
 export function reviewDocument(
