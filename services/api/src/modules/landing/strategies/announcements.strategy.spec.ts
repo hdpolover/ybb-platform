@@ -301,6 +301,124 @@ describe('AnnouncementsStrategy', () => {
     });
   });
 
+  describe('years facet', () => {
+    // Routes programAnnouncement.findMany calls by their `select` shape:
+    // the list query has none, the category/tag facet sample selects
+    // category+tags, and the year sample selects publishDate only.
+    function mockProgramAnnouncementFindMany(yearRows: Array<{ publishDate: Date }>) {
+      mockPrisma.programAnnouncement.findMany.mockImplementation(
+        (args: { select?: { category?: boolean; publishDate?: boolean } }) => {
+          if (args.select?.publishDate) return Promise.resolve(yearRows);
+          if (args.select?.category) return Promise.resolve([]);
+          return Promise.resolve([]);
+        },
+      );
+    }
+
+    // Routes systemAnnouncement.findMany calls: the page-1 feed query has no
+    // `select`, the year sample selects publishedAt only.
+    function mockSystemAnnouncementFindMany(yearRows: Array<{ publishedAt: Date | null }>) {
+      mockPrisma.systemAnnouncement.findMany.mockImplementation(
+        (args: { select?: { publishedAt?: boolean } }) => {
+          if (args.select?.publishedAt) return Promise.resolve(yearRows);
+          return Promise.resolve([]);
+        },
+      );
+    }
+
+    beforeEach(() => {
+      mockPrisma.programAnnouncement.count.mockResolvedValue(0);
+    });
+
+    it('computes distinct years, sorted descending, from program + system announcements spanning multiple years', async () => {
+      mockProgramAnnouncementFindMany([
+        { publishDate: new Date('2025-03-01T00:00:00.000Z') },
+        { publishDate: new Date('2025-11-01T00:00:00.000Z') }, // duplicate year
+        { publishDate: new Date('2024-01-01T00:00:00.000Z') },
+      ]);
+      mockSystemAnnouncementFindMany([
+        { publishedAt: new Date('2026-01-01T00:00:00.000Z') },
+        { publishedAt: null }, // no publish date yet — contributes no year
+      ]);
+
+      const strategy = new AnnouncementsStrategy(
+        mockPrisma as never,
+        mockCacheService as never,
+        mockLandingSnapshotService as never,
+      );
+
+      const result = (await strategy.getData({ id: 'brand-1' } as never)) as {
+        sections: Array<{ type: string; content?: { filters?: { years: number[] } } }>;
+      };
+      const listSection = result.sections.find((section) => section.type === 'announcement_list');
+
+      expect(listSection?.content?.filters?.years).toEqual([2026, 2025, 2024]);
+    });
+
+    it('does not shrink when an active year/category/tag/programId/search filter narrows the list', async () => {
+      const yearRows = [
+        { publishDate: new Date('2025-03-01T00:00:00.000Z') },
+        { publishDate: new Date('2024-01-01T00:00:00.000Z') },
+        { publishDate: new Date('2022-06-01T00:00:00.000Z') },
+      ];
+      mockProgramAnnouncementFindMany(yearRows);
+      mockSystemAnnouncementFindMany([]);
+
+      const strategy = new AnnouncementsStrategy(
+        mockPrisma as never,
+        mockCacheService as never,
+        mockLandingSnapshotService as never,
+      );
+
+      const filteredResult = (await strategy.getAnnouncements(
+        { id: 'brand-1' } as never,
+        {
+          year: 2024,
+          category: 'news',
+          tag: 'orientation',
+          programId: 'program-xyz',
+          search: 'orientation',
+        } as never,
+      )) as { sections: Array<{ type: string; content?: { filters?: { years: number[] } } }> };
+      const listSection = filteredResult.sections.find((section) => section.type === 'announcement_list');
+
+      // Same full year set as the unfiltered default view — the active
+      // filters narrowed the announcement list, not the year options.
+      expect(listSection?.content?.filters?.years).toEqual([2025, 2024, 2022]);
+    });
+
+    it('sorts programs/editions by year desc then title asc, with yearless/archive entries last', async () => {
+      mockProgramAnnouncementFindMany([]);
+      mockSystemAnnouncementFindMany([]);
+      mockPrisma.program.findMany.mockResolvedValue([
+        { id: 'p-old-b', name: 'Beta Summit', year: 2023 },
+        { id: 'p-archive', name: 'Legacy Summit (Archive)', year: 2020 },
+        { id: 'p-new-a', name: 'Alpha Summit', year: 2026 },
+        { id: 'p-new-b', name: 'Beta Summit', year: 2026 },
+        { id: 'p-yearless', name: 'Undated Summit', year: null },
+      ]);
+
+      const strategy = new AnnouncementsStrategy(
+        mockPrisma as never,
+        mockCacheService as never,
+        mockLandingSnapshotService as never,
+      );
+
+      const result = (await strategy.getData({ id: 'brand-1' } as never)) as {
+        sections: Array<{ type: string; content?: { filters?: { programs: Array<{ id: string; title: string }> } } }>;
+      };
+      const listSection = result.sections.find((section) => section.type === 'announcement_list');
+
+      expect(listSection?.content?.filters?.programs.map((p) => p.id)).toEqual([
+        'p-new-a',
+        'p-new-b',
+        'p-old-b',
+        'p-archive',
+        'p-yearless',
+      ]);
+    });
+  });
+
   describe('getAnnouncementDetail', () => {
     const brand = { id: 'brand-1' } as never;
     const uuid = '20069fca-e516-429f-a3bc-e88d80ce2021';
