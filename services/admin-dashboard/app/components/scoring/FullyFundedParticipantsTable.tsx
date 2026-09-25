@@ -33,6 +33,14 @@ export interface FullyFundedParticipantRow {
   scoreStatus: string | null;
 }
 
+// Statuses the "Move to Fully Funded / Self Funded" action never shows for,
+// even for admins: both are terminal (the participant withdrew, or the
+// program rejected them), so there's nothing left to reassign. Every other
+// status — including submitted/under_review/interview_scheduled/waitlisted/
+// accepted — is reachable here; the API enforces the same allow-list on its
+// side (switch-application-category.handler.ts) and is the real gate.
+const SWITCH_CATEGORY_INELIGIBLE_STATUSES = new Set(["withdrawn", "rejected"]);
+
 interface FullyFundedParticipantsTableProps {
   data: FullyFundedParticipantRow[];
   /** Current 1-based page, server-driven — rows are exactly this page's slice. */
@@ -176,7 +184,7 @@ export function FullyFundedParticipantsTable({
                             {submittingId === row.accountId ? "Submitting…" : "Force Submit"}
                           </button>
                         )}
-                        {row.status === "draft" && (
+                        {!SWITCH_CATEGORY_INELIGIBLE_STATUSES.has(row.status) && (
                           <button
                             type="button"
                             title={`Move this applicant to ${switchTargetLabel}`}
@@ -242,6 +250,19 @@ export function FullyFundedParticipantsTable({
                 `This changes ${switchRow.name}'s registration category. Any unpaid invoices on the current category are cancelled automatically. A registration fee that is already paid is NOT refunded or re-issued — finance has to reconcile any price difference.`}
             </DialogDescription>
           </DialogHeader>
+          {switchRow && switchRow.status !== "draft" && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <span className="font-semibold">Exception:</span> this applicant has already submitted
+              their application. Category switches are normally only allowed before submission — moving
+              them now overrides that rule and is recorded against your admin account.
+            </div>
+          )}
+          {switchTarget === "fully_funded" && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <span className="font-semibold">Exception:</span> if the Fully Funded registration window
+              is currently closed, this admin action overrides that lock too.
+            </div>
+          )}
           <label className="block text-xs font-semibold text-zinc-600">
             Reason
             <textarea
