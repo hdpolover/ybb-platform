@@ -16,6 +16,12 @@ import {
 const MAX_SYSTEM_ANNOUNCEMENTS = 10;
 const MAX_FACET_SAMPLE = 1000;
 const MAX_FACET_TAGS = 20;
+// Unlike MAX_FACET_SAMPLE (a tag/category *popularity* sample, where dropping
+// the tail is harmless), the year selector must never silently omit a year —
+// a missing option looks like "no announcements that year" to the frontend.
+// Each row here is a single DateTime column, so this cap is generous rather
+// than a real-world ceiling.
+const MAX_YEAR_SAMPLE = 20000;
 // Matches program_announcements.slug VarChar(255); anything longer cannot exist,
 // so it is rejected before it reaches the database or the cache key.
 const MAX_ANNOUNCEMENT_KEY_LENGTH = 255;
@@ -26,6 +32,26 @@ interface AnnouncementFilters {
   tag?: string;
   programId?: string;
   year?: number;
+}
+
+interface AnnouncementEditionOption {
+  id: string;
+  title: string;
+}
+
+// Response shape for the "filters" block of the announcement list payload —
+// the available options the frontend renders as facets (category/tag pickers,
+// the program/edition select, and now the year select). All fields are
+// always computed and always present, even when empty.
+export interface AnnouncementFilterValues {
+  categories: string[];
+  tags: string[];
+  programs: AnnouncementEditionOption[];
+  // Distinct calendar years with at least one visible announcement, sorted
+  // descending. Computed from the SAME brand/visibility scope as the list,
+  // but never narrowed by the currently-active search/category/tag/programId/
+  // year filters — see the facetRows/editionPrograms/year-sample queries.
+  years: number[];
 }
 
 export interface MappedAnnouncement {
@@ -351,42 +377,74 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
         })
         : Promise.resolve([]);
 
-    const [systemAnnouncementsRaw, programAnnouncements, programAnnouncementsTotal, facetRows, editionPrograms] =
-      await Promise.all([
-        systemAnnouncementsQuery,
-        this.prisma.programAnnouncement.findMany({
-          where: programAnnouncementWhere,
-          orderBy: [{ isPinned: 'desc' }, { publishDate: 'desc' }, { id: 'asc' }],
-          skip: (pageNum - 1) * limitNum,
-          take: limitNum,
-          include: {
-            program: {
-              select: { name: true, slug: true },
-            },
+    // Same base visibility scope as the facet sample above (brand + published
+    // program only) — no category/tag/programId/search/year filter applied,
+    // so the year select always offers every year the caller could pick.
+    const publicProgramAnnouncementBaseWhere: Prisma.ProgramAnnouncementWhereInput = {
+      isActive: true,
+      deletedAt: null,
+      targetAudience: 'all',
+      publishDate: { lte: now },
+      program: programWhere,
+    };
+
+    // Mirrors systemAnnouncementWhere's brand/publication scope only — no
+    // programId/range/search filter — for the same reason.
+    const systemAnnouncementYearsWhere: Prisma.SystemAnnouncementWhereInput = {
+      isPublished: true,
+      deletedAt: null,
+      OR: [{ brandId: category?.id ?? undefined }, { brandId: null }],
+    };
+
+    const [
+      systemAnnouncementsRaw,
+      programAnnouncements,
+      programAnnouncementsTotal,
+      facetRows,
+      editionPrograms,
+      programYearRows,
+      systemYearRows,
+    ] = await Promise.all([
+      systemAnnouncementsQuery,
+      this.prisma.programAnnouncement.findMany({
+        where: programAnnouncementWhere,
+        orderBy: [{ isPinned: 'desc' }, { publishDate: 'desc' }, { id: 'asc' }],
+        skip: (pageNum - 1) * limitNum,
+        take: limitNum,
+        include: {
+          program: {
+            select: { name: true, slug: true },
           },
-        }),
-        this.prisma.programAnnouncement.count({ where: programAnnouncementWhere }),
-        // Facet sample is intentionally brand-scoped only (not filtered by the
-        // current request's category/tag/programId/search/year) so the
-        // available-filter-values list doesn't shrink as the caller narrows
-        // their own query — it always reflects everything they *could* pick.
-        this.prisma.programAnnouncement.findMany({
-          where: {
-            isActive: true,
-            deletedAt: null,
-            targetAudience: 'all',
-            publishDate: { lte: now },
-            program: programWhere,
-          },
-          select: { category: true, tags: true },
-          take: MAX_FACET_SAMPLE,
-        }),
-        this.prisma.program.findMany({
-          where: programWhere,
-          select: { id: true, name: true },
-          orderBy: { startDate: 'desc' },
-        }),
-      ]);
+        },
+      }),
+      this.prisma.programAnnouncement.count({ where: programAnnouncementWhere }),
+      // Facet sample is intentionally brand-scoped only (not filtered by the
+      // current request's category/tag/programId/search/year) so the
+      // available-filter-values list doesn't shrink as the caller narrows
+      // their own query — it always reflects everything they *could* pick.
+      this.prisma.programAnnouncement.findMany({
+        where: publicProgramAnnouncementBaseWhere,
+        select: { category: true, tags: true },
+        take: MAX_FACET_SAMPLE,
+      }),
+      this.prisma.program.findMany({
+        where: programWhere,
+        select: { id: true, name: true, year: true },
+      }),
+      // Year facet sample — same base scope as facetRows above, but unbounded
+      // (a single DateTime column per row is cheap) so no year is ever
+      // dropped just because it fell outside a popularity-style sample cap.
+      this.prisma.programAnnouncement.findMany({
+        where: publicProgramAnnouncementBaseWhere,
+        select: { publishDate: true },
+        take: MAX_YEAR_SAMPLE,
+      }),
+      this.prisma.systemAnnouncement.findMany({
+        where: systemAnnouncementYearsWhere,
+        select: { publishedAt: true },
+        take: MAX_YEAR_SAMPLE,
+      }),
+    ]);
 
     // category/tag matching against SystemAnnouncement happens in-memory: `type` is a
     // fixed enum (not the free-text `category` values content editors actually use) and
@@ -449,7 +507,11 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
               limit: limitNum,
               total_pages: totalPages,
             },
-            filters: this.buildFilterValues(facetRows, editionPrograms),
+            filters: this.buildFilterValues(
+              facetRows,
+              editionPrograms,
+              this.computeAvailableYears(programYearRows, systemYearRows),
+            ),
           },
         },
       ],
@@ -465,8 +527,9 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
 
   private buildFilterValues(
     facetRows: Array<{ category: string | null; tags: string[] }>,
-    editionPrograms: Array<{ id: string; name: string }>,
-  ) {
+    editionPrograms: Array<{ id: string; name: string; year: number }>,
+    years: number[],
+  ): AnnouncementFilterValues {
     const categoryByKey = new Map<string, string>();
     const tagCounts = new Map<string, number>();
 
@@ -492,7 +555,11 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
     return {
       categories,
       tags,
-      programs: editionPrograms.map((program) => ({ id: program.id, title: program.name })),
+      programs: this.sortEditionPrograms(editionPrograms).map((program) => ({
+        id: program.id,
+        title: program.name,
+      })),
+      years,
     };
   }
 
@@ -500,5 +567,44 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
     const trimmed = raw?.trim();
     if (!trimmed) return null;
     return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+  }
+
+  // Year desc, then title asc — with yearless/"(Archive)"-style entries
+  // always sorted last regardless of what a numeric year comparison would
+  // otherwise say. Program.year is a required column today, but the
+  // null/undefined guard is kept defensively rather than assumed away.
+  private sortEditionPrograms<T extends { name: string; year: number | null | undefined }>(programs: T[]): T[] {
+    const isArchived = (program: T) => program.year == null || /\(archive\)/i.test(program.name);
+
+    return [...programs].sort((left, right) => {
+      const leftArchived = isArchived(left);
+      const rightArchived = isArchived(right);
+      if (leftArchived !== rightArchived) return leftArchived ? 1 : -1;
+      if (!leftArchived && !rightArchived && left.year !== right.year) {
+        return (right.year as number) - (left.year as number);
+      }
+      return left.name.localeCompare(right.name);
+    });
+  }
+
+  // Distinct calendar years across program announcements (publishDate) and
+  // system announcements (publishedAt, nullable — unpublished-date rows
+  // contribute no year), merged and sorted descending.
+  private computeAvailableYears(
+    programYearRows: Array<{ publishDate: Date }>,
+    systemYearRows: Array<{ publishedAt: Date | null }>,
+  ): number[] {
+    const years = new Set<number>();
+
+    for (const row of programYearRows) {
+      years.add(row.publishDate.getUTCFullYear());
+    }
+    for (const row of systemYearRows) {
+      if (row.publishedAt) {
+        years.add(row.publishedAt.getUTCFullYear());
+      }
+    }
+
+    return [...years].sort((a, b) => b - a);
   }
 }
