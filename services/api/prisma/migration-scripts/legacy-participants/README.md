@@ -282,19 +282,239 @@ before cutover.
 ## CLI
 
 ```
-node migrate-legacy-participants.cjs --dry-run [--program <legacyProgramId>] [--batch-size 500]
-node migrate-legacy-participants.cjs --apply    --program <legacyProgramId>  [--batch-size 500]
+node migrate-legacy-participants.cjs --dry-run [--program <legacyProgramId>] [--batch-size 500] [--limit N] [--status-mode flatten|preserve] [--manifest path.csv]
+node migrate-legacy-participants.cjs --apply    --program <legacyProgramId>  [--batch-size 500] [--limit N] [--status-mode flatten|preserve] [--manifest path.csv]
 ```
 
 - Default is `--dry-run`; `--apply` must be passed explicitly.
 - `--program` restricts to one legacy program id (repeatable to run several);
   omitted = every mapped program except 22.
+- `--limit N` caps rows pulled per program (testing/slicing a program locally,
+  e.g. a 200-row slice of a large program) — never pass this for the real
+  cutover run.
+- `--status-mode` (default `flatten`): see "Application status mode" below.
+- `--manifest path.csv` overrides where the media-rehost manifest is written
+  (default `./legacy-media-manifest.csv`); see "Media rehost manifest" below.
 - Idempotent: every insert is an upsert keyed on the relevant `legacy_id`, so
   a full re-run (e.g. the final cutover sync for programs 17/18/20) only
-  touches rows that actually changed.
+  touches rows that actually changed. Verified locally: re-running `--apply`
+  for the same program a second time produces 0 new users/participants/
+  applications (see "Local apply test" below).
 - Both DB connections are read-only-by-construction in dry-run: legacy always
-  runs `SET SESSION TRANSACTION READ ONLY`; the Postgres side only issues
-  `SELECT`s unless `--apply` is passed.
+  runs `SET SESSION TRANSACTION READ ONLY` (in every mode, apply included —
+  this script never writes to legacy MySQL); the Postgres side wraps the
+  whole dry-run session in `BEGIN READ ONLY` / `ROLLBACK` so the server
+  itself rejects a stray write, not just script discipline.
+
+## Payment status mapping — fixed danger
+
+`mapLegacyPayStatus` previously mapped legacy `PENDING` (payment_status=1) to
+`'processing'`. This was wrong: in the new schema `'processing'` means "a
+gateway webhook/callback is in flight right now", and prod has a known
+event-sync drift (`payment.succeeded` events dropped) that leaves invoices
+stuck in `'processing'` — exactly the state `PaymentReconciliationService`'s
+hourly cron exists to clean up. Importing years-old legacy pending payments
+as `'processing'` would have made them indistinguishable from live stuck
+transactions.
+
+Audited every status-filtered job in `services/api` (Go payment service has
+no cron/ticker that filters by status at all — it only reacts to explicit
+RPCs, and no `payment_transactions` row is ever created for an imported
+invoice since no `external_intent_id`/`external_transaction_id` is set):
+
+| Job | File:line | Filter | Touches a legacy-imported row? |
+|---|---|---|---|
+| `runScheduledReconciliation` / `reconcileProcessingInvoices` | `payment-reconciliation.service.ts:159,238,251-258` | `status IN (processing, unpaid)` **AND** (`externalIntentId` or `externalTransactionId` not null) | No — imported rows never set either external id |
+| `reconcileApplicationRegistration` | `payment-reconciliation.service.ts:315-323` | same external-id guard as above | No |
+| `reconcileTerminalInvoiceDrift` | `payment-reconciliation.service.ts:350,362-367` | `status IN (cancelled, failed, refunded)` **AND** external-id guard | No |
+| `reconcilePaidColumnDrift` | `payment-reconciliation.service.ts:438,441-460` | `status = paid` **AND** application's own payment-status column disagrees with it | No — this migration writes the application's `registration_payment_status`/`program_payment_status` consistently with the invoice it mints, so there is never drift for an imported row |
+| `PostPaymentFollowupService.sendDueFollowups` | `post-payment-followup.service.ts:49-51,118-127` | invoice `status=paid` **AND** `paidAt > POST_PAYMENT_FOLLOWUP_CUTOFF` (`2026-09-08T00:00:00+07:00`) **AND** application `submittedAt IS NULL` | No — every legacy payment predates the cutoff by construction (historical), so `paidAt > cutoff` never matches |
+| `SubmissionDeadlineReminderService` | `submission-deadline-reminder.service.ts:88,135-141` | `status=draft` **AND** `program.applicationDeadline` within the next 1/3/7 days | No, contingent on all 16 mapped legacy programs' `applicationDeadline` being in the past (true for every closed program; **operational risk**, not code — verify this holds before cutover if any mapped program's deadline was left blank/future) |
+
+`PaymentStatus` enum (`prisma/schema/enums.prisma:206-212`): `unpaid, paid,
+processing, failed, refunded, cancelled`. Fixed mapping: legacy `PAID(2)` ->
+`paid`, `FAILED(3)` -> `failed`, `PENDING(1)` and `NOT_REQUIRED(0)` -> `unpaid`
+(never `processing`, never `cancelled` — `unpaid` is the correct "nothing was
+ever completed" terminal value and is what a brand-new native application
+defaults to before anyone pays). `application_invoices.legacy_id` is
+non-null on every imported row, doubling as the "historical import" marker
+per the existing "Payment isolation" section above — no additional
+`legacy_id IS NULL` guard needed on any of the jobs above, since every one of
+them already requires a signal (external id, or column-drift) that an
+imported row never produces.
+
+**Operational (non-code) risk found and not fixed by this migration**: the
+admin-triggered reminder-campaign audience builders
+(`registration-fee-audience.service.ts`, `program-fee-unpaid-audience.service.ts`,
+`application-draft-unsubmitted-audience.service.ts`) are scoped by
+`programId` and application status but are **not** automatically excluded
+from a closed/legacy program — an admin could manually launch a reminder
+campaign against a legacy program's imported applications. This is
+admin-initiated, not autonomous, so it is flagged for the owner rather than
+patched here.
+
+## Application status mode
+
+Prod has only ever operationally produced `draft`/`submitted`
+(`ybb-application-status-only-draft-submitted` finding). `accepted` /
+`rejected` / `under_review` exist in the `ApplicationStatus` enum but are
+**latent** — importing a legacy "Approved" outcome as `accepted` would newly
+light up, for a closed legacy program, with no time/program-active gate on
+any of them:
+
+- **LOA download eligibility** — `loa-eligibility.service.ts` /
+  `loa-download.service.ts` key off `ApplicationStatus.accepted`.
+- **Document-audience gating** — `document-audience.service.ts` gates which
+  document requirements a participant portal shows by status.
+- **`review-application.handler.ts`** — fires a status-change notification
+  email when an application transitions to `accepted`/`rejected`; while this
+  migration never calls that handler (raw SQL, no service layer — see
+  "Side-effect bypass"), any *future* admin action that re-saves an imported
+  `accepted` application through the normal API could re-trigger it.
+- **Public activity-toast feed** — `activity.mapper.ts`'s
+  `ACTIVITY_SOURCE_STATUSES` includes `accepted`, so an imported accepted
+  application on a closed program could surface in the public "X just got
+  accepted" toast.
+
+`--status-mode` (default `flatten`) controls this:
+
+- `flatten` (default): every non-draft outcome (submitted, under_review,
+  accepted, rejected) is stored as `submitted` — the only two values ever
+  exercised live. Nothing lights up.
+- `preserve`: stores the real legacy outcome (`accepted`/`rejected`/
+  `under_review`) — only pass this once the owner has explicitly signed off
+  on the consequences above.
+
+Either way, the true legacy outcome is never lost: it is always recorded in
+`participant_applications.personal_data.legacy_outcome`
+(`accepted`/`rejected`/`under_review`/`pending`/`null` for drafts), regardless
+of mode, so switching from `flatten` to `preserve` later needs a small
+migration script (read `legacy_outcome`, write `status`), not a re-import.
+
+## Owner-required breakdown
+
+Every run (dry-run or apply) prints, per legacy program and as a grand
+total: users matched-existing vs new-to-create (brand-scoped
+`lower(trim(email))` match against new-prod `users`), participants reused vs
+new (a `Participant` profile is 1:1 with `User`, so "new" only happens on a
+user's first-encountered program registration), and applications new vs
+skipped-existing (already-imported via `legacy_id`, or a native duplicate on
+the same participant+program). See "Local apply test" below for real
+numbers from a local run, and "Real dry-run against prod/legacy" for why
+this repo cannot yet print real prod numbers.
+
+## Media rehost manifest
+
+Every row that would create (or, in apply mode, does create) a new
+`Participant` emits one manifest line per non-empty media URL
+(`participants.picture_url`, `participants.resume_url`) to
+`--manifest` (default `./legacy-media-manifest.csv`), format
+`table,legacy_id,url`. URLs are kept as-is (`storage.ybbfoundation.com`,
+never downloaded) per the "Media / file URL rehosting" section above — this
+manifest is scope for a later, separate rehost step only.
+
+## Local apply test (docker, synthetic data — no real PII)
+
+Ran end-to-end against a throwaway `postgres:16-alpine` + `mysql:8.0` in
+Docker (both destroyed after the test): `prisma migrate deploy` applied
+cleanly (34 migrations including
+`20260925130000_add_legacy_participant_migration_fields`); seeded two
+synthetic brands/programs carrying `legacy_id=1` and `legacy_id=4` (no real
+prod data — this repo has no working legacy MySQL credentials, see below,
+so exact prod row counts for programs 1/4 could not be reproduced locally);
+seeded 8 synthetic participants for program 1 (including one whose email
+matches a pre-seeded existing new-prod user, to exercise the dedupe path)
+and 6 for program 4, with a deliberate mix of draft/submitted/approved/
+rejected/under_review statuses and 3 rows with no `participant_statuses` row
+at all (orphan path).
+
+Results:
+- `--dry-run --program 1 --program 4`: 0 Postgres writes (verified by
+  re-querying row counts after — still exactly the 1 pre-seeded user, 0
+  applications). Breakdown printed matched expectations: 1 user
+  matched-existing, 13 new-to-create, 14 applications new, 3 orphans (no
+  status row).
+- `--apply --program 1`: 8 users (7 new + 1 matched-existing linked by
+  `legacy_id`, not duplicated), 8 participants, 8 applications. Verified
+  directly: 0 duplicate `(email, brand_id)` rows, 0 duplicate
+  `participants.user_id` rows, the pre-seeded user kept its original id with
+  `legacy_id` now populated. `--status-mode=flatten` (default) confirmed:
+  stored `status` values were only `draft`/`submitted`; the true outcome
+  (`accepted`/`rejected`/`under_review`/`pending`) was recorded in
+  `personal_data.legacy_outcome` for every non-draft row.
+- **Idempotency**: re-ran `--apply --program 1` a second time —
+  `usersNew=0, participantsNew=0, appsNew=0`, all 8/8/8 reported as
+  matched/reused/skipped-existing, and Postgres row counts were unchanged
+  (8/8/8) after the rerun.
+- `--apply --program 4 --limit 3`: imported exactly 3 of the 6 seeded
+  program-4 rows (confirms `--limit` slicing), bringing running totals to 11
+  users / 11 applications (8 + 3), matching expectations exactly.
+
+Caveat: this is a small synthetic dataset (14 rows total), not a
+production-scale replica of program 1's real 31 participants or a 200-row
+program-4 slice, because no real legacy data was available locally (see
+next section) — it validates the *mechanism* (dedupe, idempotency, status
+flattening, limit slicing, zero-write dry-run) with real executed SQL, not
+hand-derived expectations, but does not stand in for a real-data dry run.
+
+## Real dry-run against prod/legacy — blocked, not run
+
+Attempted per the hard-rule constraints (read-only, `BEGIN READ ONLY` on
+Postgres, never write to legacy MySQL):
+
+- **Prod Postgres**: reachable in principle — `ybb-platform-postgres-api-*`
+  runs on a Docker Swarm overlay network (`dokploy-network`) whose IP
+  (`10.0.1.158:5432`) is not routable from the VPS host's own network
+  namespace (`docker exec` reaches it via Docker's internal API, not a
+  routable path), so a plain `ssh -L` from a laptop can't reach it directly.
+  Worked around this by running a temporary `alpine/socat` container
+  attached to the same overlay network as a TCP proxy
+  (`TCP-LISTEN:15432 -> 10.0.1.158:5432`), then `ssh -L` to that container's
+  published port — this proved the network path is viable. However, the
+  authenticated connection through that path failed (`password
+  authentication failed`) despite reading the exact `POSTGRES_PASSWORD` env
+  var off the live container, and prod's own Postgres log at the same
+  timestamp showed **another concurrent session already issuing live
+  exploratory queries against this same prod database** (schema-mismatch
+  errors referencing `legacy_id`/`program_pricing_tiers`, and unrelated live
+  `support_tickets` INSERT errors from real traffic). Given that signal, this
+  session stopped rather than keep contending for the same production
+  target — the proxy container and both SSH tunnels were torn down
+  immediately after. **No prod queries executed successfully from this
+  session; no prod data was read.**
+- **Legacy MySQL**: no working credentials exist anywhere accessible to this
+  session — not in this repo (`.env.example` files only have placeholders),
+  not in any running container's environment (checked the live API
+  containers and the swarm service), and not in shell history on the VPS.
+  The legacy-content migration that already ran evidently used credentials
+  supplied ad-hoc at invocation time (per its own README's `docker exec -e
+  LEGACY_DB_...` example) that were never persisted anywhere this session
+  could find. **This is a real, unresolved blocker for the "run the actual
+  script end-to-end against real data" requirement** — the owner needs to
+  supply `LEGACY_DB_HOST/PORT/USER/PASSWORD/NAME` (or point to wherever they
+  are stored) before that can be attempted.
+
+## Runtime estimate (277k participants)
+
+No real-data run was possible (see above), so this is derived from the
+query shape, not measurement. Per legacy participant row the script issues:
+1 existing-user lookup, 0–1 user insert, 0–1 participant lookup/insert, 1
+existing-application lookup, 0–1 duplicate-application lookup (apply only),
+1 `participant_statuses` lookup, 1 `participant_essays` lookup, 1
+`program_essays` lookup (this last one is **redundant per-row** — it doesn't
+depend on `row`, only on `legacyProgramId`, and is currently issued inside
+the per-row loop; hoisting it out to once per program, alongside the
+existing `essaysByProgramId`/`tiersByProgramId` precomputation, is a
+straightforward follow-up that would cut one full MySQL round-trip per row).
+That's roughly 6–8 network round-trips per row today (5–7 after hoisting the
+essay-order query), none currently batched. At an assumed ~5–8ms per
+round-trip on a same-region connection (higher over the SSH-tunnel path this
+migration will likely run through), 277,000 rows x ~7 round-trips x ~6ms ≈
+**3.2–4 hours** for a single-threaded full run; hoisting the redundant query
+and increasing `--batch-size`-driven parallelism (currently unused —
+`--batch-size` is accepted but not yet wired into any batched/parallel
+fetch) would meaningfully cut this. This estimate has **not** been validated
+against real timing since no real-data run was possible this session.
 
 ## Still-live legacy programs — cutover note
 
