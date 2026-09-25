@@ -203,7 +203,20 @@ paths above ever joins out to the Go service to render payment status.
 payment-status columns is sufficient by itself.** No second table needed, and
 none was written.
 
-### Payment import — implemented, with a schema caveat
+### Payment import — implemented, column names verified against live schema
+
+**Update**: the column names below were initially guessed by inference and
+flagged as an open caveat; they have since been checked directly against a
+live, read-only `DESCRIBE` of `payments`/`xendit_payment`/`midtrans_payment`/
+`participant_agreement_letters`/`participant_program_documents` on the real
+legacy DB. Two were wrong and are now fixed: `payments` has no `paid_at`
+column (real column is `payment_date`) and no `payment_method` column (real
+source is `xendit_payment.payment_method` / `midtrans_payment.payment_type`,
+LEFT JOINed as before). `is_deleted` filters were also added to `payments`,
+`participant_agreement_letters`, and `participant_program_documents`,
+matching every other legacy read in this script. Everything else below
+(`participant_id`, `program_payment_id`, `amount`, `currency`, `status`,
+`file_link`, `file_url`) was already correct.
 
 `migrate-legacy-participants.cjs` now imports legacy `payments` into
 `application_invoices`, one new row per legacy payment, and writes the parent
