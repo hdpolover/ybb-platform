@@ -1227,3 +1227,72 @@ The column counts match the table in "Media / file URL rehosting" above
 - The real Spaces bucket, the real VPS, and the real legacy host's bytes were
   never touched by this verification. The localstack and Postgres containers
   were removed afterwards; all temp files/manifests were deleted.
+
+## Post-VPS-dry-run fixes (2026-09-26) — invoice tier synthesis, dup-guard, program-12
+
+A real dump-based dry-run against all mapped programs (see "Real dry-run
+against prod/legacy") surfaced three real bugs, fixed here and re-verified
+locally against real legacy data (small `--limit`-based run, programs 1/4/12):
+
+### 1. Invoice tier matching was dropping almost all payment history
+
+`invoicesUnmatchedTier=27,149` on the real run — requiring an exact
+`program_pricing_tiers.legacy_id` match before minting an invoice silently
+dropped nearly every legacy payment, because legacy programs' fee
+definitions (`program_payments`) were mostly never content-migrated into
+current pricing tiers. Fixed: `resolveOrCreateTier()` now falls back to
+synthesizing a historical tier (`program_pricing_tiers` row, `is_active =
+false`, `fee_type` mapped from legacy `program_payments.category` —
+`registration` -> `registration_fee`, `program_fee_1`/`program_fee_2` pass
+through unchanged, anything else -> `custom_fee`) from the legacy
+`program_payments` definition itself, keyed by `legacy_id` so a rerun
+reuses the same synthesized tier instead of creating a duplicate. Only a
+payment whose `program_payment_id` doesn't exist in legacy `program_payments`
+either (a true orphan) still counts as `invoicesUnmatchedTier`. Verified
+live (small local run): `tiersSynthesized=1`, `invoicesNew=19` for a
+5-participant slice of program 4, broken down by final status
+(`paid=4 unpaid=1 failed=14`) — the new "Invoices by final status" line in
+the printed report.
+
+### 2. Native-duplicate application guard didn't run in dry-run
+
+`appsSkippedExisting=0` on the real run despite `participantsReused=1,323`
+and a separately-verified 125 legacy-program-18 emails already holding a
+native application on the mapped Korea Youth Summit program. Root cause:
+the `(participant_id, program_id)` duplicate check was gated behind
+`if (apply)`, so dry-run never saw it — not a missing-column issue, that
+check uses columns that already exist in prod today. Fixed: the check now
+runs whenever `participantId` is available (i.e., in both dry-run and
+apply, for any participant whose profile already exists — a brand-new
+dry-run-only participant, not yet inserted, is the only case correctly
+skipped, since it cannot already have a native application).
+
+### 3. Legacy program 12 (MEYS) — dry-run now simulates the pending backfill
+
+Legacy program 12 still has no new-prod `programs` row (see the dedicated
+migration `20260925150000_backfill_legacy_program_12_meys`, not yet
+deployed to prod). Rather than let its 23,709 participants silently vanish
+from every dry-run count, a small `PENDING_PROGRAM_BACKFILLS` table in the
+script lets dry-run simulate "this program will exist" for legacy id 12
+specifically (brand resolved the same way the real migration does, via
+`brands.legacy_id = 3`), using a synthetic non-uuid program id that skips
+(rather than errors on) any real Postgres lookup keyed by that id
+(`program_pricing_tiers`/`program_essays`/duplicate-application checks).
+This is dry-run-only by construction — `--apply` never creates a program
+row itself; that stays a reviewed schema migration, not something this
+per-participant ETL improvises.
+
+### Same-brand duplicate email groups: 14 vs 19 — explained, not a bug
+
+An earlier investigation (predating this branch, documented against an
+older legacy snapshot) found 14 same-brand duplicate email groups; both the
+dump-based VPS run and a live direct query against the current legacy DB
+(run independently, same session) return **19**, in exact agreement with
+each other. Since two independently-run instances of the identical query
+(`SELECT ... GROUP BY LOWER(TRIM(email)), program_category_id HAVING
+COUNT(*) > 1`) against two different real snapshots (the VPS dump and a
+live connection) agree with each other and disagree with the older
+figure, this is snapshot timing — the legacy database has kept growing
+(three legacy programs are still open for registration as of this writing,
+see "Still-live legacy programs" below) — not a normalization or query
+difference.

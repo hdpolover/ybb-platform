@@ -232,16 +232,41 @@ async function main() {
     const r = await pg.query(`SELECT id, legacy_id, brand_id FROM programs WHERE legacy_id = ANY($1)`, [programIds]);
     for (const row of r.rows) programByLegacyId.set(row.legacy_id, { id: row.id, brandId: row.brand_id });
   }
+  // Known program rows that don't exist in prod YET but have an already-committed,
+  // not-yet-deployed Prisma migration that will create them (see
+  // prisma/migrations/20260925150000_backfill_legacy_program_12_meys) --
+  // legacy program 12 ("Middle East Youth Summit 2026") is the one case found so
+  // far (verified: it's the only id in MAPPED_LEGACY_PROGRAM_IDS with no matching
+  // `programs.legacy_id` row in prod). In DRY-RUN ONLY, simulate that migration
+  // having already run so the report reflects true post-migration reality (its
+  // 23,709 legacy participants would otherwise silently vanish from every count).
+  // NEVER done in --apply: creating a program row is a reviewed schema-migration
+  // decision (brand, publish/registration flags, description content), not
+  // something this generic per-participant ETL should improvise on its own.
+  const PENDING_PROGRAM_BACKFILLS = { 12: { brandLegacyId: 3 } };
   const missingPrograms = programIds.filter((id) => !programByLegacyId.has(id));
   if (missingPrograms.length) {
-    console.warn(`WARNING: no new-prod program found with legacy_id in [${missingPrograms.join(',')}] — skipping those.`);
+    for (const id of missingPrograms) {
+      const backfill = PENDING_PROGRAM_BACKFILLS[id];
+      if (dryRun && backfill && brandByLegacyCategoryId.has(backfill.brandLegacyId)) {
+        console.warn(`NOTE: legacy program ${id} has no new-prod row yet, but migration 20260925150000 (already committed, not yet deployed) will create it -- simulating "would create program" for this dry-run.`);
+        programByLegacyId.set(id, { id: `dry-run:program:${id}`, brandId: brandByLegacyCategoryId.get(backfill.brandLegacyId), _synthetic: true });
+      } else {
+        console.warn(`WARNING: no new-prod program found with legacy_id in [${id}] — skipping.`);
+      }
+    }
   }
   const activeProgramIds = programIds.filter((id) => programByLegacyId.has(id));
 
   // Pricing tiers per new program, matched by legacy_id when set, else by
   // (category + type) heuristic since program_payments were never content-migrated.
   const tiersByProgramId = new Map(); // new programId -> [{id, legacyId, feeType}]
-  for (const { id: newProgramId } of programByLegacyId.values()) {
+  for (const { id: newProgramId, _synthetic } of programByLegacyId.values()) {
+    // A dry-run-simulated program (see PENDING_PROGRAM_BACKFILLS above) has no real
+    // uuid to query prod with yet -- it has zero real tiers/essays by definition
+    // (the row doesn't exist), so skip the query rather than send a synthetic
+    // string id into a uuid-typed WHERE clause.
+    if (_synthetic) { tiersByProgramId.set(newProgramId, []); continue; }
     const r = await pg.query(
       `SELECT id, legacy_id, fee_type FROM program_pricing_tiers WHERE program_id = $1`,
       [newProgramId],
@@ -252,7 +277,8 @@ async function main() {
   // Essay question maps per new program, matched by legacy_id when set, else
   // by ordinal position (see README "essay matching").
   const essaysByProgramId = new Map(); // new programId -> [{id, legacyId, order}]
-  for (const { id: newProgramId } of programByLegacyId.values()) {
+  for (const { id: newProgramId, _synthetic } of programByLegacyId.values()) {
+    if (_synthetic) { essaysByProgramId.set(newProgramId, []); continue; }
     const r = await pg.query(
       `SELECT id, legacy_id, "order" FROM program_essays WHERE program_id = $1 ORDER BY "order" ASC, created_at ASC`,
       [newProgramId],
@@ -269,6 +295,84 @@ async function main() {
   for (const legacyProgramId of activeProgramIds) {
     const r = await mq(`SELECT id FROM program_essays WHERE program_id = ? ORDER BY id ASC`, [legacyProgramId]);
     legacyEssayOrderByProgramId.set(legacyProgramId, r);
+  }
+
+  // Legacy `program_payments` (the fee definitions themselves, e.g. "Registration
+  // Fee", "Program Fee Batch 1"), once per legacy program -- needed to synthesize a
+  // historical pricing tier for a payment whose program_payment_id has no matching
+  // `program_pricing_tiers.legacy_id` in new-prod. This is the common case, not the
+  // exception: most legacy programs' fee definitions were never content-migrated
+  // (only a handful of programs have `program_pricing_tiers.legacy_id` populated),
+  // so requiring an exact current-tier match before importing a payment silently
+  // dropped nearly all historical payment history (verified live: 27,149 of the
+  // real run's payments hit `invoicesUnmatchedTier` this way). A historical payment
+  // must import on its own legacy amount/currency/status regardless of whether a
+  // *current* pricing tier happens to line up with it -- see "Invoice tier
+  // synthesis" below.
+  const legacyProgramPaymentsById = new Map(); // legacy program_payments.id -> {id, category, name, idrAmount, usdAmount}
+  for (const legacyProgramId of activeProgramIds) {
+    const rows = await mq(
+      `SELECT id, category, name, idr_amount, usd_amount FROM program_payments WHERE program_id = ? AND is_deleted = 0`,
+      [legacyProgramId],
+    );
+    for (const r of rows) {
+      legacyProgramPaymentsById.set(r.id, {
+        id: r.id, category: r.category, name: r.name, idrAmount: r.idr_amount, usdAmount: r.usd_amount,
+      });
+    }
+  }
+
+  // category -> PricingFeeType (verified live: legacy `program_payments.category` only
+  // ever takes these three values -- see README "Invoice tier synthesis").
+  function feeTypeForLegacyCategory(category) {
+    if (category === 'registration') return 'registration_fee';
+    if (category === 'program_fee_1') return 'program_fee_1';
+    if (category === 'program_fee_2') return 'program_fee_2';
+    return 'custom_fee';
+  }
+
+  // Resolve a payment's tier, creating a historical tier record when no current
+  // `program_pricing_tiers.legacy_id` matches -- see "Invoice tier synthesis" in
+  // README. Mutates `tiersByProgramId`'s in-memory list so a second payment in the
+  // same run against the same legacy program_payment_id reuses the tier just
+  // created/synthesized instead of creating (or "would create") a duplicate.
+  // Tracks which legacy program_payment_ids were newly synthesized per program
+  // (`stat.tiersSynthesized` is a *tier* count, not a payment count) via the Set
+  // passed in by the caller.
+  async function resolveOrCreateTier(newProgramId, legacyProgramPaymentId, synthesizedThisProgram) {
+    const tiers = tiersByProgramId.get(newProgramId) || [];
+    const existing = tiers.find((t) => t.legacy_id === legacyProgramPaymentId);
+    if (existing) return existing;
+
+    const legacyDef = legacyProgramPaymentsById.get(legacyProgramPaymentId);
+    if (!legacyDef) return null; // truly orphaned: payment references a program_payment_id that no longer exists even in legacy
+
+    const feeType = feeTypeForLegacyCategory(legacyDef.category);
+    const isNewSynth = !synthesizedThisProgram.has(legacyProgramPaymentId);
+    if (isNewSynth) synthesizedThisProgram.add(legacyProgramPaymentId);
+
+    if (apply) {
+      const ins = await pg.query(
+        `INSERT INTO program_pricing_tiers
+           (program_id, name, price, currency, fee_type, legacy_id, is_active, created_at, updated_at)
+         VALUES ($1,$2,$3,'IDR',$4,$5,false,now(),now())
+         ON CONFLICT (legacy_id) DO NOTHING
+         RETURNING id, legacy_id, fee_type`,
+        [newProgramId, legacyDef.name || `Historical: ${feeType}`, legacyDef.idrAmount || 0, feeType, legacyProgramPaymentId],
+      );
+      const tier = ins.rows.length
+        ? ins.rows[0]
+        : (await pg.query(`SELECT id, legacy_id, fee_type FROM program_pricing_tiers WHERE legacy_id = $1`, [legacyProgramPaymentId])).rows[0];
+      tiers.push(tier);
+      tiersByProgramId.set(newProgramId, tiers);
+      return tier;
+    }
+    // dry-run: synthesize a virtual tier so downstream category/status aggregation
+    // works identically to apply mode, without ever touching Postgres.
+    const virtualTier = { id: `dry-run:tier:${legacyProgramPaymentId}`, legacy_id: legacyProgramPaymentId, fee_type: feeType, _synthetic: true };
+    tiers.push(virtualTier);
+    tiersByProgramId.set(newProgramId, tiers);
+    return virtualTier;
   }
 
   // Legacy payments, once per legacy program (batched via the same
@@ -333,15 +437,17 @@ async function main() {
   const perProgram = {};
 
   for (const legacyProgramId of activeProgramIds) {
-    const { id: newProgramId, brandId } = programByLegacyId.get(legacyProgramId);
+    const { id: newProgramId, brandId, _synthetic: programIsSynthetic } = programByLegacyId.get(legacyProgramId);
     const stat = {
       participants: 0, usersNew: 0, usersMatched: 0,
       participantsNew: 0, participantsReused: 0,
       appsNew: 0, appsSkippedExisting: 0, orphanNoStatus: 0, invalidEmail: 0, emptyName: 0, essayMismatchPrograms: 0,
       invoicesNew: 0, invoicesSkippedExisting: 0, invoicesUnmatchedTier: 0, invoicesSupersededUnpaid: 0,
+      tiersSynthesized: 0,
       documentsNew: 0, documentsSkippedExisting: 0, documentsUnmatchedApp: 0,
     };
     perProgram[legacyProgramId] = stat;
+    const synthesizedTiersThisProgram = new Set(); // legacy program_payment_id -> already-created-or-would-create this run
 
     // Legacy participants for this program (one row = one registration).
     // --limit caps rows/program for local slice testing (idempotency reruns, etc.) --
@@ -493,8 +599,18 @@ async function main() {
         applicationId = existingApp.rows[0].id;
         stat.appsSkippedExisting++;
         bump('appsSkippedExisting');
-      } else if (apply) {
-        // Duplicate-guard: same participant already has an application for this program natively.
+      } else if (participantId && !programIsSynthetic) {
+        // Duplicate-guard: same participant already has an application for this program
+        // natively (legacy_id IS NULL on that row -- someone who registered directly on the
+        // new platform before/alongside this import). This is a plain read-only SELECT, so
+        // it must run in DRY-RUN too, not just --apply -- a dry-run report that can't see
+        // native duplicates (e.g. the 125 legacy-program-18 emails already applied to the
+        // same mapped Korea Youth Summit program) is wrong, not just conservative. Only
+        // skipped when `participantId` is null (brand-new participant, dry-run, never
+        // inserted yet) or when the program itself is a dry-run simulation (see
+        // PENDING_PROGRAM_BACKFILLS) -- a program that doesn't exist yet in prod cannot
+        // possibly already have a native application against it, and its id isn't a real
+        // uuid to query with.
         const dupApp = await pg.query(
           `SELECT id FROM participant_applications WHERE participant_id = $1 AND program_id = $2`,
           [participantId, newProgramId],
@@ -507,7 +623,8 @@ async function main() {
           isNewApplication = true;
         }
       } else {
-        // dry-run, no existing/dup row found yet -- would be new.
+        // dry-run, brand-new participant not yet created -- cannot already have a native
+        // application for this program, so no duplicate check is possible or needed.
         isNewApplication = true;
       }
 
@@ -516,16 +633,21 @@ async function main() {
       // prior import instead of leaving it stuck at whatever the application
       // was originally inserted with). See "Payment import" in README.
       const paymentsForRow = paymentsByParticipantId.get(row.id) || [];
-      const tiers = tiersByProgramId.get(newProgramId) || [];
       let registrationPaymentStatus = 'unpaid';
       let programPaymentStatus = 'unpaid';
       const invoiceInserts = [];
       for (const payment of paymentsForRow) {
-        const tier = tiers.find((t) => t.legacy_id === payment.programPaymentId);
+        // See "Invoice tier synthesis": resolves an existing content-migrated tier when
+        // one exists, else creates (apply) / simulates (dry-run) a historical tier from
+        // legacy `program_payments` so a payment is NEVER dropped just because its
+        // program's fee definitions were never content-migrated -- only a truly orphaned
+        // program_payment_id (deleted/missing even in legacy) is reported as unmatched.
+        const tierCountBefore = synthesizedTiersThisProgram.size;
+        const tier = await resolveOrCreateTier(newProgramId, payment.programPaymentId, synthesizedTiersThisProgram);
+        if (synthesizedTiersThisProgram.size > tierCountBefore) { stat.tiersSynthesized++; bump('tiersSynthesized'); }
         if (!tier) {
-          // No program_pricing_tiers.legacy_id matches this payment's program_payment_id --
-          // can't mint an invoice (pricing_tier_id is NOT NULL on application_invoices) --
-          // report instead of guessing a tier or silently dropping the payment.
+          // Genuinely orphaned: payment.programPaymentId doesn't exist in legacy
+          // program_payments either -- nothing to synthesize from, real data gap.
           stat.invoicesUnmatchedTier++;
           bump('invoicesUnmatchedTier');
           continue;
@@ -677,6 +799,14 @@ async function main() {
       if (applicationIdForMap) applicationIdByLegacyParticipantId.set(row.id, applicationIdForMap);
 
       // ---- Invoices themselves: one application_invoices row per legacy payment row. ----
+      // By-final-status counts (paid/unpaid/failed -- 'processing' never appears, see
+      // mapLegacyPayStatus) requested alongside the new/skipped counters so the report
+      // shows what the imported payment HISTORY looks like, not just import mechanics.
+      for (const { invoiceStatus } of invoiceInserts) {
+        const key = `invoicesByStatus_${invoiceStatus}`;
+        stat[key] = (stat[key] || 0) + 1;
+        bump(key);
+      }
       if (apply && applicationId) {
         for (const { payment, tier, invoiceStatus } of invoiceInserts) {
           const ins = await pg.query(
@@ -771,14 +901,14 @@ async function main() {
 
   console.log('\n=== Per-program breakdown (users matched-existing vs new-to-create, participants reused vs new, applications new vs skipped-existing) ===');
   let totalUsersMatched = 0, totalUsersNew = 0, totalParticipantsReused = 0, totalParticipantsNew = 0, totalAppsNew = 0, totalAppsSkipped = 0;
-  let totalInvoicesNew = 0, totalInvoicesSkipped = 0, totalInvoicesUnmatchedTier = 0, totalInvoicesSuperseded = 0;
+  let totalInvoicesNew = 0, totalInvoicesSkipped = 0, totalInvoicesUnmatchedTier = 0, totalInvoicesSuperseded = 0, totalTiersSynthesized = 0;
   let totalDocumentsNew = 0, totalDocumentsSkipped = 0, totalDocumentsUnmatchedApp = 0;
   for (const [pid, s] of Object.entries(perProgram)) {
     console.log(pid, JSON.stringify(s));
     totalUsersMatched += s.usersMatched; totalUsersNew += s.usersNew;
     totalParticipantsReused += s.participantsReused; totalParticipantsNew += s.participantsNew;
     totalAppsNew += s.appsNew; totalAppsSkipped += s.appsSkippedExisting;
-    totalInvoicesNew += s.invoicesNew; totalInvoicesSkipped += s.invoicesSkippedExisting; totalInvoicesUnmatchedTier += s.invoicesUnmatchedTier; totalInvoicesSuperseded += s.invoicesSupersededUnpaid;
+    totalInvoicesNew += s.invoicesNew; totalInvoicesSkipped += s.invoicesSkippedExisting; totalInvoicesUnmatchedTier += s.invoicesUnmatchedTier; totalInvoicesSuperseded += s.invoicesSupersededUnpaid; totalTiersSynthesized += s.tiersSynthesized;
     totalDocumentsNew += s.documentsNew; totalDocumentsSkipped += s.documentsSkippedExisting; totalDocumentsUnmatchedApp += s.documentsUnmatchedApp;
   }
   console.log('\n=== Totals (raw counters) ===', JSON.stringify(counts));
@@ -786,7 +916,8 @@ async function main() {
   console.log(`Users: matched-existing=${totalUsersMatched}  new-to-create=${totalUsersNew}`);
   console.log(`Participants: reused=${totalParticipantsReused}  new=${totalParticipantsNew}`);
   console.log(`Applications: new=${totalAppsNew}  skipped-existing=${totalAppsSkipped}`);
-  console.log(`Invoices: new=${totalInvoicesNew}  skipped-existing=${totalInvoicesSkipped}  unmatched-tier=${totalInvoicesUnmatchedTier}  superseded-unpaid=${totalInvoicesSuperseded}`);
+  console.log(`Invoices: new=${totalInvoicesNew}  skipped-existing=${totalInvoicesSkipped}  unmatched-tier=${totalInvoicesUnmatchedTier}  superseded-unpaid=${totalInvoicesSuperseded}  historical-tiers-synthesized=${totalTiersSynthesized}`);
+  console.log(`Invoices by final status: paid=${counts.invoicesByStatus_paid || 0}  unpaid=${counts.invoicesByStatus_unpaid || 0}  failed=${counts.invoicesByStatus_failed || 0}`);
   console.log(`Documents (agreement letters + program documents): new=${totalDocumentsNew}  skipped-existing=${totalDocumentsSkipped}  no-target-application-yet=${totalDocumentsUnmatchedApp}`);
   console.log('Same-brand duplicate email groups (legacy):', dupSameBrand[0].n);
   console.log('Multi-brand same-email groups (expected, not dupes):', dupMultiBrand[0].n);
