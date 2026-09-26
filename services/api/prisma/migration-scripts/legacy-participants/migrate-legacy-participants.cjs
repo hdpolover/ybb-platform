@@ -491,29 +491,85 @@ async function main() {
       recordMedia('participant_program_documents.file_url', doc.id, doc.file_url, doc.participant_id);
     }
 
+    // ---------- Batch-prefetch existing users/participants/applications for this
+    // WHOLE program (one query each, not once per legacy row). MEASURED PROBLEM
+    // (2026-09-26, prod clone): the per-row `SELECT ... WHERE lower(trim(email))=$1
+    // AND brand_id=$2 LIMIT 1` had no matching index and seq-scanned the entire
+    // `users` table on every single row -- ~88% sustained CPU on the clone; against
+    // the live prod primary at 250k+ lookups that would degrade the site for hours.
+    // Batching per-program (rather than fixed-size chunks) is strictly fewer round
+    // trips for the same correctness -- the largest single program here is ~55K
+    // rows, comfortably within a single `= ANY($1::type[])` array parameter. Pair
+    // with the `idx_users_brand_lower_trim_email` CONCURRENTLY index (see migration
+    // 20260926090000) so this query is an index scan, not just fewer seq scans.
+    const rowEmails = [...new Set(rows.map((r) => normEmail(r.user_email)).filter(isValidEmail))];
+    const rowLegacyUserIds = [...new Set(rows.map((r) => r.user_id))];
+    const usersByEmail = new Map(); // normEmail -> {id, legacy_id}
+    const usersByLegacyId = new Map(); // legacy user id -> new user id
+    if (!programIsSynthetic && rowEmails.length) {
+      const r = await pg.query(
+        `SELECT id, legacy_id, lower(trim(email)) AS norm_email FROM users WHERE brand_id = $1 AND lower(trim(email)) = ANY($2::text[])`,
+        [brandId, rowEmails],
+      );
+      for (const u of r.rows) usersByEmail.set(u.norm_email, { id: u.id, legacy_id: u.legacy_id });
+    }
+    if (rowLegacyUserIds.length) {
+      const r = await pg.query(`SELECT id, legacy_id FROM users WHERE legacy_id = ANY($1::int[])`, [rowLegacyUserIds]);
+      for (const u of r.rows) usersByLegacyId.set(u.legacy_id, u.id);
+    }
+    // Participants for every user this program's rows could possibly already match --
+    // a user created earlier in THIS run (brand-new) is intentionally absent from this
+    // prefetch, which is correct: it cannot have a pre-existing participant profile.
+    const candidateUserIds = [...new Set([...[...usersByEmail.values()].map((u) => u.id), ...usersByLegacyId.values()])];
+    const participantsByUserId = new Map(); // userId -> participantId
+    if (candidateUserIds.length) {
+      const r = await pg.query(`SELECT id, user_id FROM participants WHERE user_id = ANY($1::uuid[])`, [candidateUserIds]);
+      for (const p of r.rows) participantsByUserId.set(p.user_id, p.id);
+    }
+    // Already-migrated applications, keyed by the legacy `participants.id` this
+    // migration's own `legacy_id` column stores.
+    const appsByLegacyParticipantId = new Map();
+    {
+      const rowLegacyIds = rows.map((r) => r.id);
+      const r = await pg.query(`SELECT id, legacy_id FROM participant_applications WHERE legacy_id = ANY($1::int[])`, [rowLegacyIds]);
+      for (const a of r.rows) appsByLegacyParticipantId.set(a.legacy_id, a.id);
+    }
+    // Native (legacy_id IS NULL) duplicate applications for this program, scoped to
+    // every participant this program's rows could already resolve to -- same
+    // absent-for-brand-new-participants reasoning as above applies and is correct.
+    const dupAppsByParticipantId = new Map();
+    if (!programIsSynthetic) {
+      const candidateParticipantIds = [...new Set([...participantsByUserId.values()])];
+      if (candidateParticipantIds.length) {
+        const r = await pg.query(
+          `SELECT id, participant_id FROM participant_applications WHERE program_id = $1 AND participant_id = ANY($2::uuid[])`,
+          [newProgramId, candidateParticipantIds],
+        );
+        for (const a of r.rows) dupAppsByParticipantId.set(a.participant_id, a.id);
+      }
+    }
+
     for (const row of rows) {
       const email = normEmail(row.user_email);
       if (!isValidEmail(email)) { stat.invalidEmail++; bump('invalidEmail'); continue; }
       if (!row.full_name || !String(row.full_name).trim()) { stat.emptyName++; bump('emptyName'); }
 
       // ---- User resolution (brand-scoped match) ----
-      const existingUser = await pg.query(
-        `SELECT id, legacy_id FROM users WHERE lower(trim(email)) = $1 AND brand_id = $2 LIMIT 1`,
-        [email, brandId],
-      );
+      // Read from the per-program batch prefetch above -- no per-row SELECT.
+      const existingUserMatch = usersByEmail.get(email);
       let userId;
-      if (existingUser.rows.length) {
-        userId = existingUser.rows[0].id;
+      if (existingUserMatch) {
+        userId = existingUserMatch.id;
         stat.usersMatched++;
         bump('usersMatched');
-        if (apply && existingUser.rows[0].legacy_id == null) {
+        if (apply && existingUserMatch.legacy_id == null) {
           await pg.query(`UPDATE users SET legacy_id = $1 WHERE id = $2`, [row.user_id, userId]);
         }
       } else {
         // Also check a different legacy_id already claimed this row (idempotent re-run).
-        const byLegacyId = await pg.query(`SELECT id FROM users WHERE legacy_id = $1`, [row.user_id]);
-        if (byLegacyId.rows.length) {
-          userId = byLegacyId.rows[0].id;
+        const byLegacyIdUserId = usersByLegacyId.get(row.user_id);
+        if (byLegacyIdUserId) {
+          userId = byLegacyIdUserId;
           stat.usersMatched++;
           bump('usersMatched');
         } else {
@@ -538,12 +594,9 @@ async function main() {
       // already have a Participant profile row; a brand-new user never does.
       let participantId = null;
       let participantIsNew = true;
-      if (userId) {
-        const existingParticipant = await pg.query(`SELECT id FROM participants WHERE user_id = $1`, [userId]);
-        if (existingParticipant.rows.length) {
-          participantId = existingParticipant.rows[0].id;
-          participantIsNew = false;
-        }
+      if (userId && participantsByUserId.has(userId)) {
+        participantId = participantsByUserId.get(userId);
+        participantIsNew = false;
       }
       if (participantIsNew) {
         stat.participantsNew++;
@@ -594,29 +647,29 @@ async function main() {
       // carries through to the invoice step regardless of which branch resolved it.
       let applicationId = null;
       let isNewApplication = false;
-      const existingApp = await pg.query(`SELECT id FROM participant_applications WHERE legacy_id = $1`, [row.id]);
-      if (existingApp.rows.length) {
-        applicationId = existingApp.rows[0].id;
+      // Read from the per-program batch prefetch above; both maps are updated
+      // in-memory as rows resolve (below) so a rare same-program repeat of the
+      // same legacy participant/application within this very run still sees it,
+      // matching what a fresh per-row SELECT would have found.
+      const existingAppId = appsByLegacyParticipantId.get(row.id);
+      if (existingAppId) {
+        applicationId = existingAppId;
         stat.appsSkippedExisting++;
         bump('appsSkippedExisting');
       } else if (participantId && !programIsSynthetic) {
         // Duplicate-guard: same participant already has an application for this program
         // natively (legacy_id IS NULL on that row -- someone who registered directly on the
-        // new platform before/alongside this import). This is a plain read-only SELECT, so
-        // it must run in DRY-RUN too, not just --apply -- a dry-run report that can't see
-        // native duplicates (e.g. the 125 legacy-program-18 emails already applied to the
-        // same mapped Korea Youth Summit program) is wrong, not just conservative. Only
-        // skipped when `participantId` is null (brand-new participant, dry-run, never
-        // inserted yet) or when the program itself is a dry-run simulation (see
-        // PENDING_PROGRAM_BACKFILLS) -- a program that doesn't exist yet in prod cannot
-        // possibly already have a native application against it, and its id isn't a real
-        // uuid to query with.
-        const dupApp = await pg.query(
-          `SELECT id FROM participant_applications WHERE participant_id = $1 AND program_id = $2`,
-          [participantId, newProgramId],
-        );
-        if (dupApp.rows.length) {
-          applicationId = dupApp.rows[0].id;
+        // new platform before/alongside this import). This must run in DRY-RUN too, not
+        // just --apply -- a dry-run report that can't see native duplicates (e.g. the 125
+        // legacy-program-18 emails already applied to the same mapped Korea Youth Summit
+        // program) is wrong, not just conservative. Only skipped when `participantId` is
+        // null (brand-new participant, dry-run, never inserted yet) or when the program
+        // itself is a dry-run simulation (see PENDING_PROGRAM_BACKFILLS) -- a program that
+        // doesn't exist yet in prod cannot possibly already have a native application
+        // against it, and its id isn't a real uuid to query with.
+        const dupAppId = dupAppsByParticipantId.get(participantId);
+        if (dupAppId) {
+          applicationId = dupAppId;
           stat.appsSkippedExisting++;
           bump('appsSkippedExisting');
         } else {
@@ -781,6 +834,11 @@ async function main() {
           applicationId = insApp.rows.length
             ? insApp.rows[0].id
             : (await pg.query(`SELECT id FROM participant_applications WHERE legacy_id=$1`, [row.id])).rows[0].id;
+          // Keep the batch prefetch maps current for the rest of THIS program's loop
+          // (see the comment above `existingAppId`) -- closes the gap for the rare case
+          // of a repeated legacy participant/application row within the same program.
+          appsByLegacyParticipantId.set(row.id, applicationId);
+          if (participantId) dupAppsByParticipantId.set(participantId, applicationId);
         }
       } else if (apply && applicationId) {
         // Already-migrated application: backfill payment status computed above in case

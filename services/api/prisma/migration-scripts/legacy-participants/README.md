@@ -1296,3 +1296,56 @@ figure, this is snapshot timing — the legacy database has kept growing
 (three legacy programs are still open for registration as of this writing,
 see "Still-live legacy programs" below) — not a normalization or query
 difference.
+
+## Perf fix (2026-09-26): set-based lookups + CONCURRENTLY index
+
+Observed directly on a prod clone running this migration's own dry-run:
+`SELECT id, legacy_id FROM users WHERE lower(trim(email)) = $1 AND brand_id =
+$2 LIMIT 1`, issued once per legacy participant with no matching expression
+index, seq-scanned the entire `users` table every time — ~88% sustained CPU
+on the clone. Against the live prod primary at 250k+ lookups, this would
+have meant hours of degraded seq-scan load on the site's own database.
+
+**Fixed**: the per-row Postgres lookups (`users` by email, `users` by
+`legacy_id`, `participants` by `user_id`, `participant_applications` by
+`legacy_id`, and the native `(participant_id, program_id)` duplicate-guard)
+are now batch-prefetched **once per program** (not once per fixed-size
+chunk, and not once per row) into in-memory `Map`s before the per-row loop
+runs, using `= ANY($1::type[])` array parameters. Per-program batching (as
+opposed to fixed `--batch-size` chunks) was chosen because it's strictly
+fewer round trips for the same correctness — the largest single mapped
+program has ~55K rows, comfortably within one array parameter — and it
+requires no cross-chunk bookkeeping. The in-memory maps are also updated as
+rows resolve within the loop, so a rare repeated legacy participant/
+application row within the same program still sees a same-run predecessor
+correctly (closing a gap batching would otherwise introduce). Insert paths
+remain per-row for now (still correctness-critical, ON CONFLICT-guarded);
+batching writes is a separate, lower-urgency follow-up not done in this pass.
+
+**Verified locally** (small `--limit`-based run against real legacy data):
+identical counts before/after the refactor (users/participants/applications/
+invoices/documents), and a real apply + rerun confirming the existing-user
+reuse path and idempotency both still work correctly through the new batched
+lookups.
+
+**Index**: `idx_users_brand_lower_trim_email` on `users (brand_id,
+lower(trim(email)))`, added in migration
+`20260926090000_add_legacy_email_lookup_index`. This CANNOT go through the
+normal `prisma migrate deploy` pipeline as a real `CREATE INDEX
+CONCURRENTLY` — Prisma wraps every migration file in a transaction, and
+`CONCURRENTLY` cannot run inside one. The migration file itself is a no-op
+guard (documents the requirement, doesn't attempt `CONCURRENTLY` inside a
+transaction). The actual index creation is a **manual, one-time, out-of-band
+step**, run once before any real `--apply`:
+
+```
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+  "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_brand_lower_trim_email \
+   ON users (brand_id, lower(trim(email)));"
+npx prisma migrate resolve --applied 20260926090000_add_legacy_email_lookup_index
+```
+
+`CONCURRENTLY` takes only a `SHARE UPDATE EXCLUSIVE` lock (blocks other DDL/
+`VACUUM FULL`, never blocks normal reads/writes), so this is safe to run
+against the live prod primary ahead of any real `--apply`; it may take a
+while on a large table, which is expected and non-blocking.
