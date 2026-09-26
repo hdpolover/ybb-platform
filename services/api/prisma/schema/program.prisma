@@ -349,6 +349,11 @@ model ProgramEssay {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
+  // Legacy migration support: legacy `program_essays.id`, used to key
+  // essayAnswers JSON on ParticipantApplication by question rather than by
+  // fragile order/text matching.
+  legacyId Int? @unique @map("legacy_id")
+
   program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@index([programId])

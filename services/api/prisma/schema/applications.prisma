@@ -32,6 +32,11 @@ model ProgramPricingTier {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
+  // Legacy migration support: legacy `program_payments.id`, used to resolve
+  // which tier an imported ApplicationInvoice settles instead of fragile
+  // name/category matching.
+  legacyId Int? @unique @map("legacy_id")
+
   // Relations
   program         Program                     @relation(fields: [programId], references: [id], onDelete: Cascade)
   validityPeriods PricingTierValidityPeriod[]
@@ -204,6 +209,11 @@ model ParticipantApplication {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  // Legacy migration support: legacy `participants.id` (one legacy row per
+  // program registration; NOT the legacy `users.id`, which anchors User/
+  // Participant instead). See prisma/migration-scripts/legacy-participants/README.md.
+  legacyId Int? @unique @map("legacy_id")
+
   // Relations
   program     Program     @relation(fields: [programId], references: [id], onDelete: Cascade)
   participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
@@ -281,6 +291,14 @@ model ApplicationInvoice {
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   lastReconciledAt DateTime? @map("last_reconciled_at") @db.Timestamptz(6)
+
+  // Legacy migration support: legacy `payments.id`. Also doubles as the
+  // "this is a historical import, not a live gateway transaction" marker —
+  // native invoices never have this set. externalIntentId/externalTransactionId
+  // are deliberately left NULL on imported rows so the payment reconciler
+  // (which only acts on invoices where one of those is set) never touches
+  // them. See README's "Payment isolation" section.
+  legacyId Int? @unique @map("legacy_id")
 
   application ParticipantApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   pricingTier ProgramPricingTier     @relation(fields: [pricingTierId], references: [id])
