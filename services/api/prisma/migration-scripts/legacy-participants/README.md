@@ -286,6 +286,15 @@ abandoned attempts. This never invents a `processing`/`refunded`/`cancelled`
 status; legacy `payment_status` has no equivalent codes for those (see
 `mapLegacyPayStatus`).
 
+**Failed attempts are not imported (owner decision, 2026-09-26).** Legacy
+`FAILED(3)` payment rows (21,137 of 29,089 in the 2026-09-26 dry-run) are
+abandoned gateway attempts with no money moved. They are skipped before tier
+resolution, counted in `invoicesSkippedFailed` (`skipped-failed=` in the
+report), never create an invoice, never synthesize a historical tier, and do
+not feed the status aggregate above, so an application whose only attempt
+failed lands at `unpaid`. Only `paid` and `unpaid` legacy payments become
+`application_invoices` rows. The legacy dump remains the archive for them.
+
 **Backfill on re-run**: this computation now runs for an *already-migrated*
 application too (previously the script `continue`d immediately on finding an
 existing `legacy_id` match, skipping payment import entirely) — a re-run
@@ -308,10 +317,10 @@ this constraint. Only the **most recent** `'unpaid'` payment per tier is
 therefore inserted; earlier ones that also mapped to `'unpaid'` are counted
 in `invoicesSupersededUnpaid` and never written. This loses no settlement
 information: none of the superseded rows ever completed anything (that's
-what `'unpaid'` means here). `'paid'`/`'failed'` rows are **not** covered by
-that partial index (its predicate excludes them), so multiple paid/failed
-attempts for the same tier import in full, preserving real retry history for
-fees that did eventually settle.
+what `'unpaid'` means here). `'paid'` rows are **not** covered by
+that partial index (its predicate excludes them), so multiple paid attempts
+for the same tier import in full. (Failed attempts are skipped entirely, see
+"Status aggregation".)
 
 ## Documents (agreement letters / program documents) — implemented
 
@@ -1349,3 +1358,23 @@ npx prisma migrate resolve --applied 20260926090000_add_legacy_email_lookup_inde
 `VACUUM FULL`, never blocks normal reads/writes), so this is safe to run
 against the live prod primary ahead of any real `--apply`; it may take a
 while on a large table, which is expected and non-blocking.
+
+## Verification fixes (2026-09-26, second clone run)
+
+Re-running the dry-run after the perf fix (5m55s full run, vs 43m54s before
+batching) surfaced two bugs, both fixed and re-verified on a fresh prod clone:
+
+1. **Synthetic program 12 skipped existing-user matching.** The batched
+   users-by-email prefetch was gated on `!programIsSynthetic`, but users are
+   brand-scoped and the simulated program carries its real `brandId`. Program
+   12 reported `usersMatched=0` (all 384 existing MEYS accounts counted as
+   new). Dry-run only, but it made the report wrong. Restored: 384.
+2. **Cross-program fee definitions.** `legacyProgramPaymentsById` was loaded
+   only for the programs in the run, so a payment referencing another legacy
+   program's `program_payment_id` went `invoicesUnmatchedTier` under a
+   `--program` subset (program 20 paid 321 -> 320). Now loaded for all
+   programs. Subset runs match the full run exactly.
+
+Full-run totals with failed payments skipped: invoices new=7,952 (paid
+7,119, unpaid 833), skipped-failed=21,155, unmatched-tier=1 (was 19; the 18
+that now resolve were all failed attempts), historical tiers synthesized=69.

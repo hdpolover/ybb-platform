@@ -113,6 +113,9 @@ function invoiceCategoryForFeeType(feeType) {
 // the fee, that's the truth for the category regardless of earlier failed
 // attempts. Never produces 'processing' or 'refunded'/'cancelled' -- legacy
 // payment_status has no equivalent codes for those (see mapLegacyPayStatus).
+// FAILED attempts never reach this aggregate: they are skipped before invoice
+// resolution (owner decision 2026-09-26, see the payments loop), so in practice
+// it only ever combines 'unpaid' and 'paid'. 'failed' stays ranked for safety.
 const PAYMENT_STATUS_RANK = { unpaid: 0, failed: 1, paid: 2 };
 function combinePaymentStatus(a, b) {
   return (PAYMENT_STATUS_RANK[b] ?? 0) > (PAYMENT_STATUS_RANK[a] ?? 0) ? b : a;
@@ -309,11 +312,17 @@ async function main() {
   // must import on its own legacy amount/currency/status regardless of whether a
   // *current* pricing tier happens to line up with it -- see "Invoice tier
   // synthesis" below.
+  //
+  // Loaded for ALL legacy programs, not just the ones in this run: a small number of
+  // legacy payments reference a program_payment_id owned by a different legacy
+  // program (verified 2026-09-26: one program-20 payment resolved in an all-programs
+  // run but fell to invoicesUnmatchedTier under `--program 20`). Scoping this map to
+  // activeProgramIds made per-program runs -- the planned apply mode -- drop it.
+  // The table is tiny (fee definitions), so one unscoped query costs nothing.
   const legacyProgramPaymentsById = new Map(); // legacy program_payments.id -> {id, category, name, idrAmount, usdAmount}
-  for (const legacyProgramId of activeProgramIds) {
+  {
     const rows = await mq(
-      `SELECT id, category, name, idr_amount, usd_amount FROM program_payments WHERE program_id = ? AND is_deleted = 0`,
-      [legacyProgramId],
+      `SELECT id, category, name, idr_amount, usd_amount FROM program_payments WHERE is_deleted = 0`,
     );
     for (const r of rows) {
       legacyProgramPaymentsById.set(r.id, {
@@ -442,7 +451,7 @@ async function main() {
       participants: 0, usersNew: 0, usersMatched: 0,
       participantsNew: 0, participantsReused: 0,
       appsNew: 0, appsSkippedExisting: 0, orphanNoStatus: 0, invalidEmail: 0, emptyName: 0, essayMismatchPrograms: 0,
-      invoicesNew: 0, invoicesSkippedExisting: 0, invoicesUnmatchedTier: 0, invoicesSupersededUnpaid: 0,
+      invoicesNew: 0, invoicesSkippedExisting: 0, invoicesUnmatchedTier: 0, invoicesSupersededUnpaid: 0, invoicesSkippedFailed: 0,
       tiersSynthesized: 0,
       documentsNew: 0, documentsSkippedExisting: 0, documentsUnmatchedApp: 0,
     };
@@ -506,7 +515,11 @@ async function main() {
     const rowLegacyUserIds = [...new Set(rows.map((r) => r.user_id))];
     const usersByEmail = new Map(); // normEmail -> {id, legacy_id}
     const usersByLegacyId = new Map(); // legacy user id -> new user id
-    if (!programIsSynthetic && rowEmails.length) {
+    // Users are brand-scoped, not program-scoped: a dry-run-simulated program
+    // (PENDING_PROGRAM_BACKFILLS) still carries its real brandId, so this lookup
+    // must run for it too. Gating it on programIsSynthetic (as 2444f2cc did)
+    // reported all 384 existing MEYS-brand matches for legacy program 12 as new.
+    if (rowEmails.length) {
       const r = await pg.query(
         `SELECT id, legacy_id, lower(trim(email)) AS norm_email FROM users WHERE brand_id = $1 AND lower(trim(email)) = ANY($2::text[])`,
         [brandId, rowEmails],
@@ -690,6 +703,20 @@ async function main() {
       let programPaymentStatus = 'unpaid';
       const invoiceInserts = [];
       for (const payment of paymentsForRow) {
+        const invoiceStatus = mapPaymentRowStatus(payment.status);
+        // Owner decision (2026-09-26): FAILED legacy attempts are not imported.
+        // They are abandoned gateway attempts with no money moved (~21k of ~29k
+        // legacy payments); importing them would bloat admin payment lists and
+        // finance reports for no business value. Checked before tier resolution
+        // so a failed-only fee never synthesizes a historical tier, and excluded
+        // from the status aggregate so an application whose only attempt failed
+        // lands at 'unpaid', consistent with the invoices that actually exist.
+        // The raw legacy dump remains the archive of record for these rows.
+        if (invoiceStatus === 'failed') {
+          stat.invoicesSkippedFailed++;
+          bump('invoicesSkippedFailed');
+          continue;
+        }
         // See "Invoice tier synthesis": resolves an existing content-migrated tier when
         // one exists, else creates (apply) / simulates (dry-run) a historical tier from
         // legacy `program_payments` so a payment is NEVER dropped just because its
@@ -705,7 +732,6 @@ async function main() {
           bump('invoicesUnmatchedTier');
           continue;
         }
-        const invoiceStatus = mapPaymentRowStatus(payment.status);
         const category = invoiceCategoryForFeeType(tier.fee_type);
         if (category === 'registration') {
           registrationPaymentStatus = combinePaymentStatus(registrationPaymentStatus, invoiceStatus);
@@ -959,14 +985,14 @@ async function main() {
 
   console.log('\n=== Per-program breakdown (users matched-existing vs new-to-create, participants reused vs new, applications new vs skipped-existing) ===');
   let totalUsersMatched = 0, totalUsersNew = 0, totalParticipantsReused = 0, totalParticipantsNew = 0, totalAppsNew = 0, totalAppsSkipped = 0;
-  let totalInvoicesNew = 0, totalInvoicesSkipped = 0, totalInvoicesUnmatchedTier = 0, totalInvoicesSuperseded = 0, totalTiersSynthesized = 0;
+  let totalInvoicesNew = 0, totalInvoicesSkipped = 0, totalInvoicesUnmatchedTier = 0, totalInvoicesSuperseded = 0, totalInvoicesSkippedFailed = 0, totalTiersSynthesized = 0;
   let totalDocumentsNew = 0, totalDocumentsSkipped = 0, totalDocumentsUnmatchedApp = 0;
   for (const [pid, s] of Object.entries(perProgram)) {
     console.log(pid, JSON.stringify(s));
     totalUsersMatched += s.usersMatched; totalUsersNew += s.usersNew;
     totalParticipantsReused += s.participantsReused; totalParticipantsNew += s.participantsNew;
     totalAppsNew += s.appsNew; totalAppsSkipped += s.appsSkippedExisting;
-    totalInvoicesNew += s.invoicesNew; totalInvoicesSkipped += s.invoicesSkippedExisting; totalInvoicesUnmatchedTier += s.invoicesUnmatchedTier; totalInvoicesSuperseded += s.invoicesSupersededUnpaid; totalTiersSynthesized += s.tiersSynthesized;
+    totalInvoicesNew += s.invoicesNew; totalInvoicesSkipped += s.invoicesSkippedExisting; totalInvoicesUnmatchedTier += s.invoicesUnmatchedTier; totalInvoicesSuperseded += s.invoicesSupersededUnpaid; totalInvoicesSkippedFailed += s.invoicesSkippedFailed; totalTiersSynthesized += s.tiersSynthesized;
     totalDocumentsNew += s.documentsNew; totalDocumentsSkipped += s.documentsSkippedExisting; totalDocumentsUnmatchedApp += s.documentsUnmatchedApp;
   }
   console.log('\n=== Totals (raw counters) ===', JSON.stringify(counts));
@@ -974,7 +1000,7 @@ async function main() {
   console.log(`Users: matched-existing=${totalUsersMatched}  new-to-create=${totalUsersNew}`);
   console.log(`Participants: reused=${totalParticipantsReused}  new=${totalParticipantsNew}`);
   console.log(`Applications: new=${totalAppsNew}  skipped-existing=${totalAppsSkipped}`);
-  console.log(`Invoices: new=${totalInvoicesNew}  skipped-existing=${totalInvoicesSkipped}  unmatched-tier=${totalInvoicesUnmatchedTier}  superseded-unpaid=${totalInvoicesSuperseded}  historical-tiers-synthesized=${totalTiersSynthesized}`);
+  console.log(`Invoices: new=${totalInvoicesNew}  skipped-existing=${totalInvoicesSkipped}  unmatched-tier=${totalInvoicesUnmatchedTier}  superseded-unpaid=${totalInvoicesSuperseded}  skipped-failed=${totalInvoicesSkippedFailed}  historical-tiers-synthesized=${totalTiersSynthesized}`);
   console.log(`Invoices by final status: paid=${counts.invoicesByStatus_paid || 0}  unpaid=${counts.invoicesByStatus_unpaid || 0}  failed=${counts.invoicesByStatus_failed || 0}`);
   console.log(`Documents (agreement letters + program documents): new=${totalDocumentsNew}  skipped-existing=${totalDocumentsSkipped}  no-target-application-yet=${totalDocumentsUnmatchedApp}`);
   console.log('Same-brand duplicate email groups (legacy):', dupSameBrand[0].n);
