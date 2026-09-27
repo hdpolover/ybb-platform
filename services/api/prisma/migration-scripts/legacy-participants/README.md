@@ -1324,12 +1324,21 @@ runs, using `= ANY($1::type[])` array parameters. Per-program batching (as
 opposed to fixed `--batch-size` chunks) was chosen because it's strictly
 fewer round trips for the same correctness — the largest single mapped
 program has ~55K rows, comfortably within one array parameter — and it
-requires no cross-chunk bookkeeping. The in-memory maps are also updated as
-rows resolve within the loop, so a rare repeated legacy participant/
-application row within the same program still sees a same-run predecessor
-correctly (closing a gap batching would otherwise introduce). Insert paths
-remain per-row for now (still correctness-critical, ON CONFLICT-guarded);
-batching writes is a separate, lower-urgency follow-up not done in this pass.
+requires no cross-chunk bookkeeping. Insert paths remain per-row for now
+(still correctness-critical, ON CONFLICT-guarded); batching writes is a
+separate, lower-urgency follow-up not done in this pass.
+
+**Correction (2026-09-27): the sentence this replaced was false.** It
+claimed "the in-memory maps are also updated as rows resolve within the
+loop" for all five prefetch maps. That was only true for
+`appsByLegacyParticipantId`/`dupAppsByParticipantId` (the application-dedupe
+maps) — `usersByEmail`, `usersByLegacyId`, and `participantsByUserId` were
+built once before the per-row loop and **never** written back to as new
+users/participants were created within the same run, in either dry-run or
+`--apply`. A real `--apply` against prod hit exactly this gap and crashed on
+`participants_user_id_key` (see "Duplicate legacy participant rows — same-
+program email grouping" below). Fixed in the same pass as the dedupe-by-email
+rework below: all five maps are now genuinely kept current in-run.
 
 **Verified locally** (small `--limit`-based run against real legacy data):
 identical counts before/after the refactor (users/participants/applications/
@@ -1378,3 +1387,98 @@ batching) surfaced two bugs, both fixed and re-verified on a fresh prod clone:
 Full-run totals with failed payments skipped: invoices new=7,952 (paid
 7,119, unpaid 833), skipped-failed=21,155, unmatched-tier=1 (was 19; the 18
 that now resolve were all failed attempts), historical tiers synthesized=69.
+
+## Duplicate legacy participant rows — same-program email grouping (2026-09-27)
+
+A real `--apply` against prod (programs 1 fully, then program 12) crashed on
+`duplicate key value violates unique constraint "participants_user_id_key"`.
+Root cause: the per-program batch-prefetch maps (`usersByEmail`,
+`usersByLegacyId`, `participantsByUserId`, `appsByLegacyParticipantId`,
+`dupAppsByParticipantId`) were built once before the per-row loop and never
+updated as rows were created within the same run (see the perf-section
+correction above — that section's own claim to the contrary was wrong).
+Legacy genuinely has the same person registered 2+ times within one program:
+**3,961 `(user_id, program_id)` groups / 8,242 rows** across the mapped
+programs (verified live; by program: 3:1, 4:21, 5:1, 6:22, 7:53, 8:136,
+9:262, 10:287, 11:1835, 12:1342, 18:1). The second row for the same person
+was resolved as "new user" from the stale map, inserted via
+`ON CONFLICT (legacy_id) DO UPDATE` (a no-op returning the SAME existing new
+user id, since `legacy_id` was already claimed by the first row's insert
+this run), and then the participant insert collided on `user_id`. Even
+without that, the application insert would separately have hit
+`participant_applications(participant_id, program_id)`'s unique index.
+
+Two related latent bugs, found by inspection, not yet hit live:
+- **(a) Same-brand duplicate-email legacy users** (19 groups: different
+  legacy user ids, same normalized email, same brand) would hit
+  `users(email, brand_id)`'s unique index the same way.
+- **(b) Cross-brand legacy users** (21 legacy users whose participant rows
+  span programs of a *different* brand — legacy users are brand-scoped via
+  `users.program_category_id`, but `users.legacy_id` is unique globally):
+  matching purely by `legacy_id` would attach an application to the wrong
+  brand's `User` row.
+- **(c) The "matched existing user" `UPDATE users SET legacy_id=$1`** path
+  had no guard against `$1` already being claimed by a different user row —
+  same unique-constraint crash, one step earlier.
+
+**Fix — group by email within a program, not per legacy row.** Brand is
+fixed per program, so `lower(trim(email))` is the correct dedupe key: one
+email group → one `User`, one `Participant` profile, **one**
+`participant_applications` row, regardless of how many legacy participant
+rows produced it. This single change also closes (a) for free (multiple
+legacy user ids with the same email in the same brand now resolve to the
+same group instead of two competing inserts).
+
+- **Primary row selection** (deterministic): non-draft (submitted) beats
+  draft (via a per-program batched latest-`participant_statuses` lookup,
+  replacing what used to be a per-row MySQL round trip); tie → latest
+  `updated_at`/`created_at`; tie → highest legacy id.
+- The primary row supplies `status`/`personal_data`/`essay_answers`/score.
+  Every other member's legacy id is recorded in
+  `personal_data.legacy_merged_participant_ids` (only when non-empty) — the
+  merge is never silent.
+- **Payments from every group member** are concatenated and re-sorted
+  chronologically (each member's own list was already sorted; merging
+  several requires a re-sort) before the existing status-aggregation /
+  unpaid-supersession logic runs unchanged across the combined set.
+- **Documents** (`applicationIdByLegacyParticipantId`) map every group
+  member's legacy participant id to the one resulting application, so
+  agreement letters / program documents from any merged row still attach.
+- **Existing-application resolution**, made rerun-safe: an application is
+  considered already-imported if **any** group member id matches an existing
+  `participant_applications.legacy_id`, **or** a `(participant_id,
+  program_id)` application already exists (native or legacy_id-bearing).
+  Never inserts a second application for the same `(participant, program)`.
+- **Brand-scoped `legacy_id` matching** (fixes (b)): `usersByLegacyId` now
+  stores `{id, brandId}`; a match whose `brandId` doesn't equal the current
+  program's brand is ignored (counted in the new `crossBrandLegacyUsers`
+  stat) and the user is instead resolved by `(email, brand)` or created with
+  `legacy_id = NULL`, guarded by `ON CONFLICT (email, brand_id)` instead of
+  `ON CONFLICT (legacy_id)` for that one path.
+- **SQL-level guard on the legacy_id backfill** (fixes (c)): `UPDATE users
+  SET legacy_id = $1 WHERE id = $2 AND legacy_id IS NULL AND NOT EXISTS
+  (SELECT 1 FROM users u2 WHERE u2.legacy_id = $1)` — a conflicting legacy id
+  is now a safe no-op, not a crash, enforced by Postgres itself, not just JS
+  control flow.
+- **All five prefetch maps are now genuinely kept current in-run** (the core
+  fix): every create/match path writes back into `usersByEmail`,
+  `usersByLegacyId`, `participantsByUserId`, `appsByLegacyParticipantId`, and
+  `dupAppsByParticipantId` immediately, so any remaining repeat within the
+  same program resolves from memory. No per-row SELECT was reintroduced —
+  the perf property from the batching fix above is preserved.
+
+**New counters** (per-program JSON and totals): `dupRowsMerged` (legacy rows
+folded into another row's application — should sum close to 8,242 across
+programs 2–12/18 minus any invalid-email rows in those groups) and
+`crossBrandLegacyUsers` (legacy_id matches ignored for belonging to a
+different brand — expected near 21). Dry-run performs the identical
+grouping so its counts are truthful against a real `--apply`.
+
+**Resuming on top of partial real-prod state.** Program 1 is fully migrated;
+program 12 has 11 applications already committed from the crashed run. This
+fix does not special-case resume — the normal idempotency path (existing-user/
+participant/application prefetch + matching, all now correctly maintained
+in-run) is what makes a subsequent real `--apply` a safe no-op for that
+already-imported prefix and a correct resume for the rest. Verified on a
+throwaway prod clone: see the clone-test report referenced from this
+migration's execution log.

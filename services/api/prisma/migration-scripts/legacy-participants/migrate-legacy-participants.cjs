@@ -454,6 +454,12 @@ async function main() {
       invoicesNew: 0, invoicesSkippedExisting: 0, invoicesUnmatchedTier: 0, invoicesSupersededUnpaid: 0, invoicesSkippedFailed: 0,
       tiersSynthesized: 0,
       documentsNew: 0, documentsSkippedExisting: 0, documentsUnmatchedApp: 0,
+      // Same-email dedupe (owner decision 2026-09-26, see "Duplicate legacy
+      // participant rows -- same-program email grouping" in README): rows folded
+      // into another row's application (dupRowsMerged), and legacy_id matches
+      // ignored because the matched user belongs to a different brand
+      // (crossBrandLegacyUsers).
+      dupRowsMerged: 0, crossBrandLegacyUsers: 0,
     };
     perProgram[legacyProgramId] = stat;
     const synthesizedTiersThisProgram = new Set(); // legacy program_payment_id -> already-created-or-would-create this run
@@ -514,7 +520,11 @@ async function main() {
     const rowEmails = [...new Set(rows.map((r) => normEmail(r.user_email)).filter(isValidEmail))];
     const rowLegacyUserIds = [...new Set(rows.map((r) => r.user_id))];
     const usersByEmail = new Map(); // normEmail -> {id, legacy_id}
-    const usersByLegacyId = new Map(); // legacy user id -> new user id
+    // legacy user id -> {id: new user id, brandId} -- brandId is required so a
+    // legacy_id match can be rejected when it belongs to a DIFFERENT brand (legacy
+    // users are brand-scoped via program_category_id, but users.legacy_id is
+    // unique globally across brands -- see "crossBrandLegacyUsers" below).
+    const usersByLegacyId = new Map();
     // Users are brand-scoped, not program-scoped: a dry-run-simulated program
     // (PENDING_PROGRAM_BACKFILLS) still carries its real brandId, so this lookup
     // must run for it too. Gating it on programIsSynthetic (as 2444f2cc did)
@@ -527,13 +537,16 @@ async function main() {
       for (const u of r.rows) usersByEmail.set(u.norm_email, { id: u.id, legacy_id: u.legacy_id });
     }
     if (rowLegacyUserIds.length) {
-      const r = await pg.query(`SELECT id, legacy_id FROM users WHERE legacy_id = ANY($1::int[])`, [rowLegacyUserIds]);
-      for (const u of r.rows) usersByLegacyId.set(u.legacy_id, u.id);
+      // Unscoped by brand on purpose (a legacy_id is looked up before we know
+      // which user it belongs to) -- callers below must check `.brandId` before
+      // trusting a hit.
+      const r = await pg.query(`SELECT id, legacy_id, brand_id FROM users WHERE legacy_id = ANY($1::int[])`, [rowLegacyUserIds]);
+      for (const u of r.rows) usersByLegacyId.set(u.legacy_id, { id: u.id, brandId: u.brand_id });
     }
     // Participants for every user this program's rows could possibly already match --
     // a user created earlier in THIS run (brand-new) is intentionally absent from this
     // prefetch, which is correct: it cannot have a pre-existing participant profile.
-    const candidateUserIds = [...new Set([...[...usersByEmail.values()].map((u) => u.id), ...usersByLegacyId.values()])];
+    const candidateUserIds = [...new Set([...[...usersByEmail.values()].map((u) => u.id), ...[...usersByLegacyId.values()].map((u) => u.id)])];
     const participantsByUserId = new Map(); // userId -> participantId
     if (candidateUserIds.length) {
       const r = await pg.query(`SELECT id, user_id FROM participants WHERE user_id = ANY($1::uuid[])`, [candidateUserIds]);
@@ -562,10 +575,74 @@ async function main() {
       }
     }
 
+    // ---------- Batch-fetch the latest participant_statuses row per legacy
+    // participant -- needed both for group-primary selection (below) and for
+    // status mapping. Previously a per-row MySQL round-trip inside the loop;
+    // batching per-program removes that too (see "Perf fix" precedent above).
+    const statusByParticipantId = new Map();
+    {
+      const ids = rows.map((r) => r.id);
+      if (ids.length) {
+        const latest = await mq(
+          `SELECT ps1.participant_id, ps1.general_status, ps1.form_status
+             FROM participant_statuses ps1
+             JOIN (SELECT participant_id, MAX(id) AS max_id FROM participant_statuses
+                     WHERE participant_id IN (?) GROUP BY participant_id) ps2
+               ON ps1.participant_id = ps2.participant_id AND ps1.id = ps2.max_id`,
+          [ids],
+        );
+        for (const r of latest) statusByParticipantId.set(r.participant_id, r);
+      }
+    }
+
+    // ---------- Group legacy rows by normalized email (owner decision
+    // 2026-09-26, see README "Duplicate legacy participant rows"): legacy has
+    // the same person registered 2+ times within one program (3,961
+    // (user_id, program_id) groups / 8,242 rows across the mapped programs,
+    // verified live) -- the root cause of the real prod --apply crash on
+    // `participants_user_id_key`. Brand is fixed per program, so grouping by
+    // email alone is the correct key: one group -> one user, one participant
+    // profile, ONE application. This also collapses same-brand duplicate-
+    // email legacy USERS (19 groups: different legacy user ids, same email,
+    // same brand) onto one new row, so neither case can reach two INSERTs
+    // against users(email, brand_id) or participant_applications
+    // (participant_id, program_id).
+    const groupsByEmail = new Map(); // normEmail -> { members: [row,...] }
     for (const row of rows) {
       const email = normEmail(row.user_email);
       if (!isValidEmail(email)) { stat.invalidEmail++; bump('invalidEmail'); continue; }
       if (!row.full_name || !String(row.full_name).trim()) { stat.emptyName++; bump('emptyName'); }
+      const g = groupsByEmail.get(email) || { members: [] };
+      g.members.push(row);
+      groupsByEmail.set(email, g);
+    }
+
+    // Deterministic primary-row pick within a group: non-draft (submitted)
+    // beats draft; tie -> latest updated_at/created_at; tie -> highest id.
+    // The primary row supplies the application's status/personal_data/essays;
+    // every other member's id is recorded in
+    // personal_data.legacy_merged_participant_ids and still contributes its
+    // own payments/documents to the single resulting application.
+    function pickPrimary(members) {
+      return members.reduce((best, cur) => {
+        if (!best) return cur;
+        const bestSubmitted = (statusByParticipantId.get(best.id)?.form_status ?? FORM_STATUS.DRAFT) !== FORM_STATUS.DRAFT;
+        const curSubmitted = (statusByParticipantId.get(cur.id)?.form_status ?? FORM_STATUS.DRAFT) !== FORM_STATUS.DRAFT;
+        if (curSubmitted !== bestSubmitted) return curSubmitted ? cur : best;
+        const bestTime = +new Date(best.updated_at || best.created_at || 0);
+        const curTime = +new Date(cur.updated_at || cur.created_at || 0);
+        if (curTime !== bestTime) return curTime > bestTime ? cur : best;
+        return cur.id > best.id ? cur : best;
+      }, null);
+    }
+
+    for (const group of groupsByEmail.values()) {
+      const email = normEmail(group.members[0].user_email);
+      const primary = pickPrimary(group.members);
+      const others = group.members.filter((m) => m.id !== primary.id);
+      const memberIds = group.members.map((m) => m.id);
+      const row = primary; // downstream code (application/personal_data/essays/score) reads `row`
+      if (others.length) { stat.dupRowsMerged += others.length; bump('dupRowsMerged', others.length); }
 
       // ---- User resolution (brand-scoped match) ----
       // Read from the per-program batch prefetch above -- no per-row SELECT.
@@ -576,27 +653,71 @@ async function main() {
         stat.usersMatched++;
         bump('usersMatched');
         if (apply && existingUserMatch.legacy_id == null) {
-          await pg.query(`UPDATE users SET legacy_id = $1 WHERE id = $2`, [row.user_id, userId]);
+          // BUG FIX: guarded in SQL, not just JS -- `primary.user_id` (the legacy
+          // id we're about to stamp on) may already be claimed by a DIFFERENT
+          // existing user row (bug (c) from the real prod apply: "matched
+          // existing user" UPDATE crashing on users.legacy_id's unique
+          // constraint). The NOT EXISTS makes that a safe no-op instead.
+          const upd = await pg.query(
+            `UPDATE users SET legacy_id = $1 WHERE id = $2 AND legacy_id IS NULL
+               AND NOT EXISTS (SELECT 1 FROM users u2 WHERE u2.legacy_id = $1)`,
+            [primary.user_id, userId],
+          );
+          if (upd.rowCount) existingUserMatch.legacy_id = primary.user_id;
         }
       } else {
-        // Also check a different legacy_id already claimed this row (idempotent re-run).
-        const byLegacyIdUserId = usersByLegacyId.get(row.user_id);
-        if (byLegacyIdUserId) {
-          userId = byLegacyIdUserId;
+        // Check every group member's legacy user id against the legacy_id map.
+        // Brand-scoped: a match belonging to a DIFFERENT brand must be ignored
+        // (legacy users are brand-scoped via program_category_id, but
+        // users.legacy_id is unique globally) -- attaching it here would
+        // silently move the application onto the wrong brand's user (bug (b)
+        // from the real prod apply).
+        let legacyMatch = null;
+        let crossBrandIgnored = false;
+        for (const m of group.members) {
+          const hit = usersByLegacyId.get(m.user_id);
+          if (!hit) continue;
+          if (hit.brandId === brandId) { legacyMatch = hit; break; }
+          crossBrandIgnored = true;
+        }
+        if (legacyMatch) {
+          userId = legacyMatch.id;
           stat.usersMatched++;
           bump('usersMatched');
         } else {
+          if (crossBrandIgnored) { stat.crossBrandLegacyUsers++; bump('crossBrandLegacyUsers'); }
           stat.usersNew++;
           bump('usersNew');
           if (apply) {
-            const ins = await pg.query(
-              `INSERT INTO users (email, brand_id, password_hash, email_verified, is_active, legacy_id, legacy_type, created_at, updated_at)
-               VALUES ($1,$2,NULL,$3,$4,$5,'participant',$6,now())
-               ON CONFLICT (legacy_id) DO UPDATE SET updated_at = now()
-               RETURNING id`,
-              [email, brandId, !!row.user_is_verified, !!row.user_is_active && !row.user_is_deleted, row.user_id, row.user_created_at || new Date()],
-            );
+            // crossBrandIgnored: primary.user_id is already claimed by another
+            // brand's user -- writing it here would violate users.legacy_id's
+            // global uniqueness (bug (c)'s INSERT-side twin). Create with
+            // legacy_id NULL instead, guarded by ON CONFLICT (email, brand_id).
+            const ins = crossBrandIgnored
+              ? await pg.query(
+                  `INSERT INTO users (email, brand_id, password_hash, email_verified, is_active, legacy_id, legacy_type, created_at, updated_at)
+                   VALUES ($1,$2,NULL,$3,$4,NULL,'participant',$5,now())
+                   ON CONFLICT (email, brand_id) DO UPDATE SET updated_at = now()
+                   RETURNING id, legacy_id`,
+                  [email, brandId, !!primary.user_is_verified, !!primary.user_is_active && !primary.user_is_deleted, primary.user_created_at || new Date()],
+                )
+              : await pg.query(
+                  `INSERT INTO users (email, brand_id, password_hash, email_verified, is_active, legacy_id, legacy_type, created_at, updated_at)
+                   VALUES ($1,$2,NULL,$3,$4,$5,'participant',$6,now())
+                   ON CONFLICT (legacy_id) DO UPDATE SET updated_at = now()
+                   RETURNING id, legacy_id`,
+                  [email, brandId, !!primary.user_is_verified, !!primary.user_is_active && !primary.user_is_deleted, primary.user_id, primary.user_created_at || new Date()],
+                );
             userId = ins.rows[0].id;
+            // BUG FIX (the core one): keep every prefetch map current in-run.
+            // Previously these three maps (usersByEmail/usersByLegacyId/
+            // participantsByUserId) were built once before the loop and never
+            // updated as rows were created in the same run, so a second legacy
+            // row for the same person landed here again, got treated as
+            // "new", and collided on participants_user_id_key / the
+            // (participant_id, program_id) app unique index.
+            usersByEmail.set(email, { id: userId, legacy_id: ins.rows[0].legacy_id });
+            if (ins.rows[0].legacy_id != null) usersByLegacyId.set(ins.rows[0].legacy_id, { id: userId, brandId });
           }
         }
       }
@@ -644,6 +765,10 @@ async function main() {
           ],
         );
         participantId = ins.rows.length ? ins.rows[0].id : (await pg.query(`SELECT id FROM participants WHERE user_id=$1`, [userId])).rows[0].id;
+        // BUG FIX: same in-run map-currency fix as users above, for
+        // participants_user_id_key specifically (the exact constraint the real
+        // prod --apply crashed on).
+        participantsByUserId.set(userId, participantId);
         recordMedia('participants.picture_url', row.id, row.picture_url);
         recordMedia('participants.resume_url', row.id, row.resume_url);
       } else if (!apply && participantIsNew) {
@@ -652,19 +777,20 @@ async function main() {
         recordMedia('participants.resume_url', row.id, row.resume_url);
       }
 
-      // ---- Application (per legacy participants row = per program registration) ----
-      // Unlike the old version, an already-imported application is no longer a hard
-      // `continue`: invoice import (below) must still run against it on a re-run so a
-      // partial prior run (e.g. an older script version that hardcoded payment status
-      // to 'unpaid') gets backfilled, not silently skipped forever. `applicationId`
-      // carries through to the invoice step regardless of which branch resolved it.
+      // ---- Application resolution (per email-group = per program registration) ----
+      // An application already exists if ANY group member id is an existing
+      // participant_applications.legacy_id, OR a (participant_id, program_id)
+      // app already exists (native or legacy) -- never insert a second app for
+      // the same (participant, program). Invoice import (below) must still run
+      // against an already-existing application on a re-run so a partial prior
+      // run gets backfilled, not silently skipped forever.
       let applicationId = null;
       let isNewApplication = false;
-      // Read from the per-program batch prefetch above; both maps are updated
-      // in-memory as rows resolve (below) so a rare same-program repeat of the
-      // same legacy participant/application within this very run still sees it,
-      // matching what a fresh per-row SELECT would have found.
-      const existingAppId = appsByLegacyParticipantId.get(row.id);
+      let existingAppId = null;
+      for (const mid of memberIds) {
+        const hit = appsByLegacyParticipantId.get(mid);
+        if (hit) { existingAppId = hit; break; }
+      }
       if (existingAppId) {
         applicationId = existingAppId;
         stat.appsSkippedExisting++;
@@ -694,11 +820,15 @@ async function main() {
         isNewApplication = true;
       }
 
-      // ---- Payments -> invoices (computed for both new and already-existing
-      // applications, so a re-run backfills payment status onto a partial
-      // prior import instead of leaving it stuck at whatever the application
-      // was originally inserted with). See "Payment import" in README.
-      const paymentsForRow = paymentsByParticipantId.get(row.id) || [];
+      // ---- Payments -> invoices: merged from EVERY group member (owner
+      // decision: all rows folded into a group attach their payments to the
+      // one resulting application), re-sorted chronologically since
+      // paymentsByParticipantId is only sorted within a single legacy
+      // participant id, not across several merged ones. See "Payment import"
+      // in README.
+      const paymentsForRow = memberIds
+        .flatMap((mid) => paymentsByParticipantId.get(mid) || [])
+        .sort((a, b) => (new Date(a.createdAt) - new Date(b.createdAt)) || (a.id - b.id));
       let registrationPaymentStatus = 'unpaid';
       let programPaymentStatus = 'unpaid';
       const invoiceInserts = [];
@@ -777,10 +907,9 @@ async function main() {
 
       // 109 legacy participants rows (across all programs) have no participant_statuses
       // row at all (orphans) — treated as draft/unpaid since there's nothing else to infer status from.
-      const statusRow = (await mq(
-        `SELECT general_status, form_status, document_status, payment_status FROM participant_statuses WHERE participant_id = ? ORDER BY id DESC LIMIT 1`,
-        [row.id],
-      ))[0];
+      // Read from the per-program batch prefetch (statusByParticipantId) above --
+      // no per-row MySQL round-trip.
+      const statusRow = statusByParticipantId.get(row.id);
       if (!statusRow) { stat.orphanNoStatus++; bump('orphanNoStatus'); }
       const formStatus = statusRow ? statusRow.form_status : FORM_STATUS.DRAFT;
       const generalStatus = statusRow ? statusRow.general_status : GENERAL_STATUS.PENDING;
@@ -835,6 +964,10 @@ async function main() {
           legacy_outcome: legacyOutcome,
           legacy_import: true,
         };
+        // Owner decision: record the OTHER legacy participant rows folded into
+        // this same application (only when non-empty) so the merge is never
+        // silent/lossy -- abs(each id) is a real legacy participants.id.
+        if (others.length) personalData.legacy_merged_participant_ids = others.map((m) => m.id);
 
         stat.appsNew++;
         bump('appsNew');
@@ -863,7 +996,10 @@ async function main() {
           // Keep the batch prefetch maps current for the rest of THIS program's loop
           // (see the comment above `existingAppId`) -- closes the gap for the rare case
           // of a repeated legacy participant/application row within the same program.
-          appsByLegacyParticipantId.set(row.id, applicationId);
+          // Set for every group member id, not just the primary's: the real DB row's
+          // legacy_id is the primary's id only, but in-run bookkeeping should still
+          // resolve a same-run repeat of any merged member id from memory.
+          for (const mid of memberIds) appsByLegacyParticipantId.set(mid, applicationId);
           if (participantId) dupAppsByParticipantId.set(participantId, applicationId);
         }
       } else if (apply && applicationId) {
@@ -879,8 +1015,14 @@ async function main() {
       // no real id to key documents off of yet -- use a truthy placeholder purely so the
       // dry-run document counting below can still report "would attach" vs "no target app"
       // accurately; it is never used for an actual write (guarded by `if (!apply)` there).
+      // Set for EVERY group member id: documents (agreement letters / program
+      // documents) are keyed per legacy participant id and must attach to the
+      // one merged application regardless of which row in the group they came
+      // from (owner decision -- see README "Documents").
       const applicationIdForMap = applicationId || (dryRun && isNewApplication ? `dry-run:${row.id}` : null);
-      if (applicationIdForMap) applicationIdByLegacyParticipantId.set(row.id, applicationIdForMap);
+      if (applicationIdForMap) {
+        for (const mid of memberIds) applicationIdByLegacyParticipantId.set(mid, applicationIdForMap);
+      }
 
       // ---- Invoices themselves: one application_invoices row per legacy payment row. ----
       // By-final-status counts (paid/unpaid/failed -- 'processing' never appears, see
@@ -987,6 +1129,7 @@ async function main() {
   let totalUsersMatched = 0, totalUsersNew = 0, totalParticipantsReused = 0, totalParticipantsNew = 0, totalAppsNew = 0, totalAppsSkipped = 0;
   let totalInvoicesNew = 0, totalInvoicesSkipped = 0, totalInvoicesUnmatchedTier = 0, totalInvoicesSuperseded = 0, totalInvoicesSkippedFailed = 0, totalTiersSynthesized = 0;
   let totalDocumentsNew = 0, totalDocumentsSkipped = 0, totalDocumentsUnmatchedApp = 0;
+  let totalDupRowsMerged = 0, totalCrossBrandLegacyUsers = 0;
   for (const [pid, s] of Object.entries(perProgram)) {
     console.log(pid, JSON.stringify(s));
     totalUsersMatched += s.usersMatched; totalUsersNew += s.usersNew;
@@ -994,6 +1137,7 @@ async function main() {
     totalAppsNew += s.appsNew; totalAppsSkipped += s.appsSkippedExisting;
     totalInvoicesNew += s.invoicesNew; totalInvoicesSkipped += s.invoicesSkippedExisting; totalInvoicesUnmatchedTier += s.invoicesUnmatchedTier; totalInvoicesSuperseded += s.invoicesSupersededUnpaid; totalInvoicesSkippedFailed += s.invoicesSkippedFailed; totalTiersSynthesized += s.tiersSynthesized;
     totalDocumentsNew += s.documentsNew; totalDocumentsSkipped += s.documentsSkippedExisting; totalDocumentsUnmatchedApp += s.documentsUnmatchedApp;
+    totalDupRowsMerged += s.dupRowsMerged; totalCrossBrandLegacyUsers += s.crossBrandLegacyUsers;
   }
   console.log('\n=== Totals (raw counters) ===', JSON.stringify(counts));
   console.log('\n=== Owner-required breakdown (grand total) ===');
@@ -1003,6 +1147,7 @@ async function main() {
   console.log(`Invoices: new=${totalInvoicesNew}  skipped-existing=${totalInvoicesSkipped}  unmatched-tier=${totalInvoicesUnmatchedTier}  superseded-unpaid=${totalInvoicesSuperseded}  skipped-failed=${totalInvoicesSkippedFailed}  historical-tiers-synthesized=${totalTiersSynthesized}`);
   console.log(`Invoices by final status: paid=${counts.invoicesByStatus_paid || 0}  unpaid=${counts.invoicesByStatus_unpaid || 0}  failed=${counts.invoicesByStatus_failed || 0}`);
   console.log(`Documents (agreement letters + program documents): new=${totalDocumentsNew}  skipped-existing=${totalDocumentsSkipped}  no-target-application-yet=${totalDocumentsUnmatchedApp}`);
+  console.log(`Same-email dedupe: dup-rows-merged=${totalDupRowsMerged}  cross-brand-legacy-user-matches-ignored=${totalCrossBrandLegacyUsers}`);
   console.log('Same-brand duplicate email groups (legacy):', dupSameBrand[0].n);
   console.log('Multi-brand same-email groups (expected, not dupes):', dupMultiBrand[0].n);
 
