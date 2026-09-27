@@ -35,6 +35,90 @@ function md5(s) {
   return crypto.createHash('md5').update(s).digest('hex');
 }
 
+// BUG FIX (found via the real prod --apply on program 12): several legacy
+// free-text columns have no length cap (MySQL TEXT/garbage-tolerant), but the
+// matching new-prod columns are bounded `varchar(n)` -- an --apply hit
+// `value too long for type character varying(500)` on `twibbon_link`
+// (verified live: 79 rows across the mapped programs, some containing pasted
+// HTML/rich-text markup up to 65,535 chars, e.g. browser-translate widget
+// artifacts). Also verified live: `phone_number` (17 rows over 25 chars,
+// garbage, not real phone numbers), `nationality` (594 rows over 100),
+// `occupation` (49 rows over 100), `instagram_username`/`instagram_account`
+// (20 rows over 50). `institution`/`major`/`nick_name`/`tshirt_size`/
+// `education_level`/`knowledge_source`/`referral_code`/`full_name` were all
+// verified to fit their column widths for every mapped program and are left
+// as-is.
+//
+// `clampText`: truncates informational free-text fields to fit -- some
+// (garbled) text is better than a hard crash, and these fields are display-
+// only, never matched/validated against elsewhere.
+// `nullIfOverLen`: used instead for fields where a truncated value would be
+// actively wrong/misleading (a cut-off phone number or a cut-off URL is
+// worse than no value) -- nulled and counted, same "known data-quality gap"
+// precedent already used for `nationality_code` above.
+function clampText(v, maxLen) {
+  if (v == null) return null;
+  const s = String(v);
+  return s.length > maxLen ? s.slice(0, maxLen) : s;
+}
+function nullIfOverLen(v, maxLen) {
+  if (v == null) return null;
+  return String(v).length > maxLen ? null : v;
+}
+
+// BUG FIX (found via the real prod --apply, program 12, second crash after the
+// varchar-overflow one above): `error: invalid input syntax for type timestamp
+// with time zone: "0NaN-NaN-NaNT..."`. mysql2 parses a legacy zero/garbage
+// date/datetime (verified live: 3 `payments.payment_date` rows with corrupted
+// years like "0026-01-25", plus 5,750 `participants.birthdate` rows literally
+// "0000-00-00") into a JS `Invalid Date` OBJECT, not `null` -- which is
+// TRUTHY, so every `x || fallback` chain in this script silently kept the
+// invalid Date instead of falling back, and pg's own date serializer has no
+// validity check, so it emits that NaN-filled string straight into the SQL
+// wire protocol. `safeDate` converts an invalid Date to real `null` so the
+// existing `||` fallbacks behave as originally intended.
+function safeDate(v) {
+  if (v == null) return null;
+  const d = v instanceof Date ? v : new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+// BUG FIX (found via the real prod --apply, program 10, fourth crash): `error:
+// invalid byte sequence for encoding "UTF8": 0x00`. Postgres text/varchar
+// columns can NEVER contain a literal NUL byte (a hard libpq/C-string
+// limitation, not a length issue) -- verified live: 11 legacy rows across
+// the mapped programs have an embedded 0x00 in `experiences`/`achievements`
+// (raw text pasted from somewhere binary). `JSON.stringify` already escapes
+// `\u0000` into a 6-character sequence (verified: no raw NUL byte survives
+// it), so `personal_data`/`essay_answers` (JSONB) are unaffected even though
+// 2,783 legacy essay answers also contain NUL bytes -- this guard is only
+// needed for the three raw-text application columns
+// (motivation_letter/achievements/experiences) that write `row.experiences`/
+// `row.achievements` directly, unescaped.
+function stripNul(v) {
+  if (v == null) return null;
+  return String(v).replace(/\u0000/g, '');
+}
+function stripNulCounted(v, stat) {
+  if (v == null) return null;
+  const s = String(v);
+  const cleaned = s.replace(/\u0000/g, '');
+  if (cleaned.length !== s.length && stat) { stat.nulBytesStripped++; }
+  return cleaned;
+}
+// Counting variant for the two sites where real corrupted data was found
+// live (birthdate, payment paid_at/created_at) -- `stat` is the enclosing
+// per-program counters object, passed explicitly since this is a top-level
+// function.
+function safeDateCounted(v, stat) {
+  if (v == null) return null;
+  const d = v instanceof Date ? v : new Date(v);
+  if (isNaN(d.getTime())) {
+    if (stat) { stat.invalidLegacyDatesNulled++; }
+    return null;
+  }
+  return d;
+}
+
 // statusMode: 'flatten' (default) collapses every historical decision outcome
 // down to draft/submitted only -- prod has NEVER produced under_review/
 // accepted/rejected natively (verified: see README "Status mapping"), and
@@ -460,6 +544,11 @@ async function main() {
       // ignored because the matched user belongs to a different brand
       // (crossBrandLegacyUsers).
       dupRowsMerged: 0, crossBrandLegacyUsers: 0,
+      // Overflow guards against bounded new-prod varchar columns (see
+      // clampText/nullIfOverLen above) -- found via the real prod --apply.
+      phoneOverflowNulled: 0, nationalityTruncated: 0, occupationTruncated: 0,
+      instagramTruncated: 0, twibbonLinkOverflowNulled: 0,
+      invalidLegacyDatesNulled: 0, nulBytesStripped: 0,
     };
     perProgram[legacyProgramId] = stat;
     const synthesizedTiersThisProgram = new Set(); // legacy program_payment_id -> already-created-or-would-create this run
@@ -629,8 +718,11 @@ async function main() {
         const bestSubmitted = (statusByParticipantId.get(best.id)?.form_status ?? FORM_STATUS.DRAFT) !== FORM_STATUS.DRAFT;
         const curSubmitted = (statusByParticipantId.get(cur.id)?.form_status ?? FORM_STATUS.DRAFT) !== FORM_STATUS.DRAFT;
         if (curSubmitted !== bestSubmitted) return curSubmitted ? cur : best;
-        const bestTime = +new Date(best.updated_at || best.created_at || 0);
-        const curTime = +new Date(cur.updated_at || cur.created_at || 0);
+        // safeDate: an Invalid Date object (see the safeDate comment above) is
+        // truthy, so a raw `||` chain here would never fall through to a good
+        // value and +invalidDate is NaN, making every comparison unstable.
+        const bestTime = +(safeDate(best.updated_at) || safeDate(best.created_at) || new Date(0));
+        const curTime = +(safeDate(cur.updated_at) || safeDate(cur.created_at) || new Date(0));
         if (curTime !== bestTime) return curTime > bestTime ? cur : best;
         return cur.id > best.id ? cur : best;
       }, null);
@@ -699,14 +791,14 @@ async function main() {
                    VALUES ($1,$2,NULL,$3,$4,NULL,'participant',$5,now())
                    ON CONFLICT (email, brand_id) DO UPDATE SET updated_at = now()
                    RETURNING id, legacy_id`,
-                  [email, brandId, !!primary.user_is_verified, !!primary.user_is_active && !primary.user_is_deleted, primary.user_created_at || new Date()],
+                  [email, brandId, !!primary.user_is_verified, !!primary.user_is_active && !primary.user_is_deleted, safeDate(primary.user_created_at) || new Date()],
                 )
               : await pg.query(
                   `INSERT INTO users (email, brand_id, password_hash, email_verified, is_active, legacy_id, legacy_type, created_at, updated_at)
                    VALUES ($1,$2,NULL,$3,$4,$5,'participant',$6,now())
                    ON CONFLICT (legacy_id) DO UPDATE SET updated_at = now()
                    RETURNING id, legacy_id`,
-                  [email, brandId, !!primary.user_is_verified, !!primary.user_is_active && !primary.user_is_deleted, primary.user_id, primary.user_created_at || new Date()],
+                  [email, brandId, !!primary.user_is_verified, !!primary.user_is_active && !primary.user_is_deleted, primary.user_id, safeDate(primary.user_created_at) || new Date()],
                 );
             userId = ins.rows[0].id;
             // BUG FIX (the core one): keep every prefetch map current in-run.
@@ -740,6 +832,19 @@ async function main() {
         bump('participantsReused');
       }
       if (apply && userId && participantIsNew) {
+        // BUG FIX (found via the real prod --apply on program 12): clamp/null
+        // legacy free-text values against their bounded new-prod varchar
+        // columns -- see the `clampText`/`nullIfOverLen` comment above for
+        // the verified-live overflow counts per field. Counted, never silent.
+        const safePhone = nullIfOverLen(row.phone_number, 25);
+        if (safePhone == null && row.phone_number) { stat.phoneOverflowNulled++; bump('phoneOverflowNulled'); }
+        const safeNationality = clampText(row.nationality, 100);
+        if (safeNationality && String(row.nationality || '').length > safeNationality.length) { stat.nationalityTruncated++; bump('nationalityTruncated'); }
+        const safeOccupation = clampText(row.occupation, 100);
+        if (safeOccupation && String(row.occupation || '').length > safeOccupation.length) { stat.occupationTruncated++; bump('occupationTruncated'); }
+        const safeInstagram = clampText(row.instagram_account, 50);
+        if (safeInstagram && String(row.instagram_account || '').length > safeInstagram.length) { stat.instagramTruncated++; bump('instagramTruncated'); }
+
         const ins = await pg.query(
           `INSERT INTO participants (user_id, full_name, nick_name, birthdate, gender, phone_country_code, phone_number,
              nationality, nationality_code, origin_address, current_address, institution, major, occupation,
@@ -748,9 +853,9 @@ async function main() {
            ON CONFLICT (legacy_id) DO NOTHING
            RETURNING id`,
           [
-            userId, row.full_name || '', row.nickname || null, row.birthdate || null,
-            mapGender(row.gender), row.country_code || null, row.phone_number || null,
-            row.nationality || null, null /* legacy nationality_code is actually a phone dial code
+            userId, clampText(row.full_name, 255) || '', clampText(row.nickname, 100) || null, safeDateCounted(row.birthdate, stat),
+            mapGender(row.gender), row.country_code || null, safePhone || null,
+            safeNationality || null, null /* legacy nationality_code is actually a phone dial code
               (e.g. "+234"), a duplicate of country_code, NOT an ISO country code -- verified
               live: every legacy row with nationality_code="+234" has nationality="Nigeria" and
               country_code="+234". It has no legitimate ISO-code data at all (also overflows the
@@ -759,9 +864,10 @@ async function main() {
               a real ISO code can be derived (e.g. from the free-text `nationality` name via a
               country-name lookup) -- open item, see README "Known data-quality gaps". */,
             row.origin_address || null,
-            row.current_address || null, row.institution || null, row.major || null, row.occupation || null,
-            row.instagram_account || null, row.tshirt_size || null, row.education_level || null,
-            row.knowledge_source || null, row.ref_code_ambassador || null, row.id, row.created_at || new Date(),
+            row.current_address || null, clampText(row.institution, 200) || null, clampText(row.major, 200) || null,
+            safeOccupation || null, safeInstagram || null,
+            clampText(row.tshirt_size, 10) || null, clampText(row.education_level, 100) || null,
+            clampText(row.knowledge_source, 100) || null, clampText(row.ref_code_ambassador, 20) || null, row.id, safeDate(row.created_at) || new Date(),
           ],
         );
         participantId = ins.rows.length ? ins.rows[0].id : (await pg.query(`SELECT id FROM participants WHERE user_id=$1`, [userId])).rows[0].id;
@@ -953,7 +1059,7 @@ async function main() {
         const personalData = {
           full_name: row.full_name || '',
           nationality: row.nationality || null,
-          birthdate: row.birthdate ? String(row.birthdate) : null,
+          birthdate: safeDate(row.birthdate) ? String(safeDate(row.birthdate)) : null,
           phone_country_code: row.country_code || null,
           phone_number: row.phone_number || null,
           institution: row.institution || null,
@@ -972,6 +1078,14 @@ async function main() {
         stat.appsNew++;
         bump('appsNew');
         if (apply) {
+          // BUG FIX (the actual crash on the real prod --apply, program 12):
+          // `twibbon_link` has no length cap in legacy (79 rows across the
+          // mapped programs exceed the new column's varchar(500), up to
+          // 65,535 chars of pasted markup) -- a truncated URL is broken/
+          // misleading, so null it instead and count it (see
+          // nullIfOverLen/clampText comment above).
+          const safeTwibbonLink = nullIfOverLen(row.twibbon_link, 500);
+          if (safeTwibbonLink == null && row.twibbon_link) { stat.twibbonLinkOverflowNulled++; bump('twibbonLinkOverflowNulled'); }
           const insApp = await pg.query(
             `INSERT INTO participant_applications
                (program_id, participant_id, status, registration_payment_status, program_payment_status,
@@ -984,10 +1098,10 @@ async function main() {
               newProgramId, participantId, appStatus, registrationPaymentStatus, programPaymentStatus,
               mapCategory(row.category),
               JSON.stringify(personalData), JSON.stringify(essayAnswers),
-              row.experiences || null, row.achievements || null, row.experiences || null,
-              row.twibbon_link || null, scoreTotal, scoreStatus,
-              formStatus !== FORM_STATUS.DRAFT ? (row.updated_at || row.created_at) : null,
-              row.id, row.created_at || new Date(),
+              stripNulCounted(row.experiences, stat), stripNulCounted(row.achievements, stat), stripNulCounted(row.experiences, stat),
+              safeTwibbonLink || null, scoreTotal, scoreStatus,
+              formStatus !== FORM_STATUS.DRAFT ? (safeDate(row.updated_at) || safeDate(row.created_at)) : null,
+              row.id, safeDate(row.created_at) || new Date(),
             ],
           );
           applicationId = insApp.rows.length
@@ -1043,8 +1157,8 @@ async function main() {
              RETURNING id`,
             [
               applicationId, tier.id, payment.amount, payment.currency, invoiceStatus,
-              invoiceStatus === 'paid' ? (payment.paidAt || payment.createdAt) : null,
-              payment.paymentMethod, payment.id, payment.createdAt || new Date(),
+              invoiceStatus === 'paid' ? (safeDateCounted(payment.paidAt, stat) || safeDateCounted(payment.createdAt, stat)) : null,
+              payment.paymentMethod, payment.id, safeDate(payment.createdAt) || new Date(), // counted above when used for paid_at; created_at fallback here reuses the same (already-checked) value
             ],
           );
           if (ins.rows.length) { stat.invoicesNew++; bump('invoicesNew'); }
@@ -1130,6 +1244,8 @@ async function main() {
   let totalInvoicesNew = 0, totalInvoicesSkipped = 0, totalInvoicesUnmatchedTier = 0, totalInvoicesSuperseded = 0, totalInvoicesSkippedFailed = 0, totalTiersSynthesized = 0;
   let totalDocumentsNew = 0, totalDocumentsSkipped = 0, totalDocumentsUnmatchedApp = 0;
   let totalDupRowsMerged = 0, totalCrossBrandLegacyUsers = 0;
+  let totalPhoneOverflowNulled = 0, totalNationalityTruncated = 0, totalOccupationTruncated = 0, totalInstagramTruncated = 0, totalTwibbonLinkOverflowNulled = 0;
+  let totalInvalidLegacyDatesNulled = 0, totalNulBytesStripped = 0;
   for (const [pid, s] of Object.entries(perProgram)) {
     console.log(pid, JSON.stringify(s));
     totalUsersMatched += s.usersMatched; totalUsersNew += s.usersNew;
@@ -1138,6 +1254,11 @@ async function main() {
     totalInvoicesNew += s.invoicesNew; totalInvoicesSkipped += s.invoicesSkippedExisting; totalInvoicesUnmatchedTier += s.invoicesUnmatchedTier; totalInvoicesSuperseded += s.invoicesSupersededUnpaid; totalInvoicesSkippedFailed += s.invoicesSkippedFailed; totalTiersSynthesized += s.tiersSynthesized;
     totalDocumentsNew += s.documentsNew; totalDocumentsSkipped += s.documentsSkippedExisting; totalDocumentsUnmatchedApp += s.documentsUnmatchedApp;
     totalDupRowsMerged += s.dupRowsMerged; totalCrossBrandLegacyUsers += s.crossBrandLegacyUsers;
+    totalPhoneOverflowNulled += s.phoneOverflowNulled; totalNationalityTruncated += s.nationalityTruncated;
+    totalOccupationTruncated += s.occupationTruncated; totalInstagramTruncated += s.instagramTruncated;
+    totalTwibbonLinkOverflowNulled += s.twibbonLinkOverflowNulled;
+    totalInvalidLegacyDatesNulled += s.invalidLegacyDatesNulled;
+    totalNulBytesStripped += s.nulBytesStripped;
   }
   console.log('\n=== Totals (raw counters) ===', JSON.stringify(counts));
   console.log('\n=== Owner-required breakdown (grand total) ===');
@@ -1148,6 +1269,9 @@ async function main() {
   console.log(`Invoices by final status: paid=${counts.invoicesByStatus_paid || 0}  unpaid=${counts.invoicesByStatus_unpaid || 0}  failed=${counts.invoicesByStatus_failed || 0}`);
   console.log(`Documents (agreement letters + program documents): new=${totalDocumentsNew}  skipped-existing=${totalDocumentsSkipped}  no-target-application-yet=${totalDocumentsUnmatchedApp}`);
   console.log(`Same-email dedupe: dup-rows-merged=${totalDupRowsMerged}  cross-brand-legacy-user-matches-ignored=${totalCrossBrandLegacyUsers}`);
+  console.log(`Varchar-overflow guards: phone-nulled=${totalPhoneOverflowNulled}  nationality-truncated=${totalNationalityTruncated}  occupation-truncated=${totalOccupationTruncated}  instagram-truncated=${totalInstagramTruncated}  twibbon-link-nulled=${totalTwibbonLinkOverflowNulled}`);
+  console.log(`Invalid legacy dates nulled (birthdate/payment paid_at/created_at): ${totalInvalidLegacyDatesNulled}`);
+  console.log(`NUL bytes stripped (motivation_letter/achievements/experiences): ${totalNulBytesStripped}`);
   console.log('Same-brand duplicate email groups (legacy):', dupSameBrand[0].n);
   console.log('Multi-brand same-email groups (expected, not dupes):', dupMultiBrand[0].n);
 

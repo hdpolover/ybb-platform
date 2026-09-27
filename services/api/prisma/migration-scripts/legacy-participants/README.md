@@ -1482,3 +1482,110 @@ in-run) is what makes a subsequent real `--apply` a safe no-op for that
 already-imported prefix and a correct resume for the rest. Verified on a
 throwaway prod clone: see the clone-test report referenced from this
 migration's execution log.
+
+## Varchar-overflow crash — found by the real prod --apply, program 12 (2026-09-27)
+
+The dedupe fix above did not crash on its own retest; a subsequent real
+`--apply` against prod for program 12 hit a second, unrelated bug:
+`error: value too long for type character varying(500)` on the
+`participant_applications` insert (`twibbon_link`). Legacy has no length cap
+on several free-text columns (some contain pasted rich-text/HTML markup —
+verified live, e.g. a browser-translate widget's `<font style="...">` output
+saved directly into a form field), but the matching new-prod columns are
+bounded. Verified live, across the 16 mapped programs:
+
+| Legacy column | New column | Cap | Rows over cap | Max length seen |
+|---|---|---|---|---|
+| `participants.twibbon_link` | `participant_applications.twibbon_link` | varchar(500) | 79 | 65,535 |
+| `participants.nationality` | `participants.nationality` | varchar(100) | 594 | 120 |
+| `participants.occupation` | `participants.occupation` | varchar(100) | 49 | 185 |
+| `participants.instagram_account` | `participants.instagram_username` | varchar(50) | 20 | 93 |
+| `participants.phone_number` | `participants.phone_number` | varchar(25) | 17 | 28 |
+
+`full_name`, `nick_name`, `institution`, `major`, `tshirt_size`,
+`education_level`, `knowledge_source`, `ref_code_ambassador`, invoice
+`payment_method`/`currency`, and agreement-letter/program-document URLs were
+all checked and fit their column widths for every mapped program — left
+as-is.
+
+**Fix**: two small helpers, `clampText(v, maxLen)` (truncate) and
+`nullIfOverLen(v, maxLen)` (null out) near the top of the script.
+`nationality`/`occupation`/`instagram_username` are truncated (informational,
+display-only fields — some data beats none, and these are never matched/
+validated against elsewhere). `phone_number` and `twibbon_link` are nulled
+instead: a cut-off phone number or a cut-off URL is actively wrong, not just
+incomplete, matching the same "known data-quality gap" precedent already
+used for `nationality_code`. Every guard is counted, never silent: new
+per-program/total counters `phoneOverflowNulled`, `nationalityTruncated`,
+`occupationTruncated`, `instagramTruncated`, `twibbonLinkOverflowNulled`.
+
+Both bugs (this one and the dedupe-by-email one above) were only found by
+actually running `--apply` against real data — the dry-run path never
+exercises the `INSERT` statements themselves, so a column-width violation is
+invisible until a real write. Confirmed on the throwaway prod clone: see the
+clone-test report.
+
+## Invalid-Date crash — found by the real prod --apply, program 12, third bug (2026-09-27)
+
+After the varchar-overflow fix above, the same real `--apply` for program 12
+hit a third crash: `error: invalid input syntax for type timestamp with time
+zone: "0NaN-NaN-NaNT..."`. Root cause: `mysql2` parses a legacy zero/garbage
+date into a JS `Invalid Date` **object**, not `null` — verified live: 3
+`payments.payment_date` rows with corrupted years (e.g. `"0026-01-25
+00:00:00"` instead of `2026`) and 5,750 `participants.birthdate` rows
+literally `"0000-00-00"` (plus ~98 more with implausible low years). An
+`Invalid Date` object is **truthy**, so every `x || fallback` chain already
+in this script (`payment.paidAt || payment.createdAt`, `row.birthdate ||
+null`, `row.created_at || new Date()`, etc.) kept the invalid value instead
+of falling back — and `pg`'s own date serializer has no validity check, so
+it hands Postgres a literally malformed timestamp string.
+
+**Fix**: `safeDate(v)` converts an invalid Date to real `null` (works for
+both a raw legacy value and an already-parsed Date object); `safeDateCounted`
+is the same thing with a per-program counter for the two sites where real
+corruption was found (`invalidLegacyDatesNulled` — birthdate, payment
+paid_at/created_at). Applied everywhere a legacy date value reaches a
+Postgres parameter: `participants.birthdate`, `participants.created_at`,
+`users.created_at` (both insert paths), `participant_applications.
+created_at`/`submission_date`, `application_invoices.paid_at`/`created_at`,
+and the group-primary-row tie-break in the dedupe fix above (an invalid
+`updated_at`/`created_at` there previously produced `NaN` comparisons that
+made primary selection non-deterministic, not just a crash risk).
+
+Three bugs total were found this way, all only visible under a real
+`--apply` (dry-run's read-only transaction never exercises an `INSERT`):
+duplicate-row merge (crashed first, program 12 after 11 apps), varchar
+overflow on `twibbon_link` (crashed second, after resuming past the first
+11), invalid dates on `birthdate`/`payment_date` (crashed third, on the
+subsequent resume). Each was root-caused against live legacy data, not
+patched blind. See the clone-test report for the full, successful resumed
+run.
+
+## NUL-byte crash — found by the real prod --apply, programs 6/7/8/9/10/4, fourth bug (2026-09-27)
+
+After the first three fixes, program 12 and 11 applied cleanly, but programs
+10, 9, 8, 7, 6, 4 all failed with `error: invalid byte sequence for encoding
+"UTF8": 0x00` on the `participant_applications` insert (`motivation_letter`
+column, param $9). Postgres text/varchar columns can never contain a literal
+NUL byte — a hard libpq/C-string limitation, unrelated to length. Verified
+live: 11 legacy rows across the mapped programs have an embedded `0x00` in
+`experiences`/`achievements` (raw pasted binary-adjacent text).
+
+**Not a bug for `personal_data`/`essay_answers`** (JSONB, and 2,783 legacy
+essay answers *do* contain NUL bytes): `JSON.stringify` already escapes
+`\u0000` into the 6-character sequence `\u0000` in the output text — verified
+directly (`JSON.stringify({a:"x\u0000y"})` produces no raw NUL byte). The
+guard below is only needed for the three raw-text application columns
+(`motivation_letter`/`achievements`/`experiences`) that write
+`row.experiences`/`row.achievements` directly, unescaped.
+
+**Fix**: `stripNul(v)` / `stripNulCounted(v, stat)` strip `\u0000` before
+those three columns are written; counted in the new `nulBytesStripped`
+per-program/total counter, never silent.
+
+This is the fourth and (so far) last bug found this way, each only visible
+under a real `--apply`: dedupe-by-email (crash 1), varchar overflow on
+`twibbon_link` (crash 2), invalid dates on `birthdate`/`payment_date`
+(crash 3), NUL bytes in `motivation_letter`/`achievements`/`experiences`
+(crash 4). All four were root-caused against live legacy data before being
+fixed, not patched blind. See the clone-test report for the full run.
