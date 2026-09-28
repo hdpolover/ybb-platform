@@ -1483,7 +1483,7 @@ already-imported prefix and a correct resume for the rest. Verified on a
 throwaway prod clone: see the clone-test report referenced from this
 migration's execution log.
 
-## Varchar-overflow crash — found by the real prod --apply, program 12 (2026-09-27)
+## Varchar-overflow crash — found by the prod-clone --apply, program 12 (2026-09-27)
 
 The dedupe fix above did not crash on its own retest; a subsequent real
 `--apply` against prod for program 12 hit a second, unrelated bug:
@@ -1525,7 +1525,7 @@ exercises the `INSERT` statements themselves, so a column-width violation is
 invisible until a real write. Confirmed on the throwaway prod clone: see the
 clone-test report.
 
-## Invalid-Date crash — found by the real prod --apply, program 12, third bug (2026-09-27)
+## Invalid-Date crash — found by the prod-clone --apply, program 12, third bug (2026-09-27)
 
 After the varchar-overflow fix above, the same real `--apply` for program 12
 hit a third crash: `error: invalid input syntax for type timestamp with time
@@ -1561,7 +1561,7 @@ subsequent resume). Each was root-caused against live legacy data, not
 patched blind. See the clone-test report for the full, successful resumed
 run.
 
-## NUL-byte crash — found by the real prod --apply, programs 6/7/8/9/10/4, fourth bug (2026-09-27)
+## NUL-byte crash — found by the prod-clone --apply, programs 6/7/8/9/10/4, fourth bug (2026-09-27)
 
 After the first three fixes, program 12 and 11 applied cleanly, but programs
 10, 9, 8, 7, 6, 4 all failed with `error: invalid byte sequence for encoding
@@ -1589,3 +1589,24 @@ under a real `--apply`: dedupe-by-email (crash 1), varchar overflow on
 (crash 3), NUL bytes in `motivation_letter`/`achievements`/`experiences`
 (crash 4). All four were root-caused against live legacy data before being
 fixed, not patched blind. See the clone-test report for the full run.
+
+## Legacy zero dates and birthdate format (2026-09-27)
+
+Two date problems the Invalid-Date guard above did not catch, found by
+inspecting the rows the real program-1 canary wrote:
+
+1. **Zero dates are valid Dates.** mysql2 turns a MySQL zero date
+   (`0000-00-00`) into `new Date(0, -1, 0)` = **1899-11-30**, a perfectly
+   valid Date, so `isNaN` never fires. The canary stored
+   `participants.birthdate = 1899-11-30`. `safeDate`/`safeDateCounted` now
+   also reject anything before 1901 (also covers corrupted years such as
+   `0026-01-25`), counted in `invalidLegacyDatesNulled`.
+2. **Birthdate format.** `personal_data.birthdate` was written with
+   `String(date)` ("Thu Aug 13 2009 00:00:00 GMT+0000 (...)") while native
+   rows store `YYYY-MM-DD`. `legacyBirthdate()` now returns `YYYY-MM-DD`
+   (built from local date parts, matching how mysql2 constructs DATE values)
+   and nulls years before 1920 or dates in the future. It feeds both
+   `participants.birthdate` and `personal_data.birthdate`.
+
+Rows written before this fix (program 1 + the first 11 of program 12) are
+corrected by a one-off UPDATE after the run; a re-run skips existing rows.

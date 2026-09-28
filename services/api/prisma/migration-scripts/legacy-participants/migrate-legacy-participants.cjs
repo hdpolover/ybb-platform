@@ -35,7 +35,7 @@ function md5(s) {
   return crypto.createHash('md5').update(s).digest('hex');
 }
 
-// BUG FIX (found via the real prod --apply on program 12): several legacy
+// BUG FIX (found via the prod-clone --apply on program 12): several legacy
 // free-text columns have no length cap (MySQL TEXT/garbage-tolerant), but the
 // matching new-prod columns are bounded `varchar(n)` -- an --apply hit
 // `value too long for type character varying(500)` on `twibbon_link`
@@ -66,7 +66,7 @@ function nullIfOverLen(v, maxLen) {
   return String(v).length > maxLen ? null : v;
 }
 
-// BUG FIX (found via the real prod --apply, program 12, second crash after the
+// BUG FIX (found via the prod-clone --apply, program 12, second crash after the
 // varchar-overflow one above): `error: invalid input syntax for type timestamp
 // with time zone: "0NaN-NaN-NaNT..."`. mysql2 parses a legacy zero/garbage
 // date/datetime (verified live: 3 `payments.payment_date` rows with corrupted
@@ -77,12 +77,21 @@ function nullIfOverLen(v, maxLen) {
 // validity check, so it emits that NaN-filled string straight into the SQL
 // wire protocol. `safeDate` converts an invalid Date to real `null` so the
 // existing `||` fallbacks behave as originally intended.
+// Zero/garbage dates that are NOT Invalid Date: mysql2 turns a MySQL zero date
+// ('0000-00-00') into a perfectly VALID Date of 1899-11-30 (verified on the
+// real program-1 canary, which stored participants.birthdate = 1899-11-30),
+// and a few legacy rows carry corrupted years such as '0026-01-25'. Nothing
+// legitimate in legacy predates 1901, so anything earlier is a blank marker.
+const MIN_PLAUSIBLE_LEGACY_DATE = new Date(1901, 0, 1).getTime();
+function isPlausibleDate(d) {
+  return !isNaN(d.getTime()) && d.getTime() >= MIN_PLAUSIBLE_LEGACY_DATE;
+}
 function safeDate(v) {
   if (v == null) return null;
   const d = v instanceof Date ? v : new Date(v);
-  return isNaN(d.getTime()) ? null : d;
+  return isPlausibleDate(d) ? d : null;
 }
-// BUG FIX (found via the real prod --apply, program 10, fourth crash): `error:
+// BUG FIX (found via the prod-clone --apply, program 10, fourth crash): `error:
 // invalid byte sequence for encoding "UTF8": 0x00`. Postgres text/varchar
 // columns can NEVER contain a literal NUL byte (a hard libpq/C-string
 // limitation, not a length issue) -- verified live: 11 legacy rows across
@@ -112,11 +121,30 @@ function stripNulCounted(v, stat) {
 function safeDateCounted(v, stat) {
   if (v == null) return null;
   const d = v instanceof Date ? v : new Date(v);
-  if (isNaN(d.getTime())) {
+  if (!isPlausibleDate(d)) {
     if (stat) { stat.invalidLegacyDatesNulled++; }
     return null;
   }
   return d;
+}
+
+// Birthdates: human-plausible range on top of safeDate, and stored the way
+// native rows store them -- 'YYYY-MM-DD'. The previous String(date) wrote
+// "Thu Aug 13 2009 00:00:00 GMT+0000 (Coordinated Universal Time)" into
+// personal_data.birthdate, which the portal/admin don't parse as a date.
+// Built from LOCAL date parts because mysql2 constructs DATE values in the
+// process's local timezone; toISOString() would shift the day off UTC.
+const BIRTH_YEAR_MIN = 1920;
+function legacyBirthdate(v, stat) {
+  const d = safeDateCounted(v, stat);
+  if (!d) return null;
+  const y = d.getFullYear();
+  if (y < BIRTH_YEAR_MIN || d.getTime() > Date.now()) { // 4 future birthdates in program 12 alone
+    if (stat) { stat.invalidLegacyDatesNulled++; }
+    return null;
+  }
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${y}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 // statusMode: 'flatten' (default) collapses every historical decision outcome
@@ -545,7 +573,7 @@ async function main() {
       // (crossBrandLegacyUsers).
       dupRowsMerged: 0, crossBrandLegacyUsers: 0,
       // Overflow guards against bounded new-prod varchar columns (see
-      // clampText/nullIfOverLen above) -- found via the real prod --apply.
+      // clampText/nullIfOverLen above) -- found via the prod-clone --apply.
       phoneOverflowNulled: 0, nationalityTruncated: 0, occupationTruncated: 0,
       instagramTruncated: 0, twibbonLinkOverflowNulled: 0,
       invalidLegacyDatesNulled: 0, nulBytesStripped: 0,
@@ -688,7 +716,7 @@ async function main() {
     // 2026-09-26, see README "Duplicate legacy participant rows"): legacy has
     // the same person registered 2+ times within one program (3,961
     // (user_id, program_id) groups / 8,242 rows across the mapped programs,
-    // verified live) -- the root cause of the real prod --apply crash on
+    // verified live) -- the root cause of the prod-clone --apply crash on
     // `participants_user_id_key`. Brand is fixed per program, so grouping by
     // email alone is the correct key: one group -> one user, one participant
     // profile, ONE application. This also collapses same-brand duplicate-
@@ -734,6 +762,7 @@ async function main() {
       const others = group.members.filter((m) => m.id !== primary.id);
       const memberIds = group.members.map((m) => m.id);
       const row = primary; // downstream code (application/personal_data/essays/score) reads `row`
+      const birthdate = legacyBirthdate(row.birthdate, stat); // 'YYYY-MM-DD' or null; computed once so the counter isn't doubled
       if (others.length) { stat.dupRowsMerged += others.length; bump('dupRowsMerged', others.length); }
 
       // ---- User resolution (brand-scoped match) ----
@@ -747,7 +776,7 @@ async function main() {
         if (apply && existingUserMatch.legacy_id == null) {
           // BUG FIX: guarded in SQL, not just JS -- `primary.user_id` (the legacy
           // id we're about to stamp on) may already be claimed by a DIFFERENT
-          // existing user row (bug (c) from the real prod apply: "matched
+          // existing user row (bug (c), found while fixing the real prod apply crash: "matched
           // existing user" UPDATE crashing on users.legacy_id's unique
           // constraint). The NOT EXISTS makes that a safe no-op instead.
           const upd = await pg.query(
@@ -763,7 +792,7 @@ async function main() {
         // (legacy users are brand-scoped via program_category_id, but
         // users.legacy_id is unique globally) -- attaching it here would
         // silently move the application onto the wrong brand's user (bug (b)
-        // from the real prod apply).
+        // found while fixing the real prod apply crash).
         let legacyMatch = null;
         let crossBrandIgnored = false;
         for (const m of group.members) {
@@ -832,7 +861,7 @@ async function main() {
         bump('participantsReused');
       }
       if (apply && userId && participantIsNew) {
-        // BUG FIX (found via the real prod --apply on program 12): clamp/null
+        // BUG FIX (found via the prod-clone --apply on program 12): clamp/null
         // legacy free-text values against their bounded new-prod varchar
         // columns -- see the `clampText`/`nullIfOverLen` comment above for
         // the verified-live overflow counts per field. Counted, never silent.
@@ -853,7 +882,7 @@ async function main() {
            ON CONFLICT (legacy_id) DO NOTHING
            RETURNING id`,
           [
-            userId, clampText(row.full_name, 255) || '', clampText(row.nickname, 100) || null, safeDateCounted(row.birthdate, stat),
+            userId, clampText(row.full_name, 255) || '', clampText(row.nickname, 100) || null, birthdate,
             mapGender(row.gender), row.country_code || null, safePhone || null,
             safeNationality || null, null /* legacy nationality_code is actually a phone dial code
               (e.g. "+234"), a duplicate of country_code, NOT an ISO country code -- verified
@@ -1059,7 +1088,7 @@ async function main() {
         const personalData = {
           full_name: row.full_name || '',
           nationality: row.nationality || null,
-          birthdate: safeDate(row.birthdate) ? String(safeDate(row.birthdate)) : null,
+          birthdate,
           phone_country_code: row.country_code || null,
           phone_number: row.phone_number || null,
           institution: row.institution || null,
@@ -1078,7 +1107,7 @@ async function main() {
         stat.appsNew++;
         bump('appsNew');
         if (apply) {
-          // BUG FIX (the actual crash on the real prod --apply, program 12):
+          // BUG FIX (the actual crash on the prod-clone --apply, program 12):
           // `twibbon_link` has no length cap in legacy (79 rows across the
           // mapped programs exceed the new column's varchar(500), up to
           // 65,535 chars of pasted markup) -- a truncated URL is broken/
