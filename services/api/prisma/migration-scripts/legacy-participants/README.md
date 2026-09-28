@@ -1324,12 +1324,21 @@ runs, using `= ANY($1::type[])` array parameters. Per-program batching (as
 opposed to fixed `--batch-size` chunks) was chosen because it's strictly
 fewer round trips for the same correctness — the largest single mapped
 program has ~55K rows, comfortably within one array parameter — and it
-requires no cross-chunk bookkeeping. The in-memory maps are also updated as
-rows resolve within the loop, so a rare repeated legacy participant/
-application row within the same program still sees a same-run predecessor
-correctly (closing a gap batching would otherwise introduce). Insert paths
-remain per-row for now (still correctness-critical, ON CONFLICT-guarded);
-batching writes is a separate, lower-urgency follow-up not done in this pass.
+requires no cross-chunk bookkeeping. Insert paths remain per-row for now
+(still correctness-critical, ON CONFLICT-guarded); batching writes is a
+separate, lower-urgency follow-up not done in this pass.
+
+**Correction (2026-09-27): the sentence this replaced was false.** It
+claimed "the in-memory maps are also updated as rows resolve within the
+loop" for all five prefetch maps. That was only true for
+`appsByLegacyParticipantId`/`dupAppsByParticipantId` (the application-dedupe
+maps) — `usersByEmail`, `usersByLegacyId`, and `participantsByUserId` were
+built once before the per-row loop and **never** written back to as new
+users/participants were created within the same run, in either dry-run or
+`--apply`. A real `--apply` against prod hit exactly this gap and crashed on
+`participants_user_id_key` (see "Duplicate legacy participant rows — same-
+program email grouping" below). Fixed in the same pass as the dedupe-by-email
+rework below: all five maps are now genuinely kept current in-run.
 
 **Verified locally** (small `--limit`-based run against real legacy data):
 identical counts before/after the refactor (users/participants/applications/
@@ -1378,3 +1387,226 @@ batching) surfaced two bugs, both fixed and re-verified on a fresh prod clone:
 Full-run totals with failed payments skipped: invoices new=7,952 (paid
 7,119, unpaid 833), skipped-failed=21,155, unmatched-tier=1 (was 19; the 18
 that now resolve were all failed attempts), historical tiers synthesized=69.
+
+## Duplicate legacy participant rows — same-program email grouping (2026-09-27)
+
+A real `--apply` against prod (programs 1 fully, then program 12) crashed on
+`duplicate key value violates unique constraint "participants_user_id_key"`.
+Root cause: the per-program batch-prefetch maps (`usersByEmail`,
+`usersByLegacyId`, `participantsByUserId`, `appsByLegacyParticipantId`,
+`dupAppsByParticipantId`) were built once before the per-row loop and never
+updated as rows were created within the same run (see the perf-section
+correction above — that section's own claim to the contrary was wrong).
+Legacy genuinely has the same person registered 2+ times within one program:
+**3,961 `(user_id, program_id)` groups / 8,242 rows** across the mapped
+programs (verified live; by program: 3:1, 4:21, 5:1, 6:22, 7:53, 8:136,
+9:262, 10:287, 11:1835, 12:1342, 18:1). The second row for the same person
+was resolved as "new user" from the stale map, inserted via
+`ON CONFLICT (legacy_id) DO UPDATE` (a no-op returning the SAME existing new
+user id, since `legacy_id` was already claimed by the first row's insert
+this run), and then the participant insert collided on `user_id`. Even
+without that, the application insert would separately have hit
+`participant_applications(participant_id, program_id)`'s unique index.
+
+Two related latent bugs, found by inspection, not yet hit live:
+- **(a) Same-brand duplicate-email legacy users** (19 groups: different
+  legacy user ids, same normalized email, same brand) would hit
+  `users(email, brand_id)`'s unique index the same way.
+- **(b) Cross-brand legacy users** (21 legacy users whose participant rows
+  span programs of a *different* brand — legacy users are brand-scoped via
+  `users.program_category_id`, but `users.legacy_id` is unique globally):
+  matching purely by `legacy_id` would attach an application to the wrong
+  brand's `User` row.
+- **(c) The "matched existing user" `UPDATE users SET legacy_id=$1`** path
+  had no guard against `$1` already being claimed by a different user row —
+  same unique-constraint crash, one step earlier.
+
+**Fix — group by email within a program, not per legacy row.** Brand is
+fixed per program, so `lower(trim(email))` is the correct dedupe key: one
+email group → one `User`, one `Participant` profile, **one**
+`participant_applications` row, regardless of how many legacy participant
+rows produced it. This single change also closes (a) for free (multiple
+legacy user ids with the same email in the same brand now resolve to the
+same group instead of two competing inserts).
+
+- **Primary row selection** (deterministic): non-draft (submitted) beats
+  draft (via a per-program batched latest-`participant_statuses` lookup,
+  replacing what used to be a per-row MySQL round trip); tie → latest
+  `updated_at`/`created_at`; tie → highest legacy id.
+- The primary row supplies `status`/`personal_data`/`essay_answers`/score.
+  Every other member's legacy id is recorded in
+  `personal_data.legacy_merged_participant_ids` (only when non-empty) — the
+  merge is never silent.
+- **Payments from every group member** are concatenated and re-sorted
+  chronologically (each member's own list was already sorted; merging
+  several requires a re-sort) before the existing status-aggregation /
+  unpaid-supersession logic runs unchanged across the combined set.
+- **Documents** (`applicationIdByLegacyParticipantId`) map every group
+  member's legacy participant id to the one resulting application, so
+  agreement letters / program documents from any merged row still attach.
+- **Existing-application resolution**, made rerun-safe: an application is
+  considered already-imported if **any** group member id matches an existing
+  `participant_applications.legacy_id`, **or** a `(participant_id,
+  program_id)` application already exists (native or legacy_id-bearing).
+  Never inserts a second application for the same `(participant, program)`.
+- **Brand-scoped `legacy_id` matching** (fixes (b)): `usersByLegacyId` now
+  stores `{id, brandId}`; a match whose `brandId` doesn't equal the current
+  program's brand is ignored (counted in the new `crossBrandLegacyUsers`
+  stat) and the user is instead resolved by `(email, brand)` or created with
+  `legacy_id = NULL`, guarded by `ON CONFLICT (email, brand_id)` instead of
+  `ON CONFLICT (legacy_id)` for that one path.
+- **SQL-level guard on the legacy_id backfill** (fixes (c)): `UPDATE users
+  SET legacy_id = $1 WHERE id = $2 AND legacy_id IS NULL AND NOT EXISTS
+  (SELECT 1 FROM users u2 WHERE u2.legacy_id = $1)` — a conflicting legacy id
+  is now a safe no-op, not a crash, enforced by Postgres itself, not just JS
+  control flow.
+- **All five prefetch maps are now genuinely kept current in-run** (the core
+  fix): every create/match path writes back into `usersByEmail`,
+  `usersByLegacyId`, `participantsByUserId`, `appsByLegacyParticipantId`, and
+  `dupAppsByParticipantId` immediately, so any remaining repeat within the
+  same program resolves from memory. No per-row SELECT was reintroduced —
+  the perf property from the batching fix above is preserved.
+
+**New counters** (per-program JSON and totals): `dupRowsMerged` (legacy rows
+folded into another row's application — should sum close to 8,242 across
+programs 2–12/18 minus any invalid-email rows in those groups) and
+`crossBrandLegacyUsers` (legacy_id matches ignored for belonging to a
+different brand — expected near 21). Dry-run performs the identical
+grouping so its counts are truthful against a real `--apply`.
+
+**Resuming on top of partial real-prod state.** Program 1 is fully migrated;
+program 12 has 11 applications already committed from the crashed run. This
+fix does not special-case resume — the normal idempotency path (existing-user/
+participant/application prefetch + matching, all now correctly maintained
+in-run) is what makes a subsequent real `--apply` a safe no-op for that
+already-imported prefix and a correct resume for the rest. Verified on a
+throwaway prod clone: see the clone-test report referenced from this
+migration's execution log.
+
+## Varchar-overflow crash — found by the prod-clone --apply, program 12 (2026-09-27)
+
+The dedupe fix above did not crash on its own retest; a subsequent real
+`--apply` against prod for program 12 hit a second, unrelated bug:
+`error: value too long for type character varying(500)` on the
+`participant_applications` insert (`twibbon_link`). Legacy has no length cap
+on several free-text columns (some contain pasted rich-text/HTML markup —
+verified live, e.g. a browser-translate widget's `<font style="...">` output
+saved directly into a form field), but the matching new-prod columns are
+bounded. Verified live, across the 16 mapped programs:
+
+| Legacy column | New column | Cap | Rows over cap | Max length seen |
+|---|---|---|---|---|
+| `participants.twibbon_link` | `participant_applications.twibbon_link` | varchar(500) | 79 | 65,535 |
+| `participants.nationality` | `participants.nationality` | varchar(100) | 594 | 120 |
+| `participants.occupation` | `participants.occupation` | varchar(100) | 49 | 185 |
+| `participants.instagram_account` | `participants.instagram_username` | varchar(50) | 20 | 93 |
+| `participants.phone_number` | `participants.phone_number` | varchar(25) | 17 | 28 |
+
+`full_name`, `nick_name`, `institution`, `major`, `tshirt_size`,
+`education_level`, `knowledge_source`, `ref_code_ambassador`, invoice
+`payment_method`/`currency`, and agreement-letter/program-document URLs were
+all checked and fit their column widths for every mapped program — left
+as-is.
+
+**Fix**: two small helpers, `clampText(v, maxLen)` (truncate) and
+`nullIfOverLen(v, maxLen)` (null out) near the top of the script.
+`nationality`/`occupation`/`instagram_username` are truncated (informational,
+display-only fields — some data beats none, and these are never matched/
+validated against elsewhere). `phone_number` and `twibbon_link` are nulled
+instead: a cut-off phone number or a cut-off URL is actively wrong, not just
+incomplete, matching the same "known data-quality gap" precedent already
+used for `nationality_code`. Every guard is counted, never silent: new
+per-program/total counters `phoneOverflowNulled`, `nationalityTruncated`,
+`occupationTruncated`, `instagramTruncated`, `twibbonLinkOverflowNulled`.
+
+Both bugs (this one and the dedupe-by-email one above) were only found by
+actually running `--apply` against real data — the dry-run path never
+exercises the `INSERT` statements themselves, so a column-width violation is
+invisible until a real write. Confirmed on the throwaway prod clone: see the
+clone-test report.
+
+## Invalid-Date crash — found by the prod-clone --apply, program 12, third bug (2026-09-27)
+
+After the varchar-overflow fix above, the same real `--apply` for program 12
+hit a third crash: `error: invalid input syntax for type timestamp with time
+zone: "0NaN-NaN-NaNT..."`. Root cause: `mysql2` parses a legacy zero/garbage
+date into a JS `Invalid Date` **object**, not `null` — verified live: 3
+`payments.payment_date` rows with corrupted years (e.g. `"0026-01-25
+00:00:00"` instead of `2026`) and 5,750 `participants.birthdate` rows
+literally `"0000-00-00"` (plus ~98 more with implausible low years). An
+`Invalid Date` object is **truthy**, so every `x || fallback` chain already
+in this script (`payment.paidAt || payment.createdAt`, `row.birthdate ||
+null`, `row.created_at || new Date()`, etc.) kept the invalid value instead
+of falling back — and `pg`'s own date serializer has no validity check, so
+it hands Postgres a literally malformed timestamp string.
+
+**Fix**: `safeDate(v)` converts an invalid Date to real `null` (works for
+both a raw legacy value and an already-parsed Date object); `safeDateCounted`
+is the same thing with a per-program counter for the two sites where real
+corruption was found (`invalidLegacyDatesNulled` — birthdate, payment
+paid_at/created_at). Applied everywhere a legacy date value reaches a
+Postgres parameter: `participants.birthdate`, `participants.created_at`,
+`users.created_at` (both insert paths), `participant_applications.
+created_at`/`submission_date`, `application_invoices.paid_at`/`created_at`,
+and the group-primary-row tie-break in the dedupe fix above (an invalid
+`updated_at`/`created_at` there previously produced `NaN` comparisons that
+made primary selection non-deterministic, not just a crash risk).
+
+Three bugs total were found this way, all only visible under a real
+`--apply` (dry-run's read-only transaction never exercises an `INSERT`):
+duplicate-row merge (crashed first, program 12 after 11 apps), varchar
+overflow on `twibbon_link` (crashed second, after resuming past the first
+11), invalid dates on `birthdate`/`payment_date` (crashed third, on the
+subsequent resume). Each was root-caused against live legacy data, not
+patched blind. See the clone-test report for the full, successful resumed
+run.
+
+## NUL-byte crash — found by the prod-clone --apply, programs 6/7/8/9/10/4, fourth bug (2026-09-27)
+
+After the first three fixes, program 12 and 11 applied cleanly, but programs
+10, 9, 8, 7, 6, 4 all failed with `error: invalid byte sequence for encoding
+"UTF8": 0x00` on the `participant_applications` insert (`motivation_letter`
+column, param $9). Postgres text/varchar columns can never contain a literal
+NUL byte — a hard libpq/C-string limitation, unrelated to length. Verified
+live: 11 legacy rows across the mapped programs have an embedded `0x00` in
+`experiences`/`achievements` (raw pasted binary-adjacent text).
+
+**Not a bug for `personal_data`/`essay_answers`** (JSONB, and 2,783 legacy
+essay answers *do* contain NUL bytes): `JSON.stringify` already escapes
+`\u0000` into the 6-character sequence `\u0000` in the output text — verified
+directly (`JSON.stringify({a:"x\u0000y"})` produces no raw NUL byte). The
+guard below is only needed for the three raw-text application columns
+(`motivation_letter`/`achievements`/`experiences`) that write
+`row.experiences`/`row.achievements` directly, unescaped.
+
+**Fix**: `stripNul(v)` / `stripNulCounted(v, stat)` strip `\u0000` before
+those three columns are written; counted in the new `nulBytesStripped`
+per-program/total counter, never silent.
+
+This is the fourth and (so far) last bug found this way, each only visible
+under a real `--apply`: dedupe-by-email (crash 1), varchar overflow on
+`twibbon_link` (crash 2), invalid dates on `birthdate`/`payment_date`
+(crash 3), NUL bytes in `motivation_letter`/`achievements`/`experiences`
+(crash 4). All four were root-caused against live legacy data before being
+fixed, not patched blind. See the clone-test report for the full run.
+
+## Legacy zero dates and birthdate format (2026-09-27)
+
+Two date problems the Invalid-Date guard above did not catch, found by
+inspecting the rows the real program-1 canary wrote:
+
+1. **Zero dates are valid Dates.** mysql2 turns a MySQL zero date
+   (`0000-00-00`) into `new Date(0, -1, 0)` = **1899-11-30**, a perfectly
+   valid Date, so `isNaN` never fires. The canary stored
+   `participants.birthdate = 1899-11-30`. `safeDate`/`safeDateCounted` now
+   also reject anything before 1901 (also covers corrupted years such as
+   `0026-01-25`), counted in `invalidLegacyDatesNulled`.
+2. **Birthdate format.** `personal_data.birthdate` was written with
+   `String(date)` ("Thu Aug 13 2009 00:00:00 GMT+0000 (...)") while native
+   rows store `YYYY-MM-DD`. `legacyBirthdate()` now returns `YYYY-MM-DD`
+   (built from local date parts, matching how mysql2 constructs DATE values)
+   and nulls years before 1920 or dates in the future. It feeds both
+   `participants.birthdate` and `personal_data.birthdate`.
+
+Rows written before this fix (program 1 + the first 11 of program 12) are
+corrected by a one-off UPDATE after the run; a re-run skips existing rows.
