@@ -15,6 +15,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { buildWibDateRangeFilter } from '@shared/utils/wib-time';
+import { buildApplicationSearchFilter } from './application-search.filter';
 
 /**
  * Application Repository
@@ -159,13 +160,7 @@ export class ApplicationRepository implements IApplicationRepository {
     }
 
     if (filters?.search) {
-      where.OR = [
-        { motivationLetter: { contains: filters.search, mode: 'insensitive' } },
-        { achievements: { contains: filters.search, mode: 'insensitive' } },
-        { experiences: { contains: filters.search, mode: 'insensitive' } },
-        { participant: { fullName: { contains: filters.search, mode: 'insensitive' } } },
-        { participant: { user: { email: { contains: filters.search, mode: 'insensitive' } } } },
-      ];
+      where.OR = buildApplicationSearchFilter(filters.search);
     }
 
     if (filters?.country) {
@@ -269,13 +264,7 @@ export class ApplicationRepository implements IApplicationRepository {
     }
 
     if (filters?.search) {
-      where.OR = [
-        { motivationLetter: { contains: filters.search, mode: 'insensitive' } },
-        { achievements: { contains: filters.search, mode: 'insensitive' } },
-        { experiences: { contains: filters.search, mode: 'insensitive' } },
-        { participant: { fullName: { contains: filters.search, mode: 'insensitive' } } },
-        { participant: { user: { email: { contains: filters.search, mode: 'insensitive' } } } },
-      ];
+      where.OR = buildApplicationSearchFilter(filters.search);
     }
 
     if (filters?.country) {
