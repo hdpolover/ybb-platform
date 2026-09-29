@@ -719,7 +719,12 @@ export class ApplicationsController {
   @ApiResponse({ status: 200, description: 'Application category switched successfully', type: ApplicationResponseDto })
   @ApiResponse({ status: 400, description: 'Cannot switch category due to status or payments' })
   @ApiResponse({ status: 404, description: 'Application not found' })
-  @CacheInvalidate(['portal:*:${userId}'])
+  // application:list:* is required: the admin FF/SF tabs are cached for 5
+  // minutes keyed on the category filter, so without it a moved participant
+  // stays in the old tab (and is missing from the new one) until TTL expiry.
+  // The portal:*:${userId} pattern only covers the participant's own caches
+  // (and resolves to the admin's id when an admin calls this).
+  @CacheInvalidate(['portal:*:${userId}', 'application:list:*'])
   @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.update })
   async switchCategory(
     @Param('id') id: string,
