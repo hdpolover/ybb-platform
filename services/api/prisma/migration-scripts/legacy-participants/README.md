@@ -295,6 +295,16 @@ not feed the status aggregate above, so an application whose only attempt
 failed lands at `unpaid`. Only `paid` and `unpaid` legacy payments become
 `application_invoices` rows. The legacy dump remains the archive for them.
 
+**Abandoned attempts are stored as `cancelled` (2026-09-29).** A legacy
+`PENDING(1)` attempt maps to `unpaid` for every internal step (per-tier dedupe,
+the application-column aggregate, the by-status report), but the invoice row is
+written as `cancelled` with `rejection_reason = 'Legacy import: checkout started
+on the old site, never completed.'` (`storedInvoiceStatus`). Stored as `unpaid`,
+these rows raised a "Payment Required" alert on programs that closed years ago.
+The admin follow-up queues skip cancelled rows that have a `legacy_id`. The 786
+rows from the 2026-09-28 import were converted by a one-off UPDATE with the
+same reason.
+
 **Backfill on re-run**: this computation now runs for an *already-migrated*
 application too (previously the script `continue`d immediately on finding an
 existing `legacy_id` match, skipping payment import entirely) — a re-run

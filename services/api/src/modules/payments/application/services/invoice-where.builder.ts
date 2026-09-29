@@ -24,6 +24,9 @@ export const INVOICE_ID_RE =
 export const STUCK_PROCESSING_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 const PARTICIPANT_CANCELLATION_REASON = 'Cancelled by participant';
+// Cancelled rows with a legacyId are abandoned checkouts imported from the old
+// site (see migrate-legacy-participants.cjs). They are history, not something
+// ops can follow up on, so the cancelled-issue queues skip them.
 
 export interface InvoiceFilterQuery {
     // Optional so callers that historically had no programId requirement
@@ -98,6 +101,7 @@ export function buildFollowUpStatusWhere(
         case 'payment_cancelled_issue':
             return {
                 status: PaymentStatus.cancelled,
+                legacyId: null,
                 NOT: {
                     rejectionReason: {
                         equals: PARTICIPANT_CANCELLATION_REASON,
@@ -130,6 +134,7 @@ export function buildFollowUpStatusWhere(
                     { status: PaymentStatus.failed, verifiedBy: { not: null } },
                     {
                         status: PaymentStatus.cancelled,
+                        legacyId: null,
                         NOT: {
                             rejectionReason: {
                                 equals: PARTICIPANT_CANCELLATION_REASON,

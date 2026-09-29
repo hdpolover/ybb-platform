@@ -9,7 +9,7 @@
 // "31 Aug to 31 Aug" on Middle East Youth Summit 6th returned 100 invoices, 50
 // of which the dashboard displayed as 1 Sept - they were paid between 00:03 and
 // 06:10 WIB. The correct count for that WIB day is 55.
-import { buildInvoiceWhere, endOfWibFilterDay } from './invoice-where.builder';
+import { buildFollowUpStatusWhere, buildInvoiceWhere, endOfWibFilterDay } from './invoice-where.builder';
 
 // 31 Aug 2026 in Jakarta runs from 30 Aug 17:00Z to 31 Aug 16:59:59.999Z.
 const WIB_31_AUG_START = new Date('2026-08-30T17:00:00.000Z');
@@ -79,5 +79,19 @@ describe('buildInvoiceWhere paid-date range (audit M159)', () => {
     it('leaves the range open when only one end is supplied', () => {
         expect(paidRange('2026-08-31', undefined)).toEqual({ gte: WIB_31_AUG_START });
         expect(paidRange(undefined, '2026-08-31')).toEqual({ lte: WIB_31_AUG_END });
+    });
+});
+
+describe('buildFollowUpStatusWhere legacy imports', () => {
+    // Legacy-imported abandoned checkouts are stored as `cancelled` history on
+    // programs that closed years ago. They are not a payment problem anyone can
+    // act on, so they must stay out of the follow-up queues.
+    it.each(['payment_cancelled_issue', 'all_problems'])('%s excludes legacy-imported invoices', (status) => {
+        const where = buildFollowUpStatusWhere(status);
+        expect(JSON.stringify(where)).toContain('"legacyId":null');
+    });
+
+    it('participant_cancelled is unaffected (legacy rows never carry that reason)', () => {
+        expect(JSON.stringify(buildFollowUpStatusWhere('participant_cancelled'))).not.toContain('legacyId');
     });
 });

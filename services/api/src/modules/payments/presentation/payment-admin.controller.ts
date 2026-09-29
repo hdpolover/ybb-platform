@@ -343,6 +343,7 @@ export class PaymentAdminController {
                 where: {
                     application: { programId },
                     status: PaymentStatus.cancelled,
+                    legacyId: null,
                     NOT: {
                         rejectionReason: {
                             equals: PaymentAdminController.PARTICIPANT_CANCELLATION_REASON,

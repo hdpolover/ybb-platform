@@ -22,6 +22,8 @@ import { isPastSubmissionDeadline, resolveSubmissionCutoff } from '@shared/utils
 import { effectiveStart, getCategoryRegistrationPhase, hasTierPeriodEnded } from '@shared/utils/tier-period.util';
 import { cancelClosedWindowRegistrationInvoices } from '../../utils/cancel-closed-window-invoices';
 
+const CLOSED_PROGRAM_STATUSES = new Set(['completed', 'cancelled']);
+
 @Injectable()
 @QueryHandler(GetPortalDashboardQuery)
 export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboardQuery> {
@@ -68,6 +70,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                     select: {
                         id: true,
                         name: true,
+                        status: true,
                         currency: true,
                         applicationDeadline: true,
                         formFields: {
@@ -162,10 +165,15 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
             certificatesCount: 0,
         };
 
+        // A finished program takes no payments, so nothing on it is "required".
+        // Without this, legacy-imported abandoned checkouts (unpaid invoices on
+        // programs that ended years ago) raised a "Payment Required" alert whose
+        // Pay Now link led to an empty Payments page.
+        const isProgramClosed = CLOSED_PROGRAM_STATUSES.has(latestApplication?.program?.status ?? '');
         const totalRequiredResult = calculatePortalTotalRequired(
             latestApplication?.applicationCategory ?? null,
-            latestApplication?.invoices ?? [],
-            latestApplication?.program?.pricingTiers ?? [],
+            isProgramClosed ? [] : latestApplication?.invoices ?? [],
+            isProgramClosed ? [] : latestApplication?.program?.pricingTiers ?? [],
             latestApplication?.program?.currency,
             new Date(),
         );

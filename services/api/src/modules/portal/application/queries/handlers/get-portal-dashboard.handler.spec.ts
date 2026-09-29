@@ -297,6 +297,41 @@ describe('GetPortalDashboardHandler', () => {
         expect(result.stats?.totalRequired).toEqual({ amount: 0, currency: 'USD' });
     });
 
+    it.each(['completed', 'cancelled'])(
+        'reports nothing owed and no payment alert for a %s program even with an unpaid invoice',
+        async (programStatus) => {
+            mockParticipantAndStats();
+            const app = buildAppWithRegTier({
+                invoices: [{ id: 'inv-legacy', status: 'unpaid', amount: 10, pricingTier: { feeType: 'registration_fee' } }],
+            });
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                ...app,
+                program: { ...app.program, status: programStatus },
+            });
+
+            const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+            expect(result.stats?.totalRequired).toEqual({ amount: 0, currency: 'USD' });
+            expect(result.alerts.some((alert) => alert.id === 'payment-due')).toBe(false);
+        },
+    );
+
+    it('still raises the payment alert for a published program with an unpaid invoice', async () => {
+        mockParticipantAndStats();
+        const app = buildAppWithRegTier({
+            invoices: [{ id: 'inv-reg', status: 'unpaid', amount: 15, pricingTier: { feeType: 'registration_fee' } }],
+        });
+        mockPrisma.participantApplication.findFirst.mockResolvedValue({
+            ...app,
+            program: { ...app.program, status: 'published' },
+        });
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.stats?.totalRequired).toEqual({ amount: 15, currency: 'USD' });
+        expect(result.alerts.some((alert) => alert.id === 'payment-due')).toBe(true);
+    });
+
     const buildAppWithFfTier = (
         validityPeriods: { startDate: Date; endDate: Date }[] | undefined,
     ) => ({

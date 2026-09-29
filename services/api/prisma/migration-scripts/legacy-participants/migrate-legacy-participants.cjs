@@ -200,6 +200,22 @@ function mapLegacyPayStatus(code) {
   }
 }
 
+// What actually gets written for an invoice. Everything above (dedupe per tier,
+// the application-column aggregate, the by-status report) keeps working on the
+// mapped status; only the stored row differs. A legacy PENDING attempt that
+// never completed is an abandoned checkout, so it is stored as 'cancelled'
+// rather than 'unpaid': an 'unpaid' row reads as money still owed and raised a
+// "Payment Required" alert on programs that closed years ago. The application's
+// registration/program payment column still aggregates to 'unpaid', which is
+// the truth (the fee was never paid). Keep LEGACY_ABANDONED_REASON in sync with
+// the one-off backfill that converted the 2026-09-28 import.
+const LEGACY_ABANDONED_REASON = 'Legacy import: checkout started on the old site, never completed.';
+function storedInvoiceStatus(invoiceStatus) {
+  return invoiceStatus === 'unpaid'
+    ? { status: 'cancelled', rejectionReason: LEGACY_ABANDONED_REASON }
+    : { status: invoiceStatus, rejectionReason: null };
+}
+
 // One legacy `payments` row's terminal status. `payments.status` int code
 // mirrors payment_status semantics (0 not required/void, 1 pending, 2 paid,
 // 3 failed) per the same admin-app export model.
@@ -1178,14 +1194,15 @@ async function main() {
       }
       if (apply && applicationId) {
         for (const { payment, tier, invoiceStatus } of invoiceInserts) {
+          const stored = storedInvoiceStatus(invoiceStatus);
           const ins = await pg.query(
             `INSERT INTO application_invoices
-               (application_id, pricing_tier_id, amount, currency, status, paid_at, payment_method, legacy_id, created_at, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
+               (application_id, pricing_tier_id, amount, currency, status, rejection_reason, paid_at, payment_method, legacy_id, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now())
              ON CONFLICT (legacy_id) DO NOTHING
              RETURNING id`,
             [
-              applicationId, tier.id, payment.amount, payment.currency, invoiceStatus,
+              applicationId, tier.id, payment.amount, payment.currency, stored.status, stored.rejectionReason,
               invoiceStatus === 'paid' ? (safeDateCounted(payment.paidAt, stat) || safeDateCounted(payment.createdAt, stat)) : null,
               payment.paymentMethod, payment.id, safeDate(payment.createdAt) || new Date(), // counted above when used for paid_at; created_at fallback here reuses the same (already-checked) value
             ],
