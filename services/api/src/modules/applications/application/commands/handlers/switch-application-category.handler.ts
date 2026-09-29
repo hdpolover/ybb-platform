@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
@@ -29,6 +29,8 @@ const ADMIN_STATUS_OVERRIDE_ELIGIBLE_STATUSES = new Set<string>([
 
 @Injectable()
 export class SwitchApplicationCategoryHandler {
+  private readonly logger = new Logger(SwitchApplicationCategoryHandler.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheService: CacheService,
@@ -252,7 +254,8 @@ export class SwitchApplicationCategoryHandler {
       });
     });
 
-    await this.invalidateParticipantCache(application.participantId, command.userId);
+    // Bust the OWNER's caches: command.userId is the admin when an admin acts.
+    await this.invalidateParticipantCache(application.participantId, application.participant?.userId);
 
     // 7. Return Response
     return this.applicationMapper.toDto(this.applicationMapper.toDomain(updatedApplication));
@@ -288,8 +291,10 @@ export class SwitchApplicationCategoryHandler {
           `portal:dashboard:${userId}:*`,
         ]),
       ]);
-    } catch {
+    } catch (err) {
       // Cache invalidation must never block category switch completion.
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Failed to invalidate portal cache after category switch for participant ${participantId}: ${msg}`);
     }
   }
 }

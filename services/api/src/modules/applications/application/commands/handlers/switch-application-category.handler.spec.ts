@@ -138,6 +138,30 @@ describe('SwitchApplicationCategoryHandler', () => {
     expect(mockTx.participantApplication.update).toHaveBeenCalled();
   });
 
+  it('busts the OWNING participant\'s portal caches (not the admin\'s) when an admin switches', async () => {
+    mockPrisma.participantApplication.findUnique.mockResolvedValue(paidApplication());
+    mockTx.participantApplication.update.mockResolvedValue({ id: 'app-1', applicationCategory: 'fully_funded' });
+
+    await handler.execute(
+      new SwitchApplicationCategoryCommand(
+        'app-1',
+        'fully_funded' as ApplicationCategory,
+        'admin-user',
+        'admin-1',
+        'Registered Self Funded by mistake',
+      ),
+    );
+
+    const patterns = mockCacheService.invalidateByPatterns.mock.calls.flatMap((c) => c[0] as string[]);
+    expect(patterns).toContain('portal:dashboard:u-1:*');
+    expect(patterns).toContain('portal:payments:u-1:*');
+    const allKeys = [
+      ...patterns,
+      ...mockCacheService.invalidateKeys.mock.calls.flatMap((c) => c[0] as string[]),
+    ];
+    expect(allKeys.some((k) => k.includes('admin-user'))).toBe(false);
+  });
+
   it('still refuses a participant acting on an application that is not theirs', async () => {
     mockPrisma.participantApplication.findUnique.mockResolvedValue(
       buildApplication([{ startDate: new Date(Date.now() - 86400000), endDate: new Date(Date.now() + 86400000) }]),
