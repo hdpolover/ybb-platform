@@ -545,6 +545,29 @@ describe('GetPortalDashboardHandler', () => {
         expect(active?.submissionDeadline).toBe(ffEnd.toISOString());
     });
 
+    it('other window open but registration fee paid (switch locked): alternate is null', async () => {
+        primeCaches();
+        const app = buildAppWithBothWindows(new Date(Date.now() + 86400000), new Date(Date.now() + 10 * 86400000), 'self_funded');
+        (app as { registrationPaymentStatus: string }).registrationPaymentStatus = 'paid';
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(app);
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.canSwitchCategory).toBe(false);
+        expect(result.activeApplication?.alternateCategoryDeadline).toBeNull();
+    });
+
+    it('other window open but application no longer draft (switch locked): alternate is null', async () => {
+        primeCaches();
+        const app = buildAppWithBothWindows(new Date(Date.now() + 86400000), new Date(Date.now() + 10 * 86400000), 'self_funded');
+        app.status = 'submitted';
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(app);
+
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+        expect(result.activeApplication?.alternateCategoryDeadline).toBeNull();
+    });
+
     it('application with no category: alternate is null', async () => {
         const { active } = await runAlt(null as unknown as string, 1, 10);
         expect(active?.alternateCategoryDeadline).toBeNull();

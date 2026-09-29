@@ -301,8 +301,8 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                     : programDeadline;
 
             // Secondary hint: the OTHER category's close date, only while
-            // that category's window is active now (i.e. a switch is still
-            // possible). Same ladder rules as the primary date (currently
+            // that category's window is active now; the summary additionally
+            // gates it on canSwitchCategory (i.e. a switch is really possible). Same ladder rules as the primary date (currently
             // active window only). Never affects submissionDeadline.
             const alternateCategory: 'fully_funded' | 'self_funded' | null =
                 String(latestApplication.applicationCategory) === 'self_funded'
@@ -368,7 +368,8 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 currentStep: determineSubmissionCurrentStep(latestApplication),
                 daysUntilDeadline: this.calculateDaysUntilDeadline(latestApplication.program.applicationDeadline, now),
                 submissionDeadline: submissionDeadline ? submissionDeadline.toISOString() : undefined,
-                alternateCategoryDeadline,
+                // Same eligibility rule as the "Switch Available" hint.
+                alternateCategoryDeadline: canSwitchCategory ? alternateCategoryDeadline : null,
                 guidebooks,
             };
 
