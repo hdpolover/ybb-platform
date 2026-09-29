@@ -300,6 +300,22 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                     ? null
                     : programDeadline;
 
+            // Secondary hint: the OTHER category's close date, only while
+            // that category's window is active now (i.e. a switch is still
+            // possible). Same ladder rules as the primary date (currently
+            // active window only). Never affects submissionDeadline.
+            const alternateCategory: 'fully_funded' | 'self_funded' | null =
+                String(latestApplication.applicationCategory) === 'self_funded'
+                    ? 'fully_funded'
+                    : String(latestApplication.applicationCategory) === 'fully_funded'
+                        ? 'self_funded'
+                        : null;
+            const alternateWindowEnd = alternateCategory ? activeCategoryWindowEnd(alternateCategory) : null;
+            const alternateCategoryDeadline =
+                alternateCategory && alternateWindowEnd
+                    ? { category: alternateCategory, deadline: alternateWindowEnd.toISOString() }
+                    : null;
+
             const switchLockedStatuses = new Set(['processing', 'paid']);
             const blockingRegistrationInvoice = latestApplication.invoices.find(
                 (invoice) =>
@@ -352,6 +368,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 currentStep: determineSubmissionCurrentStep(latestApplication),
                 daysUntilDeadline: this.calculateDaysUntilDeadline(latestApplication.program.applicationDeadline, now),
                 submissionDeadline: submissionDeadline ? submissionDeadline.toISOString() : undefined,
+                alternateCategoryDeadline,
                 guidebooks,
             };
 

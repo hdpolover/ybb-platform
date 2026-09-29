@@ -94,6 +94,15 @@ export class PortalApplicationSummaryDto {
     })
     submissionDeadline?: string;
 
+    @ApiProperty({
+        required: false,
+        nullable: true,
+        description:
+            'Secondary hint: the close date of the OTHER registration category (fully_funded for a self funded application and vice versa), present only while that category\'s window is active now, i.e. a switch is still possible. Null otherwise. Never replaces submissionDeadline.',
+        example: { category: 'fully_funded', deadline: '2026-10-01T16:59:59.000Z' },
+    })
+    alternateCategoryDeadline?: { category: 'fully_funded' | 'self_funded'; deadline: string } | null;
+
     @ApiProperty({ required: false, type: [PortalGuidebookDto] })
     guidebooks?: PortalGuidebookDto[];
 }

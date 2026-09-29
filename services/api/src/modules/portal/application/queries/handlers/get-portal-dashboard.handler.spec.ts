@@ -508,6 +508,48 @@ describe('GetPortalDashboardHandler', () => {
         expect(result.activeApplication?.submissionDeadline).toBe(programDeadline.toISOString());
     });
 
+    // ---- alternateCategoryDeadline: secondary hint about the OTHER category ----
+    // Set only while the other category's window is active now (a switch is
+    // still possible); the primary submissionDeadline never changes.
+
+    const runAlt = async (category: string, ffOffsetDays: number, sfOffsetDays: number) => {
+        primeCaches();
+        const ffEnd = new Date(Date.now() + ffOffsetDays * 86400000);
+        const sfEnd = new Date(Date.now() + sfOffsetDays * 86400000);
+        mockPrisma.participantApplication.findFirst.mockResolvedValue(buildAppWithBothWindows(ffEnd, sfEnd, category));
+        const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+        return { active: result.activeApplication, ffEnd, sfEnd };
+    };
+
+    it('self funded application with FF window open: alternate is the FF end, primary stays SF', async () => {
+        const { active, ffEnd, sfEnd } = await runAlt('self_funded', 1, 10);
+        expect(active?.alternateCategoryDeadline).toEqual({ category: 'fully_funded', deadline: ffEnd.toISOString() });
+        expect(active?.submissionDeadline).toBe(sfEnd.toISOString());
+    });
+
+    it('self funded application after the FF window closed: alternate is null, primary stays SF', async () => {
+        const { active, sfEnd } = await runAlt('self_funded', -1, 10);
+        expect(active?.alternateCategoryDeadline).toBeNull();
+        expect(active?.submissionDeadline).toBe(sfEnd.toISOString());
+    });
+
+    it('fully funded application with SF window open: alternate is the SF end, primary stays FF', async () => {
+        const { active, ffEnd, sfEnd } = await runAlt('fully_funded', 1, 10);
+        expect(active?.alternateCategoryDeadline).toEqual({ category: 'self_funded', deadline: sfEnd.toISOString() });
+        expect(active?.submissionDeadline).toBe(ffEnd.toISOString());
+    });
+
+    it('fully funded application after the SF window closed: alternate is null, primary stays FF', async () => {
+        const { active, ffEnd } = await runAlt('fully_funded', 1, -1);
+        expect(active?.alternateCategoryDeadline).toBeNull();
+        expect(active?.submissionDeadline).toBe(ffEnd.toISOString());
+    });
+
+    it('application with no category: alternate is null', async () => {
+        const { active } = await runAlt(null as unknown as string, 1, 10);
+        expect(active?.alternateCategoryDeadline).toBeNull();
+    });
+
     // ---- submissionDeadline: staged ("bertahap") main + extension windows ----
     // The owner runs a MAIN registration window followed by short extension
     // windows on purpose, to create urgency at each step. Showing the MAX
