@@ -519,4 +519,24 @@ describe('ExportApplicationsHandler', () => {
             expect(countryFor(null)).toBe('N/A');
         });
     });
+
+    describe('buildWhere — free-text search', () => {
+        it('puts name and email under ONE participant filter so Prisma joins participants once', () => {
+            const handler = new ExportApplicationsHandler({} as never);
+            const where = (handler as never as {
+                buildWhere: (q: ExportApplicationsQuery) => { OR?: Array<Record<string, unknown>> };
+            }).buildWhere(new ExportApplicationsQuery('brand-1', undefined, undefined, undefined, 'waseem'));
+
+            const participantArms = (where.OR ?? []).filter((c) => 'participant' in c);
+            expect(participantArms).toHaveLength(1);
+            expect(participantArms[0]).toEqual({
+                participant: {
+                    OR: [
+                        { fullName: { contains: 'waseem', mode: 'insensitive' } },
+                        { user: { email: { contains: 'waseem', mode: 'insensitive' } } },
+                    ],
+                },
+            });
+        });
+    });
 });

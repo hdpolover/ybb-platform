@@ -61,6 +61,17 @@ function clampText(v, maxLen) {
   const s = String(v);
   return s.length > maxLen ? s.slice(0, maxLen) : s;
 }
+// First non-blank trimmed name: primary participant, primary's legacy user,
+// then any merged sibling (participant, then user).
+function resolveLegacyFullName(primary, others) {
+  for (const m of [primary, ...others]) {
+    for (const v of [m.full_name, m.user_full_name]) {
+      const t = v == null ? '' : String(v).trim();
+      if (t) return t;
+    }
+  }
+  return '';
+}
 function nullIfOverLen(v, maxLen) {
   if (v == null) return null;
   return String(v).length > maxLen ? null : v;
@@ -778,6 +789,10 @@ async function main() {
       const others = group.members.filter((m) => m.id !== primary.id);
       const memberIds = group.members.map((m) => m.id);
       const row = primary; // downstream code (application/personal_data/essays/score) reads `row`
+      // participants.full_name feeds the admin name search (trigram index), so a
+      // blank primary name falls back to the primary's legacy users.full_name,
+      // then to any merged sibling row's name, instead of landing as ''.
+      const resolvedFullName = resolveLegacyFullName(primary, others);
       const birthdate = legacyBirthdate(row.birthdate, stat); // 'YYYY-MM-DD' or null; computed once so the counter isn't doubled
       if (others.length) { stat.dupRowsMerged += others.length; bump('dupRowsMerged', others.length); }
 
@@ -898,7 +913,7 @@ async function main() {
            ON CONFLICT (legacy_id) DO NOTHING
            RETURNING id`,
           [
-            userId, clampText(row.full_name, 255) || '', clampText(row.nickname, 100) || null, birthdate,
+            userId, clampText(resolvedFullName, 255) || '', clampText(row.nickname, 100) || null, birthdate,
             mapGender(row.gender), row.country_code || null, safePhone || null,
             safeNationality || null, null /* legacy nationality_code is actually a phone dial code
               (e.g. "+234"), a duplicate of country_code, NOT an ISO country code -- verified
@@ -1102,7 +1117,7 @@ async function main() {
         const scoreStatus = mapScoreStatus(row.score_status);
 
         const personalData = {
-          full_name: row.full_name || '',
+          full_name: resolvedFullName || '',
           nationality: row.nationality || null,
           birthdate,
           phone_country_code: row.country_code || null,

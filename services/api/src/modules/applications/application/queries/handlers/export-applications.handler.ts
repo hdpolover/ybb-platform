@@ -13,6 +13,7 @@ import { isRenderableEssayQuestion, coalesceStr } from '../../helpers/applicatio
 import { resolveCountryName } from '@shared/utils/country-groups';
 import { ACTIVE_PARTICIPANT_WHERE } from '@shared/utils/active-participant.filter';
 import { buildWibDateRangeFilter } from '@shared/utils/wib-time';
+import { buildApplicationSearchFilter } from '../../../infrastructure/persistence/application-search.filter';
 
 type ApplicationExportPayload = Prisma.ParticipantApplicationGetPayload<{
     select: {
@@ -330,13 +331,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
         if (query.category) where.applicationCategory = query.category;
         if (query.scoreStatus) where.scoreStatus = query.scoreStatus;
         if (query.search) {
-            where.OR = [
-                { motivationLetter: { contains: query.search, mode: 'insensitive' } },
-                { achievements: { contains: query.search, mode: 'insensitive' } },
-                { experiences: { contains: query.search, mode: 'insensitive' } },
-                { participant: { fullName: { contains: query.search, mode: 'insensitive' } } },
-                { participant: { user: { email: { contains: query.search, mode: 'insensitive' } } } },
-            ];
+            where.OR = buildApplicationSearchFilter(query.search);
         }
         if (query.country) {
             const andConditions = Array.isArray(where.AND)
