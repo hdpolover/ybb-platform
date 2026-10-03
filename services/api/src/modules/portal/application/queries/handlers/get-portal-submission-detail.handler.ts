@@ -146,16 +146,8 @@ export class GetPortalSubmissionDetailHandler
             await this.cacheService.get<PortalSubmissionDetailResponseDto>(cacheKey);
         if (cached) return cached;
 
-        const participant =
-            await this.portalCacheService.getParticipantProfile(userId);
-        if (!participant) throw new NotFoundException('Participant not found');
-
-        const application = await this.findApplication(participant.id, programId);
-        if (!application) throw new NotFoundException('No active application found');
-
-        const sections = this.buildSections(application, participant);
-        const essays = this.buildEssays(application);
-        const requirements = this.buildRequirements(application);
+        const { participant, application, sections, essays, requirements } =
+            await this.loadSubmissionState(userId, programId);
         const preview = this.buildPreview(application, sections, essays, requirements);
         const overallProgress = this.calculateProgress(sections, essays, requirements);
 
@@ -184,6 +176,65 @@ export class GetPortalSubmissionDetailHandler
 
         await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
         return result;
+    }
+
+    /**
+     * Server-side completeness check for the submit gate. Uses the same
+     * builders that drive the preview's `pendingItems` (category / program_id
+     * resolution, allowed_categories scoping, legacy essay fields), so the
+     * gate cannot drift from what the participant sees. Bypasses the response
+     * cache on purpose: a stale cached detail must never decide a submit.
+     */
+    async findIncompleteRequiredItems(userId: string, programId?: string): Promise<string[]> {
+        const { sections, essays, requirements } = await this.loadSubmissionState(userId, programId);
+        return this.collectIncompleteRequiredItems(sections, essays, requirements);
+    }
+
+    private async loadSubmissionState(userId: string, programId?: string) {
+        const participant =
+            await this.portalCacheService.getParticipantProfile(userId);
+        if (!participant) throw new NotFoundException('Participant not found');
+
+        const application = await this.findApplication(participant.id, programId);
+        if (!application) throw new NotFoundException('No active application found');
+
+        const sections = this.buildSections(application, participant);
+        const essays = this.buildEssays(application);
+        const requirements = this.buildRequirements(application);
+        return { participant, application, sections, essays, requirements };
+    }
+
+    private collectIncompleteRequiredItems(
+        sections: SubmissionSectionDetailDto[],
+        essays: SubmissionEssayDto[],
+        requirements: SubmissionRequirementDto[],
+    ): string[] {
+        const items: string[] = [];
+
+        const incompleteSections = sections.filter(
+            (section) => section.fields.some((field) => field.isRequired) && section.status !== 'completed',
+        );
+        items.push(...incompleteSections.map((section) => `Complete ${section.title}`));
+
+        const missingRequiredEssays = essays.filter(
+            (essay) => essay.isRequired && !this.hasValue(essay.answer),
+        ).length;
+        if (missingRequiredEssays > 0) {
+            items.push(
+                `Complete ${missingRequiredEssays} required essay${missingRequiredEssays > 1 ? 's' : ''}`,
+            );
+        }
+
+        const missingRequiredDocuments = requirements.filter(
+            (requirement) => requirement.isRequired && !requirement.uploadedFile,
+        ).length;
+        if (missingRequiredDocuments > 0) {
+            items.push(
+                `Upload ${missingRequiredDocuments} required document${missingRequiredDocuments > 1 ? 's' : ''}`,
+            );
+        }
+
+        return items;
     }
 
     private async findApplication(participantId: string, programId?: string) {
@@ -379,10 +430,17 @@ export class GetPortalSubmissionDetailHandler
             const values = this.buildSectionValues(sectionId, fields, application, personalData, participant);
             const persistedValues = this.buildPersistedSectionValues(fields, application, personalData);
             const filledCount = fields.filter(field => this.hasValue(persistedValues[field.name])).length;
-            const requiredCount = fields.filter((f) => f.isRequired).length;
+            const requiredFields = fields.filter((f) => f.isRequired);
+            // Only required answers count toward completion. Comparing the
+            // section-wide filled count to the required count let optional
+            // answers stand in for a blank required field, and this status is
+            // the sole gate on canSubmit.
+            const filledRequiredCount = requiredFields.filter(
+                (f) => this.hasValue(persistedValues[f.name]),
+            ).length;
 
             let status = 'pending';
-            if (filledCount >= requiredCount && requiredCount > 0) status = 'completed';
+            if (requiredFields.length > 0 && filledRequiredCount === requiredFields.length) status = 'completed';
             else if (filledCount > 0) status = 'in_progress';
 
             sections.push({
@@ -1045,30 +1103,7 @@ export class GetPortalSubmissionDetailHandler
         const regInvoice = application.invoices[0] ?? null;
         const paymentPaid = application.registrationPaymentStatus === 'paid' || regInvoice?.status === 'paid';
 
-        const pendingItems: string[] = [];
-
-        const incompleteSections = sections.filter(
-            (section) => section.fields.some((field) => field.isRequired) && section.status !== 'completed',
-        );
-        pendingItems.push(...incompleteSections.map((section) => `Complete ${section.title}`));
-
-        const missingRequiredEssays = essays.filter(
-            (essay) => essay.isRequired && !this.hasValue(essay.answer),
-        ).length;
-        if (missingRequiredEssays > 0) {
-            pendingItems.push(
-                `Complete ${missingRequiredEssays} required essay${missingRequiredEssays > 1 ? 's' : ''}`,
-            );
-        }
-
-        const missingRequiredDocuments = requirements.filter(
-            (requirement) => requirement.isRequired && !requirement.uploadedFile,
-        ).length;
-        if (missingRequiredDocuments > 0) {
-            pendingItems.push(
-                `Upload ${missingRequiredDocuments} required document${missingRequiredDocuments > 1 ? 's' : ''}`,
-            );
-        }
+        const pendingItems = this.collectIncompleteRequiredItems(sections, essays, requirements);
 
         // NOTE: Preview checklist acknowledgements are a CLIENT-SIDE confirmation only.
         // The submit POST is bodyless and we never persist the ticked state (the client
