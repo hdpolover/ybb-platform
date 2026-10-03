@@ -6,6 +6,7 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
+import { GetPortalSubmissionDetailHandler } from '../../queries/handlers/get-portal-submission-detail.handler';
 import { PortalSubmitApplicationCommand } from '../../queries/portal-queries';
 import { makePrismaTxMock, expectNoOuterWrites } from '@test/utils/prisma-tx-mock';
 
@@ -68,6 +69,11 @@ describe('PortalSubmitApplicationHandler', () => {
         assertRegistrationFeePaid: jest.fn(),
     };
 
+    /** Detail handler is mocked — its own spec covers the completeness computation. */
+    const mockDetailHandler = {
+        findIncompleteRequiredItems: jest.fn(),
+    };
+
     const mockReferralFunnel = {
         advanceToApplied: jest.fn().mockResolvedValue(undefined),
     };
@@ -81,6 +87,7 @@ describe('PortalSubmitApplicationHandler', () => {
                 { provide: PortalCacheService, useValue: mockPortalCacheService },
                 { provide: RegistrationFeeGateService, useValue: mockGateService },
                 { provide: ReferralFunnelService, useValue: mockReferralFunnel },
+                { provide: GetPortalSubmissionDetailHandler, useValue: mockDetailHandler },
             ],
         }).compile();
 
@@ -94,6 +101,8 @@ describe('PortalSubmitApplicationHandler', () => {
         // Default: $transaction calls the callback with the disjoint tx mock (never
         // the outer mockPrisma -- see makePrismaTxMock's docstring for why).
         mockPrisma.$transaction.mockImplementation((cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx));
+        // Default: application is complete
+        mockDetailHandler.findIncompleteRequiredItems.mockResolvedValue([]);
         // Default: advanceToApplied succeeds
         mockReferralFunnel.advanceToApplied.mockResolvedValue(undefined);
     });
@@ -180,6 +189,53 @@ describe('PortalSubmitApplicationHandler', () => {
             const result = await handler.execute(command);
 
             expect(result.applicationId).toBe('app-prog42');
+        });
+    });
+
+    // ── completeness gate ───────────────────────────────────────────────────────
+
+    describe('completeness gate', () => {
+        const incomplete = ['Complete Personal Details', 'Upload 1 required document'];
+
+        it('rejects with a BadRequestException naming the incomplete items and never writes', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
+            mockDetailHandler.findIncompleteRequiredItems.mockResolvedValue(incomplete);
+
+            const attempt = handler.execute({ userId: 'user-1' });
+
+            await expect(attempt).rejects.toThrow(BadRequestException);
+            await expect(attempt).rejects.toThrow(
+                'Your application is incomplete. Please: Complete Personal Details; Upload 1 required document.',
+            );
+            expect(mockPrisma.participantApplication.updateMany).not.toHaveBeenCalled();
+        });
+
+        it('invalidates the portal cache on rejection so the UI refetches fresh state', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
+            mockDetailHandler.findIncompleteRequiredItems.mockResolvedValue(incomplete);
+
+            await expect(handler.execute({ userId: 'user-1' })).rejects.toThrow(BadRequestException);
+
+            expect(mockCacheService.invalidatePortalCache).toHaveBeenCalledWith('user-1');
+        });
+
+        it('submits normally when nothing required is missing', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
+
+            const result = await handler.execute({ userId: 'user-1', programId: 'prog-42' });
+
+            expect(result).toEqual({ success: true, applicationId: 'app-1', status: 'submitted' });
+            expect(mockDetailHandler.findIncompleteRequiredItems).toHaveBeenCalledWith('user-1', 'prog-42');
+            expect(mockPrisma.participantApplication.updateMany).toHaveBeenCalledTimes(1);
+        });
+
+        it('checks completeness before the registration-fee gate', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
+            mockDetailHandler.findIncompleteRequiredItems.mockResolvedValue(incomplete);
+
+            await expect(handler.execute({ userId: 'user-1' })).rejects.toThrow(BadRequestException);
+
+            expect(mockGateService.assertRegistrationFeePaid).not.toHaveBeenCalled();
         });
     });
 

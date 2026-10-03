@@ -629,6 +629,8 @@ export type SubmissionFormFieldAdmin = {
   /** True for file/upload fields — display only, no edit control. */
   readonly: boolean;
   options?: Array<{ label: string; value: string }>;
+  /** validationRules.inputType from the field definition (e.g. 'country_select'), when set. */
+  inputType?: string;
   order: number;
 };
 
