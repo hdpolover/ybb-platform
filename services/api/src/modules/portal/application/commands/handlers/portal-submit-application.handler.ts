@@ -53,6 +53,12 @@ export class PortalSubmitApplicationHandler {
                         brandId: true,
                         applicationDeadline: true,
                         formFields: {
+                            // Only fields the participant could actually see,
+                            // in form order - referral detection below reads
+                            // these, and a soft-deleted or disabled duplicate
+                            // must not shadow the live field.
+                            where: { isActive: true, deletedAt: null },
+                            orderBy: { order: 'asc' },
                             select: {
                                 name: true,
                                 label: true,
@@ -129,7 +135,13 @@ export class PortalSubmitApplicationHandler {
             const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
             const referralKeywords = ['referral', 'refcode', 'ambassadorcode', 'ambassadorreferral'];
             const formFields = application.program?.formFields ?? [];
-            const referralField = formFields.find((f) => {
+            // A form can carry several fields that look like a referral field:
+            // a legacy custom one beside the system one, or a "how did you hear
+            // about us" select whose name contains "referral". Taking only the
+            // first match dropped the code whenever it was typed into another
+            // one, so collect every candidate value and let the ambassador
+            // lookup below decide which of them is a real code.
+            const referralFields = formFields.filter((f) => {
                 const normName = normalize(f.name ?? '');
                 const normLabel = normalize(f.label ?? '');
                 if (referralKeywords.some((kw) => normName.includes(kw) || normLabel.includes(kw))) {
@@ -142,14 +154,19 @@ export class PortalSubmitApplicationHandler {
                 return false;
             });
 
-            const rawCode = referralField
-                ? (application.personalData as Record<string, unknown>)?.[referralField.name]
-                : undefined;
+            const personalData = (application.personalData as Record<string, unknown>) || {};
             // trim() alone is not enough: codes are stored uppercase and compared
             // case-sensitively, so a lower-case entry matched nothing here.
-            const referralCode = typeof rawCode === 'string' ? normalizeReferralCode(rawCode) : '';
+            const candidateCodes = [
+                ...new Set(
+                    referralFields
+                        .map((f) => personalData[f.name])
+                        .map((raw) => (typeof raw === 'string' ? normalizeReferralCode(raw) : ''))
+                        .filter((code) => code.length > 0),
+                ),
+            ];
 
-            if (referralCode) {
+            if (candidateCodes.length > 0) {
                 await this.prisma.$transaction(async (tx) => {
                     const participantId = application.participantId;
                     // The submitted application's own programme is the
@@ -184,13 +201,17 @@ export class PortalSubmitApplicationHandler {
                     // unique strings today so this isn't currently
                     // exploitable, but it becomes load-bearing the moment
                     // codes are brand-wide instead of programme-wide.
-                    const ambassador = await tx.ambassador.findFirst({
-                        where: {
-                            referralCode,
-                            isActive: true,
-                            user: { brandId },
-                        },
-                    });
+                    let ambassador: Awaited<ReturnType<typeof tx.ambassador.findFirst>> = null;
+                    for (const referralCode of candidateCodes) {
+                        ambassador = await tx.ambassador.findFirst({
+                            where: {
+                                referralCode,
+                                isActive: true,
+                                user: { brandId },
+                            },
+                        });
+                        if (ambassador) break;
+                    }
                     if (!ambassador) return;
 
                     await tx.ambassadorReferral.create({
