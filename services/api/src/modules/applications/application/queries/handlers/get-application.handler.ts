@@ -354,6 +354,7 @@ export class GetApplicationHandler {
 
       // Parse options from the field definition
       const options = this.parseFieldOptions(field.options);
+      const inputType = this.readInputType(field.validationRules);
 
       const fieldDto: SubmissionFormFieldAdminDto = {
         name: field.name,
@@ -365,6 +366,7 @@ export class GetApplicationHandler {
         value,
         readonly: isFileField,
         ...(options ? { options } : {}),
+        ...(inputType ? { inputType } : {}),
         order: field.order,
       };
 
@@ -421,6 +423,13 @@ export class GetApplicationHandler {
       || normalizedPlaceholder.includes('word limit');
 
     return hasWordLimitRule || looksLikeEssayPrompt;
+  }
+
+  /** Extracts `validationRules.inputType` (e.g. 'country_select') as a non-empty string, if present. */
+  private readInputType(rules: unknown): string | undefined {
+    if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return undefined;
+    const inputType = (rules as Record<string, unknown>).inputType;
+    return typeof inputType === 'string' && inputType.trim() ? inputType.trim() : undefined;
   }
 
   /**
