@@ -52,6 +52,7 @@ import {
   type Application,
   type SubmissionFormFieldAdmin,
 } from "@/src/shared/api-client";
+import { buildCountryOptions, isCountryField } from "@/lib/country-options";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -257,6 +258,9 @@ function Field({
   );
 }
 
+const SELECT_CLS =
+  "w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-0";
+
 const TEXTAREA_CLS =
   "w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -293,10 +297,32 @@ function DynamicFieldInput({
           id={fieldId}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-0"
+          className={SELECT_CLS}
         >
           <option value="">— Select —</option>
           {field.options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+    );
+  }
+
+  // Country fields store ISO alpha-2 codes; a legacy non-ISO value is kept as
+  // an extra labelled option so it is shown, not blanked, until changed.
+  if (isCountryField(field)) {
+    return (
+      <Field id={fieldId} label={field.label} required={field.isRequired}>
+        <select
+          id={fieldId}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={SELECT_CLS}
+        >
+          <option value="">— Select —</option>
+          {buildCountryOptions(value).map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>

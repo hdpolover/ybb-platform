@@ -3,6 +3,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
+import { GetPortalSubmissionDetailHandler } from '../../queries/handlers/get-portal-submission-detail.handler';
 import { PortalSubmitApplicationCommand } from '../../queries/portal-queries';
 import { RegistrationFeeGateService } from '@modules/payments/application/services/registration-fee-gate.service';
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
@@ -30,6 +31,7 @@ export class PortalSubmitApplicationHandler {
         private readonly portalCacheService: PortalCacheService,
         private readonly registrationFeeGate: RegistrationFeeGateService,
         private readonly referralFunnel: ReferralFunnelService,
+        private readonly submissionDetail: GetPortalSubmissionDetailHandler,
     ) { }
 
     async execute(command: PortalSubmitApplicationCommand): Promise<{ success: boolean; applicationId: string; status: string }> {
@@ -89,6 +91,20 @@ export class PortalSubmitApplicationHandler {
         this.validatePreviewAcknowledgements(
             (application.personalData as Record<string, unknown>) || {},
         );
+
+        // Completeness gate: required fields / essays / documents were only ever
+        // enforced by disabling the browser's Submit button, so a direct POST or a
+        // stale cached detail response could submit an incomplete application. Reuse
+        // the detail handler's own computation (uncached) rather than re-deriving
+        // required-ness here. Admin submit is a deliberate override and skips this.
+        const incompleteItems = await this.submissionDetail.findIncompleteRequiredItems(userId, programId);
+        if (incompleteItems.length > 0) {
+            // Drop any cached detail that claimed canSubmit so the UI refetches truth.
+            await this.invalidateCaches(userId, participant.id);
+            throw new BadRequestException(
+                `Your application is incomplete. Please: ${incompleteItems.join('; ')}.`,
+            );
+        }
 
         // Validate registration fee via shared gate (applies to all categories).
         await this.registrationFeeGate.assertRegistrationFeePaid(application.id);

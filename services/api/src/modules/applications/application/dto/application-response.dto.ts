@@ -32,6 +32,11 @@ export class SubmissionFormFieldAdminDto {
   readonly: boolean;
   /** Configured selectable options, if any. */
   options?: Array<{ label: string; value: string }>;
+  /**
+   * `validationRules.inputType` from the field definition, when set (e.g. 'country_select').
+   * Lets the admin UI tell a country picker apart from a plain `type: 'text'` field.
+   */
+  inputType?: string;
   /** Display order within the section. */
   order: number;
 }

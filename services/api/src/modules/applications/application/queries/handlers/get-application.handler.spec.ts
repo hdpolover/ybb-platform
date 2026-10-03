@@ -109,4 +109,56 @@ describe('GetApplicationHandler birthdate resolution', () => {
 
     expect(dto.participant?.birthdate).toBeNull();
   });
+
+  describe('submissionForm inputType', () => {
+    function formField(name: string, type: string, validationRules: unknown) {
+      return {
+        id: `field-${name}`,
+        programId: 'program-1',
+        name,
+        label: name,
+        type,
+        section: 'personal_info',
+        isRequired: false,
+        options: null,
+        placeholder: null,
+        validationRules,
+        allowedCategories: [],
+        order: 1,
+      };
+    }
+
+    async function fieldsFor(rows: ReturnType<typeof formField>[]) {
+      applicationRepository.findById.mockResolvedValue(buildApplication({ nationality: 'ZA' }));
+      prisma.participant.findUnique.mockResolvedValue({
+        id: 'participant-1',
+        fullName: 'John Doe',
+        birthdate: null,
+        user: { email: 'john@example.com' },
+      });
+      prisma.applicationFormField.findMany.mockResolvedValue(rows);
+      const dto = await handler.execute(new GetApplicationQuery('app-1', true));
+      return dto.submissionForm?.sections.flatMap((section) => section.fields) ?? [];
+    }
+
+    it('exposes validationRules.inputType so a text field configured as country_select is detectable', async () => {
+      const fields = await fieldsFor([
+        formField('nationality', 'text', { inputType: 'country_select', legacyField: 'nationality' }),
+      ]);
+
+      expect(fields[0]?.inputType).toBe('country_select');
+    });
+
+    it('omits inputType when the rules are empty, absent, or not a string', async () => {
+      const fields = await fieldsFor([
+        formField('a', 'country', {}),
+        formField('b', 'text', null),
+        formField('c', 'text', { inputType: 42 }),
+        formField('d', 'text', ['country_select']),
+      ]);
+
+      expect(fields).toHaveLength(4);
+      for (const field of fields) expect(field).not.toHaveProperty('inputType');
+    });
+  });
 });
