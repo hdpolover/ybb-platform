@@ -611,6 +611,108 @@ describe('PortalSubmitApplicationHandler', () => {
             expect(mockTx.ambassadorReferral.create).not.toHaveBeenCalled();
         });
 
+        // A form can carry more than one field that looks like a referral
+        // field (a legacy custom one next to the system one, or a "how did
+        // you hear about us" select whose name contains "referral"). Taking
+        // only the first match silently dropped the code the participant
+        // actually typed into another one.
+        describe('multiple referral-like fields', () => {
+            const linkable = () => {
+                mockTx.ambassadorReferral.findFirst.mockResolvedValue(null);
+                mockTx.ambassadorReferral.create.mockResolvedValue({});
+                mockTx.ambassador.update.mockResolvedValue({});
+                mockTx.participant.findUnique.mockResolvedValue({ referralCode: null });
+                mockTx.participant.update.mockResolvedValue({});
+            };
+
+            it('uses the code from a later referral field when an earlier one was left blank', async () => {
+                mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                    makeApp({
+                        personalData: { ref_code_ambassador: '', ambassador_referral_code: 'abc12345' },
+                        programId: 'program-123',
+                        formFields: [
+                            { name: 'ref_code_ambassador', label: 'Ambassador Referral Code (optional)', validationRules: {} },
+                            { name: 'ambassador_referral_code', label: 'Ambassador Referral Code', validationRules: {} },
+                        ],
+                    }),
+                );
+                linkable();
+                mockTx.ambassador.findFirst.mockResolvedValue({ id: 'amb-1', referralCode: 'ABC12345', isActive: true });
+
+                await handler.execute({ userId: 'user-1', programId: 'program-123' });
+
+                expect(mockTx.ambassador.findFirst).toHaveBeenCalledWith({
+                    where: { referralCode: 'ABC12345', isActive: true, user: { brandId: 'brand-1' } },
+                });
+                expect(mockTx.ambassadorReferral.create).toHaveBeenCalledTimes(1);
+            });
+
+            it('skips a referral-like value that is not an ambassador code and links the one that is', async () => {
+                mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                    makeApp({
+                        personalData: { referral_source: 'instagram', ambassador_referral_code: 'ABC12345' },
+                        programId: 'program-123',
+                        formFields: [
+                            { name: 'referral_source', label: 'How did you hear about us?', validationRules: {} },
+                            { name: 'ambassador_referral_code', label: 'Ambassador Referral Code', validationRules: {} },
+                        ],
+                    }),
+                );
+                linkable();
+                mockTx.ambassador.findFirst.mockImplementation(async ({ where }: { where: { referralCode: string } }) =>
+                    where.referralCode === 'ABC12345'
+                        ? { id: 'amb-1', referralCode: 'ABC12345', isActive: true }
+                        : null,
+                );
+
+                await handler.execute({ userId: 'user-1', programId: 'program-123' });
+
+                expect(mockTx.ambassadorReferral.create).toHaveBeenCalledWith({
+                    data: {
+                        ambassadorId: 'amb-1',
+                        participantId: 'participant-1',
+                        programId: 'program-123',
+                        status: 'referred',
+                    },
+                });
+                expect(mockTx.ambassadorReferral.create).toHaveBeenCalledTimes(1);
+            });
+
+            it('looks each distinct code up once when two fields hold the same code', async () => {
+                mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                    makeApp({
+                        personalData: { ref_code_ambassador: 'ABC12345', ambassador_referral_code: ' abc12345 ' },
+                        programId: 'program-123',
+                        formFields: [
+                            { name: 'ref_code_ambassador', label: 'Ambassador Referral Code (optional)', validationRules: {} },
+                            { name: 'ambassador_referral_code', label: 'Ambassador Referral Code', validationRules: {} },
+                        ],
+                    }),
+                );
+                linkable();
+                mockTx.ambassador.findFirst.mockResolvedValue(null);
+
+                await handler.execute({ userId: 'user-1', programId: 'program-123' });
+
+                expect(mockTx.ambassador.findFirst).toHaveBeenCalledTimes(1);
+                expect(mockTx.ambassadorReferral.create).not.toHaveBeenCalled();
+            });
+
+            it('reads only active, non-deleted form fields, in form order', async () => {
+                mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
+
+                await handler.execute({ userId: 'user-1', programId: 'program-123' });
+
+                const query = mockPrisma.participantApplication.findFirst.mock.calls[0][0];
+                expect(query.select.program.select.formFields).toEqual(
+                    expect.objectContaining({
+                        where: { isActive: true, deletedAt: null },
+                        orderBy: { order: 'asc' },
+                    }),
+                );
+            });
+        });
+
         it('skips referral creation when ambassador is not found', async () => {
             const command: PortalSubmitApplicationCommand = { userId: 'user-1', programId: 'program-123' };
             mockPrisma.participantApplication.findFirst.mockResolvedValue(
