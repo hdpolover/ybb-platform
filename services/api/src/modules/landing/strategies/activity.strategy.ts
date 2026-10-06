@@ -4,6 +4,7 @@ import { ILandingPageStrategy } from './landing-page.strategy';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '../../../shared/constants/cache-keys';
+import { LIVE_PROGRAM_STATUSES } from './live-edition-scope.util';
 import {
   ActivityItem,
   ActivityRow,
@@ -73,6 +74,11 @@ export class ActivityStrategy implements ILandingPageStrategy {
     // (empty on every row in production). personal_data is the authoritative source, same
     // as phone and birthdate elsewhere in this codebase. The participants join is kept only
     // for the deleted_at guard.
+    //
+    // Live editions only: the toast announces a registration as happening now, so a row
+    // from a completed edition would name a closed program as "just registered". There is
+    // deliberately no fallback to older editions -- below MIN_ACTIVITY_POOL_SIZE the toast
+    // stays off until the live edition has enough of its own registrations.
     return this.prisma.$queryRaw<ActivityRow[]>`
       SELECT
         pa.status::text                            AS status,
@@ -87,6 +93,8 @@ export class ActivityStrategy implements ILandingPageStrategy {
         AND pr.deleted_at IS NULL
         AND pr.brand_id = ${brandId}
         AND pr.is_published = true
+        AND pr.is_active = true
+        AND pr.status IN (${Prisma.join([...LIVE_PROGRAM_STATUSES])})
         AND pa.status::text IN (${Prisma.join(ACTIVITY_SOURCE_STATUSES as string[])})
         AND btrim(pa.personal_data::jsonb->>'full_name') <> ''
         AND btrim(pa.personal_data::jsonb->>'nationality') <> ''
