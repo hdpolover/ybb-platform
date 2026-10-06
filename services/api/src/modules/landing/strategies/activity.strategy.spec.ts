@@ -91,6 +91,19 @@ describe('ActivityStrategy', () => {
     expect(params).toContain('brand-1');
   });
 
+  it('samples only live editions, so a closed edition is never announced as a new registration', async () => {
+    mockPrismaService.$queryRaw.mockResolvedValue(buildRows(10));
+    await strategy.getData(brand);
+    const [sqlParts, ...params] = mockPrismaService.$queryRaw.mock.calls[0];
+    const sql = (sqlParts as string[]).join('?');
+    expect(sql).toMatch(/pr\.is_active = true/);
+    expect(sql).toMatch(/pr\.status IN \(/);
+    // Prisma.join arrives as one Sql param; its values carry the allowed statuses.
+    const joined = params.flatMap((param) => (param && typeof param === 'object' && 'values' in param ? (param as { values: unknown[] }).values : [param]));
+    expect(joined).toEqual(expect.arrayContaining(['published', 'ongoing']));
+    expect(joined).not.toContain('completed');
+  });
+
   it('returns the cached value without querying', async () => {
     mockCacheService.get.mockResolvedValue({ enabled: true, items: buildRows(0) });
     await strategy.getData(brand);

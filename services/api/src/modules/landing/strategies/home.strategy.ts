@@ -21,6 +21,7 @@ import {
   resolveEditionGuidebooks,
 } from './registration-editions.util';
 import { buildFileUrlMaskMap } from '@shared/utils/masked-file-url';
+import { loadDistributionApplications } from './live-edition-scope.util';
 
 const FULLY_FUNDED_PROCESS_COPY =
   'Complete the registration fee, submit the required documents and essay, and participate in the interview process.';
@@ -332,30 +333,7 @@ export class HomeStrategy implements ILandingPageStrategy {
         ],
         take: 10
       }),
-      this.prisma.participantApplication.findMany({
-        where: {
-          // Count ALL registered participants for the program (any application
-          // status), not only submitted — drives the public participant
-          // distribution stat. deletedAt:null still excludes removed rows.
-          deletedAt: null,
-          program: {
-            brandId: brand.id,
-            isPublished: true,
-            deletedAt: null,
-          },
-          participant: {
-            deletedAt: null,
-          },
-        },
-        select: {
-          participant: {
-            select: {
-              originCountry: true,
-              nationality: true,
-            },
-          },
-        },
-      }),
+      loadDistributionApplications(this.prisma, brand.id),
       this.platformSettingRepository.get('impact_stats'),
       // Every currently-relevant edition for this brand (see MEYS 6th/7th
       // concurrent-active-programs bug: two published+active programs can
