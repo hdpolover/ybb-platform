@@ -47,8 +47,10 @@ export interface ProgramSpecificsData {
     location: string;
     capacity: string;
     registrationStatus: string;
-    /** Which bound (open in the future / close in the past) is gating registration, if any. */
+    /** What is gating registration (the switch, or a bound in the future/past), if anything. */
     registrationStatusReason: string | null;
+    /** The window is open right now but the Accept registrations switch is off. */
+    isSwitchedOffDuringOpenWindow: boolean;
     registrationOpenDate: string;
     registrationCloseDate: string;
     requirePayment: string;
@@ -256,7 +258,7 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
           <div>
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Status</dt>
             <RegistrationStatusBadge status={data.operations.registrationStatus} />
-            {data.operations.registrationStatusReason ? (
+            {data.operations.registrationStatusReason && !data.operations.isSwitchedOffDuringOpenWindow ? (
               <p className="mt-1.5 text-xs text-zinc-500">{data.operations.registrationStatusReason}</p>
             ) : null}
           </div>
@@ -273,6 +275,14 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
             </dd>
           </div>
         </dl>
+        {data.operations.isSwitchedOffDuringOpenWindow && (
+          <div role="status" className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <span className="font-semibold">Registration is switched off</span> even though the registration
+            window is open. Nobody can register right now: participants who sign up are told registration has
+            closed, and the countdown is hidden on the landing page. Use Edit Operational Settings and turn on
+            &quot;Accept registrations&quot; to fix this.
+          </div>
+        )}
       </section>
 
       {/* Participant Content */}
