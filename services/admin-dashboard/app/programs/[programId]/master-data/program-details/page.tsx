@@ -26,6 +26,12 @@ import { buildApiUrl, getAccessToken, readErrorMessage } from "@/app/components/
 import { ExchangeRateTab } from "@/app/components/programDetailsMasterData/exchange-rate/ExchangeRateTab";
 import { parseApiDate, toLocalDatetimeInputValue, toUtcIsoFromLocalInput } from "@/lib/utils";
 import { formatInBusinessTz } from "@/lib/datetime";
+import {
+  buildAllowRegistrationPatch,
+  getRegistrationStatus,
+  getRegistrationStatusReason,
+  isSwitchedOffDuringOpenWindow,
+} from "@/lib/registration-status";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 import { PublishReadinessModal } from "@/src/admin/publish-readiness-modal";
@@ -145,41 +151,6 @@ function formatBusinessDateTime(value?: string | null): string {
   });
 }
 
-function getRegistrationStatus(detail: ProgramDetail): string {
-  if (!detail.allowRegistration) {
-    return "Disabled";
-  }
-
-  const now = Date.now();
-  const openDate = detail.registrationOpenDate ? parseApiDate(detail.registrationOpenDate).getTime() : null;
-  const closeDate = detail.registrationCloseDate ? parseApiDate(detail.registrationCloseDate).getTime() : null;
-
-  if (openDate && now < openDate) {
-    return "Scheduled";
-  }
-
-  if (closeDate && now > closeDate) {
-    return "Closed";
-  }
-
-  return "Open";
-}
-
-// Explains which bound (open date in the future, or close date in the past)
-// is currently gating registration, so an admin can tell why at a glance
-// without opening the edit drawer.
-function getRegistrationStatusReason(detail: ProgramDetail, status: string): string | null {
-  if (status === "Scheduled" && detail.registrationOpenDate) {
-    return `Opens ${formatBusinessDateTime(detail.registrationOpenDate)} WIB`;
-  }
-
-  if (status === "Closed" && detail.registrationCloseDate) {
-    return `Closed since ${formatBusinessDateTime(detail.registrationCloseDate)} WIB`;
-  }
-
-  return null;
-}
-
 const PROGRAM_FORMAT_LABELS: Record<'in_person' | 'hybrid' | 'online', string> = {
   in_person: 'In-Person',
   hybrid: 'Hybrid',
@@ -218,7 +189,8 @@ function toProgramSpecificsData(detail: ProgramDetail): ProgramSpecificsData {
       location: formatDisplayValue(detail.location),
       capacity: formatDisplayValue(detail.capacity),
       registrationStatus: getRegistrationStatus(detail),
-      registrationStatusReason: getRegistrationStatusReason(detail, getRegistrationStatus(detail)),
+      registrationStatusReason: getRegistrationStatusReason(detail),
+      isSwitchedOffDuringOpenWindow: isSwitchedOffDuringOpenWindow(detail),
       registrationOpenDate: detail.registrationOpenDate ? `${formatBusinessDateTime(detail.registrationOpenDate)} WIB` : "Not configured",
       registrationCloseDate: detail.registrationCloseDate ? `${formatBusinessDateTime(detail.registrationCloseDate)} WIB` : "Not configured",
       requirePayment: detail.requirePayment ? "Required" : "Not required",
@@ -270,6 +242,7 @@ function toSpecificsFormValues(detail: ProgramDetail): ProgramSpecificsFormValue
     location: detail.location ?? "",
     capacity: detail.capacity !== null && detail.capacity !== undefined ? String(detail.capacity) : "",
     requirePayment: detail.requirePayment,
+    allowRegistration: detail.allowRegistration,
     registrationOpenDate: toLocalDatetimeInputValue(detail.registrationOpenDate),
     registrationCloseDate: toLocalDatetimeInputValue(detail.registrationCloseDate),
     requirementsDescription: detail.requirementsDescription ?? "",
@@ -394,6 +367,7 @@ export default function ProgramDetailsPage({
         location: values.location.trim() || undefined,
         capacity: values.capacity.trim() === "" ? undefined : Number(values.capacity),
         requirePayment: values.requirePayment,
+        ...buildAllowRegistrationPatch(programDetail.allowRegistration, values.allowRegistration),
         // Explicit null (not undefined) so an emptied input clears the bound in the DB
         // instead of being dropped as "no change" — see toUtcIsoFromLocalInput.
         registrationOpenDate: toUtcIsoFromLocalInput(values.registrationOpenDate),

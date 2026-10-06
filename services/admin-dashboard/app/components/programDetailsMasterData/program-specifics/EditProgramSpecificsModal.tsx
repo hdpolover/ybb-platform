@@ -28,6 +28,8 @@ export interface ProgramSpecificsFormValues {
   location: string;
   capacity: string;
   requirePayment: boolean;
+  /** Master switch: when false nobody can register, whatever the window below says. */
+  allowRegistration: boolean;
   /** datetime-local value (business timezone, WIB), empty string clears the bound. */
   registrationOpenDate: string;
   /** datetime-local value (business timezone, WIB), empty string clears the bound. */
@@ -225,6 +227,49 @@ export function EditProgramSpecificsModal({
         description="Configure landing-facing location and the registration window."
       >
         <div className="grid gap-5 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <div className="flex items-center justify-between gap-4 rounded-md border border-zinc-200 bg-white px-3 py-2.5 shadow-sm">
+              <div>
+                <p id="allow-registration-label" className="text-sm font-medium text-zinc-900">
+                  Accept registrations
+                </p>
+                <p id="allow-registration-hint" className="mt-0.5 text-xs text-zinc-500">
+                  Master switch. When off, nobody can register and the landing countdown is hidden,
+                  whatever the dates below say.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className={`text-xs font-semibold ${formValues.allowRegistration ? "text-emerald-700" : "text-zinc-500"}`}>
+                  {formValues.allowRegistration ? "On" : "Off"}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={formValues.allowRegistration}
+                  aria-labelledby="allow-registration-label"
+                  aria-describedby="allow-registration-hint"
+                  onClick={() => updateField("allowRegistration", !formValues.allowRegistration)}
+                  className={`relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full border shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
+                    formValues.allowRegistration
+                      ? "border-emerald-500 bg-emerald-500"
+                      : "border-zinc-300 bg-zinc-200"
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                      formValues.allowRegistration ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+            {!formValues.allowRegistration && (
+              <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Registration is off. Saving like this turns away every new signup, even inside the window below.
+              </p>
+            )}
+          </div>
           <div className="md:col-span-2">
             <label className="mb-1.5 block text-xs font-medium text-zinc-500">Location</label>
             <input

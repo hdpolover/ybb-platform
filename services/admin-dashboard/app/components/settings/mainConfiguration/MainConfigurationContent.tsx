@@ -17,6 +17,8 @@ export type MainConfigurationContentProps = {
   programActive: boolean;
   onToggleProgramActive: () => void;
   saving: boolean;
+  /** True when a switch differs from what the server last confirmed. */
+  isDirty: boolean;
   onSave: () => void;
   onCancel: () => void;
 };
@@ -29,6 +31,7 @@ export function MainConfigurationContent({
   programActive,
   onToggleProgramActive,
   saving,
+  isDirty,
   onSave,
   onCancel,
 }: MainConfigurationContentProps) {
@@ -61,22 +64,26 @@ export function MainConfigurationContent({
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-900 md:text-sm">
                     <UserGroupIcon className="h-4 w-4 text-blue-500" />
-                    <span>Registration Open</span>
+                    <span>Accept registrations</span>
                   </div>
-                  <p className="text-[11px] text-zinc-500 md:text-xs">
-                    When enabled, users can register for the program.
+                  <p id="registration-switch-hint" className="text-[11px] text-zinc-500 md:text-xs">
+                    Master switch. When off, nobody can register and the landing countdown is
+                    hidden, whatever the registration dates say.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    role="switch"
+                    aria-checked={registrationOpen}
+                    aria-describedby="registration-switch-hint"
                     onClick={onToggleRegistration}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full border text-[11px] shadow-sm transition-colors ${
+                    className={`relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full border text-[11px] shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
                       registrationOpen
                         ? "border-emerald-400 bg-emerald-400"
                         : "border-zinc-300 bg-zinc-200"
                     }`}
-                    aria-label="Toggle registration open"
+                    aria-label="Accept registrations"
                   >
                     <span
                       className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
@@ -91,7 +98,7 @@ export function MainConfigurationContent({
                         : "bg-zinc-50 text-zinc-600 ring-1 ring-zinc-200"
                     }`}
                   >
-                    {registrationOpen ? "Open" : "Closed"}
+                    {registrationOpen ? "On" : "Off"}
                   </span>
                 </div>
               </div>
@@ -109,8 +116,10 @@ export function MainConfigurationContent({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    role="switch"
+                    aria-checked={emailVerification === "Required"}
                     onClick={onToggleEmailVerification}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full border text-[11px] shadow-sm transition-colors ${
+                    className={`relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full border text-[11px] shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
                       emailVerification === "Required"
                         ? "border-emerald-400 bg-emerald-400"
                         : "border-zinc-300 bg-zinc-200"
@@ -148,8 +157,10 @@ export function MainConfigurationContent({
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
+                    role="switch"
+                    aria-checked={programActive}
                     onClick={onToggleProgramActive}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full border text-[11px] shadow-sm transition-colors ${
+                    className={`relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full border text-[11px] shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
                       programActive
                         ? "border-emerald-400 bg-emerald-400"
                         : "border-zinc-300 bg-zinc-200"
@@ -178,10 +189,13 @@ export function MainConfigurationContent({
         </div>
 
         <div className="mt-3 flex items-center justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-0 py-2.5">
+          <p role="status" className="mr-auto pl-3 text-xs font-medium text-amber-700 md:text-sm">
+            {isDirty ? "Unsaved changes. Nothing applies until you click Save Changes." : ""}
+          </p>
           <button
             type="button"
             onClick={onCancel}
-            disabled={saving}
+            disabled={saving || !isDirty}
             className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-100 disabled:opacity-60 md:text-sm"
           >
             Reset
@@ -189,7 +203,7 @@ export function MainConfigurationContent({
           <button
             type="button"
             onClick={onSave}
-            disabled={saving}
+            disabled={saving || !isDirty}
             className="rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 disabled:opacity-60 md:text-sm"
           >
             {saving ? "Saving…" : "Save Changes"}
