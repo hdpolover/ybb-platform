@@ -63,6 +63,15 @@ export class CancelPortalPaymentCommand {
   ) { }
 }
 
+export class JoinPortalProgramCommand {
+  constructor(
+    public readonly userId: string,
+    public readonly brandId: string,
+    public readonly email: string,
+    public readonly programId: string,
+  ) { }
+}
+
 export class EnsurePortalPaymentInvoiceCommand {
   constructor(
     public readonly userId: string,

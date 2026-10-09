@@ -22,6 +22,7 @@ import { DocumentAudienceService } from './application/services/document-audienc
 import { ConfirmPortalPaymentHandler } from './application/commands/handlers/confirm-portal-payment.handler';
 import { CancelPortalPaymentHandler } from './application/commands/handlers/cancel-portal-payment.handler';
 import { EnsurePortalPaymentInvoiceHandler } from './application/commands/handlers/ensure-portal-payment-invoice.handler';
+import { JoinPortalProgramHandler } from './application/commands/handlers/join-portal-program.handler';
 
 // New — Submissions
 import { PortalSubmissionsController } from './presentation/portal-submissions.controller';
@@ -68,6 +69,7 @@ import { UploadSignedCopyHandler } from './application/commands/handlers/upload-
         ConfirmPortalPaymentHandler,
         CancelPortalPaymentHandler,
         EnsurePortalPaymentInvoiceHandler,
+        JoinPortalProgramHandler,
         UploadSignedCopyHandler,
     ],
     exports: [DocumentAudienceService, LoaRenderDataService],

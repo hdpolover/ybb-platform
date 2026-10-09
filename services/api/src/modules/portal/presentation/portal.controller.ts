@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header, ForbiddenException, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, Post, HttpCode, Body, Param, Query, UseGuards, UnauthorizedException, BadRequestException, NotFoundException, UseInterceptors, UploadedFile, StreamableFile, Header, ForbiddenException, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Readable } from 'stream';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -18,6 +18,7 @@ import {
     ConfirmPortalPaymentCommand,
     CancelPortalPaymentCommand,
     EnsurePortalPaymentInvoiceCommand,
+    JoinPortalProgramCommand,
     UploadSignedCopyCommand,
 } from '../application/queries/portal-queries';
 import { PortalDashboardResponseDto } from './dto/portal-dashboard.dto';
@@ -32,10 +33,12 @@ import {
     EnsurePortalPaymentInvoiceDto,
     EnsurePortalPaymentInvoiceResponseDto,
 } from './dto/portal-payment.dto';
+import { JoinPortalProgramDto, JoinPortalProgramResponseDto } from './dto/join-portal-program.dto';
 import { PortalDocumentResponseDto } from './dto/portal-document.dto';
 import { ConfirmPortalPaymentHandler } from '../application/commands/handlers/confirm-portal-payment.handler';
 import { CancelPortalPaymentHandler } from '../application/commands/handlers/cancel-portal-payment.handler';
 import { EnsurePortalPaymentInvoiceHandler } from '../application/commands/handlers/ensure-portal-payment-invoice.handler';
+import { JoinPortalProgramHandler } from '../application/commands/handlers/join-portal-program.handler';
 import { PaymentServiceHttpClient } from '../../payments/infrastructure/services/payment-service-http.client';
 import type { AdminPaymentMethod } from '../../payments/common/proto/payment.interface';
 import { LoaDownloadService } from '../application/services/loa-download.service';
@@ -75,6 +78,7 @@ export class PortalController {
         private readonly confirmPortalPaymentHandler: ConfirmPortalPaymentHandler,
         private readonly cancelPortalPaymentHandler: CancelPortalPaymentHandler,
         private readonly ensurePortalPaymentInvoiceHandler: EnsurePortalPaymentInvoiceHandler,
+        private readonly joinPortalProgramHandler: JoinPortalProgramHandler,
         private readonly paymentServiceClient: PaymentServiceHttpClient,
         private readonly configService: ConfigService,
         private readonly prisma: PrismaService,
@@ -332,6 +336,23 @@ export class PortalController {
 
         return this.ensurePortalPaymentInvoiceHandler.execute(
             new EnsurePortalPaymentInvoiceCommand(userId, tierId, dto.program_id),
+        );
+    }
+
+    // Idempotent (existing/closed are not errors), so 200 for every status.
+    @Post('programs/join')
+    @HttpCode(200)
+    @ApiOperation({ summary: 'Join an edition: open an application on a program in the caller\'s brand' })
+    @ApiResponse({ status: 200, type: JoinPortalProgramResponseDto })
+    async joinProgram(
+        @Body() dto: JoinPortalProgramDto,
+        @CurrentUser() user: CurrentUserData,
+    ): Promise<JoinPortalProgramResponseDto> {
+        const userId = user.userId;
+        if (!userId) throw new UnauthorizedException();
+
+        return this.joinPortalProgramHandler.execute(
+            new JoinPortalProgramCommand(userId, user.brandId, user.email, dto.programId),
         );
     }
 

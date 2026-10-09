@@ -510,6 +510,7 @@ export type RegisteredProgramInfo = {
   year: number;
   applicationId: string;
   applicationStatus: string;
+  programStatus: string;
 };
 
 // Shared by login.handler.ts and register.handler.ts (audit M128): both used
@@ -543,5 +544,6 @@ export async function getRegisteredPrograms(
     year: app.program.year,
     applicationId: app.id,
     applicationStatus: app.status,
+    programStatus: app.program.status,
   }));
 }

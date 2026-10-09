@@ -8,6 +8,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PortalReceiptService } from '../application/services/portal-receipt.service';
 import { ConfirmPortalPaymentHandler } from '../application/commands/handlers/confirm-portal-payment.handler';
 import { CancelPortalPaymentHandler } from '../application/commands/handlers/cancel-portal-payment.handler';
+import { JoinPortalProgramHandler } from '../application/commands/handlers/join-portal-program.handler';
 import { EnsurePortalPaymentInvoiceHandler } from '../application/commands/handlers/ensure-portal-payment-invoice.handler';
 import { PaymentServiceHttpClient } from '../../payments/infrastructure/services/payment-service-http.client';
 import { LoaDownloadService } from '../application/services/loa-download.service';
@@ -39,6 +40,7 @@ describe('PortalController', () => {
         { provide: ConfirmPortalPaymentHandler, useValue: { execute: jest.fn() } },
         { provide: CancelPortalPaymentHandler, useValue: { execute: jest.fn() } },
         { provide: EnsurePortalPaymentInvoiceHandler, useValue: { execute: jest.fn() } },
+        { provide: JoinPortalProgramHandler, useValue: { execute: jest.fn() } },
         { provide: PaymentServiceHttpClient, useValue: { get: jest.fn() } },
         { provide: ConfigService, useValue: { get: jest.fn() } },
         {
