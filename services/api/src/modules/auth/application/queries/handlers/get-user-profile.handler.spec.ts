@@ -52,4 +52,30 @@ describe('GetUserProfileHandler', () => {
       }),
     );
   });
+
+  it('exposes the program status on each registered program', async () => {
+    mockPrisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'user@example.com',
+      brandId: 'brand-1',
+      isOnboardingCompleted: true,
+      identities: [],
+      participant: {
+        id: 'participant-1',
+        profileCompletedAt: new Date(),
+        applications: [
+          {
+            id: 'app-1',
+            programId: 'program-1',
+            status: 'submitted',
+            program: { name: 'MEYS 6th', slug: 'meys-6', year: 2026, status: 'completed' },
+          },
+        ],
+      },
+    });
+
+    const result = await handler.execute(new GetUserProfileQuery('user-1', 'brand-1'));
+
+    expect(result.registeredPrograms[0].programStatus).toBe('completed');
+  });
 });

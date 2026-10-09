@@ -29,6 +29,9 @@ export class RegisteredProgramDto {
 
   @ApiProperty({ example: 'draft', description: 'Status of the application' })
   applicationStatus: string;
+
+  @ApiProperty({ example: 'published', description: 'Status of the program (published, completed, cancelled, ...)' })
+  programStatus: string;
 }
 
 export class UserProfileDto {

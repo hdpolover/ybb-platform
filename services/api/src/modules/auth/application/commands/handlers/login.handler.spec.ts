@@ -187,6 +187,7 @@ describe('LoginHandler', () => {
               name: 'Brand One Program',
               slug: 'brand-one-program',
               year: 2026,
+              status: 'completed',
             },
           },
         ];
@@ -236,7 +237,11 @@ describe('LoginHandler', () => {
       orderBy: { createdAt: 'desc' },
     });
     expect(result.user.registeredPrograms).toEqual([
-      expect.objectContaining({ programId: 'program-1', programSlug: 'brand-one-program' }),
+      expect.objectContaining({
+        programId: 'program-1',
+        programSlug: 'brand-one-program',
+        programStatus: 'completed',
+      }),
     ]);
   });
 

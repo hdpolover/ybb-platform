@@ -607,7 +607,8 @@ export class FirebaseLoginHandler {
       programSlug: app.program.slug,
       year: app.program.year,
       applicationId: app.id,
-      applicationStatus: app.status
+      applicationStatus: app.status,
+      programStatus: app.program.status,
     })) || [];
 
     return {
