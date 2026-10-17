@@ -35,11 +35,14 @@ services:
     networks:
       - dokploy-network
     labels:
+      # Public routing comes from the Dokploy Domain config, which injects its
+      # own web/websecure routers. A hand-written router here for the same
+      # Host has no `.service=` and Traefik refuses it ("cannot be linked
+      # automatically with multiple Services"), logging an error on every
+      # config reload. Do not re-add one. The service below stays: the
+      # -internal router further down names it explicitly.
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-prod-payment.rule=${APP_DOMAINS_RULE:-Host(`payments.ybbhub.com`)}"
-      - "traefik.http.routers.ybb-prod-payment.entrypoints=websecure"
-      - "traefik.http.routers.ybb-prod-payment.tls.certresolver=letsencrypt"
       - "traefik.http.services.ybb-prod-payment.loadbalancer.server.port=8002"
       # Audit M208: /swagger and /metrics answered 200 to anyone on
       # payments.ybbhub.com — the full API surface (including /payments/{id}/verify

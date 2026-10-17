@@ -25,12 +25,13 @@ services:
     networks:
       - dokploy-network
     labels:
+      # Public routing comes from the Dokploy Domain config, which injects its
+      # own web/websecure routers. A hand-written router here for the same
+      # Host has no `.service=` and Traefik refuses it ("cannot be linked
+      # automatically with multiple Services"), logging an error on every
+      # config reload. Do not re-add one.
       - "traefik.enable=true"
       - "traefik.docker.network=dokploy-network"
-      - "traefik.http.routers.ybb-prod-admin-dashboard.rule=${APP_DOMAINS_RULE:-Host(`admin.ybbhub.com`)}"
-      - "traefik.http.routers.ybb-prod-admin-dashboard.entrypoints=websecure"
-      - "traefik.http.routers.ybb-prod-admin-dashboard.tls.certresolver=letsencrypt"
-      - "traefik.http.services.ybb-prod-admin-dashboard.loadbalancer.server.port=4001"
 
 networks:
   dokploy-network:
