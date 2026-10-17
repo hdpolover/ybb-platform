@@ -1,8 +1,9 @@
-import { Controller, Get, Logger, UseGuards } from '@nestjs/common';
+import { Controller, Get, Logger, ServiceUnavailableException, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ConsumerStatusService } from '@shared/infrastructure/messaging/consumer-status.service';
 import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service';
+import { CacheHealthService } from '@shared/infrastructure/cache/cache-health.service';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
@@ -19,11 +20,13 @@ export class HealthController {
     // Global via PrismaModule (see prisma.module.ts) -- no import needed here
     // beyond the type itself.
     private readonly unitOfWork: UnitOfWork,
+    // Global via CacheCoreModule.
+    private readonly cacheHealth: CacheHealthService,
   ) {}
 
   @Get()
   @ApiOperation({ summary: 'Health check endpoint' })
-  check() {
+  async check() {
     // Public, unauthenticated route (no global APP_GUARD covers /v1/health —
     // see ConsumerStatusService for what that means for this response).
     //
@@ -36,8 +39,17 @@ export class HealthController {
     // never checks. Runtime liveness needs the consumer-count signal
     // QueueMonitoringService already polls; that is filed separately.
     //
-    // Never returns a non-200: a pending bootstrap is degraded, not unhealthy —
-    // the HTTP process genuinely works.
+    // A pending bootstrap is degraded, not unhealthy — the HTTP process
+    // genuinely works. The ONE non-200 is a wedged cache client (see
+    // CacheHealthService): Swarm's healthcheck curls this route, and a 503
+    // there is what gets the replica replaced instead of hanging until
+    // someone notices. A plain Redis outage stays 200 on purpose.
+    const cache = await this.cacheHealth.check();
+    if (cache === 'client-wedged') {
+      this.logger.error('Cache client is wedged while Redis is reachable; failing health so Swarm replaces this replica');
+      throw new ServiceUnavailableException('Cache client unavailable');
+    }
+
     const { state } = this.consumerStatus.getSnapshot();
     const bootstrapState =
       state === 'connected' ? 'complete' : state === 'connecting' ? 'pending' : 'retrying';
@@ -52,6 +64,7 @@ export class HealthController {
       // "is anyone consuming right now") and collapsing them into one overall
       // status would hide which one tripped.
       consumerActivity: this.consumerStatus.getConsumerActivity(),
+      cache,
       timestamp: new Date().toISOString(),
       service: 'ybb-api-gateway',
       version: '1.0.0',
