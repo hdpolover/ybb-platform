@@ -1,10 +1,11 @@
 // src/modules/health/health.controller.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
-import { Logger } from '@nestjs/common';
+import { Logger, ServiceUnavailableException } from '@nestjs/common';
 import { HealthController } from './health.controller';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ConsumerStatusService } from '@shared/infrastructure/messaging/consumer-status.service';
 import { UnitOfWork } from '@shared/infrastructure/database/unit-of-work.service';
+import { CacheHealthService } from '@shared/infrastructure/cache/cache-health.service';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 
@@ -12,6 +13,7 @@ describe('HealthController', () => {
   let controller: HealthController;
   let consumerStatus: ConsumerStatusService;
   let mockUnitOfWork: { getCircuitState: jest.Mock };
+  const mockCacheHealth = { check: jest.fn() };
 
   const mockPrismaRead = {
     $queryRaw: jest.fn(),
@@ -19,6 +21,7 @@ describe('HealthController', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockCacheHealth.check.mockResolvedValue('ok');
 
     mockUnitOfWork = {
       getCircuitState: jest.fn().mockReturnValue({
@@ -39,6 +42,7 @@ describe('HealthController', () => {
       providers: [
         { provide: PrismaReadService, useValue: mockPrismaRead },
         { provide: UnitOfWork, useValue: mockUnitOfWork },
+        { provide: CacheHealthService, useValue: mockCacheHealth },
         ConsumerStatusService,
       ],
     })
@@ -53,27 +57,27 @@ describe('HealthController', () => {
   });
 
   describe('check (GET /health)', () => {
-    it('reports ok and a complete bootstrap once consumers have connected', () => {
+    it('reports ok and a complete bootstrap once consumers have connected', async () => {
       consumerStatus.recordConnected();
 
-      const result = controller.check();
+      const result = await controller.check();
 
       expect(result.status).toBe('ok');
       expect(result.consumerBootstrap).toBe('complete');
     });
 
-    it('reports degraded while the consumer bootstrap is still pending (initial state)', () => {
-      const result = controller.check();
+    it('reports degraded while the consumer bootstrap is still pending (initial state)', async () => {
+      const result = await controller.check();
 
       expect(result.status).toBe('degraded');
       expect(result.consumerBootstrap).toBe('pending');
     });
 
-    it('carries consumerActivity from ConsumerStatusService alongside consumerBootstrap, without one overriding the other', () => {
+    it('carries consumerActivity from ConsumerStatusService alongside consumerBootstrap, without one overriding the other', async () => {
       consumerStatus.recordConnected();
       consumerStatus.recordQueueObservation('audit_log_queue', 0);
 
-      const result = controller.check();
+      const result = await controller.check();
 
       // Bootstrap completed, but a fresh zero-consumer reading still reports
       // 'inactive' -- the two fields answer different questions.
@@ -81,21 +85,38 @@ describe('HealthController', () => {
       expect(result.consumerActivity).toBe('inactive');
     });
 
-    it('reports consumerActivity unknown when no queue observation has ever been recorded', () => {
-      const result = controller.check();
+    it('reports consumerActivity unknown when no queue observation has ever been recorded', async () => {
+      const result = await controller.check();
 
       expect(result.consumerActivity).toBe('unknown');
     });
 
-    it('reports degraded while the bootstrap is retrying, without leaking the error message', () => {
+    it('reports degraded while the bootstrap is retrying, without leaking the error message', async () => {
       consumerStatus.recordFailure(new Error('amqp connection refused at 10.0.0.5:5672'));
 
-      const result = controller.check();
+      const result = await controller.check();
 
       expect(result.status).toBe('degraded');
       expect(result.consumerBootstrap).toBe('retrying');
       expect(JSON.stringify(result)).not.toContain('10.0.0.5');
       expect(JSON.stringify(result)).not.toContain('amqp connection refused');
+    });
+
+    it('fails with 503 when the cache client is wedged but Redis is reachable, so Swarm replaces the replica', async () => {
+      mockCacheHealth.check.mockResolvedValue('client-wedged');
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
+      await expect(controller.check()).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+
+    it('stays 200 during a real Redis outage, because restarting the API would not fix it', async () => {
+      consumerStatus.recordConnected();
+      mockCacheHealth.check.mockResolvedValue('redis-unreachable');
+
+      const result = await controller.check();
+
+      expect(result.status).toBe('ok');
+      expect(result.cache).toBe('redis-unreachable');
     });
   });
 

@@ -1,5 +1,6 @@
 import { Injectable, Inject, Optional, Logger, OnModuleInit } from '@nestjs/common';
 import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
+import { randomUUID } from 'crypto';
 import { CacheMetricsService } from './cache-metrics.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 
@@ -34,9 +35,40 @@ const keyPrefix = (key?: string): string => {
   return label.length > 0 ? label.join(':') : '(unrecognised)';
 };
 
+/**
+ * Upper bound on a single cache read/write. Redis answers in ~1ms on this
+ * network, so anything past this is a stalled client, not a slow one.
+ *
+ * Load-bearing, not tuning. On 2026-10-16 the VPS rebooted, the API booted
+ * before the Redis service's DNS existed, and the Keyv/node-redis client came
+ * up wedged: every `get` stayed pending forever without erroring. Because
+ * TokenBlacklistService.isBlacklisted awaits `get` on EVERY authenticated
+ * request, the whole admin dashboard hung (public routes, which skip the
+ * blacklist, kept working and /v1/health stayed green). cache-manager's
+ * error swallowing cannot help with a promise that never settles; only a
+ * timeout turns "hung" into the miss / fail-open these callers already handle.
+ */
+const CACHE_OP_TIMEOUT_MS = 500;
+
+/** SCAN+DEL walks the keyspace in batches, so it gets a wider budget than a single op. */
+const CACHE_PATTERN_OP_TIMEOUT_MS = 5_000;
+
+const PROBE_TTL_MS = 60_000;
+
+const withTimeout = <T>(op: Promise<T>, ms: number): Promise<T> => {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`cache op timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([op, timeout]).finally(() => clearTimeout(timer));
+};
+
 @Injectable()
 export class CacheService implements OnModuleInit {
   private readonly logger = new Logger(CacheService.name);
+
+  // Per-process so two replicas probing at once never read each other's token.
+  private readonly probeKey = `health:cache-probe:${randomUUID()}`;
 
   constructor(
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
@@ -92,10 +124,15 @@ export class CacheService implements OnModuleInit {
         console.warn(`[CacheService] No Redis client found — skipping invalidation for pattern: ${pattern}`);
         return;
       }
-      const keys = await this.scanKeys(client, pattern);
-      if (keys.length > 0) {
-        await client.del(keys);
-      }
+      await withTimeout(
+        (async () => {
+          const keys = await this.scanKeys(client, pattern);
+          if (keys.length > 0) {
+            await client.del(keys);
+          }
+        })(),
+        CACHE_PATTERN_OP_TIMEOUT_MS,
+      );
       this.metricsService?.recordLatency('invalidate_pattern', Date.now() - startTime);
     } catch (error) {
       console.error('Error invalidating cache by pattern:', error);
@@ -275,7 +312,7 @@ export class CacheService implements OnModuleInit {
     // that triggered the invalidation. A stale entry expires on its TTL, which
     // is a far smaller problem than 500ing the mutation that just succeeded.
     try {
-      await this.cacheManager.del(key);
+      await withTimeout(this.cacheManager.del(key), CACHE_OP_TIMEOUT_MS);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`Cache del failed for "${keyPrefix(key)}", entry left to expire: ${message}`);
@@ -292,7 +329,7 @@ export class CacheService implements OnModuleInit {
     // Promise.all would reject the whole batch on the first failing key AND
     // propagate to the caller's write. Settle instead, so one bad key neither
     // skips the others nor fails the mutation.
-    const results = await Promise.allSettled(keys.map((key) => this.cacheManager.del(key)));
+    const results = await Promise.allSettled(keys.map((key) => withTimeout(this.cacheManager.del(key), CACHE_OP_TIMEOUT_MS)));
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') {
         this.metricsService?.recordDelete();
@@ -311,13 +348,13 @@ export class CacheService implements OnModuleInit {
    */
   async get<T>(key: string): Promise<T | undefined> {
     const startTime = Date.now();
-    // cache-manager swallows store errors on `get` today, so this catch is
-    // belt-and-braces rather than the load-bearing half (that is `set`). It
-    // exists so a future store, or a client configured to reject rather than
-    // queue, degrades to a MISS instead of failing the request.
+    // cache-manager swallows store ERRORS on `get`, but not HANGS: a wedged
+    // client never settles, so the timeout is what reaches this catch (see
+    // CACHE_OP_TIMEOUT_MS). Either way the result is a MISS, not a failed
+    // request.
     let result: T | undefined;
     try {
-      result = await this.cacheManager.get<T>(key);
+      result = await withTimeout(this.cacheManager.get<T>(key), CACHE_OP_TIMEOUT_MS);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`Cache get failed for "${keyPrefix(key)}", treating as a miss: ${message}`);
@@ -360,7 +397,7 @@ export class CacheService implements OnModuleInit {
   async set<T>(key: string, value: T, ttl?: number): Promise<void> {
     const startTime = Date.now();
     try {
-      await this.cacheManager.set(key, value, ttl);
+      await withTimeout(this.cacheManager.set(key, value, ttl), CACHE_OP_TIMEOUT_MS);
     } catch (error) {
       // keyPrefix, not the key: these carry user ids and jtis, and a store
       // outage would otherwise emit one line per request per key.
@@ -370,6 +407,23 @@ export class CacheService implements OnModuleInit {
     }
     this.metricsService?.recordSet();
     this.metricsService?.recordLatency('set', Date.now() - startTime);
+  }
+
+  /**
+   * True only if a value written through the real cache path reads back.
+   *
+   * Goes through cacheManager directly, not get/set above: those convert every
+   * failure into a miss on purpose, which is exactly what a probe must not do.
+   */
+  async probe(): Promise<boolean> {
+    const token = randomUUID();
+    try {
+      await withTimeout(this.cacheManager.set(this.probeKey, token, PROBE_TTL_MS), CACHE_OP_TIMEOUT_MS);
+      const read = await withTimeout(this.cacheManager.get<string>(this.probeKey), CACHE_OP_TIMEOUT_MS);
+      return read === token;
+    } catch {
+      return false;
+    }
   }
 
   /**

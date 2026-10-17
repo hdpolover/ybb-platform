@@ -37,6 +37,11 @@ export class TokenBlacklistService {
      * CacheService.onModuleInit, which subscribes to that emitter; see the
      * comment there.
      *
+     * A HUNG store (not an erroring one) is bounded inside CacheService.get,
+     * which times the read out and returns a miss - so a wedged client also
+     * lands on fail-open here, and /v1/health fails so Swarm replaces the
+     * replica (CacheHealthService).
+     *
      * The try/catch below is therefore NOT the error path - it cannot fire
      * today. It is here so that if CacheService.get ever starts throwing, this
      * check degrades to the fail-open we chose rather than to an unhandled 500,

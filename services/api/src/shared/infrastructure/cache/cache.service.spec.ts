@@ -306,4 +306,74 @@ describe('CacheService', () => {
             expect(mockRedisClient.del).not.toHaveBeenCalled();
         });
     });
+
+    describe('hung store (2026-10-16: wedged client left every authed request pending)', () => {
+        const never = () => new Promise<never>(() => undefined);
+
+        beforeEach(() => {
+            jest.useFakeTimers();
+            jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+        });
+
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        it('times a hung get out as a miss instead of hanging the caller', async () => {
+            mockCacheManager.get.mockImplementation(never);
+
+            const pending = service.get('auth:blacklist:jti-1');
+            await jest.advanceTimersByTimeAsync(500);
+
+            await expect(pending).resolves.toBeUndefined();
+        });
+
+        it('times a hung set out without failing the caller', async () => {
+            mockCacheManager.set.mockImplementation(never);
+
+            const pending = service.set('program:detail:x', { a: 1 });
+            await jest.advanceTimersByTimeAsync(500);
+
+            await expect(pending).resolves.toBeUndefined();
+        });
+
+        it('times a hung del out without failing the caller', async () => {
+            mockCacheManager.del.mockImplementation(never);
+
+            const pending = service.invalidateKey('program:detail:x');
+            await jest.advanceTimersByTimeAsync(500);
+
+            await expect(pending).resolves.toBeUndefined();
+        });
+    });
+
+    describe('probe', () => {
+        it('passes when the written token reads back', async () => {
+            let stored: unknown;
+            mockCacheManager.set.mockImplementation(async (_key: string, value: unknown) => {
+                stored = value;
+            });
+            mockCacheManager.get.mockImplementation(async () => stored);
+
+            await expect(service.probe()).resolves.toBe(true);
+        });
+
+        it('fails on a swallowed store error, which get() would have reported as a plain miss', async () => {
+            mockCacheManager.set.mockResolvedValue(undefined);
+            mockCacheManager.get.mockResolvedValue(undefined);
+
+            await expect(service.probe()).resolves.toBe(false);
+        });
+
+        it('fails, rather than hanging, on a wedged client', async () => {
+            jest.useFakeTimers();
+            mockCacheManager.set.mockImplementation(() => new Promise<never>(() => undefined));
+
+            const pending = service.probe();
+            await jest.advanceTimersByTimeAsync(500);
+
+            await expect(pending).resolves.toBe(false);
+            jest.useRealTimers();
+        });
+    });
 });

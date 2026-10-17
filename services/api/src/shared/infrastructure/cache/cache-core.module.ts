@@ -5,7 +5,14 @@ import Keyv from 'keyv';
 import KeyvRedis from '@keyv/redis';
 import { CacheService } from './cache.service';
 import { CacheMetricsService } from './cache-metrics.service';
+import { CacheHealthService } from './cache-health.service';
 import { PrismaModule } from '../prisma/prisma.module';
+
+// KeyvRedis leaves connect() unbounded by default, and its first call happens
+// at boot. If Redis is unresolvable then (reboot ordering, 2026-10-16), that
+// connect is the one that wedged the client. Bounding it makes it throw instead,
+// which cache-manager and CacheService already degrade to a miss.
+const REDIS_CONNECT_TIMEOUT_MS = 5_000;
 
 /**
  * Minimal cache surface: the Redis-backed cache manager plus CacheService and
@@ -46,7 +53,7 @@ import { PrismaModule } from '../prisma/prisma.module';
         return {
           stores: [
             new Keyv({
-              store: new KeyvRedis(redisUrl),
+              store: new KeyvRedis(redisUrl, { connectionTimeout: REDIS_CONNECT_TIMEOUT_MS }),
               namespace: undefined, // Disable "keyv:" prefix — keys stored as-is so SCAN patterns match
               ttl: 300000, // 5 minutes default
             }),
@@ -57,7 +64,7 @@ import { PrismaModule } from '../prisma/prisma.module';
       isGlobal: true,
     }),
   ],
-  providers: [CacheService, CacheMetricsService],
-  exports: [NestCacheModule, CacheService, CacheMetricsService],
+  providers: [CacheService, CacheMetricsService, CacheHealthService],
+  exports: [NestCacheModule, CacheService, CacheMetricsService, CacheHealthService],
 })
 export class CacheCoreModule {}

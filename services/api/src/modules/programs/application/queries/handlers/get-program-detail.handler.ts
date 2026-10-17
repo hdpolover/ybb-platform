@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
-import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { GetProgramDetailQuery } from '../get-program-detail.query';
 import { CACHE_KEYS, CACHE_TTL } from '../../../../../shared/constants/cache-keys';
@@ -11,7 +11,9 @@ export class GetProgramDetailHandler {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    // CacheService, not CACHE_MANAGER: a raw `set` rejects on a Redis failure
+    // and would 500 this public route; CacheService degrades it to uncached.
+    private readonly cacheService: CacheService,
   ) { }
 
   /**
@@ -74,7 +76,7 @@ export class GetProgramDetailHandler {
     resourcesLimit = Number(resourcesLimit);
 
     // Try to get from cache
-    const cached = await this.cacheManager.get(cacheKey);
+    const cached = await this.cacheService.get(cacheKey);
     if (cached) {
       return cached;
     }
@@ -124,7 +126,7 @@ export class GetProgramDetailHandler {
     const result = await this.transformResponse(program, include);
 
     // Cache the result for 5 minutes
-    await this.cacheManager.set(cacheKey, result, CACHE_TTL.MEDIUM);
+    await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
 
     return result;
   }
