@@ -40,7 +40,21 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
             description: dto.description,
         });
 
-        const fallbackProgramApplication = dto.programId
+        // Never trust the client's programId: it must be a program this participant
+        // has an application in, otherwise fall back to their latest application.
+        const ownedProgramApplication = dto.programId
+            ? await this.prisma.participantApplication.findFirst({
+                where: {
+                    participantId: participant.id,
+                    programId: dto.programId,
+                    deletedAt: null,
+                },
+                select: {
+                    programId: true,
+                },
+            })
+            : null;
+        const fallbackProgramApplication = ownedProgramApplication
             ? null
             : await this.prisma.participantApplication.findFirst({
                 where: {
@@ -54,7 +68,7 @@ export class CreateSupportTicketHandler implements ICommandHandler<CreateSupport
                     programId: true,
                 },
             });
-        const resolvedProgramId = dto.programId ?? fallbackProgramApplication?.programId;
+        const resolvedProgramId = (ownedProgramApplication ?? fallbackProgramApplication)?.programId;
 
         const ticketNumber = await this.repository.generateTicketNumber();
 
