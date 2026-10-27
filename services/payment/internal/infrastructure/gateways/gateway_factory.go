@@ -3,6 +3,7 @@ package gateways
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/ybb-platform/payment/internal/domain/exceptions"
 	domainGateways "github.com/ybb-platform/payment/internal/domain/gateways"
@@ -17,7 +18,9 @@ type ConfigEntry struct {
 	BrandID   *string
 	ProgramID *string
 	IsActive  bool
-	Gateway   domainGateways.PaymentGateway
+	// DeactivatedAt is when an inactive DB config was switched off (nil if unknown or active).
+	DeactivatedAt *time.Time
+	Gateway       domainGateways.PaymentGateway
 }
 
 // scopeKey indexes active brand/program overrides: "brand|<provider>|<id>".
@@ -145,6 +148,15 @@ func (f *GatewayFactory) GetGatewayByConfigID(id string) (domainGateways.Payment
 		return nil, "", fmt.Errorf("%w: gateway config %s", exceptions.ErrUnsupportedGateway, id)
 	}
 	return e.Gateway, e.Provider, nil
+}
+
+// LookupConfig returns the snapshot entry for a config id (active or not), so
+// callers can look at IsActive/DeactivatedAt. Unknown or soft-deleted ids are absent.
+func (f *GatewayFactory) LookupConfig(id string) (ConfigEntry, bool) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	e, ok := f.byID[id]
+	return e, ok
 }
 
 func idPtr(id string) *string {

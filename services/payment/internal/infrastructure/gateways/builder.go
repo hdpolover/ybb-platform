@@ -58,7 +58,7 @@ func BuildEntries(env []EnvCredentials, dbConfigs []entities.GatewayConfig, warn
 		}
 		entries = append(entries, ConfigEntry{
 			ID: c.ID, Provider: c.Provider, BrandID: c.BrandID, ProgramID: c.ProgramID,
-			IsActive: c.IsActive, Gateway: gw,
+			IsActive: c.IsActive, DeactivatedAt: c.DeactivatedAt, Gateway: gw,
 		})
 	}
 	return entries

@@ -175,17 +175,22 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 	configID := c.Param("configId")
 	var gateway domainGateways.PaymentGateway
 	if configID != "" {
-		var provider string
-		gateway, provider, err = h.gatewayFactory.GetGatewayByConfigID(configID)
-		if err != nil {
+		entry, ok := h.gatewayFactory.LookupConfig(configID)
+		if !ok {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Unknown gateway config"})
 			return
 		}
-		if provider != gatewayName {
-			log.Printf("payment_webhook provider_mismatch request_id=%s url_gateway=%s config_id=%s config_provider=%s", requestID, gatewayName, configID, provider)
+		if entry.Provider != gatewayName {
+			log.Printf("payment_webhook provider_mismatch request_id=%s url_gateway=%s config_id=%s config_provider=%s", requestID, gatewayName, configID, entry.Provider)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Gateway does not match config"})
 			return
 		}
+		if !webhookConfigTrusted(entry, time.Now()) {
+			log.Printf("payment_webhook config_inactive request_id=%s config_id=%s deactivated_at=%v", requestID, configID, entry.DeactivatedAt)
+			c.JSON(http.StatusForbidden, gin.H{"error": "Gateway config is no longer active"})
+			return
+		}
+		gateway = entry.Gateway
 	} else {
 		gateway, err = h.gatewayFactory.GetGateway(gatewayName)
 		if err != nil {
@@ -308,6 +313,22 @@ func (h *PaymentHandler) handleTransactionWebhook(c *gin.Context, tx *entities.P
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// webhookInactiveGrace is how long after deactivation a config's callbacks are
+// still accepted, so payments in flight at rotation time can settle. Past it the
+// (possibly revoked) callback token is no longer trusted. Outbound calls for a
+// pinned transaction (cancel) are not subject to this.
+const webhookInactiveGrace = 72 * time.Hour
+
+// webhookConfigTrusted reports whether callbacks verified against e may be acted
+// on: active configs always, inactive ones only inside the grace window. An
+// inactive config with no recorded deactivation time is treated as long gone.
+func webhookConfigTrusted(e infraGateways.ConfigEntry, now time.Time) bool {
+	if e.IsActive {
+		return true
+	}
+	return e.DeactivatedAt != nil && now.Sub(*e.DeactivatedAt) <= webhookInactiveGrace
 }
 
 func webhookRouteMatchesTransaction(tx *entities.PaymentTransaction, routeConfigID string) bool {

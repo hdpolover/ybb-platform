@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/infrastructure/crypto"
@@ -116,12 +117,16 @@ func (r *GatewayConfigRepository) Update(ctx context.Context, cfg *entities.Gate
 				return err
 			}
 		}
+		if err := stampDeactivation(tx, encrypted); err != nil {
+			return err
+		}
 		return tx.Save(encrypted).Error
 	})
 	if err != nil {
 		return fmt.Errorf("failed to update gateway config: %w", err)
 	}
 	cfg.UpdatedAt = encrypted.UpdatedAt
+	cfg.DeactivatedAt = encrypted.DeactivatedAt
 	return nil
 }
 
@@ -138,8 +143,28 @@ func deactivateOtherActive(tx *gorm.DB, cfg *entities.GatewayConfig, exceptID st
 	if exceptID != "" {
 		q = q.Where("id <> ?", exceptID)
 	}
-	if err := q.Update("is_active", false).Error; err != nil {
+	if err := q.Updates(map[string]any{"is_active": false, "deactivated_at": time.Now()}).Error; err != nil {
 		return fmt.Errorf("deactivate other active configs for %q: %w", cfg.Provider, err)
+	}
+	return nil
+}
+
+// stampDeactivation keeps deactivated_at in step with is_active: set on a
+// true -> false flip, cleared on reactivation, untouched while the state is unchanged
+// (editing an already-inactive config must not restart its grace window).
+func stampDeactivation(tx *gorm.DB, cfg *entities.GatewayConfig) error {
+	if cfg.IsActive {
+		cfg.DeactivatedAt = nil
+		return nil
+	}
+	var was struct{ IsActive bool }
+	err := tx.Model(&entities.GatewayConfig{}).Select("is_active").Where("id = ?", cfg.ID).Take(&was).Error
+	if err != nil {
+		return fmt.Errorf("read current is_active for %s: %w", cfg.ID, err)
+	}
+	if was.IsActive {
+		now := time.Now()
+		cfg.DeactivatedAt = &now
 	}
 	return nil
 }

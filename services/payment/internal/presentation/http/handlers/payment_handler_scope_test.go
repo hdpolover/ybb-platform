@@ -27,7 +27,20 @@ type scopeFixture struct {
 	globalGW  *stubPaymentGateway
 	scopedGW  *stubPaymentGateway
 	scopedCfg infraGateways.ConfigEntry
+	factory   *infraGateways.GatewayFactory
 }
+
+// setScopedState re-snapshots the factory with the scoped config's activity changed.
+func (f *scopeFixture) setScopedState(active bool, deactivatedAt *time.Time) {
+	e := f.scopedCfg
+	e.IsActive, e.DeactivatedAt = active, deactivatedAt
+	f.factory.Replace([]infraGateways.ConfigEntry{
+		{Provider: "xendit", IsActive: true, Gateway: f.globalGW},
+		e,
+	})
+}
+
+func ago(d time.Duration) *time.Time { t := time.Now().Add(-d); return &t }
 
 // newScopeFixture wires a global xendit stub plus a program-scoped xendit stub
 // registered under scopedCfgID, and a pending tx pinned to pin (nil = global).
@@ -64,7 +77,7 @@ func newScopeFixture(pin *string) *scopeFixture {
 	r.POST("/payments/webhook/:gateway", h.HandleWebhook)
 	r.POST("/payments/webhook/:gateway/:configId", h.HandleWebhook)
 	r.POST("/payments/:id/cancel", h.CancelPayment)
-	return &scopeFixture{handler: h, txRepo: txRepo, intent: intentRepo, tx: tx, router: r, globalGW: globalGW, scopedGW: scopedGW, scopedCfg: scopedCfg}
+	return &scopeFixture{handler: h, txRepo: txRepo, intent: intentRepo, tx: tx, router: r, globalGW: globalGW, scopedGW: scopedGW, scopedCfg: scopedCfg, factory: factory}
 }
 
 func (f *scopeFixture) post(path string) *httptest.ResponseRecorder {
@@ -199,3 +212,48 @@ func http500() error { return errString("500 internal") }
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+func TestScopedWebhookInactiveWithinGraceAccepted(t *testing.T) {
+	f := newScopeFixture(pinTo(scopedCfgID))
+	f.setScopedState(false, ago(webhookInactiveGrace-time.Hour))
+	rec := f.post("/payments/webhook/xendit/" + scopedCfgID)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, entities.TransactionStatusSuccess, f.txRepo.updated.Status)
+}
+
+func TestScopedWebhookInactivePastGraceRejected(t *testing.T) {
+	f := newScopeFixture(pinTo(scopedCfgID))
+	f.setScopedState(false, ago(webhookInactiveGrace+time.Hour))
+	rec := f.post("/payments/webhook/xendit/" + scopedCfgID)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Nil(t, f.txRepo.updated)
+	require.Equal(t, entities.TransactionStatusPending, f.tx.Status)
+}
+
+// Inactive with no recorded deactivation time predates tracking: not trusted.
+func TestScopedWebhookInactiveWithoutTimestampRejected(t *testing.T) {
+	f := newScopeFixture(pinTo(scopedCfgID))
+	f.setScopedState(false, nil)
+	rec := f.post("/payments/webhook/xendit/" + scopedCfgID)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.Nil(t, f.txRepo.updated)
+}
+
+// An active config is never subject to the grace window, whatever stale timestamp it carries.
+func TestScopedWebhookActiveIgnoresDeactivatedAt(t *testing.T) {
+	f := newScopeFixture(pinTo(scopedCfgID))
+	f.setScopedState(true, ago(10*webhookInactiveGrace))
+	rec := f.post("/payments/webhook/xendit/" + scopedCfgID)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+// Outbound calls are not gated by the webhook grace: a long-inactive pinned
+// config must still be able to cancel its own pending transaction.
+func TestCancelOnLongInactivePinnedConfigStillWorks(t *testing.T) {
+	f := newScopeFixture(pinTo(scopedCfgID))
+	f.setScopedState(false, ago(10*webhookInactiveGrace))
+	f.globalGW.cancelErr = errString("500 would fail if global were used")
+	rec := f.post("/payments/" + f.tx.ID + "/cancel")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, entities.TransactionStatusVoid, f.tx.Status)
+}
