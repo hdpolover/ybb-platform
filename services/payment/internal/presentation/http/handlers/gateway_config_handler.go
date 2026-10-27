@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/domain/repositories"
 )
@@ -82,6 +83,7 @@ func (h *GatewayConfigHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.BrandID, req.ProgramID = normalizeScopeID(req.BrandID), normalizeScopeID(req.ProgramID)
 	if err := validateGatewayConfigRequest(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -131,7 +133,15 @@ func (h *GatewayConfigHandler) Update(c *gin.Context) {
 	existing.ClientKey = keepSecretIfMasked(req.ClientKey, existing.ClientKey)
 	existing.WebhookSecret = keepSecretIfMasked(req.WebhookSecret, existing.WebhookSecret)
 	existing.IsActive = req.IsActive
-	existing.BrandID = req.BrandID
+	// Scope is fixed at creation: an omitted scope keeps the stored one (a PUT that
+	// leaves brand_id out must not turn a brand override into a global config), and
+	// a different scope is a different config.
+	reqBrand, reqProgram := normalizeScopeID(req.BrandID), normalizeScopeID(req.ProgramID)
+	if (reqBrand != nil && !sameScopeID(reqBrand, existing.BrandID)) ||
+		(reqProgram != nil && !sameScopeID(reqProgram, existing.ProgramID)) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "scope cannot be changed; create a new gateway config instead"})
+		return
+	}
 	if err := validateGatewayConfigRequest(existing); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -204,6 +214,27 @@ func (h *GatewayConfigHandler) Delete(c *gin.Context) {
 		return
 	}
 
+	// Scoped overrides: the global config keeps serving the provider, so payment
+	// methods are irrelevant. Only block while PENDING transactions are pinned to
+	// this config, since they still need its credentials to be verified/cancelled.
+	if existing.BrandID != nil || existing.ProgramID != nil {
+		pending, err := h.repo.CountPendingTransactions(ctx, existing.ID)
+		if err != nil {
+			log.Printf("gateway_config_delete check_pending error id=%s: %v", existing.ID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if pending > 0 {
+			c.JSON(http.StatusConflict, gin.H{
+				"error":                "Cannot delete: pending transactions are still pinned to this gateway config",
+				"pending_transactions": pending,
+			})
+			return
+		}
+		h.deleteConfig(c)
+		return
+	}
+
 	// Referential guard: refuse to delete while any payment method still uses
 	// this provider, otherwise payments using those methods would fail at
 	// charge time with a confusing "no active config" error.
@@ -222,12 +253,32 @@ func (h *GatewayConfigHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.repo.Delete(ctx, c.Param("id")); err != nil {
+	h.deleteConfig(c)
+}
+
+func (h *GatewayConfigHandler) deleteConfig(c *gin.Context) {
+	if err := h.repo.Delete(c.Request.Context(), c.Param("id")); err != nil {
 		log.Printf("gateway_config_delete error id=%s: %v", c.Param("id"), err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Deleted successfully"})
+}
+
+// normalizeScopeID turns a blank scope id into nil so it is stored as NULL.
+func normalizeScopeID(id *string) *string {
+	if id == nil || strings.TrimSpace(*id) == "" {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*id)
+	return &trimmed
+}
+
+func sameScopeID(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return strings.EqualFold(*a, *b)
 }
 
 // secretMaskPrefix marks a value that has been redacted for a read response.
@@ -274,6 +325,16 @@ func validateGatewayConfigRequest(cfg *entities.GatewayConfig) error {
 
 	if provider == "" {
 		return badRequestError("provider is required")
+	}
+	if cfg.BrandID != nil && cfg.ProgramID != nil {
+		return badRequestError("a gateway config can be scoped to a brand or a program, not both")
+	}
+	for _, id := range []*string{cfg.BrandID, cfg.ProgramID} {
+		if id != nil {
+			if _, err := uuid.Parse(*id); err != nil {
+				return badRequestError("brand_id and program_id must be valid UUIDs")
+			}
+		}
 	}
 	if mode != "sandbox" && mode != "production" {
 		return badRequestError("mode must be sandbox or production")

@@ -15,6 +15,14 @@ type GatewayConfigRepository interface {
 	// FindActive returns only active configs — used at startup to build the gateway factory.
 	FindActive(ctx context.Context) ([]entities.GatewayConfig, error)
 
+	// FindAllRuntime returns every non-deleted config, active or not, with
+	// credentials decrypted. Rows that fail to decrypt are skipped and logged so
+	// one bad row cannot take every gateway down. Used to build the runtime snapshot.
+	FindAllRuntime(ctx context.Context) ([]entities.GatewayConfig, error)
+
+	// CountPendingTransactions counts PENDING transactions pinned to the config.
+	CountPendingTransactions(ctx context.Context, id string) (int64, error)
+
 	// FindByProvider returns the active config for a specific provider name (e.g. "xendit").
 	FindByProvider(ctx context.Context, provider string) (*entities.GatewayConfig, error)
 
@@ -22,12 +30,12 @@ type GatewayConfigRepository interface {
 	FindByID(ctx context.Context, id string) (*entities.GatewayConfig, error)
 
 	// Create persists a new gateway config. If cfg.IsActive is true, any other
-	// active rows for the same provider are flipped to inactive in the same
-	// transaction to preserve the one-active-per-provider invariant.
+	// active rows for the same provider and scope are flipped to inactive in the same
+	// transaction to preserve the one-active-per-(provider, scope) invariant.
 	Create(ctx context.Context, cfg *entities.GatewayConfig) error
 
 	// Update saves changes to an existing gateway config. If the post-update
-	// row has IsActive=true, other active rows for the same provider are
+	// row has IsActive=true, other active rows for the same provider and scope are
 	// deactivated within the same transaction.
 	Update(ctx context.Context, cfg *entities.GatewayConfig) error
 

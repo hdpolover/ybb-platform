@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/infrastructure/crypto"
@@ -87,7 +88,7 @@ func (r *GatewayConfigRepository) Create(ctx context.Context, cfg *entities.Gate
 	}
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if encrypted.IsActive {
-			if err := deactivateOtherActive(tx, encrypted.Provider, ""); err != nil {
+			if err := deactivateOtherActive(tx, encrypted, ""); err != nil {
 				return err
 			}
 		}
@@ -111,7 +112,7 @@ func (r *GatewayConfigRepository) Update(ctx context.Context, cfg *entities.Gate
 	}
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if encrypted.IsActive {
-			if err := deactivateOtherActive(tx, encrypted.Provider, encrypted.ID); err != nil {
+			if err := deactivateOtherActive(tx, encrypted, encrypted.ID); err != nil {
 				return err
 			}
 		}
@@ -124,19 +125,61 @@ func (r *GatewayConfigRepository) Update(ctx context.Context, cfg *entities.Gate
 	return nil
 }
 
-// deactivateOtherActive flips is_active=false on every row for `provider`
-// except `exceptID` (pass "" when creating a new row). Called inside a
+// deactivateOtherActive flips is_active=false on every row sharing cfg's
+// provider AND scope (global / one brand / one program) except `exceptID`
+// (pass "" when creating a new row). Scoped overrides coexist with the global
+// config, so activating one scope must never touch another. Called inside a
 // transaction so the partial unique index never sees two active rows at once.
-func deactivateOtherActive(tx *gorm.DB, provider, exceptID string) error {
+func deactivateOtherActive(tx *gorm.DB, cfg *entities.GatewayConfig, exceptID string) error {
 	q := tx.Model(&entities.GatewayConfig{}).
-		Where("provider = ? AND is_active = true", provider)
+		Where("provider = ? AND is_active = true", cfg.Provider)
+	q = scopeEquals(q, "brand_id", cfg.BrandID)
+	q = scopeEquals(q, "program_id", cfg.ProgramID)
 	if exceptID != "" {
 		q = q.Where("id <> ?", exceptID)
 	}
 	if err := q.Update("is_active", false).Error; err != nil {
-		return fmt.Errorf("deactivate other active configs for %q: %w", provider, err)
+		return fmt.Errorf("deactivate other active configs for %q: %w", cfg.Provider, err)
 	}
 	return nil
+}
+
+func scopeEquals(q *gorm.DB, column string, id *string) *gorm.DB {
+	if id == nil || *id == "" {
+		return q.Where(column + " IS NULL")
+	}
+	return q.Where(column+" = ?", *id)
+}
+
+// FindAllRuntime returns every non-deleted config (inactive included, so a
+// pinned transaction can still reach a config that was rotated out). Rows that
+// fail to decrypt are skipped with a log line rather than failing the load.
+func (r *GatewayConfigRepository) FindAllRuntime(ctx context.Context) ([]entities.GatewayConfig, error) {
+	var configs []entities.GatewayConfig
+	if err := r.db.WithContext(ctx).Order("created_at asc").Find(&configs).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch gateway configs: %w", err)
+	}
+	usable := make([]entities.GatewayConfig, 0, len(configs))
+	for _, c := range configs {
+		if err := r.decryptInPlace(&c); err != nil {
+			log.Printf("gateway_config runtime load: skipping config: %v", err)
+			continue
+		}
+		usable = append(usable, c)
+	}
+	return usable, nil
+}
+
+// CountPendingTransactions counts PENDING transactions pinned to the config.
+func (r *GatewayConfigRepository) CountPendingTransactions(ctx context.Context, id string) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Table("payment_transactions").
+		Where("gateway_config_id = ? AND status = ?", id, string(entities.TransactionStatusPending)).
+		Count(&n).Error
+	if err != nil {
+		return 0, fmt.Errorf("count pending transactions for gateway config %s: %w", id, err)
+	}
+	return n, nil
 }
 
 func (r *GatewayConfigRepository) Delete(ctx context.Context, id string) error {
