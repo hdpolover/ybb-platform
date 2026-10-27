@@ -20,6 +20,9 @@ type GatewayConfig struct {
 	WebhookSecret string  `gorm:"type:text" json:"webhook_secret"`
 
 	IsActive bool `gorm:"not null;default:true" json:"is_active"`
+	// DeactivatedAt is set by the repository when is_active flips true -> false and
+	// cleared on reactivation. NULL on an inactive row means "deactivated before we tracked it".
+	DeactivatedAt *time.Time `gorm:"column:deactivated_at" json:"deactivated_at,omitempty"`
 
 	CreatedAt time.Time      `gorm:"not null;default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"not null;default:CURRENT_TIMESTAMP" json:"updated_at"`
