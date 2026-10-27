@@ -1881,6 +1881,7 @@ export type GatewayMode = "sandbox" | "production";
 export type GatewayConfig = {
   id: string;
   brand_id: string | null;
+  program_id: string | null;
   provider: GatewayProvider;
   mode: GatewayMode;
   server_key: string;
@@ -1899,6 +1900,7 @@ export type CreateGatewayConfigInput = {
   webhook_secret?: string;
   is_active?: boolean;
   brand_id?: string;
+  program_id?: string;
 };
 
 export type UpdateGatewayConfigInput = Partial<CreateGatewayConfigInput>;
