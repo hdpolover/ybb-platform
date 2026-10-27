@@ -49,6 +49,7 @@ import { ReportingModule } from '@modules/reporting/reporting.module';
 import { AdminsModule } from '@modules/admins/admins.module';
 import { EmailTemplatesModule } from '@modules/email-templates/email-templates.module';
 import { PlatformSettingsModule } from '@modules/platform-settings/platform-settings.module';
+import { CheckoutModule } from '@modules/checkout/checkout.module';
 
 @Module({
   imports: [
@@ -160,6 +161,7 @@ import { PlatformSettingsModule } from '@modules/platform-settings/platform-sett
     AdminsModule,
     PlatformSettingsModule,
     ReadinessModule,
+    CheckoutModule,
   ],
   controllers: [CacheController, MetricsController, QueueController],
 })
