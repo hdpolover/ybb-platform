@@ -16,6 +16,7 @@ import type { Miscellaneous } from "@/app/components/participants/tabs/Miscellan
 import type { Essay } from "@/app/components/participants/tabs/EssaysTab";
 import { listApplications, getApplication, createSupportImpersonation, type Application } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
+import { getMiscExtraFields } from "@/lib/misc-extra-fields";
 import { Button } from "@/src/ui/button";
 import { Input } from "@/src/ui/input";
 import { Label } from "@/src/ui/label";
@@ -133,6 +134,7 @@ function mapToParticipantData(app: Application): ParticipantData {
       twibbon: app.twibbonLink ?? "—",
       requirementLink: app.requirementLink ?? "—",
       referralCode: p?.referralCode ?? "—",
+      extraFields: getMiscExtraFields(app.submissionForm?.sections),
     },
     essays: app.essays ?? [],
   };
