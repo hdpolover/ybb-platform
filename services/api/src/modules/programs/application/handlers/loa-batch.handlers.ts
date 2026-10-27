@@ -25,7 +25,11 @@ import {
   GetLoaBatchRecipientSendsQuery,
   SearchLoaSendsQuery,
 } from '../queries/loa-batch.queries';
-import { LoaRecipientSendResponseDto, LoaSendSearchResultDto } from '../dto/loa-batch.dto';
+import {
+  LoaDeliveryFieldsDto,
+  LoaRecipientSendResponseDto,
+  LoaSendSearchResultDto,
+} from '../dto/loa-batch.dto';
 import { Prisma } from '@prisma/client';
 import { assertProgramContentAccess } from '../../application/utils/program-content-access.util';
 
@@ -60,6 +64,56 @@ import { endOfWibDay, startOfWibDay } from '@shared/utils/wib-time';
 // ─── LOA_DOCUMENT_TYPE ────────────────────────────────────────────────────────
 // ParticipantDocument.type is a plain string column — no Prisma enum.
 const LOA_DOCUMENT_TYPE = 'letter_of_acceptance';
+
+type DeliveryRow = {
+  deliveryStatus: string | null;
+  deliveredAt: Date | null;
+  bouncedAt: Date | null;
+  bounceType: string | null;
+  complainedAt: Date | null;
+  deliveryUpdatedAt: Date | null;
+};
+
+/** One query for every participant's LOA download state in a program. */
+async function loadDownloadsByParticipant(
+  prisma: PrismaService,
+  programId: string,
+  participantIds: string[],
+): Promise<Map<string, { downloadCount: number; firstDownloadedAt: Date | null }>> {
+  const docs = await prisma.participantDocument.findMany({
+    where: { type: LOA_DOCUMENT_TYPE, application: { programId, participantId: { in: participantIds } } },
+    select: { downloadCount: true, firstDownloadedAt: true, application: { select: { participantId: true } } },
+  });
+  const byParticipant = new Map<string, { downloadCount: number; firstDownloadedAt: Date | null }>();
+  for (const doc of docs) {
+    const prev = byParticipant.get(doc.application.participantId);
+    const first =
+      prev?.firstDownloadedAt && doc.firstDownloadedAt
+        ? (prev.firstDownloadedAt < doc.firstDownloadedAt ? prev.firstDownloadedAt : doc.firstDownloadedAt)
+        : (prev?.firstDownloadedAt ?? doc.firstDownloadedAt);
+    byParticipant.set(doc.application.participantId, {
+      downloadCount: (prev?.downloadCount ?? 0) + doc.downloadCount,
+      firstDownloadedAt: first,
+    });
+  }
+  return byParticipant;
+}
+
+function deliveryFields(
+  send: DeliveryRow,
+  download: { downloadCount: number; firstDownloadedAt: Date | null } | undefined,
+): LoaDeliveryFieldsDto {
+  return {
+    deliveryStatus: send.deliveryStatus as LoaDeliveryFieldsDto['deliveryStatus'],
+    deliveredAt: send.deliveredAt,
+    bouncedAt: send.bouncedAt,
+    bounceType: send.bounceType,
+    complainedAt: send.complainedAt,
+    deliveryUpdatedAt: send.deliveryUpdatedAt,
+    downloadCount: download?.downloadCount ?? 0,
+    firstDownloadedAt: download?.firstDownloadedAt ?? null,
+  };
+}
 
 // Rows per user_notifications INSERT. Each row binds ~8 parameters and
 // Postgres caps a statement at 65535, so this keeps a large release well
@@ -540,6 +594,11 @@ export class SearchLoaSendsHandler implements IQueryHandler<SearchLoaSendsQuery>
       select: { id: true, fullName: true },
     });
     const nameById = new Map(participants.map((p) => [p.id, p.fullName]));
+    const downloads = await loadDownloadsByParticipant(
+      this.prisma,
+      programId,
+      sends.map((send) => send.participantId),
+    );
 
     return sends.map((send) => ({
       id: send.id,
@@ -553,6 +612,7 @@ export class SearchLoaSendsHandler implements IQueryHandler<SearchLoaSendsQuery>
       errorMessage: send.errorMessage,
       attemptCount: send.attemptCount,
       sentAt: send.sentAt,
+      ...deliveryFields(send, downloads.get(send.participantId)),
     }));
   }
 }
@@ -586,15 +646,18 @@ export class GetLoaBatchRecipientSendsHandler
       this.summariseUncoveredParticipants(programId),
     ]);
 
-    const recipients = await this.attachParticipantNames(sends);
+    const recipients = await this.attachParticipantNames(programId, sends);
 
     const summary = sends.reduce(
       (counts, send) => ({
         ...counts,
         total: counts.total + 1,
         [send.status]: (counts[send.status as 'pending' | 'sent' | 'failed'] ?? 0) + 1,
+        delivered: counts.delivered + (send.deliveryStatus === 'delivered' ? 1 : 0),
+        bounced: counts.bounced + (send.deliveryStatus === 'bounced' ? 1 : 0),
+        complained: counts.complained + (send.deliveryStatus === 'complained' ? 1 : 0),
       }),
-      { total: 0, pending: 0, sent: 0, failed: 0 },
+      { total: 0, pending: 0, sent: 0, failed: 0, delivered: 0, bounced: 0, complained: 0 },
     );
 
     return {
@@ -616,7 +679,8 @@ export class GetLoaBatchRecipientSendsHandler
    * relation, so the new table needs no foreign key to participants.
    */
   private async attachParticipantNames(
-    sends: Array<{
+    programId: string,
+    sends: Array<DeliveryRow & {
       participantId: string;
       email: string;
       status: string;
@@ -635,6 +699,11 @@ export class GetLoaBatchRecipientSendsHandler
       select: { id: true, fullName: true },
     });
     const nameById = new Map(participants.map((p) => [p.id, p.fullName]));
+    const downloads = await loadDownloadsByParticipant(
+      this.prisma,
+      programId,
+      sends.map((send) => send.participantId),
+    );
 
     return sends.map((send) => ({
       participantId: send.participantId,
@@ -647,6 +716,7 @@ export class GetLoaBatchRecipientSendsHandler
       errorMessage: send.errorMessage,
       attemptCount: send.attemptCount,
       sentAt: send.sentAt,
+      ...deliveryFields(send, downloads.get(send.participantId)),
     }));
   }
 

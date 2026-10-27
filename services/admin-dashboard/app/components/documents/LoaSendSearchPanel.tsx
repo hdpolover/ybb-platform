@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/src/ui/table";
+import { LoaDeliveryBadge } from "./LoaDeliveryBadge";
 import { EmptyState } from "@/src/admin/empty-state";
 
 // Mirrors SearchLoaSendsQueryDto in services/api.
@@ -100,6 +101,7 @@ export function LoaSendSearchPanel({ programId }: { programId: string }) {
               <TableHead>Batch</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Sent</TableHead>
+              <TableHead>Delivery</TableHead>
               <TableHead>Message ID</TableHead>
             </TableRow>
           </TableHeader>
@@ -114,6 +116,9 @@ export function LoaSendSearchPanel({ programId }: { programId: string }) {
                 </TableCell>
                 <TableCell className="text-sm text-zinc-500">
                   {row.sentAt ? formatDateTime(row.sentAt) : "—"}
+                </TableCell>
+                <TableCell>
+                  <LoaDeliveryBadge row={row} />
                 </TableCell>
                 <TableCell className="max-w-[16rem] text-sm text-zinc-500">
                   {row.errorMessage ? (

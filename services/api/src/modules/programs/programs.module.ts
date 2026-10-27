@@ -130,6 +130,7 @@ import { UpdateExchangeRateHandler } from './application/commands/handlers/updat
 import { ProgramContentRepository } from './infrastructure/persistence/program-content.repository';
 import { ProgramRepository } from './infrastructure/persistence/program.repository';
 import { LoaReleaseBatchRepository } from './infrastructure/persistence/loa-release-batch.repository';
+import { ResendWebhookController } from './presentation/resend-webhook.controller';
 import { LoaBatchRecipientSendRepository } from './infrastructure/persistence/loa-batch-recipient-send.repository';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
@@ -171,6 +172,7 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
     ProgramFormFieldsController,
     ProgramScoringController,
     ProgramCopyController,
+    ResendWebhookController,
   ],
   providers: [
     ListProgramsHandler,

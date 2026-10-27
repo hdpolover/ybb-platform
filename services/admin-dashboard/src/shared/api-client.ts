@@ -4654,10 +4654,27 @@ export function upsertApplicationReview(
 }
 
 /**
+ * Resend webhook verdict + LOA download state, shared by the batch dialog and
+ * the email search. Mirrors LoaDeliveryFieldsDto (services/api). All dates are
+ * ISO strings; deliveryStatus is null until a webhook has reported.
+ */
+export type LoaDeliveryFields = {
+  deliveryStatus: "delivered" | "bounced" | "complained" | "delayed" | null;
+  deliveredAt: string | null;
+  bouncedAt: string | null;
+  bounceType: string | null;
+  complainedAt: string | null;
+  deliveryUpdatedAt: string | null;
+  /** 0 = the participant has never downloaded the letter. */
+  downloadCount: number;
+  firstDownloadedAt: string | null;
+};
+
+/**
  * Per-recipient delivery status for one LOA release batch.
  * Mirrors GetLoaBatchRecipientSendsHandler (services/api).
  */
-export type LoaRecipientSend = {
+export type LoaRecipientSend = LoaDeliveryFields & {
   participantId: string;
   participantName: string;
   /** The address the email was actually addressed to, as of release time. */
@@ -4688,7 +4705,15 @@ export type LoaBatchRecipientSends = {
   batchId: string;
   /** False for batches released before per-recipient logging existed. */
   hasSendLog: boolean;
-  summary: { total: number; pending: number; sent: number; failed: number };
+  summary: {
+    total: number;
+    pending: number;
+    sent: number;
+    failed: number;
+    delivered: number;
+    bounced: number;
+    complained: number;
+  };
   recipients: LoaRecipientSend[];
   /** True total; `uncoveredParticipants` below is capped at 100. */
   uncoveredParticipantCount: number;
@@ -4711,7 +4736,7 @@ export function getLoaBatchRecipientSends(
  * One row of the program-wide email lookup. Mirrors LoaSendSearchResultDto
  * (services/api); the endpoint returns a bare array (unwrapped from `data`).
  */
-export type LoaSendSearchResult = {
+export type LoaSendSearchResult = LoaDeliveryFields & {
   id: string;
   batchId: string;
   batchName: string;

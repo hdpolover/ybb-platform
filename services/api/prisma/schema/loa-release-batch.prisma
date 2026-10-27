@@ -74,13 +74,27 @@ model LoaBatchRecipientSend {
   attemptCount Int @default(0) @map("attempt_count")
 
   sentAt    DateTime? @map("sent_at") @db.Timestamptz(6)
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Resend delivery webhook state (POST /v1/webhooks/resend). `status` above
+  // only says Resend ACCEPTED the message; these say what happened after.
+  // 'delivered' | 'bounced' | 'complained' | 'delayed', null until a webhook
+  // lands. Plain varchar for the same reason as `status`.
+  deliveryStatus    String?   @map("delivery_status") @db.VarChar(20)
+  deliveredAt       DateTime? @map("delivered_at") @db.Timestamptz(6)
+  bouncedAt         DateTime? @map("bounced_at") @db.Timestamptz(6)
+  bounceType        String?   @map("bounce_type") @db.Text
+  complainedAt      DateTime? @map("complained_at") @db.Timestamptz(6)
+  // created_at of the newest webhook event applied; older events are dropped.
+  deliveryUpdatedAt DateTime? @map("delivery_updated_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   batch LoaReleaseBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
 
   @@unique([batchId, participantId], map: "loa_batch_recipient_sends_batch_participant_key")
   @@index([batchId, status])
+  @@index([providerMessageId], map: "loa_batch_recipient_sends_provider_message_id_idx")
   @@index([programId])
   @@map("loa_batch_recipient_sends")
 }

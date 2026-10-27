@@ -41,18 +41,31 @@ const row = {
   errorMessage: null,
   attemptCount: 1,
   sentAt: new Date('2026-02-01'),
+  deliveryStatus: 'complained',
+  deliveredAt: new Date('2026-02-01'),
+  bouncedAt: null,
+  bounceType: null,
+  complainedAt: new Date('2026-02-02'),
+  deliveryUpdatedAt: new Date('2026-02-02'),
 };
 
 describe('SearchLoaSendsHandler', () => {
   let handler: SearchLoaSendsHandler;
   let sendRepo: { searchByEmail: jest.Mock };
-  let prisma: { participant: { findMany: jest.Mock } };
+  let prisma: { participant: { findMany: jest.Mock }; participantDocument: { findMany: jest.Mock } };
   let programRepo: { findBySlug: jest.Mock };
   let readPrisma: any;
 
   beforeEach(async () => {
     sendRepo = { searchByEmail: jest.fn().mockResolvedValue([row]) };
-    prisma = { participant: { findMany: jest.fn().mockResolvedValue([{ id: 'p-1', fullName: 'Ada L' }]) } };
+    prisma = {
+      participant: { findMany: jest.fn().mockResolvedValue([{ id: 'p-1', fullName: 'Ada L' }]) },
+      participantDocument: {
+        findMany: jest.fn().mockResolvedValue([
+          { downloadCount: 3, firstDownloadedAt: new Date('2026-02-04'), application: { participantId: 'p-1' } },
+        ]),
+      },
+    };
     programRepo = { findBySlug: jest.fn().mockResolvedValue({ id: 'prog-1' }) };
     readPrisma = {
       admin: { findUnique: jest.fn().mockResolvedValue(platformAdmin) },
@@ -96,6 +109,14 @@ describe('SearchLoaSendsHandler', () => {
       errorMessage: null,
       attemptCount: 1,
       sentAt: row.sentAt,
+      deliveryStatus: 'complained',
+      deliveredAt: row.deliveredAt,
+      bouncedAt: null,
+      bounceType: null,
+      complainedAt: row.complainedAt,
+      deliveryUpdatedAt: row.deliveryUpdatedAt,
+      downloadCount: 3,
+      firstDownloadedAt: new Date('2026-02-04'),
     });
   });
 
