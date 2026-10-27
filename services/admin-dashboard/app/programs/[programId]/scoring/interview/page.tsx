@@ -5,7 +5,7 @@ import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { exportApplicationsExcel } from "@/src/shared/api-client";
 import { InterviewParticipantsHeader } from "@/app/components/scoring/InterviewParticipantsHeader";
-import { InterviewParticipantsTable } from "@/app/components/scoring/InterviewParticipantsTable";
+import { InterviewParticipantsTable, INTERVIEW_TAB_SCORE_STATUSES } from "@/app/components/scoring/InterviewParticipantsTable";
 
 export default function InterviewScoringPage({
   params,
@@ -39,7 +39,7 @@ export default function InterviewScoringPage({
       await exportApplicationsExcel({
         brandId: resolvedBrandId,
         programId: resolvedProgramId,
-        status: "interview_scheduled",
+        scoreStatus: [...INTERVIEW_TAB_SCORE_STATUSES],
       });
     } catch (err) {
       setExportError(err instanceof Error ? err.message : "Export failed");

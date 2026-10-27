@@ -288,13 +288,30 @@ export class ApplicationsController {
     }
   }
 
+  /**
+   * `scoreStatus` accepts one value, a comma-separated list, or a repeated
+   * param. One value stays a plain string so existing callers and cache keys
+   * are unchanged; several become an array.
+   */
+  private parseScoreStatus(raw?: string | string[]): ScoreStatus | ScoreStatus[] | undefined {
+    if (raw === undefined) return undefined;
+    const values = (Array.isArray(raw) ? raw : [raw])
+      .flatMap((v) => String(v).split(','))
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (values.length === 0 || values.some((v) => !ApplicationsController.SCORE_STATUS_VALUES.has(v as ScoreStatus))) {
+      throw new BadRequestException('Invalid scoreStatus value.');
+    }
+    const unique = [...new Set(values)] as ScoreStatus[];
+    return unique.length === 1 ? unique[0] : unique;
+  }
+
   private validateListFilters(params: {
     sortBy?: string;
     sortOrder?: string;
     category?: string;
     registrationPaymentStatus?: string;
     programPaymentStatus?: string;
-    scoreStatus?: string;
   }): void {
     if (params.sortBy && !ApplicationsController.SORT_BY_VALUES.has(params.sortBy as ListApplicationsSortBy)) {
       throw new BadRequestException('Invalid sortBy value.');
@@ -320,13 +337,6 @@ export class ApplicationsController {
       !ApplicationsController.PAYMENT_STATUS_VALUES.has(params.programPaymentStatus as PaymentStatus)
     ) {
       throw new BadRequestException('Invalid programPaymentStatus value.');
-    }
-
-    if (
-      params.scoreStatus &&
-      !ApplicationsController.SCORE_STATUS_VALUES.has(params.scoreStatus as ScoreStatus)
-    ) {
-      throw new BadRequestException('Invalid scoreStatus value.');
     }
   }
 
@@ -400,12 +410,13 @@ export class ApplicationsController {
     @Query('programPaymentStatus') programPaymentStatus?: PaymentStatus,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
-    @Query('scoreStatus') scoreStatus?: ScoreStatus,
+    @Query('scoreStatus') rawScoreStatus?: string | string[],
     @Req() req?: { user?: { adminId?: string } },
   ): Promise<StreamableFile> {
     this.logger.log(`Exporting applications: brandId=${brandId}, programId=${programId}`);
     this.validateDateRange(startDate, endDate);
-    this.validateListFilters({ scoreStatus, registrationPaymentStatus, programPaymentStatus });
+    this.validateListFilters({ registrationPaymentStatus, programPaymentStatus });
+    const scoreStatus = this.parseScoreStatus(rawScoreStatus);
 
     const scoped = await this.resolveScopedFilters(req ?? {}, brandId, programId);
 
@@ -457,7 +468,7 @@ export class ApplicationsController {
     @Query('country') country?: string,
     @Query('registrationPaymentStatus') registrationPaymentStatus?: PaymentStatus,
     @Query('programPaymentStatus') programPaymentStatus?: PaymentStatus,
-    @Query('scoreStatus') scoreStatus?: ScoreStatus,
+    @Query('scoreStatus') rawScoreStatus?: string | string[],
     @Query('sortBy') sortBy?: ListApplicationsSortBy,
     @Query('sortOrder') sortOrder?: ListApplicationsSortOrder,
     @Query('startDate') startDate?: string,
@@ -474,8 +485,8 @@ export class ApplicationsController {
       category,
       registrationPaymentStatus,
       programPaymentStatus,
-      scoreStatus,
     });
+    const scoreStatus = this.parseScoreStatus(rawScoreStatus);
 
     const scoped = await this.resolveScopedFilters(req ?? {}, brandId, programId);
     if (scoped.programIds) {

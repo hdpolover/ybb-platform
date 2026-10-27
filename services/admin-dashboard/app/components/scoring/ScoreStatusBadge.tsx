@@ -4,12 +4,8 @@
 /**
  * Score-status badge for the real `ScoreStatus` enum (pending / scored /
  * go_to_interview / rejected / finalist / not_selected). Shared by the
- * fully-funded participants table and the review queue header so both
+ * fully-funded participants table, interview table and the review queue header so both
  * surfaces agree on the same labels/colors instead of drifting.
- *
- * NOTE: InterviewParticipantsTable.tsx has its own local `ScoreStatusBadge`,
- * but it's keyed on "High"/"Medium"/"Low" — unrelated display values, not
- * this enum — so it isn't reusable here.
  */
 export function ScoreStatusBadge({ status }: { status: string | null }) {
   const labels: Record<string, string> = {
