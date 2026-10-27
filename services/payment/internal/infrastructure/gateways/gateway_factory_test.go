@@ -191,3 +191,16 @@ func TestResolveDuringReplaceNeverFails(t *testing.T) {
 		t.Fatalf("resolve failed during replace: %v", err)
 	}
 }
+
+func TestHasProviderAnyScope(t *testing.T) {
+	f := NewGatewayFactory()
+	f.Replace([]ConfigEntry{
+		entry("", "xendit", "env", nil, nil, true),
+		entry("b1cfg", "midtrans", "brand", str("b1"), nil, true),
+		entry("p1cfg", "stripe", "program-inactive", nil, str("p1"), false),
+	})
+	require.True(t, f.HasProvider("xendit"), "global/env")
+	require.True(t, f.HasProvider("midtrans"), "brand-only active config")
+	require.False(t, f.HasProvider("stripe"), "inactive scoped config does not count")
+	require.False(t, f.HasProvider("paypal"))
+}

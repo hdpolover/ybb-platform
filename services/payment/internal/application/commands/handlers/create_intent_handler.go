@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -34,6 +35,9 @@ func (h *CreateIntentHandler) Handle(ctx context.Context, cmd *commands.CreateIn
 
 	if existing != nil {
 		if existing.Amount == cmd.Amount && existing.Currency == cmd.Currency {
+			if err := h.patchGatewayScope(ctx, existing, cmd.Metadata); err != nil {
+				return nil, err
+			}
 			return &dto.CreateIntentResponse{
 				IntentID:     existing.ID,
 				ClientSecret: existing.ClientSecret,
@@ -72,6 +76,9 @@ func (h *CreateIntentHandler) Handle(ctx context.Context, cmd *commands.CreateIn
 			// intent the caller would charge for a different amount.
 			raced, findErr := h.intentRepo.FindOpenByReference(ctx, cmd.ReferenceType, cmd.ReferenceID)
 			if findErr == nil && raced != nil && raced.Amount == cmd.Amount && raced.Currency == cmd.Currency {
+				if err := h.patchGatewayScope(ctx, raced, cmd.Metadata); err != nil {
+					return nil, err
+				}
 				return &dto.CreateIntentResponse{
 					IntentID:     raced.ID,
 					ClientSecret: raced.ClientSecret,
@@ -89,4 +96,40 @@ func (h *CreateIntentHandler) Handle(ctx context.Context, cmd *commands.CreateIn
 		ClientSecret: intent.ClientSecret,
 		Status:       string(intent.Status),
 	}, nil
+}
+
+// patchGatewayScope copies program_id/brand_id from the incoming request into a
+// reused intent's metadata. Older intents were created before brand_id was sent,
+// and the scope decides which gateway config charges them. Only non-empty values
+// that differ are written; everything else in the metadata is left alone.
+func (h *CreateIntentHandler) patchGatewayScope(ctx context.Context, intent *entities.PaymentIntent, incoming map[string]interface{}) error {
+	current := map[string]interface{}{}
+	if len(intent.Metadata) > 0 {
+		if err := json.Unmarshal(intent.Metadata, &current); err != nil || current == nil {
+			current = map[string]interface{}{}
+		}
+	}
+
+	changed := false
+	for _, key := range []string{"program_id", "brand_id"} {
+		v, ok := incoming[key].(string)
+		if !ok || v == "" || current[key] == v {
+			continue
+		}
+		current[key] = v
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+
+	raw, err := json.Marshal(current)
+	if err != nil {
+		return fmt.Errorf("failed to encode payment intent metadata: %w", err)
+	}
+	intent.Metadata = raw
+	if err := h.intentRepo.Update(ctx, intent); err != nil {
+		return fmt.Errorf("failed to update payment intent metadata: %w", err)
+	}
+	return nil
 }

@@ -268,8 +268,22 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		chargeFee = math.Max(chargeTotal-chargeSubtotal, 0)
 	}
 
+	// Resolve the gateway before creating the transaction so a config error leaves
+	// no orphan PENDING row. Manual methods never reach a gateway here.
+	var gateway gateways.PaymentGateway
+	var gatewayConfigID *string
+	if !method.Type.IsManual() {
+		programID, brandID := services.GatewayScopeFromMetadata(intent.Metadata)
+		gateway, gatewayConfigID, err = s.gatewayFact.Resolve(gatewayName, programID, brandID)
+		if err != nil {
+			s.failIdempotency(ctx, idempotencyRecord, err)
+			return nil, status.Errorf(codes.Internal, "gateway configuration error: %s", gatewayName)
+		}
+	}
+
 	// 3. Create Transaction (Pending)
 	tx := entities.NewPaymentTransaction(intent.ID, req.PaymentMethodId, chargeTotal)
+	tx.GatewayConfigID = gatewayConfigID
 	tx.AmountSubtotal = chargeSubtotal
 	tx.AmountTotal = chargeTotal
 	tx.FeeProvider = chargeFee
@@ -314,12 +328,6 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		}
 		s.completeIdempotency(ctx, idempotencyRecord, tx.ID, response)
 		return response, nil
-	}
-
-	gateway, err := s.gatewayFact.GetGateway(gatewayName)
-	if err != nil {
-		s.failIdempotency(ctx, idempotencyRecord, err)
-		return nil, status.Errorf(codes.Internal, "gateway configuration error: %s", gatewayName)
 	}
 
 	// Parse Payment Details

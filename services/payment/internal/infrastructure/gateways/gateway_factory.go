@@ -154,6 +154,24 @@ func idPtr(id string) *string {
 	return &id
 }
 
+// HasProvider reports whether any active config of the provider exists at any
+// scope (global, env, brand or program). Used to decide whether a payment method
+// is worth showing; the exact gateway is picked per payment by Resolve.
+func (f *GatewayFactory) HasProvider(provider string) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	if _, ok := f.gateways[provider]; ok {
+		return true
+	}
+	for _, e := range f.scoped {
+		if e.Provider == provider {
+			return true
+		}
+	}
+	return false
+}
+
 // ListAvailableGateways returns list of available global gateway names
 func (f *GatewayFactory) ListAvailableGateways() []string {
 	f.mu.RLock()
