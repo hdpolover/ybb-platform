@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon, LockClosedIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon, LockClosedIcon, ExclamationTriangleIcon, ClipboardDocumentIcon } from "@heroicons/react/24/outline";
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
 import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
@@ -19,7 +19,8 @@ import {
   type CreateGatewayConfigInput,
   type PaymentMethod,
 } from "@/src/shared/api-client";
-import { listPlatformBrands, type PlatformBrand } from "../api";
+import { listPlatformBrands, listPlatformPrograms, type PlatformBrand, type PlatformProgram } from "../api";
+import { scopeLabel, scopeOf, webhookUrlForConfig, type GatewayScope } from "@/lib/gateway-scope";
 import {
   Sheet,
   SheetContent,
@@ -30,10 +31,36 @@ import {
 } from "@/src/ui/sheet";
 import { formatDateTime } from "@/lib/utils";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://api.ybbhub.com";
+const WEBHOOK_HINT = "Paste this into the provider dashboard callback URL for this account";
+
+function copyToClipboard(value: string) {
+  navigator.clipboard.writeText(value).then(
+    () => toast.success("Webhook URL copied."),
+    () => toast.error("Could not copy. Select the URL and copy manually."),
+  );
+}
+
+function WebhookUrlBox({ url }: { url: string }) {
+  return (
+    <div>
+      <div className="flex items-center gap-1">
+        <code className="block max-w-[28rem] truncate rounded bg-zinc-100 px-1.5 py-1 font-mono text-[10px] text-zinc-700" title={url}>{url}</code>
+        <button type="button" onClick={() => copyToClipboard(url)} aria-label="Copy webhook URL" className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50">
+          <ClipboardDocumentIcon className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <p className="mt-1 text-[10px] text-zinc-500">{WEBHOOK_HINT}</p>
+    </div>
+  );
+}
+
 export default function PaymentGatewaysPage() {
   const [configs, setConfigs] = useState<GatewayConfig[]>([]);
   const [brands, setBrands] = useState<PlatformBrand[]>([]);
+  const [programs, setPrograms] = useState<PlatformProgram[]>([]);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  const [activateTarget, setActivateTarget] = useState<GatewayConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -45,10 +72,11 @@ export default function PaymentGatewaysPage() {
   const fetch = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [configsResult, brandsResult, methodsResult] = await Promise.allSettled([
+    const [configsResult, brandsResult, methodsResult, programsResult] = await Promise.allSettled([
       listGatewayConfigs(),
       listPlatformBrands(),
       listPaymentMethods(),
+      listPlatformPrograms({ page: 1, limit: 200 }),
     ]);
 
     if (configsResult.status === "rejected") {
@@ -66,12 +94,27 @@ export default function PaymentGatewaysPage() {
     if (methodsResult.status === "fulfilled") {
       setMethods(methodsResult.value);
     }
+    if (programsResult.status === "fulfilled") {
+      setPrograms(programsResult.value.data);
+    } else {
+      toast.error(programsResult.reason instanceof Error ? programsResult.reason.message : "Failed to load programs.");
+    }
     setLoading(false);
   }, []);
 
   useEffect(() => { fetch(); }, [fetch]);
 
+  // Activating a scoped config reroutes real payments, so it needs a confirm.
+  function requestToggleActive(cfg: GatewayConfig) {
+    if (!cfg.is_active && scopeOf(cfg) !== "platform") {
+      setActivateTarget(cfg);
+      return;
+    }
+    void handleToggleActive(cfg);
+  }
+
   async function handleToggleActive(cfg: GatewayConfig) {
+    setActivateTarget(null);
     setToggleLoadingId(cfg.id);
     try {
       await setGatewayActive(cfg.id, !cfg.is_active);
@@ -109,6 +152,11 @@ export default function PaymentGatewaysPage() {
     [brands],
   );
 
+  const programNameById = useMemo(
+    () => Object.fromEntries(programs.map((program) => [program.id, program.name])),
+    [programs],
+  );
+
   // For each provider, count the active automatic methods that depend on it.
   // Drives the "used by N methods" hint per provider and the orphan-warning banner.
   const methodCountByProvider = useMemo(() => {
@@ -142,7 +190,7 @@ export default function PaymentGatewaysPage() {
         <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">Platform</div>
         <h1 className="mt-1 text-lg font-bold text-zinc-900">Payment Gateways</h1>
         <p className="text-sm text-zinc-500">
-          Configure payment provider credentials (Midtrans, Xendit, Stripe, PayPal). Each configuration can be platform-wide or tied to one brand.
+          Configure payment provider credentials (Midtrans, Xendit, Stripe, PayPal). Each configuration can be platform-wide or tied to one brand or one program.
         </p>
       </section>
 
@@ -199,7 +247,8 @@ export default function PaymentGatewaysPage() {
                 <thead className="bg-zinc-50/60 text-zinc-600">
                   <tr>
                     <th className="px-3 py-2 font-semibold">Mode</th>
-                    <th className="px-3 py-2 font-semibold">Brand Scope</th>
+                    <th className="px-3 py-2 font-semibold">Scope</th>
+                    <th className="px-3 py-2 font-semibold">Webhook URL</th>
                     <th className="px-3 py-2 font-semibold">Updated</th>
                     <th className="px-3 py-2 font-semibold">Status</th>
                     <th className="px-3 py-2 text-right font-semibold">Actions</th>
@@ -214,14 +263,14 @@ export default function PaymentGatewaysPage() {
                         </span>
                       </td>
                       <td className="px-3 py-2 text-zinc-600">
-                        {cfg.brand_id ? (
-                          <div className="space-y-0.5">
-                            <p className="font-medium text-zinc-800">{brandNameById[cfg.brand_id] ?? "Unknown brand"}</p>
-                            <p className="font-mono text-[10px] text-zinc-500">{cfg.brand_id}</p>
-                          </div>
+                        {scopeOf(cfg) === "platform" ? (
+                          <span className="text-zinc-400">{scopeLabel(cfg, brandNameById, programNameById)}</span>
                         ) : (
-                          <span className="text-zinc-400">Platform-wide</span>
+                          <p className="font-medium text-zinc-800">{scopeLabel(cfg, brandNameById, programNameById)}</p>
                         )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <WebhookUrlBox url={webhookUrlForConfig(cfg, API_BASE)} />
                       </td>
                       <td className="px-3 py-2 text-zinc-500">{formatDateTime(cfg.updated_at)}</td>
                       <td className="px-3 py-2">
@@ -237,7 +286,7 @@ export default function PaymentGatewaysPage() {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
-                            onClick={() => handleToggleActive(cfg)}
+                            onClick={() => requestToggleActive(cfg)}
                             disabled={toggleLoadingId === cfg.id}
                             className={`rounded-md border px-2 py-1 text-[10px] font-semibold transition disabled:opacity-50 ${cfg.is_active ? "border-zinc-200 text-zinc-600 hover:bg-zinc-50" : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"}`}
                           >
@@ -261,8 +310,16 @@ export default function PaymentGatewaysPage() {
         </div>
       </section>
 
-      {showCreate && <GatewayConfigSheet brands={brands} onClose={() => setShowCreate(false)} onSaved={fetch} />}
-      {editTarget && <GatewayConfigSheet brands={brands} config={editTarget} onClose={() => setEditTarget(null)} onSaved={fetch} />}
+      {showCreate && <GatewayConfigSheet brands={brands} programs={programs} onClose={() => setShowCreate(false)} onSaved={fetch} />}
+      {editTarget && <GatewayConfigSheet brands={brands} programs={programs} config={editTarget} onClose={() => setEditTarget(null)} onSaved={fetch} />}
+      {activateTarget && (
+        <ConfirmActivate
+          cfg={activateTarget}
+          scope={scopeLabel(activateTarget, brandNameById, programNameById)}
+          onCancel={() => setActivateTarget(null)}
+          onConfirm={() => handleToggleActive(activateTarget)}
+        />
+      )}
       {deleteTarget && (
         <ConfirmDelete
           label={`${deleteTarget.provider} (${deleteTarget.mode})`}
@@ -277,11 +334,13 @@ export default function PaymentGatewaysPage() {
 
 function GatewayConfigSheet({
   brands,
+  programs,
   config,
   onClose,
   onSaved,
 }: {
   brands: PlatformBrand[];
+  programs: PlatformProgram[];
   config?: GatewayConfig;
   onClose: () => void;
   onSaved: () => void;
@@ -296,7 +355,10 @@ function GatewayConfigSheet({
   const [clientKey, setClientKey] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [brandId, setBrandId] = useState(config?.brand_id ?? "");
-  const [scope, setScope] = useState<"platform" | "brand">(config?.brand_id ? "brand" : "platform");
+  const [programId, setProgramId] = useState(config?.program_id ?? "");
+  const [scope, setScope] = useState<GatewayScope>(config ? scopeOf(config) : "platform");
+  const brandNameById = Object.fromEntries(brands.map((b) => [b.id, b.name]));
+  const programNameById = Object.fromEntries(programs.map((p) => [p.id, p.name]));
   const [isActive, setIsActive] = useState(config?.is_active ?? true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -305,8 +367,13 @@ function GatewayConfigSheet({
     e.preventDefault();
     setLoading(true);
     setError(null);
-    if (scope === "brand" && !brandId) {
+    if (!isEdit && scope === "brand" && !brandId) {
       setError("Select a brand scope for this gateway configuration.");
+      setLoading(false);
+      return;
+    }
+    if (!isEdit && scope === "program" && !programId) {
+      setError("Select a program scope for this gateway configuration.");
       setLoading(false);
       return;
     }
@@ -327,7 +394,9 @@ function GatewayConfigSheet({
       client_key: resolveSecret(clientKey, config?.client_key) ?? "",
       webhook_secret: resolveSecret(webhookSecret, config?.webhook_secret),
       is_active: isActive,
-      brand_id: scope === "brand" ? brandId : undefined,
+      // Scope is immutable server-side: PUT must omit it (a different scope is a 400).
+      brand_id: !isEdit && scope === "brand" ? brandId : undefined,
+      program_id: !isEdit && scope === "program" ? programId : undefined,
     };
     try {
       if (isEdit && config) {
@@ -354,7 +423,7 @@ function GatewayConfigSheet({
           <SheetHeader className="border-b border-zinc-200 px-6 py-5">
             <SheetTitle>{isEdit ? "Edit Gateway Configuration" : "Add Gateway Configuration"}</SheetTitle>
             <SheetDescription>
-              Store provider credentials securely. A configuration can be platform-wide or assigned to exactly one brand.
+              Store provider credentials securely. A configuration can be platform-wide or assigned to exactly one brand or program.
             </SheetDescription>
           </SheetHeader>
 
@@ -392,39 +461,68 @@ function GatewayConfigSheet({
                 </p>
               )}
             <div className="rounded-md border border-zinc-200 bg-zinc-50/70 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Brand Assignment</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Scope</p>
               <p className="mt-1 text-[11px] text-zinc-600">
-                Each gateway configuration can be used for one brand or for the whole platform. Create separate entries when different brands need different credentials.
+                The most specific active config wins: program, then brand, then platform-wide. Create separate entries when a brand or program needs its own provider account.
               </p>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Scope" required>
-                  <SelectControl
-                    value={scope}
-                    onChange={(e) => {
-                      const nextScope = e.target.value as "platform" | "brand";
-                      setScope(nextScope);
-                      if (nextScope === "platform") setBrandId("");
-                    }}
-                  >
-                    <option value="platform">Platform-wide</option>
-                    <option value="brand">Specific brand</option>
-                  </SelectControl>
-                </Field>
-                <Field label="Brand" required={scope === "brand"}>
-                  <SelectControl
-                    value={brandId}
-                    onChange={(e) => setBrandId(e.target.value)}
-                    disabled={scope !== "brand"}
-                  >
-                    <option value="">{brands.length === 0 ? "No brands available" : "Select a brand..."}</option>
-                    {brands.map((brand) => (
-                      <option key={brand.id} value={brand.id}>
-                        {brand.name}
-                      </option>
-                    ))}
-                  </SelectControl>
-                </Field>
-              </div>
+              {isEdit && config ? (
+                <>
+                  <input type="text" readOnly aria-readonly="true" value={scopeLabel(config, brandNameById, programNameById)} className={`${inputCls} mt-3 cursor-not-allowed bg-zinc-50 text-zinc-500`} />
+                  <p className="mt-1 flex items-center gap-1 text-[10px] text-zinc-500">
+                    <LockClosedIcon className="h-3 w-3" /> Scope can&apos;t be changed after creation. Create a new config to use a different scope.
+                  </p>
+                </>
+              ) : (
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label="Scope" required>
+                    <SelectControl
+                      value={scope}
+                      onChange={(e) => {
+                        const nextScope = e.target.value as GatewayScope;
+                        setScope(nextScope);
+                        if (nextScope !== "brand") setBrandId("");
+                        if (nextScope !== "program") setProgramId("");
+                      }}
+                    >
+                      <option value="platform">Platform-wide</option>
+                      <option value="brand">Specific brand</option>
+                      <option value="program">Specific program</option>
+                    </SelectControl>
+                  </Field>
+                  {scope === "program" ? (
+                    <Field label="Program" required>
+                      <SelectControl value={programId} onChange={(e) => setProgramId(e.target.value)}>
+                        <option value="">{programs.length === 0 ? "No programs available" : "Select a program..."}</option>
+                        {programs.map((program) => (
+                          <option key={program.id} value={program.id}>
+                            {program.name}{program.brandName ? ` (${program.brandName})` : ""}
+                          </option>
+                        ))}
+                      </SelectControl>
+                    </Field>
+                  ) : (
+                    <Field label="Brand" required={scope === "brand"}>
+                      <SelectControl value={brandId} onChange={(e) => setBrandId(e.target.value)} disabled={scope !== "brand"}>
+                        <option value="">{brands.length === 0 ? "No brands available" : "Select a brand..."}</option>
+                        {brands.map((brand) => (
+                          <option key={brand.id} value={brand.id}>{brand.name}</option>
+                        ))}
+                      </SelectControl>
+                    </Field>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="mb-1 text-[11px] font-medium text-zinc-700">Webhook URL</p>
+              {isEdit && config ? (
+                <WebhookUrlBox url={webhookUrlForConfig(config, API_BASE)} />
+              ) : (
+                <p className="text-[10px] text-zinc-500">
+                  {scope === "platform" ? "Global configs use the shared provider webhook URL, shown after saving." : "Scoped configs get their own webhook URL, shown after saving."}
+                </p>
+              )}
             </div>
 
             <Field label="Server Key" required={!isEdit}>
@@ -441,6 +539,12 @@ function GatewayConfigSheet({
               <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} className="h-3.5 w-3.5" />
               <span className="text-[11px] font-medium text-zinc-700">Active</span>
             </label>
+            {scope !== "platform" && isActive && !config?.is_active && (
+              <p className="flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                <ExclamationTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                Payments for {scope === "brand" ? brandNameById[brandId] ?? "the selected brand" : programNameById[programId] ?? "the selected program"} will charge this account. Make sure the provider&apos;s callback URL is set to the webhook URL for this config before activating.
+              </p>
+            )}
           </div>
 
           <SheetFooter className="border-t border-zinc-200 bg-white px-6 py-4">
@@ -452,6 +556,24 @@ function GatewayConfigSheet({
         </form>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function ConfirmActivate({ cfg, scope, onCancel, onConfirm }: { cfg: GatewayConfig; scope: string; onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
+        <h2 className="mb-2 text-sm font-semibold text-zinc-900">Activate scoped gateway?</h2>
+        <p className="text-[11px] text-zinc-600">
+          Payments for <span className="font-semibold">{scope}</span> will charge this account. Make sure the provider&apos;s callback URL is set to the URL below before activating.
+        </p>
+        <div className="mt-3"><WebhookUrlBox url={webhookUrlForConfig(cfg, API_BASE)} /></div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onCancel} className="rounded-md border border-zinc-200 px-3 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50">Cancel</button>
+          <button onClick={onConfirm} className="rounded-md bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-emerald-700">Activate</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
