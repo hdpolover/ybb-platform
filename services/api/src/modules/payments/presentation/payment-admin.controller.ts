@@ -1944,6 +1944,7 @@ export class PaymentAdminController {
             await Promise.all([
                 this.cacheService.invalidateKey(CACHE_KEYS.PROGRAM_PAYMENT_METHODS(programId)),
                 this.cacheService.invalidateKey(CACHE_KEYS.PROGRAM_PAYMENT_METHODS_PORTAL(programId)),
+                this.cacheService.invalidateKey(CACHE_KEYS.LANDING_PAYMENT_METHODS(programId)),
             ]);
 
             return data;
@@ -1975,6 +1976,7 @@ export class PaymentAdminController {
             await Promise.all([
                 this.cacheService.invalidateKey(CACHE_KEYS.PROGRAM_PAYMENT_METHODS(programId)),
                 this.cacheService.invalidateKey(CACHE_KEYS.PROGRAM_PAYMENT_METHODS_PORTAL(programId)),
+                this.cacheService.invalidateKey(CACHE_KEYS.LANDING_PAYMENT_METHODS(programId)),
             ]);
 
             return data;

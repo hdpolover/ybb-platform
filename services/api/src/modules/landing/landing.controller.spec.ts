@@ -17,6 +17,7 @@ describe('LandingController', () => {
     getAnnouncements: jest.fn(),
     getAnnouncementDetail: jest.fn(),
     getActivity: jest.fn(),
+    getPaymentMethods: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -80,6 +81,18 @@ describe('LandingController', () => {
       await controller.getActivity(undefined);
 
       expect(mockService.getActivity).toHaveBeenCalledWith(undefined);
+    });
+  });
+
+  describe('getPaymentMethods', () => {
+    it('delegates to the service with the resolved brand domain', async () => {
+      const expected = { programs: [] };
+      mockService.getPaymentMethods.mockResolvedValue(expected);
+
+      const result = await controller.getPaymentMethods('istanyouthsummit.com');
+
+      expect(mockService.getPaymentMethods).toHaveBeenCalledWith('istanyouthsummit.com');
+      expect(result).toBe(expected);
     });
   });
 

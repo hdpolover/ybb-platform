@@ -9,6 +9,7 @@ import { AnnouncementsStrategy, MappedAnnouncement } from './strategies/announce
 import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
 import { ActivityStrategy } from './strategies/activity.strategy';
+import { LandingPaymentMethodsData, PaymentMethodsStrategy } from './strategies/payment-methods.strategy';
 import { Brand } from '@prisma/client';
 import { LandingPageResponseDto } from './dto/landing-page.dto';
 import { LandingSettingsResponseDto } from './dto/landing-settings.dto';
@@ -36,6 +37,7 @@ export class LandingService {
     private readonly settingsStrategy: SettingsStrategy,
     private readonly faqsStrategy: FaqsStrategy,
     private readonly activityStrategy: ActivityStrategy,
+    private readonly paymentMethodsStrategy: PaymentMethodsStrategy,
     private readonly landingSnapshotService: LandingSnapshotService,
     private readonly cacheService: CacheService,
   ) { }
@@ -133,6 +135,11 @@ export class LandingService {
         programName: item.programName,
       })),
     };
+  }
+
+  async getPaymentMethods(url?: string): Promise<LandingPaymentMethodsData> {
+    const brand = await this.resolveBrand(url);
+    return this.paymentMethodsStrategy.getData(brand);
   }
 
   async getAbout(url?: string): Promise<LandingPageResponseDto> {

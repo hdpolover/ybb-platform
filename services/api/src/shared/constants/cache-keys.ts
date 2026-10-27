@@ -106,6 +106,9 @@ export const CACHE_KEYS = {
   // calls in payment-admin.controller.ts additionally invalidate this key
   // explicitly, since a single-key delete does not.
   PROGRAM_PAYMENT_METHODS_PORTAL: (programId: string) => `payment:methods:program:${programId}:portal`,
+  // Public landing view (sanitized name/type/logo only). Own key for the same
+  // reason as the portal one above; admin program-method writes bust it explicitly.
+  LANDING_PAYMENT_METHODS: (programId: string) => `payment:methods:program:${programId}:landing`,
 
   // Participant analytics cache keys
   ANALYTICS_KNOWLEDGE_SOURCE: (programId: string) => `analytics:knowledge-source:${programId}`,
