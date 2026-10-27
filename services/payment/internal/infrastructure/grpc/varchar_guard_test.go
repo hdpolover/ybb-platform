@@ -128,6 +128,12 @@ type varcharGuardGatewayFactory struct {
 func (f *varcharGuardGatewayFactory) GetGateway(name string) (gateways.PaymentGateway, error) {
 	return f.gw, nil
 }
+func (f *varcharGuardGatewayFactory) Resolve(provider, programID, brandID string) (gateways.PaymentGateway, *string, error) {
+	return f.gw, nil, nil
+}
+func (f *varcharGuardGatewayFactory) GetGatewayByConfigID(id string) (gateways.PaymentGateway, string, error) {
+	return f.gw, "", nil
+}
 
 type varcharGuardGateway struct {
 	chargeErr error

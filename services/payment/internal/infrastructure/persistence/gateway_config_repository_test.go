@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/ybb-platform/payment/internal/domain/entities"
@@ -48,6 +49,7 @@ func setupDB(t *testing.T) *gorm.DB {
 		client_key TEXT NOT NULL,
 		webhook_secret TEXT,
 		is_active INTEGER NOT NULL DEFAULT 1,
+		deactivated_at DATETIME,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		deleted_at DATETIME
@@ -192,4 +194,49 @@ func TestRepoCountPendingTransactions(t *testing.T) {
 	n, err := repo.CountPendingTransactions(context.Background(), "cfg")
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
+}
+
+func deactivatedAtOf(t *testing.T, db *gorm.DB, id string) *time.Time {
+	t.Helper()
+	var cfg entities.GatewayConfig
+	require.NoError(t, db.First(&cfg, "id = ?", id).Error)
+	return cfg.DeactivatedAt
+}
+
+func TestRepoTracksDeactivatedAt(t *testing.T) {
+	repo, db := newScopedRepo(t)
+	ctx := context.Background()
+	brand := "b1"
+	mk := func() *entities.GatewayConfig {
+		c := &entities.GatewayConfig{Provider: "xendit", Mode: "sandbox", ServerKey: "s", ClientKey: "c",
+			WebhookSecret: "w", IsActive: true, BrandID: &brand}
+		require.NoError(t, repo.Create(ctx, c))
+		return c
+	}
+
+	first := mk()
+	require.Nil(t, deactivatedAtOf(t, db, first.ID))
+
+	// Replaced by a newer config of the same scope: stamped.
+	second := mk()
+	stamp := deactivatedAtOf(t, db, first.ID)
+	require.NotNil(t, stamp)
+	require.Nil(t, deactivatedAtOf(t, db, second.ID))
+
+	// Editing the already-inactive config must not restart its grace window.
+	first.IsActive = false
+	first.Mode = "production"
+	first.DeactivatedAt = stamp
+	require.NoError(t, repo.Update(ctx, first))
+	require.Equal(t, stamp.Unix(), deactivatedAtOf(t, db, first.ID).Unix())
+
+	// Explicit true -> false flip via Update is stamped.
+	second.IsActive = false
+	require.NoError(t, repo.Update(ctx, second))
+	require.NotNil(t, deactivatedAtOf(t, db, second.ID))
+
+	// Reactivation clears it.
+	second.IsActive = true
+	require.NoError(t, repo.Update(ctx, second))
+	require.Nil(t, deactivatedAtOf(t, db, second.ID))
 }

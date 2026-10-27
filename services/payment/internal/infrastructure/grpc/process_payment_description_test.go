@@ -29,6 +29,12 @@ type singleGatewayFactory struct{ gw domainGateways.PaymentGateway }
 func (f singleGatewayFactory) GetGateway(string) (domainGateways.PaymentGateway, error) {
 	return f.gw, nil
 }
+func (f singleGatewayFactory) Resolve(string, string, string) (domainGateways.PaymentGateway, *string, error) {
+	return f.gw, nil, nil
+}
+func (f singleGatewayFactory) GetGatewayByConfigID(string) (domainGateways.PaymentGateway, string, error) {
+	return f.gw, "", nil
+}
 
 type stubIntentByID struct {
 	stubIntentRepository

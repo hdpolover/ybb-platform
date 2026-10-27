@@ -162,15 +162,14 @@ func (h *PaymentMethodHandler) GetAll(c *gin.Context) {
 // isGatewayAvailable reports whether a payment method should be shown when
 // `available_only=true` is requested. Manual methods (and automatic methods
 // with no gateway configured) always pass through; automatic methods are
-// only available if their gateway is currently registered/live in the
-// factory. Shared by GetAll and GetByProgram so the two endpoints can't
-// drift on what "available" means.
+// only available if their provider has a live config at any scope
+// (global, env, brand or program) in the factory. Shared by GetAll and
+// GetByProgram so the two endpoints can't drift on what "available" means.
 func isGatewayAvailable(gatewayFactory *gateways.GatewayFactory, methodType entities.PaymentMethodType, gatewayName string) bool {
 	if methodType.IsManual() || gatewayName == "" {
 		return true
 	}
-	_, err := gatewayFactory.GetGateway(gatewayName)
-	return err == nil
+	return gatewayFactory.HasProvider(gatewayName)
 }
 
 // GetByID godoc

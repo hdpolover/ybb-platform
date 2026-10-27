@@ -128,7 +128,8 @@ func (h *ConfirmIntentHandler) Handle(ctx context.Context, cmd *commands.Confirm
 		return nil, err
 	}
 
-	gateway, err := h.gatewayFactory.GetGateway(gatewayName)
+	programID, brandID := services.GatewayScopeFromMetadata(intent.Metadata)
+	gateway, gatewayConfigID, err := h.gatewayFactory.Resolve(gatewayName, programID, brandID)
 	if err != nil {
 		h.failIdempotency(ctx, idempotencyRecord, err)
 		return nil, fmt.Errorf("gateway not found: %v", err)
@@ -138,6 +139,7 @@ func (h *ConfirmIntentHandler) Handle(ctx context.Context, cmd *commands.Confirm
 	tx.Currency = intent.Currency
 	tx.GatewayReferenceID = ""
 	tx.Status = entities.TransactionStatusPending
+	tx.GatewayConfigID = gatewayConfigID
 
 	// Save Initial Transaction
 	if err := h.txRepo.Create(ctx, tx); err != nil {

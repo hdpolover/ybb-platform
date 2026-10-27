@@ -345,6 +345,12 @@ type stubGatewayFactory struct {
 func (f stubGatewayFactory) GetGateway(name string) (gateways.PaymentGateway, error) {
 	return f.gateway, nil
 }
+func (f stubGatewayFactory) Resolve(provider, programID, brandID string) (gateways.PaymentGateway, *string, error) {
+	return f.gateway, nil, nil
+}
+func (f stubGatewayFactory) GetGatewayByConfigID(id string) (gateways.PaymentGateway, string, error) {
+	return f.gateway, "", nil
+}
 
 type stubPaymentGateway struct {
 	chargeCalls    int

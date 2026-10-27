@@ -95,4 +95,9 @@ type PaymentGateway interface {
 // TODO for intern: Register new gateways in the factory
 type GatewayFactory interface {
 	GetGateway(name string) (PaymentGateway, error)
+	// Resolve picks the gateway for a provider via program -> brand -> global -> env.
+	// The returned config id is non-nil only for brand/program overrides.
+	Resolve(provider, programID, brandID string) (PaymentGateway, *string, error)
+	// GetGatewayByConfigID returns the gateway built from a specific config (active or not).
+	GetGatewayByConfigID(id string) (PaymentGateway, string, error)
 }

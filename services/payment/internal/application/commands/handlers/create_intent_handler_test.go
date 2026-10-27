@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/ybb-platform/payment/internal/application/commands"
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/domain/exceptions"
+	"github.com/ybb-platform/payment/internal/domain/services"
 )
 
 func TestCreateIntentHandler_ReusesExistingOpenIntent(t *testing.T) {
@@ -249,5 +251,88 @@ func TestCreateIntentHandler_NoExistingIntent_CreatesNormally(t *testing.T) {
 	}
 	if resp.Status != string(entities.PaymentIntentStatusRequiresMethod) {
 		t.Fatalf("expected status REQUIRES_PAYMENT_METHOD, got %s", resp.Status)
+	}
+}
+
+func TestCreateIntentHandler_ReuseMergesGatewayScopeIntoMetadata(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		stored      string
+		incoming    map[string]interface{}
+		wantUpdates int
+		wantProgram string
+		wantBrand   string
+	}{
+		{"adds brand_id to legacy intent and keeps other keys", `{"program_id":"p1","description":"d"}`,
+			map[string]interface{}{"program_id": "p1", "brand_id": "b1"}, 1, "p1", "b1"},
+		{"adds both to empty metadata", ``,
+			map[string]interface{}{"program_id": "p1", "brand_id": "b1"}, 1, "p1", "b1"},
+		{"overwrites a changed program_id", `{"program_id":"old","brand_id":"b1"}`,
+			map[string]interface{}{"program_id": "p2", "brand_id": "b1"}, 1, "p2", "b1"},
+		{"no write when nothing changed", `{"program_id":"p1","brand_id":"b1"}`,
+			map[string]interface{}{"program_id": "p1", "brand_id": "b1"}, 0, "p1", "b1"},
+		{"empty incoming never clears stored scope", `{"program_id":"p1","brand_id":"b1"}`,
+			map[string]interface{}{"program_id": "", "description": "x"}, 0, "p1", "b1"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			existing := &entities.PaymentIntent{
+				ID: "intent-existing", ReferenceType: "invoice", ReferenceID: "inv-1",
+				Amount: 150000, Currency: "IDR",
+				Status:   entities.PaymentIntentStatusRequiresMethod,
+				Metadata: []byte(tc.stored),
+			}
+			repo := &stubIntentRepository{findOpenResults: []*entities.PaymentIntent{existing}}
+
+			resp, err := NewCreateIntentHandler(repo).Handle(context.Background(), &commands.CreateIntentCommand{
+				UserID: "user-1", ReferenceType: "invoice", ReferenceID: "inv-1",
+				Amount: 150000, Currency: "IDR", Metadata: tc.incoming,
+			})
+			if err != nil {
+				t.Fatalf("expected nil error, got %v", err)
+			}
+			if resp.IntentID != existing.ID || repo.createCalls != 0 {
+				t.Fatalf("expected reuse of %q without create, got %q / %d creates", existing.ID, resp.IntentID, repo.createCalls)
+			}
+			if repo.updates != tc.wantUpdates {
+				t.Fatalf("updates = %d, want %d", repo.updates, tc.wantUpdates)
+			}
+			program, brand := services.GatewayScopeFromMetadata(existing.Metadata)
+			if program != tc.wantProgram || brand != tc.wantBrand {
+				t.Fatalf("scope = (%q,%q), want (%q,%q) in %s", program, brand, tc.wantProgram, tc.wantBrand, existing.Metadata)
+			}
+		})
+	}
+}
+
+func TestCreateIntentHandler_ReusePatchKeepsOtherMetadata(t *testing.T) {
+	t.Parallel()
+
+	existing := &entities.PaymentIntent{
+		ID: "intent-existing", ReferenceType: "invoice", ReferenceID: "inv-1",
+		Amount: 150000, Currency: "IDR",
+		Status:   entities.PaymentIntentStatusRequiresMethod,
+		Metadata: []byte(`{"description":"Registration fee"}`),
+	}
+	repo := &stubIntentRepository{findOpenResults: []*entities.PaymentIntent{existing}}
+
+	_, err := NewCreateIntentHandler(repo).Handle(context.Background(), &commands.CreateIntentCommand{
+		UserID: "user-1", ReferenceType: "invoice", ReferenceID: "inv-1",
+		Amount: 150000, Currency: "IDR", Metadata: map[string]interface{}{"brand_id": "b1"},
+	})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(existing.Metadata, &got); err != nil {
+		t.Fatalf("metadata not valid JSON: %v", err)
+	}
+	if got["description"] != "Registration fee" || got["brand_id"] != "b1" {
+		t.Fatalf("unexpected metadata %v", got)
 	}
 }
