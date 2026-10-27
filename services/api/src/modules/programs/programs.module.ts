@@ -142,6 +142,7 @@ import {
   DeleteLoaBatchHandler,
   GetLoaBatchesHandler,
   GetLoaBatchRecipientSendsHandler,
+  SearchLoaSendsHandler,
   GetLoaDownloadsHandler,
 } from './application/handlers/loa-batch.handlers';
 import { PreviewLoaTemplateHandler } from './application/handlers/loa-preview.handler';
@@ -297,6 +298,7 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
     DeleteLoaBatchHandler,
     GetLoaBatchesHandler,
     GetLoaBatchRecipientSendsHandler,
+    SearchLoaSendsHandler,
     GetLoaDownloadsHandler,
     PreviewLoaTemplateHandler,
     LoaPreviewParticipantService,

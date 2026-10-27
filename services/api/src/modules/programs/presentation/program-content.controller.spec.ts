@@ -35,6 +35,7 @@ import {
 import {
   GetLoaBatchesHandler,
   GetLoaBatchRecipientSendsHandler,
+  SearchLoaSendsHandler,
   GetLoaDownloadsHandler,
 } from '../application/handlers/loa-batch.handlers';
 import { PreviewLoaTemplateHandler } from '../application/handlers/loa-preview.handler';
@@ -79,6 +80,7 @@ describe('ProgramContentController', () => {
             GetLoaBatchesHandler,
             GetLoaDownloadsHandler,
             GetLoaBatchRecipientSendsHandler,
+            SearchLoaSendsHandler,
             PreviewLoaTemplateHandler,
         ];
 

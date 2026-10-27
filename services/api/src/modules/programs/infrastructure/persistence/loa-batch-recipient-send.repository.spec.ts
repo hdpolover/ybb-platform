@@ -149,3 +149,39 @@ describe('LoaBatchRecipientSendRepository', () => {
     });
   });
 });
+
+describe('LoaBatchRecipientSendRepository.searchByEmail', () => {
+  let findMany: jest.Mock;
+  let repo: LoaBatchRecipientSendRepository;
+
+  beforeEach(() => {
+    findMany = jest.fn().mockResolvedValue([]);
+    repo = new LoaBatchRecipientSendRepository({
+      loaBatchRecipientSend: { findMany },
+    } as unknown as PrismaService);
+  });
+
+  it('scopes to the program and matches the email case-insensitively', async () => {
+    await repo.searchByEmail('prog-1', 'ADA@Example', 50);
+
+    const args = findMany.mock.calls[0][0];
+    expect(args.where).toEqual({
+      programId: 'prog-1',
+      email: { contains: 'ADA@Example', mode: 'insensitive' },
+    });
+  });
+
+  it('orders by sentAt desc with unsent rows last, and caps the result', async () => {
+    await repo.searchByEmail('prog-1', 'ada', 50);
+
+    const args = findMany.mock.calls[0][0];
+    expect(args.orderBy[0]).toEqual({ sentAt: { sort: 'desc', nulls: 'last' } });
+    expect(args.take).toBe(50);
+  });
+
+  it('joins the batch name for the audit trail', async () => {
+    await repo.searchByEmail('prog-1', 'ada', 50);
+
+    expect(findMany.mock.calls[0][0].include).toEqual({ batch: { select: { id: true, name: true } } });
+  });
+});

@@ -120,4 +120,18 @@ export class LoaBatchRecipientSendRepository {
       orderBy: [{ status: 'asc' }, { email: 'asc' }],
     });
   }
+
+  /**
+   * Program-scoped email lookup for support: "did this person get the LOA
+   * email?". `contains` + insensitive so a half-remembered address works;
+   * unsent rows sort last since Postgres would otherwise put NULL sent_at first.
+   */
+  async searchByEmail(programId: string, email: string, limit: number) {
+    return this.prisma.loaBatchRecipientSend.findMany({
+      where: { programId, email: { contains: email, mode: 'insensitive' } },
+      include: { batch: { select: { id: true, name: true } } },
+      orderBy: [{ sentAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+      take: limit,
+    });
+  }
 }

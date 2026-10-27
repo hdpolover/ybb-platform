@@ -29,6 +29,7 @@ import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 import { LoaBatchDialog } from "./LoaBatchDialog";
 import { LoaDeliveryDialog } from "./LoaDeliveryDialog";
 import { LoaCoverageWarning } from "./LoaCoverageWarning";
+import { LoaSendSearchPanel } from "./LoaSendSearchPanel";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -364,6 +365,8 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
           unreleasedBatchNames={coverage.unreleasedBatchNames}
         />
       )}
+
+      <LoaSendSearchPanel programId={resolvedProgramId} />
 
       {/* Loading state */}
       {loading && (
