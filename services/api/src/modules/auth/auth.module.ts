@@ -94,6 +94,8 @@ import { MetricsCoreModule } from '@shared/infrastructure/monitoring/metrics-cor
     TokenBlacklistService,
     PassportModule,
     FirebaseAuthService,
+    // POST /v1/checkout registers through the same handler as /auth/register.
+    RegisterHandler,
   ],
 })
 export class AuthModule { }

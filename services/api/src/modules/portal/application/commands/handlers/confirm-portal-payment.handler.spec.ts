@@ -130,6 +130,19 @@ describe('ConfirmPortalPaymentHandler', () => {
                 reference_id: 'invoice-1',
             }),
         );
+
+        // Portal behaviour unchanged: no payment_details unless a callback url is given.
+        expect(mockPaymentClient.processPayment.mock.calls[0][0]).not.toHaveProperty('payment_details');
+
+        // POST /v1/checkout passes the return url through to the gateway.
+        await handler.execute(
+            new ConfirmPortalPaymentCommand('user-1', 'invoice-1', 'gateway', 'xendit_credit_card', {
+                callbackUrl: 'https://meys.org/onboarding?checkout=return',
+            }),
+        );
+        expect(mockPaymentClient.processPayment.mock.calls[1][0].payment_details).toEqual({
+            details_json: JSON.stringify({ callback_url: 'https://meys.org/onboarding?checkout=return' }),
+        });
     });
 
     // M156 backstop: CreateIntentRequest.amount is int64 at the gRPC boundary and

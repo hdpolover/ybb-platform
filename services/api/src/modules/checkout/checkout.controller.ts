@@ -1,12 +1,17 @@
 // services/api/src/modules/checkout/checkout.controller.ts
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '@shared/decorators/public.decorator';
 import { BrandDomain } from '@shared/decorators/brand-domain.decorator';
+import { ClientIp } from '@shared/decorators/client-ip.decorator';
+import { MAILBOX_THROTTLE } from '@modules/auth/presentation/auth.controller';
 import { clientIpTracker } from '@shared/infrastructure/throttler/user-aware-throttler.guard';
 import { CheckoutPolicyService } from './checkout-policy.service';
+import { CheckoutHandler, CheckoutResponse } from './checkout.handler';
+import { CreateCheckoutDto } from './dto/create-checkout.dto';
 import { CheckoutConfigQueryDto, CheckoutConfigResponseDto } from './dto/checkout-config.dto';
 
 const FIFTEEN_MINUTES = 900000;
@@ -26,6 +31,7 @@ export class CheckoutController {
     constructor(
         private readonly policy: CheckoutPolicyService,
         private readonly config: ConfigService,
+        private readonly checkout: CheckoutHandler,
     ) {}
 
     @Get('config')
@@ -57,5 +63,23 @@ export class CheckoutController {
                 : null;
 
         return { enabled, turnstileSiteKey, editions, selected };
+    }
+
+    @Post()
+    // Same tiers as POST /auth/register (10/hour per mailbox, 600/15min per IP, both
+    // tier names overridden); see MAILBOX_THROTTLE for why.
+    @Throttle(MAILBOX_THROTTLE)
+    @ApiOperation({ summary: 'Create an account, mint the registration-fee invoice and start the gateway payment in one step' })
+    async create(
+        @Body() dto: CreateCheckoutDto,
+        @BrandDomain() brandDomain?: string,
+        @ClientIp() ip?: string,
+        @Req() req?: Request,
+    ): Promise<CheckoutResponse> {
+        return this.checkout.execute(dto, {
+            brandDomain,
+            ip: ip || '0.0.0.0',
+            userAgent: req?.headers['user-agent'] || 'unknown',
+        });
     }
 }

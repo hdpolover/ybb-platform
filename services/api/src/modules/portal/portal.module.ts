@@ -72,6 +72,7 @@ import { UploadSignedCopyHandler } from './application/commands/handlers/upload-
         JoinPortalProgramHandler,
         UploadSignedCopyHandler,
     ],
-    exports: [DocumentAudienceService, LoaRenderDataService],
+    // The two payment handlers are reused by POST /v1/checkout (CheckoutModule).
+    exports: [DocumentAudienceService, LoaRenderDataService, EnsurePortalPaymentInvoiceHandler, ConfirmPortalPaymentHandler],
 })
 export class PortalModule { }

@@ -51,6 +51,9 @@ export class ConfirmPortalPaymentCommand {
       proofFileId?: string;
       proofFileUrl?: string;
       gatewayToken?: string;
+      // Where the gateway sends the payer back after paying. Optional: the portal
+      // never sets it (it leaves the gateway default), POST /v1/checkout does.
+      callbackUrl?: string;
     },
   ) { }
 }
