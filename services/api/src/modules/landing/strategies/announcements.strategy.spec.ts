@@ -387,15 +387,19 @@ describe('AnnouncementsStrategy', () => {
       expect(listSection?.content?.filters?.years).toEqual([2025, 2024, 2022]);
     });
 
-    it('sorts programs/editions by year desc then title asc, with yearless/archive entries last', async () => {
+    it('sorts programs/editions oldest to newest (year, startDate, name), with yearless/archive entries last', async () => {
       mockProgramAnnouncementFindMany([]);
       mockSystemAnnouncementFindMany([]);
       mockPrisma.program.findMany.mockResolvedValue([
-        { id: 'p-old-b', name: 'Beta Summit', year: 2023 },
-        { id: 'p-archive', name: 'Legacy Summit (Archive)', year: 2020 },
-        { id: 'p-new-a', name: 'Alpha Summit', year: 2026 },
-        { id: 'p-new-b', name: 'Beta Summit', year: 2026 },
-        { id: 'p-yearless', name: 'Undated Summit', year: null },
+        { id: 'kys-2026-b2', name: 'KYS 2026 Batch 2', year: 2026, startDate: new Date('2026-09-01') },
+        { id: 'kys-2027', name: 'KYS 4th 2027', year: 2027, startDate: new Date('2027-01-10') },
+        { id: 'p-archive', name: 'Legacy Summit (Archive)', year: 2020, startDate: new Date('2020-01-01') },
+        { id: 'kys-2026', name: 'KYS 2026', year: 2026, startDate: new Date('2026-03-01') },
+        { id: 'p-yearless', name: 'Undated Summit', year: null, startDate: new Date('2019-01-01') },
+        { id: 'kys-2025', name: 'KYS 2025', year: 2025, startDate: new Date('2025-03-01') },
+        // same year + startDate: name asc tiebreak
+        { id: 'tie-b', name: 'Beta Summit', year: 2024, startDate: new Date('2024-05-01') },
+        { id: 'tie-a', name: 'Alpha Summit', year: 2024, startDate: new Date('2024-05-01') },
       ]);
 
       const strategy = new AnnouncementsStrategy(
@@ -410,11 +414,15 @@ describe('AnnouncementsStrategy', () => {
       const listSection = result.sections.find((section) => section.type === 'announcement_list');
 
       expect(listSection?.content?.filters?.programs.map((p) => p.id)).toEqual([
-        'p-new-a',
-        'p-new-b',
-        'p-old-b',
-        'p-archive',
+        'tie-a',
+        'tie-b',
+        'kys-2025',
+        'kys-2026',
+        'kys-2026-b2',
+        'kys-2027',
+        // archived/yearless group is last, ordered by startDate (2019 before 2020)
         'p-yearless',
+        'p-archive',
       ]);
     });
   });
