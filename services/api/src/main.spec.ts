@@ -106,6 +106,18 @@ describe('main.ts bootstrap (M171)', () => {
     process.env.RABBITMQ_URL = originalRabbitMqUrl;
   });
 
+  it('captures the raw request body (Resend webhook signature verification needs it)', async () => {
+    jest.useFakeTimers();
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    amqpConnectMock.mockImplementation(() => Promise.resolve(createWorkingAmqpConnection()));
+
+    await bootstrap();
+
+    expect(nestFactoryCreateMock).toHaveBeenCalledWith(expect.anything(), { rawBody: true });
+    await jest.advanceTimersByTimeAsync(1000);
+    logSpy.mockRestore();
+  });
+
   it('starts the HTTP app even when the broker connect/assert path rejects', async () => {
     amqpConnectMock.mockRejectedValue(new Error('ECONNREFUSED'));
     jest.useFakeTimers();

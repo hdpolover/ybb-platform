@@ -37,7 +37,17 @@ const assignedAdminFor = (programIds: string[]) => ({
 });
 const actor = { userId: 'admin-1', email: 'a@b.c', brandId: 'brand-x', adminId: 'adm-1' } as any;
 
+const noDelivery = {
+  deliveryStatus: null,
+  deliveredAt: null,
+  bouncedAt: null,
+  bounceType: null,
+  complainedAt: null,
+  deliveryUpdatedAt: null,
+};
+
 const sentRow = {
+  ...noDelivery,
   participantId: 'p-1',
   email: 'ada@example.com',
   status: 'sent',
@@ -48,6 +58,7 @@ const sentRow = {
 };
 
 const failedRow = {
+  ...noDelivery,
   participantId: 'p-2',
   email: 'bob@example.com',
   status: 'failed',
@@ -89,6 +100,7 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
           provide: PrismaService,
           useValue: {
             participant: { findMany: jest.fn().mockResolvedValue([]) },
+            participantDocument: { findMany: jest.fn().mockResolvedValue([]) },
             loaReleaseBatch: { findMany: jest.fn().mockResolvedValue([]) },
             participantApplication: {
               count: jest.fn().mockResolvedValue(0),
@@ -151,6 +163,27 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
     );
   });
 
+  it('exposes delivery verdict, counts it in the summary, and joins LOA download state', async () => {
+    const bouncedAt = new Date('2026-02-02');
+    mockSendRepo.findByBatch.mockResolvedValue([
+      { ...sentRow, deliveryStatus: 'delivered', deliveredAt: new Date('2026-02-01') },
+      { ...sentRow, participantId: 'p-3', email: 'cy@example.com', deliveryStatus: 'bounced', bouncedAt, bounceType: 'Permanent/General' },
+    ]);
+    mockPrisma.participantDocument.findMany.mockResolvedValue([
+      { downloadCount: 2, firstDownloadedAt: new Date('2026-02-03'), application: { participantId: 'p-1' } },
+    ]);
+
+    const result = await run();
+
+    expect(result.summary).toEqual(expect.objectContaining({ delivered: 1, bounced: 1, complained: 0 }));
+    expect(result.recipients[0]).toEqual(
+      expect.objectContaining({ deliveryStatus: 'delivered', downloadCount: 2, firstDownloadedAt: new Date('2026-02-03') }),
+    );
+    expect(result.recipients[1]).toEqual(
+      expect.objectContaining({ deliveryStatus: 'bounced', bouncedAt, bounceType: 'Permanent/General', downloadCount: 0, firstDownloadedAt: null }),
+    );
+  });
+
   it('summarises sent and failed counts and lists every recipient', async () => {
     mockSendRepo.findByBatch.mockResolvedValue([sentRow, failedRow]);
     mockPrisma.participant.findMany.mockResolvedValue([
@@ -160,7 +193,7 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
 
     const result = await run();
 
-    expect(result.summary).toEqual({ total: 2, pending: 0, sent: 1, failed: 1 });
+    expect(result.summary).toEqual({ total: 2, pending: 0, sent: 1, failed: 1, delivered: 0, bounced: 0, complained: 0 });
     expect(result.hasSendLog).toBe(true);
     expect(result.recipients).toEqual([
       expect.objectContaining({
@@ -186,7 +219,7 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
 
     const result = await run();
 
-    expect(result.summary).toEqual({ total: 2, pending: 1, sent: 1, failed: 0 });
+    expect(result.summary).toEqual({ total: 2, pending: 1, sent: 1, failed: 0, delivered: 0, bounced: 0, complained: 0 });
   });
 
   it('reports hasSendLog false for a batch released before the log existed', async () => {
@@ -195,7 +228,7 @@ describe('GetLoaBatchRecipientSendsHandler', () => {
     const result = await run();
 
     expect(result.hasSendLog).toBe(false);
-    expect(result.summary).toEqual({ total: 0, pending: 0, sent: 0, failed: 0 });
+    expect(result.summary).toEqual({ total: 0, pending: 0, sent: 0, failed: 0, delivered: 0, bounced: 0, complained: 0 });
     expect(result.recipients).toEqual([]);
   });
 

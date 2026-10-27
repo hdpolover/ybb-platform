@@ -36,7 +36,24 @@ export class LoaDownloadResponseDto {
 
 // ─── Per-recipient LOA email audit ────────────────────────────────────────────
 
-export class LoaRecipientSendResponseDto {
+/**
+ * What happened to a sent email after Resend accepted it (webhook-fed), plus
+ * whether the participant has actually opened the letter. Shared by the batch
+ * recipient list and the email search so both render the same badges.
+ */
+export class LoaDeliveryFieldsDto {
+  deliveryStatus: 'delivered' | 'bounced' | 'complained' | 'delayed' | null;
+  deliveredAt: Date | null;
+  bouncedAt: Date | null;
+  bounceType: string | null;
+  complainedAt: Date | null;
+  deliveryUpdatedAt: Date | null;
+  /** participant_documents.download_count for this program's LOA; 0 = never. */
+  downloadCount: number;
+  firstDownloadedAt: Date | null;
+}
+
+export class LoaRecipientSendResponseDto extends LoaDeliveryFieldsDto {
   participantId: string;
   participantName: string;
   /** The address the email was actually addressed to, as of release time. */
@@ -53,6 +70,10 @@ export class LoaRecipientSendSummaryDto {
   pending: number;
   sent: number;
   failed: number;
+  // Webhook-fed; counts of sent rows by what Resend reported afterwards.
+  delivered: number;
+  bounced: number;
+  complained: number;
 }
 
 export class LoaBatchRecipientSendsResponseDto {
@@ -111,7 +132,7 @@ export class SearchLoaSendsQueryDto {
   email: string;
 }
 
-export class LoaSendSearchResultDto {
+export class LoaSendSearchResultDto extends LoaDeliveryFieldsDto {
   id: string;
   batchId: string;
   batchName: string;

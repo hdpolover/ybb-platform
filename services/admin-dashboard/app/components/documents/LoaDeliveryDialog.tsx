@@ -18,6 +18,7 @@ import {
   TableRow,
 } from "@/src/ui/table";
 import { formatDate } from "@/lib/utils";
+import { LoaDeliveryBadge } from "./LoaDeliveryBadge";
 import type {
   LoaBatch,
   LoaBatchRecipientSends,
@@ -77,6 +78,12 @@ export function LoaDeliveryDialog({ batch, delivery, onClose }: LoaDeliveryDialo
             <div className="flex items-center gap-4 text-sm">
               <span className="tabular-nums text-emerald-700">{summary.sent} sent</span>
               <span className="tabular-nums text-red-700">{summary.failed} failed</span>
+              <span className="tabular-nums text-emerald-700">{summary.delivered} delivered</span>
+              {summary.bounced + summary.complained > 0 && (
+                <span className="tabular-nums text-red-700">
+                  {summary.bounced} bounced, {summary.complained} complained
+                </span>
+              )}
               {summary.pending > 0 && (
                 <span className="tabular-nums text-zinc-500">
                   {summary.pending} awaiting confirmation
@@ -92,6 +99,7 @@ export function LoaDeliveryDialog({ batch, delivery, onClose }: LoaDeliveryDialo
                     <TableHead>Email</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Sent</TableHead>
+                    <TableHead>Delivery</TableHead>
                     <TableHead>Detail</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -111,6 +119,9 @@ export function LoaDeliveryDialog({ batch, delivery, onClose }: LoaDeliveryDialo
                       </TableCell>
                       <TableCell className="text-sm text-zinc-500">
                         {recipient.sentAt ? formatDate(recipient.sentAt) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <LoaDeliveryBadge row={recipient} />
                       </TableCell>
                       <TableCell className="max-w-[16rem] text-sm text-zinc-500">
                         {recipient.errorMessage ? (

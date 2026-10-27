@@ -82,7 +82,8 @@ async function createConsumerApp(
 }
 
 export async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: the Resend webhook verifies an HMAC over the exact bytes received.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // DELIBERATELY NOT SET: app.set('trust proxy', ...).
   //

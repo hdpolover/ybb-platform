@@ -68,6 +68,13 @@ describe('LoaBatchRecipientSendRepository', () => {
           providerMessageId: null,
           errorMessage: null,
           sentAt: null,
+          // Stale verdict from the previous message must not outlive it.
+          deliveryStatus: null,
+          deliveredAt: null,
+          bouncedAt: null,
+          bounceType: null,
+          complainedAt: null,
+          deliveryUpdatedAt: null,
         },
       });
     });
