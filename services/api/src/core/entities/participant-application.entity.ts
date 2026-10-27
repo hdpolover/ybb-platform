@@ -30,6 +30,14 @@ export enum ScoreStatus {
   NOT_SELECTED = 'not_selected',
 }
 
+/** One score status, or several (matches any of them). */
+export type ScoreStatusFilter = ScoreStatus | ScoreStatus[];
+
+/** Prisma where-fragment: equality for one value, `in` for several. */
+export function toScoreStatusWhere(filter: ScoreStatusFilter): ScoreStatus | { in: ScoreStatus[] } {
+  return Array.isArray(filter) ? { in: filter } : filter;
+}
+
 export interface ApplicationAnswer {
   questionId: string;
   question: string;

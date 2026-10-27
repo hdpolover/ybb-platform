@@ -131,6 +131,42 @@ describe('ApplicationsController GET /applications scoreStatus filter', () => {
     expect(query.filters.scoreStatus).toBe('not_selected');
   });
 
+  it('GET /applications?scoreStatus=a,b,c (comma-separated) reaches the handler as an array', async () => {
+    await request(app.getHttpServer())
+      .get('/applications')
+      .query({ scoreStatus: 'go_to_interview,finalist,not_selected' })
+      .expect(200);
+
+    const query = mockListApplicationsHandler.execute.mock.calls[0][0];
+    expect(query.filters.scoreStatus).toEqual(['go_to_interview', 'finalist', 'not_selected']);
+  });
+
+  it('GET /applications?scoreStatus=a&scoreStatus=b (repeated param) reaches the handler as an array', async () => {
+    await request(app.getHttpServer())
+      .get('/applications?scoreStatus=go_to_interview&scoreStatus=finalist')
+      .expect(200);
+
+    const query = mockListApplicationsHandler.execute.mock.calls[0][0];
+    expect(query.filters.scoreStatus).toEqual(['go_to_interview', 'finalist']);
+  });
+
+  it('GET /applications 400s when any one of several scoreStatus values is invalid', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/applications')
+      .query({ scoreStatus: 'go_to_interview,bogus-value' });
+    expect(response.status).toBe(400);
+    expect(mockListApplicationsHandler.execute).not.toHaveBeenCalled();
+  });
+
+  it('GET /applications/export?scoreStatus=a,b passes the array to the export query', async () => {
+    await request(app.getHttpServer())
+      .get('/applications/export')
+      .query({ brandId: 'brand-1', scoreStatus: 'go_to_interview,finalist' });
+
+    const query = mockExportApplicationsHandler.execute.mock.calls[0][0];
+    expect(query.scoreStatus).toEqual(['go_to_interview', 'finalist']);
+  });
+
   it('GET /applications?scoreStatus=bogus-value still returns 400 (the whitelist is not simply removed)', async () => {
     const response = await request(app.getHttpServer()).get('/applications').query({ scoreStatus: 'bogus-value' });
     expect(response.status).toBe(400);

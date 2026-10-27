@@ -2,6 +2,7 @@
 import { ApplicationRepository } from './application.repository';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { ApplicationMapper } from '../mappers/application.mapper';
+import { ScoreStatus } from '@core/entities/participant-application.entity';
 
 describe('ApplicationRepository - findByProgram createdAt filter', () => {
   let findMany: jest.Mock;
@@ -57,4 +58,25 @@ describe('ApplicationRepository - stable list ordering', () => {
       expect(orderBy[orderBy.length - 1]).toEqual({ id: 'asc' });
     },
   );
+});
+
+describe('ApplicationRepository - scoreStatus filter', () => {
+  let findMany: jest.Mock;
+  let repo: ApplicationRepository;
+
+  beforeEach(() => {
+    findMany = jest.fn().mockResolvedValue([]);
+    const prismaStub = { participantApplication: { findMany, count: jest.fn().mockResolvedValue(0) } } as unknown as PrismaService;
+    repo = new ApplicationRepository(prismaStub, {} as ApplicationMapper);
+  });
+
+  it.each(['findByProgram', 'findByBrand'] as const)('%s keeps a single scoreStatus as an equality match', async (method) => {
+    await repo[method]('id-1', { scoreStatus: ScoreStatus.FINALIST });
+    expect(findMany.mock.calls[0][0].where.scoreStatus).toBe('finalist');
+  });
+
+  it.each(['findByProgram', 'findByBrand'] as const)('%s turns several scoreStatus values into an { in } match', async (method) => {
+    await repo[method]('id-1', { scoreStatus: [ScoreStatus.GO_TO_INTERVIEW, ScoreStatus.FINALIST] });
+    expect(findMany.mock.calls[0][0].where.scoreStatus).toEqual({ in: ['go_to_interview', 'finalist'] });
+  });
 });

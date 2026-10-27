@@ -5,6 +5,14 @@ import { ArrowDownTrayIcon } from "@heroicons/react/24/solid";
 import { listApplications, type Application } from "@/src/shared/api-client";
 import { EmptyState } from "@/src/admin/empty-state";
 import { formatDate } from "@/lib/utils";
+import { ScoreStatusBadge } from "./ScoreStatusBadge";
+
+/**
+ * Scoring never sets status = interview_scheduled; it sets scoreStatus. The tab
+ * lists everyone who reached the interview stage, including those already
+ * decided (finalist / not_selected) after interview scoring.
+ */
+export const INTERVIEW_TAB_SCORE_STATUSES = ["go_to_interview", "finalist", "not_selected"] as const;
 
 interface InterviewParticipantsTableProps {
   onExport?: () => void;
@@ -34,7 +42,7 @@ export function InterviewParticipantsTable({
     try {
       const res = await listApplications({
         programId,
-        status: "interview_scheduled",
+        scoreStatus: [...INTERVIEW_TAB_SCORE_STATUSES],
         search: search || undefined,
         limit: pageSize,
         offset: (page - 1) * pageSize,
@@ -61,7 +69,7 @@ export function InterviewParticipantsTable({
     name: app.participant?.fullName ?? "Unknown",
     email: app.participant?.email ?? "",
     registeredOn: formatDate(app.createdAt),
-    scoreStatus: app.scoreStatus ?? "Not Scored",
+    scoreStatus: app.scoreStatus,
   }));
 
   const showingFrom = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -169,22 +177,5 @@ export function InterviewParticipantsTable({
         </div>
       </div>
     </section>
-  );
-}
-
-function ScoreStatusBadge({ status }: { status: string }) {
-  let className = "bg-zinc-100 text-zinc-600";
-
-  if (status === "High") className = "bg-emerald-100 text-emerald-700";
-  else if (status === "Medium") className = "bg-amber-100 text-amber-700";
-  else if (status === "Low") className = "bg-rose-100 text-rose-700";
-  else className = "bg-zinc-100 text-zinc-600";
-
-  return (
-    <span
-      className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${className}`}
-    >
-      {status}
-    </span>
   );
 }

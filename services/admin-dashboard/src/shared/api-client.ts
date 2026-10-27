@@ -1938,6 +1938,8 @@ export function deleteGatewayConfig(id: string): Promise<void> {
 
 // ─── Applications / Submissions / Participants ────────────────────────────────
 
+type ScoreStatusValue = "pending" | "scored" | "go_to_interview" | "rejected" | "finalist" | "not_selected";
+
 export async function listApplications(params?: {
   programId?: string;
   participantId?: string;
@@ -1947,7 +1949,7 @@ export async function listApplications(params?: {
   country?: string;
   registrationPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded";
   programPaymentStatus?: "unpaid" | "paid" | "processing" | "failed" | "cancelled" | "refunded";
-  scoreStatus?: "pending" | "scored" | "go_to_interview" | "rejected" | "finalist" | "not_selected";
+  scoreStatus?: ScoreStatusValue | ScoreStatusValue[];
   sortBy?:
     | "updatedAt"
     | "createdAt"
@@ -1975,7 +1977,7 @@ export async function listApplications(params?: {
   if (params?.country) q.set("country", params.country);
   if (params?.registrationPaymentStatus) q.set("registrationPaymentStatus", params.registrationPaymentStatus);
   if (params?.programPaymentStatus) q.set("programPaymentStatus", params.programPaymentStatus);
-  if (params?.scoreStatus) q.set("scoreStatus", params.scoreStatus);
+  if (params?.scoreStatus) q.set("scoreStatus", [params.scoreStatus].flat().join(","));
   if (params?.sortBy) q.set("sortBy", params.sortBy);
   if (params?.sortOrder) q.set("sortOrder", params.sortOrder);
   if (params?.startDate) q.set("startDate", params.startDate);
@@ -2007,7 +2009,7 @@ export async function exportApplicationsExcel(params: {
   search?: string;
   startDate?: string;
   endDate?: string;
-  scoreStatus?: "pending" | "scored" | "go_to_interview" | "rejected" | "finalist" | "not_selected";
+  scoreStatus?: ScoreStatusValue | ScoreStatusValue[];
   registrationPaymentStatus?: string;
 }): Promise<void> {
   const q = new URLSearchParams();
@@ -2018,7 +2020,7 @@ export async function exportApplicationsExcel(params: {
   if (params.search) q.set("search", params.search);
   if (params.startDate) q.set("startDate", params.startDate);
   if (params.endDate) q.set("endDate", params.endDate);
-  if (params.scoreStatus) q.set("scoreStatus", params.scoreStatus);
+  if (params.scoreStatus) q.set("scoreStatus", [params.scoreStatus].flat().join(","));
   if (params.registrationPaymentStatus) q.set("registrationPaymentStatus", params.registrationPaymentStatus);
 
   const response = await fetch(buildApiUrl(`/applications/export?${q}`), {

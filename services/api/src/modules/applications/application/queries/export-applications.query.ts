@@ -1,4 +1,4 @@
-import { ApplicationStatus, ApplicationCategory, ScoreStatus } from '@core/entities/participant-application.entity';
+import { ApplicationStatus, ApplicationCategory, ScoreStatusFilter } from '@core/entities/participant-application.entity';
 import { PaymentStatus } from '@prisma/client';
 
 export class ExportApplicationsQuery {
@@ -11,7 +11,7 @@ export class ExportApplicationsQuery {
         public readonly search?: string,
         public readonly startDate?: string,
         public readonly endDate?: string,
-        public readonly scoreStatus?: ScoreStatus,
+        public readonly scoreStatus?: ScoreStatusFilter,
         /** Set for callers scoped to specific programs instead of a whole brand. */
         public readonly programIds?: string[],
         public readonly country?: string,

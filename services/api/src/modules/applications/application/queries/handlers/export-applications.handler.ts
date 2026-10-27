@@ -4,6 +4,7 @@ import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
 import { StreamableFile } from '@nestjs/common';
 import { PassThrough } from 'stream';
 import * as ExcelJS from 'exceljs';
+import { toScoreStatusWhere } from '@core/entities/participant-application.entity';
 import { ExportApplicationsQuery } from '../export-applications.query';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import type { Column } from 'exceljs';
@@ -329,7 +330,7 @@ export class ExportApplicationsHandler implements IQueryHandler<ExportApplicatio
         if (query.programId) where.programId = query.programId;
         if (query.status) where.status = query.status;
         if (query.category) where.applicationCategory = query.category;
-        if (query.scoreStatus) where.scoreStatus = query.scoreStatus;
+        if (query.scoreStatus) where.scoreStatus = toScoreStatusWhere(query.scoreStatus);
         if (query.search) {
             where.OR = buildApplicationSearchFilter(query.search);
         }

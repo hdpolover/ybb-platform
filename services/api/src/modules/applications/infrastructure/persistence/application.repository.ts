@@ -4,7 +4,8 @@ import {
   ParticipantApplication,
   ApplicationStatus,
   ApplicationUpdateField,
-  ScoreStatus,
+  ScoreStatusFilter,
+  toScoreStatusWhere,
 } from '@core/entities/participant-application.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
@@ -130,7 +131,7 @@ export class ApplicationRepository implements IApplicationRepository {
       country?: string;
       registrationPaymentStatus?: PaymentStatus;
       programPaymentStatus?: PaymentStatus;
-      scoreStatus?: ScoreStatus;
+      scoreStatus?: ScoreStatusFilter;
       sortBy?:
         | 'updatedAt'
         | 'createdAt'
@@ -189,7 +190,7 @@ export class ApplicationRepository implements IApplicationRepository {
     }
 
     if (filters?.scoreStatus) {
-      where.scoreStatus = filters.scoreStatus;
+      where.scoreStatus = toScoreStatusWhere(filters.scoreStatus);
     }
 
     const createdAt = buildWibDateRangeFilter(filters?.startDate, filters?.endDate);
@@ -223,7 +224,7 @@ export class ApplicationRepository implements IApplicationRepository {
       country?: string;
       registrationPaymentStatus?: PaymentStatus;
       programPaymentStatus?: PaymentStatus;
-      scoreStatus?: ScoreStatus;
+      scoreStatus?: ScoreStatusFilter;
       sortBy?:
         | 'updatedAt'
         | 'createdAt'
@@ -293,7 +294,7 @@ export class ApplicationRepository implements IApplicationRepository {
     }
 
     if (filters?.scoreStatus) {
-      where.scoreStatus = filters.scoreStatus;
+      where.scoreStatus = toScoreStatusWhere(filters.scoreStatus);
     }
 
     const createdAt = buildWibDateRangeFilter(filters?.startDate, filters?.endDate);

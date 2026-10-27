@@ -22,6 +22,7 @@
 
 import { ExportApplicationsHandler } from './export-applications.handler';
 import { ExportApplicationsQuery } from '../export-applications.query';
+import { ScoreStatus } from '@core/entities/participant-application.entity';
 
 // ── where-clause matcher for the in-memory Prisma fake ─────────────────────────
 // Interprets the small subset of Prisma where-clause shapes this handler emits
@@ -173,6 +174,16 @@ describe('ExportApplicationsHandler', () => {
         // M116: country/registrationPaymentStatus/programPaymentStatus were advertised
         // by @ApiQuery but never bound into the query or threaded into the where
         // clause, so an admin's on-screen filters silently didn't apply to the export.
+        it('uses an { in } match when several scoreStatus values are supplied, equality for one', () => {
+            const handler = new ExportApplicationsHandler({} as never);
+            const buildWhere = (q: ExportApplicationsQuery) =>
+                (handler as never as { buildWhere: (q: ExportApplicationsQuery) => Record<string, unknown> }).buildWhere(q);
+            const multi = new ExportApplicationsQuery('b', 'p', undefined, undefined, undefined, undefined, undefined, [ScoreStatus.GO_TO_INTERVIEW, ScoreStatus.FINALIST]);
+            const single = new ExportApplicationsQuery('b', 'p', undefined, undefined, undefined, undefined, undefined, ScoreStatus.FINALIST);
+            expect(buildWhere(multi).scoreStatus).toEqual({ in: ['go_to_interview', 'finalist'] });
+            expect(buildWhere(single).scoreStatus).toBe('finalist');
+        });
+
         it('includes country/registrationPaymentStatus/programPaymentStatus in the where clause when supplied', () => {
             const handler = new ExportApplicationsHandler({} as never);
             const where = (handler as never as { buildWhere: (q: ExportApplicationsQuery) => Record<string, unknown> }).buildWhere(
