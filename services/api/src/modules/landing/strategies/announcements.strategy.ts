@@ -429,7 +429,7 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
       }),
       this.prisma.program.findMany({
         where: programWhere,
-        select: { id: true, name: true, year: true },
+        select: { id: true, name: true, year: true, startDate: true },
       }),
       // Year facet sample — same base scope as facetRows above, but unbounded
       // (a single DateTime column per row is cheap) so no year is ever
@@ -569,11 +569,14 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
     return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
   }
 
-  // Year desc, then title asc — with yearless/"(Archive)"-style entries
-  // always sorted last regardless of what a numeric year comparison would
-  // otherwise say. Program.year is a required column today, but the
-  // null/undefined guard is kept defensively rather than assumed away.
-  private sortEditionPrograms<T extends { name: string; year: number | null | undefined }>(programs: T[]): T[] {
+  // Oldest to newest: year asc, then startDate asc (separates "KYS 2026" from
+  // "KYS 2026 Batch 2" within one year), then name asc as the final tiebreak —
+  // with yearless/"(Archive)"-style entries always sorted last regardless of
+  // what a numeric year comparison would otherwise say. Program.year is a
+  // required column today, but the null/undefined guard is kept defensively.
+  private sortEditionPrograms<T extends { name: string; year: number | null | undefined; startDate?: Date | null }>(
+    programs: T[],
+  ): T[] {
     const isArchived = (program: T) => program.year == null || /\(archive\)/i.test(program.name);
 
     return [...programs].sort((left, right) => {
@@ -581,8 +584,10 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
       const rightArchived = isArchived(right);
       if (leftArchived !== rightArchived) return leftArchived ? 1 : -1;
       if (!leftArchived && !rightArchived && left.year !== right.year) {
-        return (right.year as number) - (left.year as number);
+        return (left.year as number) - (right.year as number);
       }
+      const startDiff = (left.startDate?.getTime() ?? 0) - (right.startDate?.getTime() ?? 0);
+      if (startDiff !== 0) return startDiff;
       return left.name.localeCompare(right.name);
     });
   }
