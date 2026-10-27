@@ -1,4 +1,5 @@
 import { isAllowedForCategory } from '@shared/utils/category-scope.util';
+import { filterVisibleFields } from '@shared/utils/field-visibility.util';
 
 type ProgressStatus = 'pending' | 'in_progress' | 'completed';
 
@@ -10,7 +11,7 @@ interface ApplicationForProgress {
     uploadedFiles?: unknown;
     program?: {
         id?: string;
-        formFields?: { section?: string | null; name: string; isRequired: boolean; allowedCategories?: string[] | null }[];
+        formFields?: { section?: string | null; name: string; isRequired: boolean; allowedCategories?: string[] | null; validationRules?: unknown }[];
         essays?: { id: string; isRequired: boolean; allowedCategories?: string[] | null }[];
         requirements?: { id: string; isRequired: boolean }[];
         subthemes?: unknown[];
@@ -137,9 +138,14 @@ export function buildSubmissionProgressSections(application: ApplicationForProgr
     // 100% because of Fully Funded-only essays they can't even see, and vice
     // versa. Hidden answers already saved (e.g. after a category switch) are
     // left untouched in personalData/essayAnswers, just excluded from progress.
-    const formFields = (application.program?.formFields || []).filter((field) =>
+    const categoryFields = (application.program?.formFields || []).filter((field) =>
         isAllowedForCategory(field.allowedCategories, currentCategory),
     );
+    // visibleWhen-hidden fields don't count either (see field-visibility.util).
+    const scopedValues = Object.fromEntries(
+        categoryFields.map((field) => [field.name, getFieldValue(field.name, personalData, application)]),
+    );
+    const formFields = filterVisibleFields(categoryFields, scopedValues);
     const groupedFields = new Map<string, ProgressField[]>();
 
     for (const field of formFields) {

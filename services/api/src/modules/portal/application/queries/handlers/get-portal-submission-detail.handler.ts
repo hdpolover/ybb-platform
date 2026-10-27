@@ -9,6 +9,7 @@ import { buildE164Phone } from '@shared/utils/phone-e164';
 import { isYearOnlyBirthdate } from '@shared/utils/birthdate-resolution';
 import { formatSubmissionDeadlineMessage, isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
 import { isAllowedForCategory } from '@shared/utils/category-scope.util';
+import { filterVisibleFields } from '@shared/utils/field-visibility.util';
 import { GetPortalSubmissionDetailQuery } from '../portal-queries';
 import {
     PortalSubmissionDetailResponseDto,
@@ -395,6 +396,14 @@ export class GetPortalSubmissionDetailHandler
             } as import('../../../presentation/dto/portal-submission-detail.dto').SubmissionFormFieldDto);
         }
 
+        // visibleWhen-hidden fields stay in the DTO (the portal re-evaluates the
+        // rule live as the user types) but never count toward required/status.
+        // Values come from the same canonical resolver as completeness and only
+        // for fields in this rendered set, never raw personalData keys.
+        const scopedFields = [...sectionMap.values()].flat();
+        const scopedValues = this.buildPersistedSectionValues(scopedFields, application, personalData);
+        const visibleNames = new Set(filterVisibleFields(scopedFields, scopedValues).map((field) => field.name));
+
         const sectionTitles: Record<string, string> = {
             personal_info: 'Personal Information',
             personal_details: 'Personal Details',
@@ -429,8 +438,9 @@ export class GetPortalSubmissionDetailHandler
         for (const [sectionId, fields] of sectionMap) {
             const values = this.buildSectionValues(sectionId, fields, application, personalData, participant);
             const persistedValues = this.buildPersistedSectionValues(fields, application, personalData);
-            const filledCount = fields.filter(field => this.hasValue(persistedValues[field.name])).length;
-            const requiredFields = fields.filter((f) => f.isRequired);
+            const visibleFields = fields.filter((field) => visibleNames.has(field.name));
+            const filledCount = visibleFields.filter(field => this.hasValue(persistedValues[field.name])).length;
+            const requiredFields = visibleFields.filter((f) => f.isRequired);
             // Only required answers count toward completion. Comparing the
             // section-wide filled count to the required count let optional
             // answers stand in for a blank required field, and this status is
@@ -439,8 +449,10 @@ export class GetPortalSubmissionDetailHandler
                 (f) => this.hasValue(persistedValues[f.name]),
             ).length;
 
+            // A section whose required fields are all hidden is satisfied;
+            // collectIncompleteRequiredItems keys off fields.some(isRequired).
             let status = 'pending';
-            if (requiredFields.length > 0 && filledRequiredCount === requiredFields.length) status = 'completed';
+            if (fields.some((f) => f.isRequired) && filledRequiredCount === requiredFields.length) status = 'completed';
             else if (filledCount > 0) status = 'in_progress';
 
             sections.push({

@@ -14,12 +14,19 @@ export type ValidationRules = {
   maxDate?: string;
   /** Regex pattern, advanced only. */
   pattern?: string;
+  /** Show this field only when `field` equals one of `equals` (a string, or a list). */
+  visibleWhen?: { field: string; equals: string | string[] };
 };
+
+/** A sibling field the "Show only when" control can depend on. */
+export type VisibilityController = { name: string; label: string; options: string[] };
 
 interface ValidationRulesEditorProps {
   fieldType: string;
   value: ValidationRules;
   onChange: (next: ValidationRules) => void;
+  /** Other fields in the same program (current field excluded). */
+  controllers?: VisibilityController[];
 }
 
 function NumberInput({
@@ -67,11 +74,11 @@ function NumberInput({
  * should be able to fill out confidently. Advanced cases (custom regex,
  * conditional rules) aren't in scope; fall back to a dev if needed.
  */
-export function ValidationRulesEditor({
+function TypeSpecificRules({
   fieldType,
   value,
   onChange,
-}: ValidationRulesEditorProps) {
+}: Omit<ValidationRulesEditorProps, "controllers">) {
   const set = <K extends keyof ValidationRules>(key: K, v: ValidationRules[K]) =>
     onChange({ ...value, [key]: v });
 
@@ -176,5 +183,98 @@ export function ValidationRulesEditor({
     <p className="text-xs text-zinc-500">
       No extra validation needed for this field type.
     </p>
+  );
+}
+
+const toList = (equals: string | string[] | undefined): string[] =>
+  Array.isArray(equals) ? equals : equals ? [equals] : [];
+
+/** "Show only when <field> is <value>" — writes `visibleWhen`, or removes it when no field is picked. */
+function VisibleWhenControl({
+  value,
+  onChange,
+  controllers,
+}: {
+  value: ValidationRules;
+  onChange: (next: ValidationRules) => void;
+  controllers: VisibilityController[];
+}) {
+  const rule = value.visibleWhen;
+  const controller = controllers.find((c) => c.name === rule?.field);
+  const selected = toList(rule?.equals);
+  const setRule = (field: string, values: string[]) => {
+    if (!field) {
+      const { visibleWhen: _removed, ...rest } = value;
+      void _removed;
+      onChange(rest);
+      return;
+    }
+    onChange({ ...value, visibleWhen: { field, equals: values.length === 1 ? values[0] : values } });
+  };
+  const inputClass =
+    "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
+  return (
+    <div className="space-y-2 border-t border-zinc-100 pt-3">
+      <label className="block text-xs font-medium text-zinc-600">Show only when</label>
+      <select
+        value={rule?.field ?? ""}
+        onChange={(e) => setRule(e.target.value, [])}
+        className={inputClass}
+      >
+        <option value="">Always show this field</option>
+        {controllers.map((c) => (
+          <option key={c.name} value={c.name}>
+            {c.label} ({c.name})
+          </option>
+        ))}
+        {rule?.field && !controller && <option value={rule.field}>{rule.field} (field not found)</option>}
+      </select>
+      {rule?.field && controller && controller.options.length > 0 && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {controller.options.map((option) => (
+            <label key={option} className="flex items-center gap-1.5 text-sm text-zinc-700">
+              <input
+                type="checkbox"
+                checked={selected.includes(option)}
+                onChange={(e) =>
+                  setRule(
+                    rule.field,
+                    e.target.checked ? [...selected, option] : selected.filter((v) => v !== option),
+                  )
+                }
+              />
+              {option}
+            </label>
+          ))}
+        </div>
+      )}
+      {rule?.field && (!controller || controller.options.length === 0) && (
+        <input
+          type="text"
+          value={selected.join(", ")}
+          onChange={(e) =>
+            setRule(
+              rule.field,
+              e.target.value.split(",").map((v) => v.trim()).filter(Boolean),
+            )
+          }
+          placeholder="Value to match, e.g. Yes (comma-separate for several)"
+          className={inputClass}
+        />
+      )}
+      <p className="text-[11px] text-zinc-400">
+        When the condition is not met, applicants do not see this field and it is not required.
+      </p>
+    </div>
+  );
+}
+
+export function ValidationRulesEditor({ controllers = [], ...props }: ValidationRulesEditorProps) {
+  return (
+    <div className="space-y-3">
+      <TypeSpecificRules {...props} />
+      <VisibleWhenControl value={props.value} onChange={props.onChange} controllers={controllers} />
+    </div>
   );
 }

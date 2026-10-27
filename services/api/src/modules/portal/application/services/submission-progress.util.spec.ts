@@ -79,4 +79,49 @@ describe('calculateSubmissionProgress', () => {
 
         expect(progress).toBe(50);
     });
+
+    it('ignores a required field hidden by visibleWhen, but counts it once the rule matches', () => {
+        const program = {
+            id: 'program-1',
+            formFields: [
+                { section: 'personal_details', name: 'is_alumni', isRequired: true },
+                {
+                    section: 'professional_profile',
+                    name: 'alumni_program',
+                    isRequired: true,
+                    validationRules: { visibleWhen: { field: 'is_alumni', equals: 'Yes' } },
+                },
+            ],
+            essays: [],
+            requirements: [],
+        };
+
+        const hidden = calculateSubmissionProgress({ status: 'draft', personalData: { is_alumni: 'No' }, program });
+        const shown = calculateSubmissionProgress({ status: 'draft', personalData: { is_alumni: 'Yes' }, program });
+
+        expect(hidden).toBe(100);
+        expect(shown).toBe(50);
+    });
+
+    it('does not hide a required field because of a personalData key whose controller is not in the form', () => {
+        const progress = calculateSubmissionProgress({
+            status: 'draft',
+            personalData: { ghost_flag: 'No' },
+            program: {
+                id: 'program-1',
+                formFields: [
+                    {
+                        section: 'personal_details',
+                        name: 'alumni_program',
+                        isRequired: true,
+                        validationRules: { visibleWhen: { field: 'ghost_flag', equals: 'Yes' } },
+                    },
+                ],
+                essays: [],
+                requirements: [],
+            },
+        });
+
+        expect(progress).toBe(0);
+    });
 });

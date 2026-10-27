@@ -18,7 +18,7 @@ import {
 } from "@/app/components/submissionsMasterData/api";
 import { uploadFileViaPresignedUrl, type MediaFile } from "@/src/shared/api-client";
 import { OptionsRepeater, type OptionRow } from "./OptionsRepeater";
-import { ValidationRulesEditor, type ValidationRules } from "./ValidationRulesEditor";
+import { ValidationRulesEditor, type ValidationRules, type VisibilityController } from "./ValidationRulesEditor";
 import { MediaLibraryPicker } from "./MediaLibraryPicker";
 import { HelpAssetsRepeater, type HelpAssetRow, HELP_ASSETS_MAX } from "./HelpAssetsRepeater";
 import type { ApplicationFormFieldRow } from "./FormFieldsTable";
@@ -71,6 +71,8 @@ interface FormFieldEditorProps {
   open: boolean;
   initialField: ApplicationFormFieldRow | null;
   programId: string;
+  /** All fields in the program; feeds the "Show only when" picker. */
+  siblingFields?: ApplicationFormFieldRow[];
   onClose: () => void;
   onSaved: () => void;
 }
@@ -198,6 +200,15 @@ function optionsToRows(raw: unknown): OptionRow[] {
     .filter((r) => r.label || r.value);
 }
 
+function visibleWhenFromRaw(raw: unknown): ValidationRules["visibleWhen"] {
+  if (!raw || typeof raw !== "object") return undefined;
+  const { field, equals } = raw as { field?: unknown; equals?: unknown };
+  if (typeof field !== "string" || !field) return undefined;
+  if (typeof equals === "string") return { field, equals };
+  if (Array.isArray(equals)) return { field, equals: equals.filter((v): v is string => typeof v === "string") };
+  return undefined;
+}
+
 function validationRulesFromRaw(raw: unknown): ValidationRules {
   if (!raw || typeof raw !== "object") return {};
   const rec = raw as Record<string, unknown>;
@@ -220,6 +231,7 @@ function validationRulesFromRaw(raw: unknown): ValidationRules {
     minDate: pick("minDate"),
     maxDate: pick("maxDate"),
     pattern: pick("pattern"),
+    visibleWhen: visibleWhenFromRaw(rec.visibleWhen),
   };
 }
 
@@ -266,14 +278,36 @@ function toEditorState(field: ApplicationFormFieldRow | null): EditorState {
   };
 }
 
-/** Drop empty entries from validation rules so we don't send `{minLength: undefined}`. */
-function pruneRules(rules: ValidationRules): Record<string, unknown> | undefined {
+/** Rule keys this editor owns; anything else stored on the field (fieldKind, wordLimit, ...) is carried over untouched. */
+const MANAGED_RULE_KEYS = new Set([
+  "minLength", "maxLength", "min", "max", "maxSize", "accept", "minDate", "maxDate", "pattern", "visibleWhen", "defaultValue",
+]);
+
+/**
+ * Builds the validation_rules payload: drops empty entries, keeps unmanaged keys
+ * from the stored value, and always keeps `visibleWhen` (select/radio/checkbox
+ * fields hide the other inputs but can still be conditional). Returns `{}` rather
+ * than undefined when the field had rules before, because the API only replaces
+ * validation_rules when the key is present, so `{}` is how a cleared rule is saved.
+ */
+function buildRulesPayload(
+  rules: ValidationRules,
+  stored: unknown,
+  keepTypeRules: boolean,
+): Record<string, unknown> | undefined {
   const out: Record<string, unknown> = {};
+  if (stored && typeof stored === "object") {
+    for (const [k, v] of Object.entries(stored as Record<string, unknown>)) {
+      if (!MANAGED_RULE_KEYS.has(k)) out[k] = v;
+    }
+  }
   for (const [k, v] of Object.entries(rules)) {
     if (v === undefined || v === null || v === "") continue;
+    if (k !== "visibleWhen" && !keepTypeRules) continue;
     out[k] = v;
   }
-  return Object.keys(out).length > 0 ? out : undefined;
+  const hadStored = stored && typeof stored === "object" && Object.keys(stored).length > 0;
+  return Object.keys(out).length > 0 || hadStored ? out : undefined;
 }
 
 function normalizeRichText(value: string): string | undefined {
@@ -293,6 +327,7 @@ export function FormFieldEditor({
   open,
   initialField,
   programId,
+  siblingFields,
   onClose,
   onSaved,
 }: FormFieldEditorProps) {
@@ -331,6 +366,13 @@ export function FormFieldEditor({
 
   const isEditing = !!initialField;
   const needsOptions = TYPES_WITH_OPTIONS.has(state.fieldType);
+  const controllers: VisibilityController[] = (siblingFields ?? [])
+    .filter((f) => f.fieldName !== initialField?.fieldName && f.fieldType !== "file")
+    .map((f) => ({
+      name: f.fieldName,
+      label: f.label,
+      options: optionsToRows(f.options).map((o) => o.value).filter(Boolean),
+    }));
   // System fields' type and storage key are owned by the shared system field
   // catalog (Audit M12) and the API rejects a change to either, so the
   // controls are locked here rather than let the admin hit that error.
@@ -436,7 +478,7 @@ export function FormFieldEditor({
               return { label, value };
             })
         : undefined,
-      validationRules: needsOptions ? undefined : pruneRules(state.validationRules),
+      validationRules: buildRulesPayload(state.validationRules, initialField?.validationRules, !needsOptions),
       allowedCategories: state.categoryScope ? [state.categoryScope] : [],
     };
 
@@ -710,6 +752,7 @@ export function FormFieldEditor({
               fieldType={state.fieldType}
               value={state.validationRules}
               onChange={(next) => patch("validationRules", next)}
+              controllers={controllers}
             />
           </section>
 

@@ -1,7 +1,7 @@
 // services/api/src/modules/portal/application/queries/handlers/get-portal-submission-detail.handler.incomplete-items.spec.ts
 import { GetPortalSubmissionDetailHandler } from './get-portal-submission-detail.handler';
 
-const formField = (name: string, isRequired: boolean, order: number) => ({
+const formField = (name: string, isRequired: boolean, order: number, validationRules: unknown = {}) => ({
     id: `field-${name}`,
     section: 'personal_details',
     name,
@@ -13,20 +13,21 @@ const formField = (name: string, isRequired: boolean, order: number) => ({
     mediaAlt: null,
     helpAssets: [],
     options: [],
-    validationRules: {},
+    validationRules,
     isRequired,
     order,
-    allowedCategories: [],
+    allowedCategories: [] as string[],
 });
 
 interface ApplicationOverrides {
     personalData?: Record<string, unknown>;
     essayAnswers?: Record<string, unknown>;
     uploadedFiles?: Record<string, unknown>;
+    extraFields?: ReturnType<typeof formField>[];
 }
 
 // Personal Details: two required fields among an optional one.
-const makeApplication = ({ personalData = {}, essayAnswers = {}, uploadedFiles = {} }: ApplicationOverrides) => ({
+const makeApplication = ({ personalData = {}, essayAnswers = {}, uploadedFiles = {}, extraFields = [] }: ApplicationOverrides) => ({
     id: 'app-1',
     status: 'draft',
     applicationCategory: 'fully_funded',
@@ -47,6 +48,7 @@ const makeApplication = ({ personalData = {}, essayAnswers = {}, uploadedFiles =
             formField('full_name', true, 1),
             formField('nickname', false, 2),
             formField('nationality', true, 3),
+            ...extraFields,
         ],
         essays: [
             { id: 'essay-1', question: 'Why do you want to join?', isRequired: true, wordLimit: null, order: 1, allowedCategories: [] },
@@ -117,5 +119,82 @@ describe('GetPortalSubmissionDetailHandler.findIncompleteRequiredItems', () => {
         expect(prisma.participantApplication.findFirst).toHaveBeenCalledWith(
             expect.objectContaining({ where: expect.objectContaining({ programId: 'program-42' }) }),
         );
+    });
+
+    describe('conditional visibility (visibleWhen)', () => {
+        const alumniFields = [
+            formField('is_alumni', true, 4),
+            formField('alumni_program', true, 5, { visibleWhen: { field: 'is_alumni', equals: 'Yes' } }),
+        ];
+        const base = { ...COMPLETE.personalData, };
+
+        it('does not block submit when a required field is hidden by its rule', async () => {
+            const { handler } = setup({ ...COMPLETE, extraFields: alumniFields, personalData: { ...base, is_alumni: 'No' } });
+
+            expect(await handler.findIncompleteRequiredItems('user-1')).toEqual([]);
+        });
+
+        it('ignores a stale answer on a hidden field and still passes', async () => {
+            const { handler } = setup({
+                ...COMPLETE,
+                extraFields: alumniFields,
+                personalData: { ...base, is_alumni: 'No', alumni_program: '' },
+            });
+
+            expect(await handler.findIncompleteRequiredItems('user-1')).toEqual([]);
+        });
+
+        it('blocks when the rule matches and the now-visible required field is blank', async () => {
+            const { handler } = setup({ ...COMPLETE, extraFields: alumniFields, personalData: { ...base, is_alumni: 'Yes' } });
+
+            expect(await handler.findIncompleteRequiredItems('user-1')).toEqual(['Complete Personal Details']);
+        });
+
+        it('still requires the field when a crafted personal_data key matches a controller that is not in the program form', async () => {
+            const { handler } = setup({
+                ...COMPLETE,
+                extraFields: [formField('alumni_program', true, 5, { visibleWhen: { field: 'ghost_flag', equals: 'Yes' } })],
+                personalData: { ...base, ghost_flag: 'No' },
+            });
+
+            expect(await handler.findIncompleteRequiredItems('user-1')).toEqual(['Complete Personal Details']);
+        });
+
+        it('still requires the field when its controller is filtered out by the applicant category', async () => {
+            const { handler } = setup({
+                ...COMPLETE,
+                extraFields: [
+                    { ...formField('is_alumni', false, 4), allowedCategories: ['self_funded'] },
+                    formField('alumni_program', true, 5, { visibleWhen: { field: 'is_alumni', equals: 'Yes' } }),
+                ],
+                personalData: { ...base, is_alumni: 'No' },
+            });
+
+            expect(await handler.findIncompleteRequiredItems('user-1')).toEqual(['Complete Personal Details']);
+        });
+
+        it('still requires the field when its controller is itself hidden by its own rule', async () => {
+            const { handler } = setup({
+                ...COMPLETE,
+                extraFields: [
+                    formField('is_alumni', false, 4),
+                    formField('alumni_program', false, 5, { visibleWhen: { field: 'is_alumni', equals: 'Yes' } }),
+                    formField('alumni_year', true, 6, { visibleWhen: { field: 'alumni_program', equals: 'IYS' } }),
+                ],
+                personalData: { ...base, is_alumni: 'No', alumni_program: 'IYS' },
+            });
+
+            expect(await handler.findIncompleteRequiredItems('user-1')).toEqual(['Complete Personal Details']);
+        });
+
+        it('passes when the rule matches and the field is filled', async () => {
+            const { handler } = setup({
+                ...COMPLETE,
+                extraFields: alumniFields,
+                personalData: { ...base, is_alumni: 'Yes', alumni_program: 'IYS' },
+            });
+
+            expect(await handler.findIncompleteRequiredItems('user-1')).toEqual([]);
+        });
     });
 });

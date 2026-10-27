@@ -16,6 +16,8 @@ export interface FieldValidationRules {
     min?: number;
     max?: number;
     pattern?: string;
+    /** Show this field only when `field` equals one of `equals` (see shared/utils/field-visibility.util). */
+    visibleWhen?: { field: string; equals: string | string[] };
 }
 
 /** Supplementary guidance item shown beside a form field (example link, tutorial video, downloadable template) */
