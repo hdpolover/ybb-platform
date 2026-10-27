@@ -1,5 +1,6 @@
 import React from "react";
 import { InfoField } from "../InfoField";
+import type { MiscExtraField } from "@/lib/misc-extra-fields";
 
 export interface Miscellaneous {
   instagram: string;
@@ -8,6 +9,8 @@ export interface Miscellaneous {
   twibbon: string;
   requirementLink: string;
   referralCode: string;
+  /** Other answered fields from the program's miscellaneous form section. */
+  extraFields: MiscExtraField[];
 }
 
 export function MiscellaneousTab({ data }: { data: Miscellaneous }) {
@@ -21,6 +24,9 @@ export function MiscellaneousTab({ data }: { data: Miscellaneous }) {
         <InfoField label="Twibbon Link" value={data.twibbon} isLink />
         <InfoField label="Requirement Link" value={data.requirementLink} isLink />
         <InfoField label="Ambassador Referral Code" value={data.referralCode} />
+        {data.extraFields.map((f) => (
+          <InfoField key={f.name} label={f.label} value={f.value} isLink={f.isLink} />
+        ))}
       </div>
     </section>
   );

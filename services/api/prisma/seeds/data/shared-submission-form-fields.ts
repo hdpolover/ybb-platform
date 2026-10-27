@@ -411,6 +411,38 @@ const LEGACY_SUBMISSION_FORM_FIELDS: SeedFormField[] = [
     isRequired: false,
     order: 32,
   },
+  {
+    section: 'miscellaneous',
+    label: 'Are you an alumni of a YBB program?',
+    name: 'alumni_status',
+    type: 'select',
+    options: [
+      { label: 'Yes', value: 'Yes' },
+      { label: 'No', value: 'No' },
+    ],
+    validationRules: {},
+    isRequired: false,
+    order: 33,
+  },
+  {
+    section: 'miscellaneous',
+    label: 'Which YBB program did you join?',
+    name: 'alumni_program',
+    type: 'text',
+    validationRules: { maxLength: 100, visibleWhen: { field: 'alumni_status', equals: 'Yes' } },
+    isRequired: false,
+    order: 34,
+  },
+  {
+    section: 'miscellaneous',
+    label: 'Which year?',
+    name: 'alumni_year',
+    type: 'select',
+    options: ['2026', '2025', '2024', '2023', '2022 or earlier'].map((y) => ({ label: y, value: y })),
+    validationRules: { visibleWhen: { field: 'alumni_status', equals: 'Yes' } },
+    isRequired: false,
+    order: 35,
+  },
 ];
 
 export function buildLegacySubmissionFormFields(): SeedFormField[] {
