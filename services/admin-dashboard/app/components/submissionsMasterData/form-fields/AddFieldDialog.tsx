@@ -11,6 +11,7 @@ import {
 import { fetchSystemFormFields, type SystemFormField } from "./catalog-api";
 import { SystemFieldConfigSheet } from "./SystemFieldConfigSheet";
 import { FormFieldEditor } from "./FormFieldEditor";
+import type { ApplicationFormFieldRow } from "./FormFieldsTable";
 
 type Mode = "picker" | "system" | "custom";
 
@@ -33,6 +34,7 @@ const CATEGORY_ORDER = [
 interface AddFieldDialogProps {
   open: boolean;
   programId: string;
+  siblingFields?: ApplicationFormFieldRow[];
   onClose: () => void;
   onSaved: () => void;
 }
@@ -40,6 +42,7 @@ interface AddFieldDialogProps {
 export function AddFieldDialog({
   open,
   programId,
+  siblingFields,
   onClose,
   onSaved,
 }: AddFieldDialogProps) {
@@ -115,6 +118,7 @@ export function AddFieldDialog({
       <FormFieldEditor
         open
         programId={programId}
+        siblingFields={siblingFields}
         initialField={null}
         onClose={() => setMode("picker")}
         onSaved={() => {

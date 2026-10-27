@@ -412,6 +412,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
       <AddFieldDialog
         open={addDialogOpen}
         programId={resolvedProgramId}
+        siblingFields={fields}
         onClose={() => setAddDialogOpen(false)}
         onSaved={() => {
           setAddDialogOpen(false);
@@ -448,6 +449,7 @@ export function FormFieldsTable({ programId }: { programId: string }) {
       <FormFieldEditor
         open={editingField !== null}
         programId={resolvedProgramId}
+        siblingFields={fields}
         initialField={editingField}
         onClose={() => setEditingField(null)}
         onSaved={() => {

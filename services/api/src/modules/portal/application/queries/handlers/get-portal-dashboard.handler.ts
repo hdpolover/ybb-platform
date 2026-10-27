@@ -80,6 +80,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                                 name: true,
                                 isRequired: true,
                                 allowedCategories: true,
+                                validationRules: true,
                             },
                             orderBy: { order: 'asc' },
                         },

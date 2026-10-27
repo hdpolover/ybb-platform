@@ -59,6 +59,7 @@ export class GetPortalSubmissionsHandler implements IQueryHandler<GetPortalSubmi
                                 name: true,
                                 isRequired: true,
                                 allowedCategories: true,
+                                validationRules: true,
                             },
                             orderBy: { order: 'asc' },
                         },
