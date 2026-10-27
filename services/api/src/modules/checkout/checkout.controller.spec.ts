@@ -24,7 +24,7 @@ describe('CheckoutController.getConfig', () => {
     const policy = { resolveBrandId: jest.fn(), listOffers: jest.fn() };
     const env: Record<string, string | undefined> = {};
     const config = { get: (k: string) => env[k] };
-    const controller = new CheckoutController(policy as never, config as never);
+    const controller = new CheckoutController(policy as never, config as never, {} as never);
 
     beforeEach(() => {
         jest.resetAllMocks();

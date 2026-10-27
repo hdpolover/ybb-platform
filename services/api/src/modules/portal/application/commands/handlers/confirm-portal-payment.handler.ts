@@ -367,6 +367,9 @@ export class ConfirmPortalPaymentHandler {
             payment_method_id: paymentMethodId,
             gateway_token: details?.gatewayToken,
             user_id: userId,
+            ...(details?.callbackUrl
+                ? { payment_details: { details_json: JSON.stringify({ callback_url: details.callbackUrl }) } }
+                : {}),
         });
 
         // Update invoice with intent reference

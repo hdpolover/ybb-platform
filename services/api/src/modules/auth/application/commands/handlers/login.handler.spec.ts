@@ -489,6 +489,22 @@ describe('LoginHandler', () => {
     });
   });
 
+  // Regression guard for POST /v1/checkout: that endpoint hands an unverified
+  // user a session, but /auth/login must keep refusing them.
+  it('rejects an unverified user with no program in scope when the brand requires verification', async () => {
+    mockPrismaService.user.findFirst.mockResolvedValueOnce({
+      ...brandOneUser,
+      emailVerified: false,
+      brand: { ...brandOneUser.brand, requireEmailVerification: true },
+    });
+
+    const command = new LoginCommand('same@example.com', 'password123', '127.0.0.1', 'Mozilla/5.0', 'brand-1');
+
+    await expect(handler.execute(command)).rejects.toThrow(
+      'Email not verified. Please verify your email before logging in.',
+    );
+  });
+
   it('allows unverified user when selected program does not require verification even if brand does', async () => {
     mockPrismaService.user.findFirst.mockImplementationOnce(async () => ({
       ...brandOneUser,

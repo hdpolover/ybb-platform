@@ -163,7 +163,7 @@ const CREDENTIAL_THROTTLE = {
  * varying the address it sends, and is sized for a building for the reasons
  * above — a lab full of students registering together is normal traffic.
  */
-const MAILBOX_THROTTLE = {
+export const MAILBOX_THROTTLE = {
   default: { limit: 10, ttl: ONE_HOUR, getTracker: emailTracker },
   // Same building-sized ceiling as CREDENTIAL_THROTTLE, and for the same
   // reason. A route-level @Throttle REPLACES the global tier of that name
