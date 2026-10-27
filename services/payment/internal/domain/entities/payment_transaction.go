@@ -36,6 +36,9 @@ type PaymentTransaction struct {
 	Status          TransactionStatus `gorm:"type:varchar(20);not null" json:"status"`
 	GatewayResponse json.RawMessage   `gorm:"type:jsonb" json:"gateway_response"`
 	ErrorCode       string            `gorm:"type:varchar(50)" json:"error_code"`
+	// GatewayConfigID pins the brand/program-scoped gateway config that charged this
+	// transaction. NULL means the global/env gateway (legacy behaviour).
+	GatewayConfigID *string           `gorm:"type:uuid;column:gateway_config_id" json:"gateway_config_id,omitempty"`
 	ProofFileURL    string            `gorm:"type:text" json:"proof_file_url"`
 	AdminNotes      string            `gorm:"type:text" json:"admin_notes"`
 	ReviewedBy      *string           `gorm:"type:uuid" json:"reviewed_by"`

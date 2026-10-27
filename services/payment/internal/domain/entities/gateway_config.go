@@ -11,8 +11,9 @@ import (
 // Maps to table: payment_gateway_configs
 type GatewayConfig struct {
 	ID            string  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	BrandID       *string `gorm:"type:uuid;column:brand_id" json:"brand_id"` // Nullable for Global Config
-	Provider      string  `gorm:"type:varchar(50);not null" json:"provider"` // 'midtrans', 'xendit'
+	BrandID       *string `gorm:"type:uuid;column:brand_id" json:"brand_id"`     // Nullable for Global Config
+	ProgramID     *string `gorm:"type:uuid;column:program_id" json:"program_id"` // Program override; mutually exclusive with BrandID
+	Provider      string  `gorm:"type:varchar(50);not null" json:"provider"`     // 'midtrans', 'xendit'
 	Mode          string  `gorm:"type:varchar(20);default:'sandbox'" json:"mode"`
 	ServerKey     string  `gorm:"type:text;not null" json:"server_key"`
 	ClientKey     string  `gorm:"type:text;not null" json:"client_key"`

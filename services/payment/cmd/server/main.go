@@ -269,12 +269,12 @@ func main() {
 	logger.Info("Server exited")
 }
 
-// registerGateways loads payment gateways with DB-stored configs taking priority over env vars.
-// Strategy:
-//  1. Reset the factory so deactivated providers are dropped on each call.
-//  2. Start with env-var fallbacks.
-//  3. For each active DB config, build and register the matching gateway, overwriting the
-//     env-var version if the same provider was already registered.
+// registerGateways rebuilds the gateway snapshot and swaps it in atomically.
+// Sources, in order: the manual gateway, env-var fallbacks (virtual global configs
+// with no id), then every non-deleted DB config. A later global entry wins, so a
+// DB global config overrides its env counterpart; brand/program configs are
+// served by GatewayFactory.Resolve. Inactive configs are kept for by-id lookups
+// only. If the DB load fails the previous snapshot is kept (env-only on first boot).
 //
 // Safe to call repeatedly: a periodic refresh keeps the in-memory factory in sync
 // with payment_gateway_configs without requiring a service restart.
@@ -285,84 +285,55 @@ func registerGateways(
 	gatewayConfigRepo *persistence.GatewayConfigRepository,
 	logger *zap.SugaredLogger,
 ) {
-	gatewayFactory.Reset()
-
-	registered := []string{}
-
-	// Manual gateway is always registered — it has no API keys.
-	gatewayFactory.Register(infraGateways.NewManualGateway())
-	registered = append(registered, "manual")
-
-	// --- Step 1: env-var fallbacks ---
-	if cfg.MidtransServerKey != "" {
-		gatewayFactory.Register(infraGateways.NewMidtransGateway(
-			cfg.MidtransServerKey,
-			cfg.MidtransClientKey,
-			cfg.Environment,
-		))
-		registered = append(registered, "midtrans(env)")
-	}
-	if cfg.XenditSecretKey != "" {
-		gatewayFactory.Register(infraGateways.NewXenditGateway(cfg.XenditSecretKey, cfg.XenditCallbackToken))
-		registered = append(registered, "xendit(env)")
-	}
-	if cfg.StripeSecretKey != "" {
-		gatewayFactory.Register(infraGateways.NewStripeGateway(cfg.StripeSecretKey))
-		registered = append(registered, "stripe(env)")
-	}
-	if cfg.PayPalClientID != "" && cfg.PayPalSecret != "" {
-		paypalGateway, err := infraGateways.NewPayPalGateway(cfg.PayPalClientID, cfg.PayPalSecret, cfg.PayPalMode)
-		if err != nil {
-			logger.Warnf("Skipping PayPal env gateway registration: %v", err)
-		} else {
-			gatewayFactory.Register(paypalGateway)
-			registered = append(registered, "paypal(env)")
-		}
-	}
-
-	// --- Step 2: DB configs override env-var registrations ---
-	dbConfigs, err := gatewayConfigRepo.FindActive(ctx)
+	dbConfigs, err := gatewayConfigRepo.FindAllRuntime(ctx)
 	if err != nil {
+		if gatewayFactory.HasSnapshot() {
+			logger.Warnf("Could not load gateway configs from DB, keeping previous gateway snapshot: %v", err)
+			return
+		}
 		logger.Warnf("Could not load gateway configs from DB, using env vars only: %v", err)
-	} else {
-		for _, dbCfg := range dbConfigs {
-			env := dbCfg.Mode // "sandbox" or "production"
-			switch dbCfg.Provider {
-			case "midtrans":
-				gatewayFactory.Register(infraGateways.NewMidtransGateway(
-					dbCfg.ServerKey,
-					dbCfg.ClientKey,
-					env,
-				))
-				registered = append(registered, "midtrans(db)")
-			case "xendit":
-				gatewayFactory.Register(infraGateways.NewXenditGateway(
-					dbCfg.ServerKey,
-					dbCfg.WebhookSecret, // callback token stored in webhook_secret
-				))
-				registered = append(registered, "xendit(db)")
-			case "stripe":
-				gatewayFactory.Register(infraGateways.NewStripeGateway(dbCfg.ServerKey))
-				registered = append(registered, "stripe(db)")
-			case "paypal":
-				paypalGateway, err := infraGateways.NewPayPalGateway(
-					dbCfg.ServerKey, // client_id stored in server_key
-					dbCfg.ClientKey, // secret stored in client_key
-					env,
-				)
-				if err != nil {
-					logger.Warnf("Skipping PayPal DB gateway registration for config %s: %v", dbCfg.ID, err)
-				} else {
-					gatewayFactory.Register(paypalGateway)
-					registered = append(registered, "paypal(db)")
-				}
-			default:
-				logger.Warnf("Unknown provider %q in gateway_configs, skipping", dbCfg.Provider)
+		dbConfigs = nil
+	}
+
+	entries := infraGateways.BuildEntries(envGatewayCredentials(cfg), dbConfigs, logger.Warnf)
+	gatewayFactory.Replace(entries)
+
+	registered := make([]string, 0, len(entries))
+	for _, e := range entries {
+		source := "env"
+		switch {
+		case e.Provider == "manual":
+			source = "builtin"
+		case e.ID != "":
+			source = "db:" + e.ID
+			if !e.IsActive {
+				source += ",inactive"
 			}
 		}
+		registered = append(registered, fmt.Sprintf("%s(%s)", e.Provider, source))
 	}
-
 	logger.Infof("Registered payment gateways: %v", registered)
+}
+
+// envGatewayCredentials lists the env-var gateway fallbacks that are configured.
+func envGatewayCredentials(cfg *config.Config) []infraGateways.EnvCredentials {
+	var env []infraGateways.EnvCredentials
+	if cfg.MidtransServerKey != "" {
+		env = append(env, infraGateways.EnvCredentials{Provider: "midtrans",
+			ServerKey: cfg.MidtransServerKey, ClientKey: cfg.MidtransClientKey, Mode: cfg.Environment})
+	}
+	if cfg.XenditSecretKey != "" {
+		env = append(env, infraGateways.EnvCredentials{Provider: "xendit",
+			ServerKey: cfg.XenditSecretKey, WebhookSecret: cfg.XenditCallbackToken})
+	}
+	if cfg.StripeSecretKey != "" {
+		env = append(env, infraGateways.EnvCredentials{Provider: "stripe", ServerKey: cfg.StripeSecretKey})
+	}
+	if cfg.PayPalClientID != "" && cfg.PayPalSecret != "" {
+		env = append(env, infraGateways.EnvCredentials{Provider: "paypal",
+			ServerKey: cfg.PayPalClientID, ClientKey: cfg.PayPalSecret, Mode: cfg.PayPalMode})
+	}
+	return env
 }
 
 // setupRouter registers all HTTP routes.

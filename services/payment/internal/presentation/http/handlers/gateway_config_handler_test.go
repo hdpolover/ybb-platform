@@ -1,11 +1,17 @@
 package handlers
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/ybb-platform/payment/internal/domain/entities"
+	"github.com/ybb-platform/payment/internal/domain/repositories"
 )
 
 func TestValidateGatewayConfigRequest(t *testing.T) {
@@ -158,4 +164,131 @@ func TestKeepSecretIfMaskedPreservesStoredValue(t *testing.T) {
 	require.Equal(t, stored, keepSecretIfMasked(maskSecret(stored), stored))
 	require.Equal(t, "xnd_production_new999", keepSecretIfMasked("xnd_production_new999", stored))
 	require.Equal(t, "", keepSecretIfMasked("", stored), "an explicitly cleared field still clears")
+}
+
+// --- scope handling -------------------------------------------------------
+
+type fakeGatewayConfigRepo struct {
+	repositories.GatewayConfigRepository
+	stored  *entities.GatewayConfig
+	created *entities.GatewayConfig
+	updated *entities.GatewayConfig
+	deleted bool
+	pending int64
+}
+
+func (r *fakeGatewayConfigRepo) FindByID(context.Context, string) (*entities.GatewayConfig, error) {
+	if r.stored == nil {
+		return nil, errors.New("not found")
+	}
+	cp := *r.stored
+	return &cp, nil
+}
+func (r *fakeGatewayConfigRepo) Create(_ context.Context, c *entities.GatewayConfig) error {
+	r.created = c
+	return nil
+}
+func (r *fakeGatewayConfigRepo) Update(_ context.Context, c *entities.GatewayConfig) error {
+	r.updated = c
+	return nil
+}
+func (r *fakeGatewayConfigRepo) Delete(context.Context, string) error { r.deleted = true; return nil }
+func (r *fakeGatewayConfigRepo) CountPendingTransactions(context.Context, string) (int64, error) {
+	return r.pending, nil
+}
+
+type fakeMethodRepo struct {
+	repositories.PaymentMethodRepository
+	refs int64
+}
+
+func (r fakeMethodRepo) CountByGatewayName(context.Context, string) (int64, error) {
+	return r.refs, nil
+}
+
+func doGatewayConfigReq(h gin.HandlerFunc, method, body string) *httptest.ResponseRecorder {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(method, "/gateway-configs/cfg-1", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Params = gin.Params{{Key: "id", Value: "cfg-1"}}
+	h(c)
+	return w
+}
+
+const validXenditBody = `"provider":"xendit","mode":"sandbox","server_key":"xnd_development_a","client_key":"x","webhook_secret":"t","is_active":true`
+const (
+	brandUUID   = "11111111-1111-1111-1111-111111111111"
+	programUUID = "22222222-2222-2222-2222-222222222222"
+)
+
+func TestCreateRejectsBrandAndProgramTogether(t *testing.T) {
+	repo := &fakeGatewayConfigRepo{}
+	h := NewGatewayConfigHandler(repo, fakeMethodRepo{})
+	body := `{` + validXenditBody + `,"brand_id":"` + brandUUID + `","program_id":"` + programUUID + `"}`
+	w := doGatewayConfigReq(h.Create, http.MethodPost, body)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Nil(t, repo.created)
+}
+
+func TestCreateAcceptsSingleScopeAndNormalisesEmptyStrings(t *testing.T) {
+	repo := &fakeGatewayConfigRepo{}
+	h := NewGatewayConfigHandler(repo, fakeMethodRepo{})
+	body := `{` + validXenditBody + `,"brand_id":"","program_id":"` + programUUID + `"}`
+	w := doGatewayConfigReq(h.Create, http.MethodPost, body)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.Nil(t, repo.created.BrandID, "empty string must become NULL, not an invalid uuid")
+	require.Equal(t, programUUID, *repo.created.ProgramID)
+}
+
+func TestCreateRejectsMalformedScopeID(t *testing.T) {
+	h := NewGatewayConfigHandler(&fakeGatewayConfigRepo{}, fakeMethodRepo{})
+	w := doGatewayConfigReq(h.Create, http.MethodPost, `{`+validXenditBody+`,"program_id":"not-a-uuid"}`)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestUpdateKeepsScopeWhenOmittedAndRejectsScopeChange(t *testing.T) {
+	brand := brandUUID
+	repo := &fakeGatewayConfigRepo{stored: &entities.GatewayConfig{ID: "cfg-1", BrandID: &brand, Provider: "xendit",
+		Mode: "sandbox", ServerKey: "xnd_development_a", ClientKey: "x", WebhookSecret: "t"}}
+	h := NewGatewayConfigHandler(repo, fakeMethodRepo{})
+
+	// Scope omitted: a brand-scoped config must not silently become global.
+	w := doGatewayConfigReq(h.Update, http.MethodPut, `{`+validXenditBody+`}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, brandUUID, *repo.updated.BrandID)
+	require.Nil(t, repo.updated.ProgramID)
+
+	// Moving it to a program is a different config; must be created fresh.
+	repo.updated = nil
+	w = doGatewayConfigReq(h.Update, http.MethodPut, `{`+validXenditBody+`,"program_id":"`+programUUID+`"}`)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Nil(t, repo.updated)
+}
+
+func TestDeleteGuardScopedBlocksOnlyOnPendingTransactions(t *testing.T) {
+	prog := programUUID
+	scoped := &entities.GatewayConfig{ID: "cfg-1", ProgramID: &prog, Provider: "xendit"}
+
+	// Payment methods still reference the provider, but a scoped delete does not care.
+	repo := &fakeGatewayConfigRepo{stored: scoped, pending: 2}
+	h := NewGatewayConfigHandler(repo, fakeMethodRepo{refs: 5})
+	w := doGatewayConfigReq(h.Delete, http.MethodDelete, "")
+	require.Equal(t, http.StatusConflict, w.Code)
+	require.False(t, repo.deleted)
+
+	repo = &fakeGatewayConfigRepo{stored: scoped, pending: 0}
+	h = NewGatewayConfigHandler(repo, fakeMethodRepo{refs: 5})
+	w = doGatewayConfigReq(h.Delete, http.MethodDelete, "")
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.True(t, repo.deleted)
+}
+
+func TestDeleteGuardGlobalKeepsPaymentMethodGuard(t *testing.T) {
+	repo := &fakeGatewayConfigRepo{stored: &entities.GatewayConfig{ID: "cfg-1", Provider: "xendit"}}
+	h := NewGatewayConfigHandler(repo, fakeMethodRepo{refs: 1})
+	w := doGatewayConfigReq(h.Delete, http.MethodDelete, "")
+	require.Equal(t, http.StatusConflict, w.Code)
+	require.False(t, repo.deleted)
 }

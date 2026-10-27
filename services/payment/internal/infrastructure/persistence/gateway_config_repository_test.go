@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/infrastructure/persistence"
 	"gorm.io/driver/sqlite"
@@ -40,6 +41,7 @@ func setupDB(t *testing.T) *gorm.DB {
 	ddl := `CREATE TABLE IF NOT EXISTS payment_gateway_configs (
 		id TEXT PRIMARY KEY,
 		brand_id TEXT,
+		program_id TEXT,
 		provider TEXT NOT NULL,
 		mode TEXT DEFAULT 'sandbox',
 		server_key TEXT NOT NULL,
@@ -110,4 +112,84 @@ func TestRepoHandlesLegacyPlaintextRow(t *testing.T) {
 	if got.ServerKey != "LEGACY" {
 		t.Fatalf("legacy plaintext should pass through, got %q", got.ServerKey)
 	}
+}
+
+func newScopedRepo(t *testing.T) (*persistence.GatewayConfigRepository, *gorm.DB) {
+	t.Helper()
+	db := setupDB(t)
+	key := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	return persistence.NewGatewayConfigRepository(db, key), db
+}
+
+func activeOf(t *testing.T, db *gorm.DB, id string) bool {
+	t.Helper()
+	var active bool
+	require.NoError(t, db.Raw("SELECT is_active FROM payment_gateway_configs WHERE id = ?", id).Scan(&active).Error)
+	return active
+}
+
+func TestRepoActivationOnlyDeactivatesSameScope(t *testing.T) {
+	repo, db := newScopedRepo(t)
+	ctx := context.Background()
+	brand, prog := "b1", "p1"
+	mk := func(brandID, programID *string) *entities.GatewayConfig {
+		c := &entities.GatewayConfig{Provider: "xendit", Mode: "sandbox", ServerKey: "s", ClientKey: "c",
+			WebhookSecret: "w", IsActive: true, BrandID: brandID, ProgramID: programID}
+		require.NoError(t, repo.Create(ctx, c))
+		return c
+	}
+
+	global1 := mk(nil, nil)
+	brandCfg := mk(&brand, nil)
+	progCfg := mk(nil, &prog)
+	require.True(t, activeOf(t, db, global1.ID), "scoped creates must not deactivate global")
+	require.True(t, activeOf(t, db, brandCfg.ID))
+	require.True(t, activeOf(t, db, progCfg.ID))
+
+	global2 := mk(nil, nil)
+	require.False(t, activeOf(t, db, global1.ID), "new global replaces old global")
+	require.True(t, activeOf(t, db, global2.ID))
+	require.True(t, activeOf(t, db, brandCfg.ID))
+	require.True(t, activeOf(t, db, progCfg.ID))
+
+	// Update path: re-activating an inactive brand row deactivates only the other brand row.
+	brand2 := mk(&brand, nil)
+	require.False(t, activeOf(t, db, brandCfg.ID))
+	brandCfg.IsActive = true
+	require.NoError(t, repo.Update(ctx, brandCfg))
+	require.False(t, activeOf(t, db, brand2.ID))
+	require.True(t, activeOf(t, db, global2.ID))
+}
+
+func TestRepoFindAllRuntimeSkipsUndecryptableAndDeleted(t *testing.T) {
+	repo, db := newScopedRepo(t)
+	ctx := context.Background()
+	good := &entities.GatewayConfig{Provider: "xendit", Mode: "sandbox", ServerKey: "s", ClientKey: "c", WebhookSecret: "w", IsActive: true}
+	inactive := &entities.GatewayConfig{Provider: "midtrans", Mode: "sandbox", ServerKey: "s", ClientKey: "c", WebhookSecret: "w", IsActive: false}
+	deleted := &entities.GatewayConfig{Provider: "stripe", Mode: "sandbox", ServerKey: "s", ClientKey: "c", WebhookSecret: "w", IsActive: false}
+	for _, c := range []*entities.GatewayConfig{good, inactive, deleted} {
+		require.NoError(t, repo.Create(ctx, c))
+	}
+	require.NoError(t, repo.Delete(ctx, deleted.ID))
+	// Ciphertext-shaped garbage that cannot be decrypted with the key.
+	require.NoError(t, db.Exec(`INSERT INTO payment_gateway_configs (id, provider, mode, server_key, client_key, webhook_secret, is_active)
+		VALUES ('bad', 'paypal', 'sandbox', 'enc:v1:AAAA', 'enc:v1:AAAA', 'enc:v1:AAAA', 1)`).Error)
+
+	got, err := repo.FindAllRuntime(ctx)
+	require.NoError(t, err)
+	ids := []string{}
+	for _, c := range got {
+		ids = append(ids, c.ID)
+	}
+	require.ElementsMatch(t, []string{good.ID, inactive.ID}, ids)
+}
+
+func TestRepoCountPendingTransactions(t *testing.T) {
+	repo, db := newScopedRepo(t)
+	require.NoError(t, db.Exec(`CREATE TABLE payment_transactions (id TEXT PRIMARY KEY, gateway_config_id TEXT, status TEXT)`).Error)
+	require.NoError(t, db.Exec(`INSERT INTO payment_transactions VALUES ('t1','cfg','PENDING'),('t2','cfg','SUCCESS'),('t3','other','PENDING'),('t4',NULL,'PENDING')`).Error)
+
+	n, err := repo.CountPendingTransactions(context.Background(), "cfg")
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
 }
