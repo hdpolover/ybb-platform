@@ -30,7 +30,7 @@ export class CheckoutController {
 
     @Get('config')
     @Throttle(CONFIG_THROTTLE)
-    @ApiOperation({ summary: 'Checkout feature flag, Turnstile site key and the authoritative registration-fee quote' })
+    @ApiOperation({ summary: 'Checkout feature flag, Turnstile site key and the open editions with their registration-fee options' })
     async getConfig(
         @Query() query: CheckoutConfigQueryDto,
         @BrandDomain() brandDomain?: string,
@@ -40,30 +40,22 @@ export class CheckoutController {
 
         // Flag off: answer without touching the DB or revealing any offer.
         if (!enabled) {
-            return { enabled, quote: null, turnstileSiteKey };
+            return { enabled, turnstileSiteKey, editions: [], selected: null };
         }
 
         const brandId = await this.policy.resolveBrandId(brandDomain);
-        const offer = await this.policy.resolveOffer({
-            brandId,
-            programSlug: query.programSlug,
-            tierId: query.tierId,
-            category: query.category,
-        });
+        const editions = await this.policy.listOffers(brandId);
 
-        return {
-            enabled,
-            quote: {
-                programName: offer.programName,
-                programSlug: offer.programSlug,
-                tierId: offer.tierId,
-                tierName: offer.tierName,
-                category: offer.category,
-                amount: offer.amount,
-                currency: offer.currency,
-                ...(offer.amountIdr !== null ? { amountIdr: offer.amountIdr } : {}),
-            },
-            turnstileSiteKey,
-        };
+        // Preselect only when the query names an option that is actually on offer.
+        const matches = editions
+            .filter((e) => e.programSlug === query.programSlug)
+            .flatMap((e) => e.options.filter((o) => o.tierId === query.tierId && (!query.category || o.category === query.category)));
+        // A tier that allows several categories is ambiguous without ?category.
+        const selected =
+            matches.length === 1
+                ? { programSlug: query.programSlug as string, category: matches[0].category, tierId: matches[0].tierId }
+                : null;
+
+        return { enabled, turnstileSiteKey, editions, selected };
     }
 }

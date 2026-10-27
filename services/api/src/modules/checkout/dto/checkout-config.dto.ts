@@ -1,38 +1,32 @@
 // services/api/src/modules/checkout/dto/checkout-config.dto.ts
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ApplicationCategory } from '@prisma/client';
 import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import type { CheckoutEdition } from '../checkout-policy.service';
 
+/** Both preselect params are optional hints; an invalid pair just yields `selected: null`. */
 export class CheckoutConfigQueryDto {
-    @ApiProperty()
+    @ApiPropertyOptional()
+    @IsOptional()
     @IsString()
     @MaxLength(255)
-    programSlug!: string;
+    programSlug?: string;
 
-    @ApiProperty()
+    @ApiPropertyOptional()
+    @IsOptional()
     @IsUUID()
-    tierId!: string;
+    tierId?: string;
 
-    @ApiPropertyOptional({ enum: ApplicationCategory, description: 'Only needed when the tier allows several categories' })
+    @ApiPropertyOptional({ enum: ApplicationCategory, description: 'Disambiguates a tier that allows several categories' })
     @IsOptional()
     @IsEnum(ApplicationCategory)
     category?: ApplicationCategory;
 }
 
-export class CheckoutQuoteDto {
-    programName!: string;
-    programSlug!: string;
-    tierId!: string;
-    tierName!: string;
-    category!: ApplicationCategory;
-    amount!: number;
-    currency!: string;
-    amountIdr?: number;
-}
-
 export class CheckoutConfigResponseDto {
     enabled!: boolean;
-    /** null when the flag is off. */
-    quote!: CheckoutQuoteDto | null;
     turnstileSiteKey!: string | null;
+    /** All open-registration editions of the brand with at least one valid option. */
+    editions!: CheckoutEdition[];
+    selected!: { programSlug: string; category: ApplicationCategory; tierId: string } | null;
 }

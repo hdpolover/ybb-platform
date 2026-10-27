@@ -43,7 +43,7 @@ const program = (over: Record<string, unknown> = {}, tiers = [tier()]) => ({
 
 describe('CheckoutPolicyService', () => {
     const prisma = {
-        program: { findFirst: jest.fn() },
+        program: { findFirst: jest.fn(), findMany: jest.fn() },
         brand: { findFirst: jest.fn() },
         brandSetting: { findFirst: jest.fn() },
     };
@@ -140,6 +140,68 @@ describe('CheckoutPolicyService', () => {
 
     it('needs a program id or slug', async () => {
         await expect(service.resolveOffer({ brandId: BRAND, tierId: TIER })).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    describe('listOffers', () => {
+        const edition = (slug: string, name: string, over: Record<string, unknown> = {}) =>
+            program(
+                { id: `id-${slug}`, slug, name, ...over },
+                [
+                    tier({ id: `ff-${slug}`, allowedCategories: ['fully_funded'], usdPrice: '10.00' }),
+                    tier({ id: `sf-${slug}`, name: 'Self Funded Registration', allowedCategories: ['self_funded'], usdPrice: '15.00', idrPrice: null }),
+                ],
+            );
+
+        it('lists every open edition with a fully funded and self funded option each', async () => {
+            prisma.program.findMany.mockResolvedValue([edition('meys-6', 'MEYS 6th'), edition('meys-7', 'MEYS 7th')]);
+            const res = await service.listOffers(BRAND);
+            expect(res.map((e) => e.programSlug)).toEqual(['meys-6', 'meys-7']);
+            expect(res[0].options).toEqual([
+                { category: 'fully_funded', tierId: 'ff-meys-6', tierName: 'Fully Funded Registration', amount: 10, currency: 'USD', amountIdr: 165000 },
+                { category: 'self_funded', tierId: 'sf-meys-6', tierName: 'Self Funded Registration', amount: 15, currency: 'USD' },
+            ]);
+            expect(res[0].registrationDates).toEqual({ open: null, close: null });
+            expect(prisma.program.findMany.mock.calls[0][0].where).toMatchObject({ brandId: BRAND, status: 'published', allowRegistration: true });
+        });
+
+        it('excludes an edition whose registration dates have passed', async () => {
+            prisma.program.findMany.mockResolvedValue([
+                edition('meys-6', 'MEYS 6th', { registrationCloseDate: new Date(Date.now() - DAY) }),
+                edition('meys-7', 'MEYS 7th', { registrationCloseDate: new Date(Date.now() + DAY) }),
+            ]);
+            const res = await service.listOffers(BRAND);
+            expect(res.map((e) => e.programSlug)).toEqual(['meys-7']);
+            expect(res[0].registrationDates.close).toEqual(expect.any(String));
+        });
+
+        it('drops an option whose fee window closed but keeps the rest of the edition', async () => {
+            const closedWindow = [{ startDate: new Date(Date.now() - 10 * DAY), endDate: new Date(Date.now() - 2 * DAY) }];
+            prisma.program.findMany.mockResolvedValue([
+                program({}, [
+                    tier({ id: 'ff', allowedCategories: ['fully_funded'], validityPeriods: closedWindow }),
+                    tier({ id: 'sf', allowedCategories: ['self_funded'], usdPrice: '15.00' }),
+                ]),
+            ]);
+            const res = await service.listOffers(BRAND);
+            expect(res[0].options.map((o) => o.tierId)).toEqual(['sf']);
+        });
+
+        it('excludes an edition with no valid option at all', async () => {
+            prisma.program.findMany.mockResolvedValue([program({}, [])]);
+            await expect(service.listOffers(BRAND)).resolves.toEqual([]);
+        });
+
+        it('emits only the categories a tier allows, never an off-category pairing', async () => {
+            prisma.program.findMany.mockResolvedValue([program({}, [tier({ allowedCategories: ['fully_funded'] })])]);
+            const res = await service.listOffers(BRAND);
+            expect(res[0].options.map((o) => o.category)).toEqual(['fully_funded']);
+        });
+
+        it('offers an empty-allowedCategories tier under both categories', async () => {
+            prisma.program.findMany.mockResolvedValue([program({}, [tier({ allowedCategories: [] })])]);
+            const res = await service.listOffers(BRAND);
+            expect(res[0].options.map((o) => o.category)).toEqual(['fully_funded', 'self_funded']);
+        });
     });
 
     describe('resolveBrandId', () => {
