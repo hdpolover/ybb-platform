@@ -8,8 +8,11 @@ type SeedEntry = {
   defaultOptions?: Array<{ label: string; value: string }>;
   isMagic?: boolean;
   helpText?: string;
+  validationRules?: Record<string, unknown>;
   order?: number;
 };
+
+const ALUMNI_YEAR_OPTIONS = ['2026', '2025', '2024', '2023', '2022 or earlier'].map((y) => ({ label: y, value: y }));
 
 const GENERIC_CATALOG: SeedEntry[] = [
   // Identity
@@ -101,6 +104,34 @@ const GENERIC_CATALOG: SeedEntry[] = [
   { key: 'referral_source_detail', label: 'Referral source detail', category: 'misc', type: 'text', order: 61 },
   { key: 'ambassador_referral_code', label: 'Ambassador Referral Code', category: 'misc', type: 'text', order: 62 },
   { key: 'twibbon_link', label: 'Twibbon / Social Media Post Link', category: 'misc', type: 'url', order: 63 },
+  {
+    key: 'alumni_status',
+    label: 'Are you an alumni of a YBB program?',
+    category: 'misc',
+    type: 'select',
+    defaultOptions: [
+      { label: 'Yes', value: 'Yes' },
+      { label: 'No', value: 'No' },
+    ],
+    order: 64,
+  },
+  {
+    key: 'alumni_program',
+    label: 'Which YBB program did you join?',
+    category: 'misc',
+    type: 'text',
+    validationRules: { visibleWhen: { field: 'alumni_status', equals: 'Yes' } },
+    order: 65,
+  },
+  {
+    key: 'alumni_year',
+    label: 'Which year?',
+    category: 'misc',
+    type: 'select',
+    defaultOptions: ALUMNI_YEAR_OPTIONS,
+    validationRules: { visibleWhen: { field: 'alumni_status', equals: 'Yes' } },
+    order: 66,
+  },
 ];
 
 const MAGIC_SEED: SeedEntry[] = [
@@ -135,6 +166,8 @@ export async function seedSystemFormFields() {
         type: e.type,
         defaultOptions: e.defaultOptions ?? [],
         helpText: e.helpText ?? null,
+        // Only written when the entry declares rules, so admin-edited rules on other keys survive a reseed.
+        ...(e.validationRules ? { validationRules: e.validationRules as object } : {}),
         isMagic: e.isMagic ?? false,
         isActive: true,
         order: e.order ?? 0,
@@ -147,6 +180,7 @@ export async function seedSystemFormFields() {
         type: e.type,
         defaultOptions: e.defaultOptions ?? [],
         helpText: e.helpText ?? null,
+        ...(e.validationRules ? { validationRules: e.validationRules as object } : {}),
         isMagic: e.isMagic ?? false,
         order: e.order ?? 0,
       },
