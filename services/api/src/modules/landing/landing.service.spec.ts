@@ -10,6 +10,7 @@ import { AnnouncementsStrategy } from './strategies/announcements.strategy';
 import { SettingsStrategy } from './strategies/settings.strategy';
 import { FaqsStrategy } from './strategies/faqs.strategy';
 import { ActivityStrategy } from './strategies/activity.strategy';
+import { PaymentMethodsStrategy } from './strategies/payment-methods.strategy';
 import { LandingSnapshotService } from './services/landing-snapshot.service';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { NotFoundException } from '@nestjs/common';
@@ -53,6 +54,7 @@ describe('LandingService', () => {
         { provide: SettingsStrategy, useValue: mockStrategy },
         { provide: FaqsStrategy, useValue: mockStrategy },
         { provide: ActivityStrategy, useValue: mockStrategy },
+        { provide: PaymentMethodsStrategy, useValue: mockStrategy },
         { provide: LandingSnapshotService, useValue: mockLandingSnapshotService },
         { provide: CacheService, useValue: mockCacheService },
       ],

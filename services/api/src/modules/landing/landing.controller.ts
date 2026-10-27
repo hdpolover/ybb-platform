@@ -7,6 +7,7 @@ import { LandingActivityResponseDto } from './dto/landing-activity.dto';
 import { ListAnnouncementsQueryDto } from './dto/landing-announcements-query.dto';
 import { Public } from '../../shared/decorators/public.decorator';
 import type { MappedAnnouncement } from './strategies/announcements.strategy';
+import type { LandingPaymentMethodsData } from './strategies/payment-methods.strategy';
 import { BrandDomain } from '../../shared/decorators/brand-domain.decorator';
 
 @ApiTags('Landing')
@@ -61,6 +62,20 @@ export class LandingController {
     @BrandDomain() brandDomain?: string,
   ): Promise<LandingActivityResponseDto> {
     return this.landingService.getActivity(brandDomain);
+  }
+
+  @Get('payment-methods')
+  @ApiOperation({
+    summary: 'Get accepted payment methods',
+    description: 'Public, read-only list of the payment methods accepted for the resolved brand\'s open programs (per-program, with the same global fallback as the participant portal). Exposes only display name, type and logo URL - never account details, instructions or gateway configuration.',
+  })
+  @ApiQuery({ name: 'url', required: false, description: 'Brand website URL' })
+  @ApiResponse({ status: 200, description: 'Accepted payment methods per program' })
+  @ApiBadRequestResponse({ description: 'Invalid brand identification' })
+  async getPaymentMethods(
+    @BrandDomain() brandDomain?: string,
+  ): Promise<LandingPaymentMethodsData> {
+    return this.landingService.getPaymentMethods(brandDomain);
   }
 
   @Get('about')
