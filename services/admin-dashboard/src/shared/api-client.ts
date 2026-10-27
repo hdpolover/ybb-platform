@@ -4677,6 +4677,35 @@ export function getLoaBatchRecipientSends(
   );
 }
 
+/**
+ * One row of the program-wide email lookup. Mirrors LoaSendSearchResultDto
+ * (services/api); the endpoint returns a bare array (unwrapped from `data`).
+ */
+export type LoaSendSearchResult = {
+  id: string;
+  batchId: string;
+  batchName: string;
+  participantId: string;
+  participantName: string;
+  email: string;
+  status: "pending" | "sent" | "failed";
+  /** Resend message id, the proof that the provider accepted the email. */
+  providerMessageId: string | null;
+  errorMessage: string | null;
+  attemptCount: number;
+  /** ISO datetime string, null unless the send succeeded */
+  sentAt: string | null;
+};
+
+export function searchLoaSends(
+  programId: string,
+  email: string,
+): Promise<LoaSendSearchResult[]> {
+  return request<LoaSendSearchResult[]>(
+    `/programs/${programId}/loa-sends?email=${encodeURIComponent(email)}`,
+  );
+}
+
 // ─── Participant Reminders ────────────────────────────────────────────────────
 
 /**

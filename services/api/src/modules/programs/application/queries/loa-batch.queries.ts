@@ -21,3 +21,11 @@ export class GetLoaBatchRecipientSendsQuery {
     public readonly actor: CurrentUserData,
   ) {}
 }
+
+export class SearchLoaSendsQuery {
+  constructor(
+    public readonly programId: string,
+    public readonly email: string,
+    public readonly actor: CurrentUserData,
+  ) {}
+}

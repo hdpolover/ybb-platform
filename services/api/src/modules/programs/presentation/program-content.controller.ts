@@ -57,7 +57,7 @@ import {
   CreateDocumentTemplateHandler, UpdateDocumentTemplateHandler, DeleteDocumentTemplateHandler,
 } from '../application/commands/handlers/manage-program-content.handlers';
 
-import { CreateLoaBatchDto, UpdateLoaBatchDto } from '../application/dto/loa-batch.dto';
+import { CreateLoaBatchDto, UpdateLoaBatchDto, SearchLoaSendsQueryDto } from '../application/dto/loa-batch.dto';
 import {
   CreateLoaBatchCommand,
   UpdateLoaBatchCommand,
@@ -70,6 +70,7 @@ import {
   GetLoaBatchesQuery,
   GetLoaDownloadsQuery,
   GetLoaBatchRecipientSendsQuery,
+  SearchLoaSendsQuery,
 } from '../application/queries/loa-batch.queries';
 import {
   CreateLoaBatchHandler,
@@ -80,6 +81,7 @@ import {
   GetLoaBatchesHandler,
   GetLoaDownloadsHandler,
   GetLoaBatchRecipientSendsHandler,
+  SearchLoaSendsHandler,
 } from '../application/handlers/loa-batch.handlers';
 import { PreviewLoaTemplateQuery, PreviewLoaTemplateHandler } from '../application/handlers/loa-preview.handler';
 import { multerLimits } from '@common/constants';
@@ -116,6 +118,7 @@ export class ProgramContentController {
     private readonly getLoaBatchesHandlerSvc: GetLoaBatchesHandler,
     private readonly getLoaDownloadsHandlerSvc: GetLoaDownloadsHandler,
     private readonly getLoaBatchRecipientSendsHandlerSvc: GetLoaBatchRecipientSendsHandler,
+    private readonly searchLoaSendsHandlerSvc: SearchLoaSendsHandler,
     private readonly previewLoaTemplateHandler: PreviewLoaTemplateHandler,
   ) {}
 
@@ -512,6 +515,23 @@ export class ProgramContentController {
   ) {
     return this.getLoaBatchRecipientSendsHandlerSvc.execute(
       new GetLoaBatchRecipientSendsQuery(programId, batchId, actor),
+    );
+  }
+
+  @Get(':programId/loa-sends')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Search LOA-ready email sends by recipient email (partial, case-insensitive, max 50)',
+  })
+  async searchLoaSends(
+    @Param('programId') programId: string,
+    @Query() dto: SearchLoaSendsQueryDto,
+    @CurrentUser() actor: CurrentUserData,
+  ) {
+    return this.searchLoaSendsHandlerSvc.execute(
+      new SearchLoaSendsQuery(programId, dto.email, actor),
     );
   }
 

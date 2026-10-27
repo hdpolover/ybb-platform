@@ -1,4 +1,5 @@
-import { IsString, IsDateString, IsOptional } from 'class-validator';
+import { IsString, IsDateString, IsOptional, MinLength, MaxLength } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateLoaBatchDto {
   @IsString() name: string;
@@ -95,4 +96,31 @@ export class UncoveredParticipantDto {
   // Display context only ("when did this person apply") — coverage itself is
   // now decided by payment date, not this field. See uncoveredParticipantCount.
   submittedAt: Date | null;
+}
+
+// ─── Email search across a program's LOA sends ────────────────────────────────
+
+export const LOA_SEND_SEARCH_MIN_LENGTH = 3;
+
+export class SearchLoaSendsQueryDto {
+  // Trim first so "  ab " can't slip past the minimum length.
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MinLength(LOA_SEND_SEARCH_MIN_LENGTH)
+  @MaxLength(255)
+  email: string;
+}
+
+export class LoaSendSearchResultDto {
+  id: string;
+  batchId: string;
+  batchName: string;
+  participantId: string;
+  participantName: string;
+  email: string;
+  status: 'pending' | 'sent' | 'failed';
+  providerMessageId: string | null;
+  errorMessage: string | null;
+  attemptCount: number;
+  sentAt: Date | null;
 }

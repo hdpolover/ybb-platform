@@ -23,8 +23,9 @@ import {
   GetLoaBatchesQuery,
   GetLoaDownloadsQuery,
   GetLoaBatchRecipientSendsQuery,
+  SearchLoaSendsQuery,
 } from '../queries/loa-batch.queries';
-import { LoaRecipientSendResponseDto } from '../dto/loa-batch.dto';
+import { LoaRecipientSendResponseDto, LoaSendSearchResultDto } from '../dto/loa-batch.dto';
 import { Prisma } from '@prisma/client';
 import { assertProgramContentAccess } from '../../application/utils/program-content-access.util';
 
@@ -502,6 +503,56 @@ export class GetLoaDownloadsHandler implements IQueryHandler<GetLoaDownloadsQuer
       documentNumber: doc.documentNumber ?? '',
       firstDownloadedAt: doc.firstDownloadedAt,
       downloadCount: doc.downloadCount,
+    }));
+  }
+}
+
+const LOA_SEND_SEARCH_LIMIT = 50;
+
+@QueryHandler(SearchLoaSendsQuery)
+export class SearchLoaSendsHandler implements IQueryHandler<SearchLoaSendsQuery> {
+  constructor(
+    private readonly recipientSendRepo: LoaBatchRecipientSendRepository,
+    private readonly prisma: PrismaService,
+    @Inject('IProgramRepository') private readonly programRepository: IProgramRepository,
+    private readonly prismaRead: PrismaReadService,
+  ) {}
+
+  async execute(query: SearchLoaSendsQuery): Promise<LoaSendSearchResultDto[]> {
+    const programId = await resolveProgramId(this.programRepository, query.programId);
+    if (!programId) {
+      throw new NotFoundException('Program not found');
+    }
+    await assertProgramContentAccess(this.prismaRead, query.actor, programId);
+
+    const sends = await this.recipientSendRepo.searchByEmail(
+      programId,
+      query.email,
+      LOA_SEND_SEARCH_LIMIT,
+    );
+    if (sends.length === 0) {
+      return [];
+    }
+
+    // The send log stores no name (see GetLoaBatchRecipientSendsHandler).
+    const participants = await this.prisma.participant.findMany({
+      where: { id: { in: sends.map((send) => send.participantId) } },
+      select: { id: true, fullName: true },
+    });
+    const nameById = new Map(participants.map((p) => [p.id, p.fullName]));
+
+    return sends.map((send) => ({
+      id: send.id,
+      batchId: send.batchId,
+      batchName: send.batch.name,
+      participantId: send.participantId,
+      participantName: nameById.get(send.participantId) || send.email,
+      email: send.email,
+      status: send.status as LoaSendSearchResultDto['status'],
+      providerMessageId: send.providerMessageId,
+      errorMessage: send.errorMessage,
+      attemptCount: send.attemptCount,
+      sentAt: send.sentAt,
     }));
   }
 }
