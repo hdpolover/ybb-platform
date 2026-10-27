@@ -7,6 +7,7 @@ import {
     Logger,
     HttpException,
     HttpStatus,
+    ParseUUIDPipe,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
@@ -49,6 +50,26 @@ export class WebhooksController {
         @Req() req: Request,
         @Res() res: Response,
     ) {
+        return this.forwardWebhook(gateway, `/api/v1/payments/webhook/${gateway}`, req, res);
+    }
+
+    // Per-config URL for brand/program-scoped gateway configs; the payment
+    // service checks the transaction is pinned to this config.
+    @Post(':gateway/:configId')
+    @ApiOperation({ summary: 'Handle payment gateway webhooks for a scoped gateway config' })
+    @ApiResponse({ status: 200, description: 'Webhook processed' })
+    @ApiResponse({ status: 400, description: 'Invalid gateway, config id or webhook signature' })
+    @ApiResponse({ status: 503, description: 'Payment service not configured' })
+    async handleScopedWebhook(
+        @Param('gateway') gateway: string,
+        @Param('configId', new ParseUUIDPipe()) configId: string,
+        @Req() req: Request,
+        @Res() res: Response,
+    ) {
+        return this.forwardWebhook(gateway, `/api/v1/payments/webhook/${gateway}/${configId}`, req, res);
+    }
+
+    private async forwardWebhook(gateway: string, targetPath: string, req: Request, res: Response) {
         this.logger.log(`Received webhook for gateway: ${gateway}`);
 
         if (!ALLOWED_GATEWAYS.includes(gateway) || /[/%.]/.test(gateway)) {
@@ -58,8 +79,6 @@ export class WebhooksController {
         if (!this.configService.get<string>('PAYMENT_SERVICE_URL')) {
             throw new HttpException('Payment Service Not Configured', HttpStatus.SERVICE_UNAVAILABLE);
         }
-
-        const targetPath = `/api/v1/payments/webhook/${gateway}`;
 
         try {
             const { data, status } = await this.paymentServiceClient.post(targetPath, req.body, {

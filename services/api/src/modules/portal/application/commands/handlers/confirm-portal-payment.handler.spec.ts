@@ -383,6 +383,8 @@ describe('ConfirmPortalPaymentHandler', () => {
                     submission_page_url: 'https://program.example.com/dashboard/submission',
                     invoice_url: 'https://program.example.com/dashboard/payments/invoice-1',
                     email: 'hendra@example.com',
+                    program_id: 'program-1',
+                    brand_id: 'brand-1',
                 }),
             }),
         );

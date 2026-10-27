@@ -295,6 +295,7 @@ export class ConfirmPortalPaymentHandler {
                 invoice_id: invoice.id,
                 application_id: invoice.applicationId,
                 program_id: invoice.application.programId,
+                brand_id: invoice.application.program.brandId,
                 payment_method: paymentMethodId,
                 email: customerEmail,
                 customer_email: customerEmail,
