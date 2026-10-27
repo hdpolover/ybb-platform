@@ -369,6 +369,7 @@ func setupRouter(
 		paymentsPublic := v1.Group("/payments")
 		{
 			paymentsPublic.POST("/webhook/:gateway", paymentHandler.HandleWebhook)
+			paymentsPublic.POST("/webhook/:gateway/:configId", paymentHandler.HandleWebhook)
 		}
 
 		protected := v1.Group("")

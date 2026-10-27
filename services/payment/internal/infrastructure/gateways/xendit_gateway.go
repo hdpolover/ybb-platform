@@ -2,6 +2,7 @@ package gateways
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -168,7 +169,7 @@ func (g *XenditGateway) HandleWebhook(ctx context.Context, payload []byte) (*ent
 		return nil, fmt.Errorf("xendit callback token is not configured")
 	}
 	ctxToken, _ := ctx.Value(XenditCallbackTokenKey).(string)
-	if ctxToken != g.callbackToken {
+	if subtle.ConstantTimeCompare([]byte(ctxToken), []byte(g.callbackToken)) != 1 {
 		return nil, fmt.Errorf("invalid xendit callback token")
 	}
 

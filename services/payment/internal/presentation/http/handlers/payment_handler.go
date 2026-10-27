@@ -169,11 +169,29 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 		return
 	}
 
-	// 3. Ambil Gateway yang sesuai dari Factory
-	gateway, err := h.gatewayFactory.GetGateway(gatewayName)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported gateway"})
-		return
+	// 3. Ambil Gateway yang sesuai dari Factory. The scoped route
+	// (/webhook/:gateway/:configId) verifies with that exact config's credentials;
+	// the legacy route serves the global gateway.
+	configID := c.Param("configId")
+	var gateway domainGateways.PaymentGateway
+	if configID != "" {
+		var provider string
+		gateway, provider, err = h.gatewayFactory.GetGatewayByConfigID(configID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Unknown gateway config"})
+			return
+		}
+		if provider != gatewayName {
+			log.Printf("payment_webhook provider_mismatch request_id=%s url_gateway=%s config_id=%s config_provider=%s", requestID, gatewayName, configID, provider)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Gateway does not match config"})
+			return
+		}
+	} else {
+		gateway, err = h.gatewayFactory.GetGateway(gatewayName)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported gateway"})
+			return
+		}
 	}
 
 	// 4. Inject gateway-specific headers into context for verification.
@@ -195,14 +213,14 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 	// Webhooks only target the new transaction flow.
 	tx, err := h.txRepo.FindByID(c.Request.Context(), updatedData.ID)
 	if err == nil {
-		h.handleTransactionWebhook(c, tx, updatedData)
+		h.handleTransactionWebhook(c, tx, updatedData, configID)
 		return
 	}
 
 	if updatedData.GatewayOrderID != "" {
 		tx, err = h.txRepo.FindByGatewayReferenceID(c.Request.Context(), updatedData.GatewayOrderID)
 		if err == nil {
-			h.handleTransactionWebhook(c, tx, updatedData)
+			h.handleTransactionWebhook(c, tx, updatedData, configID)
 			return
 		}
 	}
@@ -211,7 +229,21 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "warning": "transaction not found"})
 }
 
-func (h *PaymentHandler) handleTransactionWebhook(c *gin.Context, tx *entities.PaymentTransaction, updatedData *entities.Payment) {
+// handleTransactionWebhook applies a verified webhook to tx. routeConfigID is the
+// :configId the callback arrived on ("" for the legacy route); it must equal the
+// config tx was pinned to, so a callback verified with one config's secret can
+// never settle a transaction charged through another.
+func (h *PaymentHandler) handleTransactionWebhook(c *gin.Context, tx *entities.PaymentTransaction, updatedData *entities.Payment, routeConfigID string) {
+	if !webhookRouteMatchesTransaction(tx, routeConfigID) {
+		got := "<nil>"
+		if tx.GatewayConfigID != nil {
+			got = *tx.GatewayConfigID
+		}
+		log.Printf("payment_webhook config_mismatch transaction_id=%s expected_config_id=%q got_config_id=%s", tx.ID, routeConfigID, got)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Webhook route does not match the transaction's gateway config"})
+		return
+	}
+
 	// Map Status
 	var newStatus entities.TransactionStatus
 	switch updatedData.Status {
@@ -276,6 +308,29 @@ func (h *PaymentHandler) handleTransactionWebhook(c *gin.Context, tx *entities.P
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func webhookRouteMatchesTransaction(tx *entities.PaymentTransaction, routeConfigID string) bool {
+	if routeConfigID == "" {
+		return tx.GatewayConfigID == nil
+	}
+	return tx.GatewayConfigID != nil && *tx.GatewayConfigID == routeConfigID
+}
+
+// gatewayForTransaction returns the gateway that charged tx: the pinned config
+// when there is one (even if since deactivated), else the global provider gateway.
+func (h *PaymentHandler) gatewayForTransaction(tx *entities.PaymentTransaction, provider string) (domainGateways.PaymentGateway, error) {
+	if tx.GatewayConfigID != nil {
+		gw, cfgProvider, err := h.gatewayFactory.GetGatewayByConfigID(*tx.GatewayConfigID)
+		if err != nil {
+			return nil, err
+		}
+		if cfgProvider != provider {
+			return nil, fmt.Errorf("pinned gateway config %s is provider %q, transaction is %q", *tx.GatewayConfigID, cfgProvider, provider)
+		}
+		return gw, nil
+	}
+	return h.gatewayFactory.GetGateway(provider)
 }
 
 // The gateways are charged a rounded/narrowed version of the stored amount:
@@ -628,7 +683,7 @@ func (h *PaymentHandler) CancelPayment(c *gin.Context) {
 
 	gatewayName, gatewayOrderID := resolveGatewayCancelTarget(tx)
 	if gatewayName != "" && gatewayOrderID != "" {
-		gateway, gwErr := h.gatewayFactory.GetGateway(gatewayName)
+		gateway, gwErr := h.gatewayForTransaction(tx, gatewayName)
 		if gwErr != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("gateway not found: %s", gatewayName)})
 			return
