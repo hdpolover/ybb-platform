@@ -218,6 +218,8 @@ export class CreateRegistrationPaymentIntentHandler {
       metadata: {
         payment_category: 'registration',
         program_id: application.programId,
+        // Lets the payment service resolve a brand-scoped gateway config.
+        ...(program?.brandId ? { brand_id: program.brandId } : {}),
         application_id: application.id,
         ...(exchangeRate !== undefined ? { exchange_rate_value: String(exchangeRate) } : {}),
       },

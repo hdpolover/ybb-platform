@@ -360,6 +360,16 @@ describe('CreateRegistrationPaymentIntentHandler (admin path)', () => {
     );
   });
 
+  it('sends program_id and brand_id in intent metadata so the payment service can resolve a scoped gateway', async () => {
+    await handler.execute(command);
+
+    expect(mockPaymentClient.createIntent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ program_id: 'program-1', brand_id: 'brand-1' }),
+      }),
+    );
+  });
+
   it('fails loudly when the application has no participant row', async () => {
     mockPrisma.participant.findUnique.mockResolvedValue(null);
 

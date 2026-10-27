@@ -1,4 +1,4 @@
-import { IsString, IsBoolean, IsOptional, IsIn, IsUUID } from 'class-validator';
+import { IsString, IsBoolean, IsOptional, IsIn, IsUUID, ValidateBy, buildMessage } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export const SUPPORTED_GATEWAY_PROVIDERS = ['midtrans', 'xendit', 'stripe', 'paypal'] as const;
@@ -6,6 +6,22 @@ export type SupportedGatewayProvider = typeof SUPPORTED_GATEWAY_PROVIDERS[number
 
 export const GATEWAY_MODES = ['sandbox', 'production'] as const;
 export type GatewayMode = typeof GATEWAY_MODES[number];
+
+// A config has exactly one scope: global, brand or program. The payment service
+// enforces this too (400 + DB CHECK); failing here gives the admin a clean message.
+const NotWithBrandId = () =>
+    ValidateBy(
+        {
+            name: 'notWithBrandId',
+            validator: {
+                validate: (value: unknown, args) =>
+                    value == null || (args?.object as { brand_id?: unknown }).brand_id == null,
+                defaultMessage: buildMessage(
+                    (eachPrefix) => `${eachPrefix}program_id and brand_id cannot both be set; a config has a single scope`,
+                ),
+            },
+        },
+    );
 
 export class CreateGatewayConfigDto {
     @ApiProperty({ enum: SUPPORTED_GATEWAY_PROVIDERS })
@@ -41,6 +57,12 @@ export class CreateGatewayConfigDto {
     @IsOptional()
     @IsUUID()
     brand_id?: string;
+
+    @ApiProperty({ required: false, description: 'UUID of the program this config is scoped to. Mutually exclusive with brand_id.' })
+    @IsOptional()
+    @IsUUID()
+    @NotWithBrandId()
+    program_id?: string;
 }
 
 export class UpdateGatewayConfigDto {
@@ -80,6 +102,12 @@ export class UpdateGatewayConfigDto {
     @IsOptional()
     @IsUUID()
     brand_id?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsUUID()
+    @NotWithBrandId()
+    program_id?: string;
 }
 
 export class SetGatewayActiveDto {

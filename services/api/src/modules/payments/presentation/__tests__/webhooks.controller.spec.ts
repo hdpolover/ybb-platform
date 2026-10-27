@@ -1,6 +1,6 @@
 // src/modules/payments/presentation/__tests__/webhooks.controller.spec.ts
 
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
 import { WebhooksController } from '../webhooks.controller';
 import { PaymentServiceHttpClient } from '../../infrastructure/services/payment-service-http.client';
 import { ConfigService } from '@nestjs/config';
@@ -94,6 +94,45 @@ describe('WebhooksController — gateway allowlist and header filtering', () => 
             'content-type': 'application/json',
             'x-callback-token': 'tok-1',
             'X-Internal-Service-Key': 'internal-key-123',
+        });
+    });
+
+    describe('scoped route (:gateway/:configId)', () => {
+        const CONFIG_ID = '6c9627c6-1f2e-4a3b-8c4d-5e6f7a8b9c0d';
+
+        it('forwards to the per-config payment-service path with the same header filtering', async () => {
+            const req = makeReq({ 'content-type': 'application/json', 'x-callback-token': 'tok-1', cookie: 'x=y' });
+            const res = makeRes();
+
+            await controller.handleScopedWebhook('xendit', CONFIG_ID, req, res);
+
+            expect(mockPost).toHaveBeenCalledWith(
+                `/api/v1/payments/webhook/xendit/${CONFIG_ID}`,
+                req.body,
+                {
+                    headers: {
+                        'content-type': 'application/json',
+                        'x-callback-token': 'tok-1',
+                        'X-Internal-Service-Key': 'internal-key-123',
+                    },
+                },
+            );
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('rejects a disallowed gateway', async () => {
+            await expect(
+                controller.handleScopedWebhook('nope', CONFIG_ID, makeReq({}), makeRes()),
+            ).rejects.toMatchObject(new HttpException('Unsupported gateway', HttpStatus.BAD_REQUEST));
+            expect(mockPost).not.toHaveBeenCalled();
+        });
+
+        it('rejects a non-UUID configId with 400 before forwarding', async () => {
+            const pipe = new ParseUUIDPipe();
+            await expect(pipe.transform('..%2Fgateway-configs', { type: 'param', data: 'configId' })).rejects.toBeInstanceOf(
+                BadRequestException,
+            );
+            expect(mockPost).not.toHaveBeenCalled();
         });
     });
 });
