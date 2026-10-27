@@ -2856,6 +2856,34 @@ export function uploadProgramAnnouncementAsset(input: {
   });
 }
 
+/**
+ * Image embedded in payment-method instructions (e.g. a QR code). Returns the
+ * permanent public URL (unsigned, built from the CDN endpoint) because the
+ * HTML that embeds it is stored indefinitely.
+ */
+export async function uploadPaymentMethodInstructionImage(input: {
+  programId: string;
+  brandId: string;
+  userId: string;
+  file: File;
+}): Promise<string> {
+  if (!input.programId || !input.brandId || !input.userId) {
+    throw new Error("Missing program upload context. Refresh the page and try again.");
+  }
+  const upload = await uploadFileViaPresignedUrl(input.file, {
+    userId: input.userId,
+    brandId: input.brandId,
+    programId: input.programId,
+    bucket: "payment_methods",
+    assetType: "payment-method-instruction-image",
+    title: input.file.name,
+  });
+  if (!upload.publicUrl) {
+    throw new Error("Upload succeeded but no public URL was returned.");
+  }
+  return upload.publicUrl;
+}
+
 // ─── Program Resources (Guidelines) ──────────────────────────────────────────
 
 export type ProgramResource = {

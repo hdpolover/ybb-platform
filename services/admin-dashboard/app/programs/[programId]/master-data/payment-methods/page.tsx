@@ -16,6 +16,7 @@ import {
   deletePaymentMethod,
   listGatewayConfigs,
   getPaymentMethodUsage,
+  uploadPaymentMethodInstructionImage,
   type ProgramPaymentMethod,
   type ProgramMethodOverride,
   type PaymentMethod,
@@ -321,6 +322,7 @@ export default function PaymentMethodsPage() {
                 method={m}
                 draft={drafts[m.id] ?? buildDraft(m)}
                 activeGatewayNames={activeGatewayNames}
+                onUploadImage={(file) => uploadPaymentMethodInstructionImage({ programId, brandId, userId, file })}
                 editSharedLoading={editSharedLoadingId === m.id}
                 onChange={(patch) => updateDraft(m.id, patch)}
                 onFieldChange={(field, patch) => updateFieldDraft(m.id, field, patch)}
@@ -336,6 +338,7 @@ export default function PaymentMethodsPage() {
         <PaymentMethodModal
           method={editSharedTarget}
           programName={programName}
+          programId={programId}
           userId={userId}
           brandId={brandId}
           onClose={() => setEditSharedTarget(null)}
@@ -346,6 +349,7 @@ export default function PaymentMethodsPage() {
       {showCreateShared && (
         <PaymentMethodModal
           programName={programName}
+          programId={programId}
           userId={userId}
           brandId={brandId}
           onClose={() => setShowCreateShared(false)}
@@ -369,6 +373,7 @@ function MethodRow({
   method,
   draft,
   activeGatewayNames,
+  onUploadImage,
   editSharedLoading,
   onChange,
   onFieldChange,
@@ -378,6 +383,7 @@ function MethodRow({
   method: ProgramPaymentMethod;
   draft: MethodDraft;
   activeGatewayNames: Set<string>;
+  onUploadImage: (file: File) => Promise<string>;
   editSharedLoading: boolean;
   onChange: (patch: Partial<MethodDraft>) => void;
   onFieldChange: (field: "description" | "instructions" | "adminInstructions", patch: Partial<FieldDraft>) => void;
@@ -479,6 +485,7 @@ function MethodRow({
               <RichTextEditor
                 content={value}
                 onChange={onValueChange}
+                onUploadImage={onUploadImage}
                 placeholder="Shown to the payer"
                 className="[&_.ProseMirror]:min-h-[100px]"
               />
@@ -633,6 +640,7 @@ function OverrideField({
 function PaymentMethodModal({
   method,
   programName,
+  programId,
   userId,
   brandId,
   onClose,
@@ -640,6 +648,7 @@ function PaymentMethodModal({
 }: {
   method?: PaymentMethod;
   programName: string;
+  programId: string;
   userId: string;
   brandId: string;
   onClose: () => void;
@@ -901,6 +910,7 @@ function PaymentMethodModal({
                 <RichTextEditor
                   content={instructions}
                   onChange={setInstructions}
+                  onUploadImage={(file) => uploadPaymentMethodInstructionImage({ programId, brandId, userId, file })}
                   placeholder="Shown to the payer"
                   className="[&_.ProseMirror]:min-h-[140px]"
                 />
