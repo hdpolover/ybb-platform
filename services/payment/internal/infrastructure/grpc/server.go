@@ -426,9 +426,17 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		}
 	}
 
+	// Description shown on the gateway dashboard (e.g. Xendit invoice list), set
+	// upstream by the API in intent metadata. Empty lets the gateway fall back.
+	chargeDescription := ""
+	if d, ok := metaMap["description"].(string); ok {
+		chargeDescription = strings.TrimSpace(d)
+	}
+
 	chargeReq := &gateways.ChargePaymentRequest{
 		TransactionID:   tx.ID,
 		IntentID:        intent.ID,
+		Description:     chargeDescription,
 		Amount:          tx.AmountTotal, // Charge the TOTAL (inc surcharge if any)
 		Currency:        tx.Currency,
 		PaymentMethodID: req.PaymentMethodId,
