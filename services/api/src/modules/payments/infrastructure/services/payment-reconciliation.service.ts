@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { PaymentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
+import { invalidateParticipantPortalCache } from '@shared/utils/invalidate-participant-portal-cache.util';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { buildParticipantPaymentsUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { isManualPaymentMethod } from '@modules/payments/application/utils/payment-method.util';
@@ -96,6 +98,7 @@ const PROCESSING_INVOICE_INCLUDE = {
         select: {
             id: true,
             programId: true,
+            participantId: true,
             participant: {
                 select: {
                     fullName: true,
@@ -137,6 +140,7 @@ export class PaymentReconciliationService {
         private readonly prisma: PrismaService,
         private readonly rabbitmqProducer: RabbitMQProducerService,
         private readonly cronLock: CronLockService,
+        private readonly cacheService: CacheService,
     ) {
         this.paymentServiceInternalKey = this.configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY', '');
     }
@@ -458,7 +462,12 @@ export class PaymentReconciliationService {
                 applicationId: true,
                 pricingTier: { select: { feeType: true } },
                 application: {
-                    select: { registrationPaymentStatus: true, programPaymentStatus: true },
+                    select: {
+                        registrationPaymentStatus: true,
+                        programPaymentStatus: true,
+                        participantId: true,
+                        participant: { select: { userId: true } },
+                    },
                 },
             },
             take: this.batchSize,
@@ -497,6 +506,12 @@ export class PaymentReconciliationService {
                             : { programPaymentStatus: PaymentStatus.paid },
                 });
                 report.repaired += 1;
+                await invalidateParticipantPortalCache(
+                    this.prisma,
+                    this.cacheService,
+                    invoice.application.participantId,
+                    invoice.application.participant?.userId,
+                );
                 this.logger.warn(
                     `[payment-reconciliation] paid-column-drift repaired application=${invoice.applicationId} ` +
                     `category=${category} was=${was} (paid invoice ${invoice.id})`,
@@ -873,6 +888,7 @@ export class PaymentReconciliationService {
             }),
         ]);
 
+        await this.invalidatePortalCaches(invoice);
         this.logger.log(`[payment-reconciliation] settled invoice ${invoice.id} -> paid`);
         return null;
     }
@@ -928,10 +944,27 @@ export class PaymentReconciliationService {
                   ]),
         ]);
 
+        await this.invalidatePortalCaches(invoice);
         this.logger.log(`[payment-reconciliation] reverted abandoned invoice ${invoice.id} -> unpaid`);
         if (!paidSibling) {
             await this.emitReminder(invoice);
         }
+    }
+
+    /**
+     * The portal dashboard (canSwitchCategory, switch-lock message, totalRequired)
+     * and payments list are cached ~5 min and derived from invoice + application
+     * payment status, so every committed status change here must bust them. The
+     * participant userId is already on the loaded invoice, so no extra query.
+     * Never throws (see invalidateParticipantPortalCache).
+     */
+    private invalidatePortalCaches(invoice: ProcessingInvoice): Promise<void> {
+        return invalidateParticipantPortalCache(
+            this.prisma,
+            this.cacheService,
+            invoice.application.participantId,
+            invoice.application.participant?.userId,
+        );
     }
 
     /**
