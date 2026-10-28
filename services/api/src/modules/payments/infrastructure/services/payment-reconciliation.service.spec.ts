@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { PaymentGatewayClient } from './payment-gateway.client';
 import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,7 @@ const makeInvoice = (overrides: Record<string, unknown> = {}) => ({
     application: {
         id: 'app-1',
         programId: 'prog-1',
+        participantId: 'participant-1',
         participant: {
             fullName: 'John',
             userId: 'user-1',
@@ -56,6 +58,7 @@ describe('PaymentReconciliationService', () => {
     let mockPaymentClient: { get: jest.Mock; post: jest.Mock };
     let mockRabbitmq: { emit: jest.Mock };
     let mockGatewayClient: { voidTransaction: jest.Mock };
+    let mockCache: { invalidatePortalCache: jest.Mock; invalidateKeys: jest.Mock };
 
     beforeEach(async () => {
         mockPrisma = {
@@ -85,6 +88,11 @@ describe('PaymentReconciliationService', () => {
             voidTransaction: jest.fn().mockResolvedValue({ outcome: 'voided', detail: 'ok' }),
         };
 
+        mockCache = {
+            invalidatePortalCache: jest.fn().mockResolvedValue(undefined),
+            invalidateKeys: jest.fn().mockResolvedValue(undefined),
+        };
+
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 PaymentReconciliationService,
@@ -93,6 +101,7 @@ describe('PaymentReconciliationService', () => {
                 { provide: PaymentGatewayClient, useValue: mockGatewayClient },
                 { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('') } },
                 { provide: RabbitMQProducerService, useValue: mockRabbitmq },
+                { provide: CacheService, useValue: mockCache },
                 // Tests here exercise the business methods directly (not the
                 // @Cron-decorated wrapper), so the lock is just a passthrough.
                 { provide: CronLockService, useValue: { runExclusive: jest.fn((_jobName: string, fn: () => Promise<void>) => fn()) } },
@@ -112,6 +121,8 @@ describe('PaymentReconciliationService', () => {
         mockPaymentClient.post.mockResolvedValue({});
         mockRabbitmq.emit.mockResolvedValue(undefined);
         mockGatewayClient.voidTransaction.mockResolvedValue({ outcome: 'voided', detail: 'ok' });
+        mockCache.invalidatePortalCache.mockResolvedValue(undefined);
+        mockCache.invalidateKeys.mockResolvedValue(undefined);
     });
 
     // ── Test case 1: unpaid invoice + gateway SETTLED ─────────────────────────
@@ -131,6 +142,8 @@ describe('PaymentReconciliationService', () => {
 
             expect(report.details[0].outcome).toBe('settled_paid');
             expect(mockPrisma.$transaction).toHaveBeenCalled();
+            // unpaid -> paid must bust the cached dashboard + payments
+            expect(mockCache.invalidatePortalCache).toHaveBeenCalledWith('user-1');
             // Check that applicationInvoice.update was called with lastReconciledAt (inside $transaction via settlePaid)
             expect(mockPrisma.applicationInvoice.update).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -162,6 +175,8 @@ describe('PaymentReconciliationService', () => {
                     data: expect.objectContaining({ lastReconciledAt: expect.any(Date) }),
                 }),
             );
+            // no status change, nothing to invalidate
+            expect(mockCache.invalidatePortalCache).not.toHaveBeenCalled();
         });
     });
 
@@ -186,6 +201,8 @@ describe('PaymentReconciliationService', () => {
             expect(report.details[0].outcome).toBe('skipped');
             expect(report.details[0].reason).toContain('superseded');
             expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+            // nothing participant-visible changed, so nothing to invalidate
+            expect(mockCache.invalidatePortalCache).not.toHaveBeenCalled();
         });
 
         // Regression for the audit-M158/M65 fix: the old inline guard was keyed on
@@ -249,6 +266,27 @@ describe('PaymentReconciliationService', () => {
                 expect.anything(),
             );
             expect(mockRabbitmq.emit).toHaveBeenCalledWith('payment.reminder', expect.anything());
+            // processing -> unpaid changes canSwitchCategory / the switch-lock message
+            expect(mockCache.invalidatePortalCache).toHaveBeenCalledWith('user-1');
+        });
+
+        it('does not fail the reconcile when the cache invalidation rejects', async () => {
+            const invoice = makeInvoice({
+                status: 'processing',
+                externalTransactionId: 'txn-1',
+                updatedAt: new Date('2020-01-01'),
+            });
+            mockPrisma.applicationInvoice.findMany.mockResolvedValue([invoice]);
+            mockPaymentClient.get.mockResolvedValue({
+                data: { status: 'REQUIRES_PAYMENT_METHOD', transactions: [] },
+            });
+            mockPrisma.$transaction.mockResolvedValue([{}, {}]);
+            mockCache.invalidatePortalCache.mockRejectedValue(new Error('redis down'));
+
+            const report = await service.reconcileProcessingInvoices({ apply: true, graceMinutes: 1440 });
+
+            expect(report.errors).toBe(0);
+            expect(report.details[0].outcome).toBe('reverted_unpaid');
         });
 
         it('still reverts and cancels for a deactivated participant, but skips the reminder email', async () => {
@@ -554,7 +592,12 @@ describe('PaymentReconciliationService', () => {
             id: 'inv-drift-1',
             applicationId: 'app-1',
             pricingTier: { feeType: 'program_fee_1' },
-            application: { registrationPaymentStatus: 'paid', programPaymentStatus: 'unpaid' },
+            application: {
+                registrationPaymentStatus: 'paid',
+                programPaymentStatus: 'unpaid',
+                participantId: 'participant-1',
+                participant: { userId: 'user-1' },
+            },
             ...over,
         });
 
@@ -568,13 +611,19 @@ describe('PaymentReconciliationService', () => {
                 where: { id: 'app-1' },
                 data: { programPaymentStatus: 'paid' },
             });
+            expect(mockCache.invalidatePortalCache).toHaveBeenCalledWith('user-1');
         });
 
         it('writes the registration column for a registration_fee invoice, not the programme one', async () => {
             mockPrisma.applicationInvoice.findMany.mockResolvedValue([
                 driftRow({
                     pricingTier: { feeType: 'registration_fee' },
-                    application: { registrationPaymentStatus: 'cancelled', programPaymentStatus: 'paid' },
+                    application: {
+                        registrationPaymentStatus: 'cancelled',
+                        programPaymentStatus: 'paid',
+                        participantId: 'participant-1',
+                        participant: { userId: 'user-1' },
+                    },
                 }),
             ]);
 

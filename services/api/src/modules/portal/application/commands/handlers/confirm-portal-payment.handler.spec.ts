@@ -143,6 +143,9 @@ describe('ConfirmPortalPaymentHandler', () => {
         expect(mockPaymentClient.processPayment.mock.calls[1][0].payment_details).toEqual({
             details_json: JSON.stringify({ callback_url: 'https://meys.org/onboarding?checkout=return' }),
         });
+
+        // unpaid -> processing locks the category switch, so the cached dashboard must go
+        expect(mockCacheService.invalidatePortalCache).toHaveBeenCalledWith('user-1');
     });
 
     // M156 backstop: CreateIntentRequest.amount is int64 at the gRPC boundary and
@@ -271,6 +274,7 @@ describe('ConfirmPortalPaymentHandler', () => {
                 }),
             }),
         );
+        expect(mockCacheService.invalidatePortalCache).toHaveBeenCalledWith('user-1');
     });
 
     it('keeps USD settlement on manual confirm when no IDR snapshot is available (legacy tier)', async () => {
