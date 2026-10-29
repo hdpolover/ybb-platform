@@ -1,3 +1,5 @@
+import { MarketingConsentContext } from '../utils/marketing-consent.util';
+
 export class UpdateUserPreferencesCommand {
     constructor(
         public readonly userId: string,
@@ -14,6 +16,8 @@ export class UpdateUserPreferencesCommand {
             applicationUpdates?: boolean;
             reminderEmails?: boolean;
             customSettings?: Record<string, unknown>;
-        }
+        },
+        /** Request context, stored on the audit row when marketingEmails changes. */
+        public readonly consentContext?: MarketingConsentContext,
     ) { }
 }

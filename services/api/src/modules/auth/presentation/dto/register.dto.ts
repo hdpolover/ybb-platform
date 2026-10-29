@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength, IsIn, IsEnum, Matches, ValidateNested } from 'class-validator';
+import { IsBoolean, IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID, MinLength, IsIn, IsEnum, Matches, ValidateNested } from 'class-validator';
 import { ApplicationCategory } from '@prisma/client';
 import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 import { AdAttributionDto } from './ad-attribution.dto';
@@ -106,4 +106,11 @@ export class RegisterDto {
   @ValidateNested()
   @Type(() => AdAttributionDto)
   adAttribution?: AdAttributionDto;
+
+  @ApiPropertyOptional({
+    description: 'Explicit, unticked-by-default opt-in to marketing emails about upcoming programs. Omitted or false means not subscribed.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  marketingOptIn?: boolean;
 }

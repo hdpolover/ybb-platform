@@ -13,5 +13,6 @@ export class FirebaseLoginCommand {
     public readonly referralCode?: string,
     public readonly applicationCategory?: ApplicationCategory,
     public readonly adAttribution?: AdAttributionInput,
+    public readonly marketingOptIn?: boolean,
   ) {}
 }

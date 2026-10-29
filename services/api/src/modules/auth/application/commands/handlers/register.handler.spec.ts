@@ -660,6 +660,75 @@ describe('RegisterHandler', () => {
         expect(createArgs.data.adAttribution).toBeUndefined();
     });
 
+    describe('marketing email opt-in', () => {
+        const prefCreate = jest.fn();
+        const consentCreate = jest.fn();
+
+        beforeEach(() => {
+            prefCreate.mockReset();
+            consentCreate.mockReset();
+            mockUnitOfWork.execute.mockImplementation(async (work: any) =>
+                work({
+                    tx: {
+                        user: { create: mockPrismaService.user.create },
+                        participant: { create: mockPrismaService.participant.create },
+                        userPreference: { create: prefCreate },
+                        userPrivacyConsent: { create: consentCreate },
+                    },
+                }),
+            );
+            mockPrismaService.authProvider.findUnique.mockResolvedValue({
+                id: 'provider-id-123', name: 'local', isActive: true, isOAuth: false,
+            });
+            mockPrismaService.brand.findUnique.mockResolvedValue({
+                id: 'category-id-123', isActive: true, name: 'Test Category', requireEmailVerification: false,
+            });
+            mockPrismaService.program.findUnique.mockResolvedValue({
+                id: 'program-id-123', brandId: 'category-id-123', status: 'published', isActive: true,
+                isPublished: true, allowRegistration: true, registrationOpenDate: null, registrationCloseDate: null,
+            });
+            mockPrismaService.ambassador.findFirst.mockResolvedValue(null);
+            mockPrismaService.user.findFirst.mockResolvedValue(null);
+            mockPrismaService.user.create.mockResolvedValue({
+                id: 'new-user-id', email: 'test@example.com', brandId: 'category-id-123',
+                isActive: true, isOnboardingCompleted: false,
+            });
+            mockPrismaService.participant.findUnique.mockResolvedValue({ id: 'participant-id-123', userId: 'new-user-id' });
+            mockPrismaService.participant.create.mockResolvedValue({ id: 'participant-id-123', userId: 'new-user-id' });
+        });
+
+        const registerWith = (marketingOptIn?: boolean) =>
+            handler.execute(new RegisterCommand(
+                'test@example.com', 'provider-id-123', 'password123', 'category-id-123', 'provider-user-id-123',
+                undefined, 'program-slug-123', undefined, '127.0.0.1', 'Mozilla/5.0', undefined, undefined, marketingOptIn,
+            ));
+
+        it('subscribes and writes a granted consent audit row when the box was ticked', async () => {
+            await registerWith(true);
+
+            expect(prefCreate).toHaveBeenCalledWith({ data: { userId: 'new-user-id', marketingEmails: true } });
+            expect(consentCreate).toHaveBeenCalledWith({
+                data: expect.objectContaining({
+                    userId: 'new-user-id',
+                    consentType: 'marketing_emails',
+                    consentText: expect.any(String),
+                    consentVersion: expect.any(String),
+                    isGranted: true,
+                    grantedAt: expect.any(Date),
+                    ipAddress: '127.0.0.1',
+                    userAgent: 'Mozilla/5.0',
+                }),
+            });
+        });
+
+        it.each([undefined, false])('stays unsubscribed with no rows written when opt-in is %s', async (value) => {
+            await registerWith(value);
+
+            expect(prefCreate).not.toHaveBeenCalled();
+            expect(consentCreate).not.toHaveBeenCalled();
+        });
+    });
+
     it('should reject registration for an existing email without touching the account', async () => {
         mockPrismaService.authProvider.findUnique.mockResolvedValue({
             id: 'provider-id-123',

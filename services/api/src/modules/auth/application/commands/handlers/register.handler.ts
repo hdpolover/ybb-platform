@@ -22,6 +22,7 @@ import {
 } from '../../services/auth-program-linking.util';
 import { MetaCapiService } from '@modules/meta/meta-capi.service';
 import { buildAdAttributionJson } from '../../services/ad-attribution.util';
+import { recordMarketingConsent } from '@modules/users/application/utils/marketing-consent.util';
 
 @Injectable()
 export class RegisterHandler {
@@ -362,6 +363,17 @@ export class RegisterHandler {
           adAttribution: buildAdAttributionJson(command.adAttribution) ?? undefined,
         },
       });
+
+      // Only an explicit tick subscribes; every other path leaves the column at
+      // its false default. Same transaction, so no account carries the flag
+      // without its audit row.
+      if (command.marketingOptIn === true) {
+        await tx.userPreference.create({ data: { userId: user.id, marketingEmails: true } });
+        await recordMarketingConsent(tx, user.id, true, {
+          ipAddress: command.ipAddress,
+          userAgent: command.userAgent,
+        });
+      }
 
       return user;
     }, { name: 'user-registration', timeout: 10000 });

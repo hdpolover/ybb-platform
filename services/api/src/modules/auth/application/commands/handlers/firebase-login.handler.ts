@@ -21,6 +21,7 @@ import {
 import { normalizeReferralCode } from '@modules/participants/application/utils/referral-code.util';
 import { MetaCapiService } from '@modules/meta/meta-capi.service';
 import { buildAdAttributionJson } from '../../services/ad-attribution.util';
+import { recordMarketingConsent } from '@modules/users/application/utils/marketing-consent.util';
 
 // participants.referral_code is declared @db.VarChar(20) in
 // prisma/schema/roles.prisma — kept in sync with that column, not derived
@@ -435,6 +436,20 @@ export class FirebaseLoginHandler {
                     });
 
                     await repos.incrementAmbassadorReferrals(ambassador.id);
+                }
+
+                // New accounts only (this block creates the participant). Returning
+                // users change the setting through the preferences endpoint.
+                if (command.marketingOptIn === true) {
+                    await repos.tx.userPreference.upsert({
+                        where: { userId: user.id },
+                        create: { userId: user.id, marketingEmails: true },
+                        update: { marketingEmails: true },
+                    });
+                    await recordMarketingConsent(repos.tx, user.id, true, {
+                        ipAddress: command.ipAddress,
+                        userAgent: command.userAgent,
+                    });
                 }
 
                 return newParticipant;
