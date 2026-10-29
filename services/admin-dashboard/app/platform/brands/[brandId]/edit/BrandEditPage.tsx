@@ -19,11 +19,12 @@ import {
   updatePlatformBrandSettings,
   type PlatformBrandDetail,
 } from "../../../api";
+import { BrandEmailTab } from "./BrandEmailTab";
 
 // Tab ids that actually exist on this page — used to validate the `tab` query
 // param so a garbage value (e.g. ?tab=nonsense) falls back to Identity instead
 // of rendering a blank tab area.
-const EDIT_TAB_IDS = ["identity", "details", "settings"] as const;
+const EDIT_TAB_IDS = ["identity", "details", "settings", "email"] as const;
 type EditTabId = (typeof EDIT_TAB_IDS)[number];
 
 function isEditTabId(value: string | null): value is EditTabId {
@@ -862,6 +863,7 @@ export default function BrandEditPage({ brandId }: { brandId: string }) {
           <TabsTrigger value="identity">Identity</TabsTrigger>
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsTrigger value="email">Email look</TabsTrigger>
         </TabsList>
 
         <TabsContent value="identity">
@@ -872,6 +874,9 @@ export default function BrandEditPage({ brandId }: { brandId: string }) {
         </TabsContent>
         <TabsContent value="settings">
           <SettingsTab brand={brand} onSaved={setBrand} />
+        </TabsContent>
+        <TabsContent value="email">
+          <BrandEmailTab brandId={brand.id} brandBannerUrl={brand.bannerUrl} />
         </TabsContent>
       </Tabs>
     </div>
