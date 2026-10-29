@@ -16,6 +16,8 @@ import {
 } from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
 import Link from "next/link";
+import { NewEmailCampaignButton } from "@/app/components/program/NewEmailCampaignButton";
+import { buildPermissionSet, hasRequiredPermissions } from "@/lib/admin-access";
 
 type ProgramDashboardProps = {
   selectedProgramId: string;
@@ -507,7 +509,7 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
   const [loadingTickets, setLoadingTickets] = useState(true);
 
   // selectedProgramId may be a program slug; operational APIs need the UUID.
-  const { accessiblePrograms } = useAuth();
+  const { accessiblePrograms, adminProfile } = useAuth();
   const resolvedProgramId = useMemo(() => {
     const match = accessiblePrograms.find(
       (program) =>
@@ -515,6 +517,13 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
     );
     return match?.programId ?? selectedProgramId;
   }, [accessiblePrograms, selectedProgramId]);
+
+  // Same permission the program settings page requires; the API re-checks scope.
+  const canCreateCampaign = useMemo(
+    () =>
+      hasRequiredPermissions(buildPermissionSet(adminProfile, resolvedProgramId), ["program:write"]),
+    [adminProfile, resolvedProgramId],
+  );
 
   // KPI data (feeds the top stat strip)
   const fetchDashboard = useCallback(async () => {
@@ -557,6 +566,11 @@ export function ProgramDashboard({ selectedProgramId }: ProgramDashboardProps) {
 
   return (
     <div className="space-y-5">
+      {canCreateCampaign && (
+        <div className="flex justify-end">
+          <NewEmailCampaignButton programId={resolvedProgramId} />
+        </div>
+      )}
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}

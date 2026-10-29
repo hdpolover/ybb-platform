@@ -5019,3 +5019,79 @@ export async function publishProgram(programId: string): Promise<{ success: bool
 export async function unpublishProgram(programId: string): Promise<{ success: boolean }> {
   return request<{ success: boolean }>(`/programs/${programId}/unpublish`, { method: "POST" });
 }
+
+// ─── Brand promotional email (Listmonk) ─────────────────────────────────────
+
+export type EmailButtonStyle = "rounded" | "square" | "pill";
+
+/** Stored theme. A missing key means "use the default". */
+export type BrandEmailTheme = {
+  fromName?: string;
+  fromLocalPart?: string;
+  replyTo?: string;
+  bannerUrl?: string;
+  footerText?: string;
+  secondaryColor?: string;
+  buttonStyle?: EmailButtonStyle;
+};
+
+export type BrandEmailSyncState = "not_configured" | "never" | "synced" | "failed";
+
+export type BrandEmailThemeResponse = {
+  theme: BrandEmailTheme;
+  /** What admins get when a field is empty; `fromEmail` is the full address. */
+  effective: {
+    brandName: string;
+    fromName: string;
+    fromLocalPart: string;
+    fromEmail: string;
+    replyTo: string | null;
+    bannerUrl: string | null;
+    footerText: string;
+    primaryColor: string;
+    secondaryColor: string;
+    buttonStyle: EmailButtonStyle;
+  };
+  sync: {
+    state: BrandEmailSyncState;
+    templateId?: number;
+    syncedAt?: string;
+    error?: string;
+  };
+};
+
+export function getBrandEmailTheme(brandId: string): Promise<BrandEmailThemeResponse> {
+  return request<BrandEmailThemeResponse>(`/brands/${brandId}/email-theme`);
+}
+
+/** PUT replaces the whole theme; an empty string clears a field. */
+export function saveBrandEmailTheme(
+  brandId: string,
+  theme: Record<keyof BrandEmailTheme, string>,
+): Promise<BrandEmailThemeResponse> {
+  return request<BrandEmailThemeResponse>(`/brands/${brandId}/email-theme`, {
+    method: "PUT",
+    body: JSON.stringify(theme),
+  });
+}
+
+export function resyncBrandEmailTheme(brandId: string): Promise<BrandEmailThemeResponse> {
+  return request<BrandEmailThemeResponse>(`/brands/${brandId}/email-theme/resync`, {
+    method: "POST",
+  });
+}
+
+export async function getBrandEmailPreviewHtml(brandId: string): Promise<string> {
+  const { html } = await request<{ html: string }>(`/brands/${brandId}/email-theme/preview`);
+  return html;
+}
+
+/** Creates a draft Listmonk campaign; 503 = Listmonk not configured, 502 = Listmonk rejected. */
+export function createProgramEmailCampaign(
+  programId: string,
+): Promise<{ campaignId: number; editUrl: string }> {
+  return request<{ campaignId: number; editUrl: string }>(
+    `/programs/${programId}/email-campaigns`,
+    { method: "POST" },
+  );
+}
