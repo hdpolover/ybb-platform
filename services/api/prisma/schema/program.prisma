@@ -110,6 +110,12 @@ model BrandSetting {
   tiktokAccessToken String? @map("tiktok_access_token") @db.Text
   tiktokTestEventCode String? @map("tiktok_test_event_code") @db.VarChar(50)
 
+  // Promotional-email look for this brand (from name/local part, reply-to,
+  // header banner, footer, secondary colour, button style) plus the last
+  // Listmonk template sync result under `sync`. Shape: see
+  // modules/brand-email/dto/brand-email-theme.dto.ts. Null = use brand defaults.
+  emailTheme Json? @map("email_theme") @db.Json
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)

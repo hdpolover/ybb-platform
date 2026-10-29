@@ -24,6 +24,7 @@ import { AchievementsModule } from '@modules/achievements/achievements.module';
 import { ApplicationsModule } from '@modules/applications/applications.module';
 import { AuthModule } from '@modules/auth/auth.module';
 import { BrandsModule } from '@modules/brands/brands.module';
+import { BrandEmailModule } from '@modules/brand-email/brand-email.module';
 import { FilesModule } from '@modules/files/files.module';
 import { HealthModule } from '@modules/health/health.module';
 import { LandingModule } from '@modules/landing/landing.module';
@@ -136,6 +137,7 @@ import { CheckoutModule } from '@modules/checkout/checkout.module';
     ApplicationsModule,
     AuthModule,
     BrandsModule,
+    BrandEmailModule,
     EmailTemplatesModule,
     FilesModule,
     HealthModule,
