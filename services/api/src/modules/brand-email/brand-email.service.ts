@@ -27,7 +27,7 @@ export interface DraftCampaignResponse {
     editUrl: string;
 }
 
-const THEME_KEYS = ['fromName', 'fromLocalPart', 'replyTo', 'bannerUrl', 'footerText', 'secondaryColor', 'buttonStyle'] as const;
+const THEME_KEYS = ['fromName', 'fromLocalPart', 'replyTo', 'bannerUrl', 'footerText', 'secondaryColor', 'accentColor', 'buttonStyle'] as const;
 
 /** Display name goes inside "..." in a From header: drop quote, backslash, angle brackets and control chars. */
 export function sanitizeDisplayName(name: string): string {

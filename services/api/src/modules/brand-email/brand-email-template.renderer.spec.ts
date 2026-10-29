@@ -15,6 +15,7 @@ const theme = (over: Partial<EffectiveEmailTheme> = {}): EffectiveEmailTheme => 
     footerText: '',
     primaryColor: '#112233',
     secondaryColor: '#445566',
+    accentColor: '#778899',
     buttonStyle: 'rounded',
     ...over,
 });
@@ -69,9 +70,16 @@ describe('brand email renderer', () => {
     });
 
     it('ignores non-hex colors and falls back', () => {
-        const html = renderBrandEmailTemplate(theme({ primaryColor: 'red;}</style><script>', secondaryColor: 'url(x)' }));
+        const html = renderBrandEmailTemplate(theme({ primaryColor: 'red;}</style><script>', secondaryColor: 'url(x)', accentColor: 'red;}' }));
         expect(html).not.toContain('<script>');
         expect(html).not.toContain('url(x)');
+    });
+
+    it('paints the top bar and divider with the accent color, not the primary', () => {
+        const html = renderBrandEmailTemplate(theme());
+        expect(html).toContain('bgcolor="#778899"');
+        expect(html).toContain('border-top:2px solid #778899');
+        expect(html).not.toContain('#112233');
     });
 
     it('renders banner image when set and button radius per style', () => {

@@ -13,6 +13,7 @@ export interface StoredEmailTheme {
     bannerUrl?: string;
     footerText?: string;
     secondaryColor?: string;
+    accentColor?: string;
     buttonStyle?: ButtonStyle;
 }
 
@@ -41,6 +42,8 @@ export interface EffectiveEmailTheme {
     footerText: string;
     primaryColor: string;
     secondaryColor: string;
+    /** Top bar + divider: stored accent, else brand primary, else neutral. */
+    accentColor: string;
     buttonStyle: ButtonStyle;
 }
 
@@ -76,6 +79,7 @@ export function resolveEmailTheme(brand: BrandEmailSource, stored: StoredEmailTh
         footerText: theme.footerText || '',
         primaryColor,
         secondaryColor: hexOr(theme.secondaryColor, primaryColor),
+        accentColor: hexOr(theme.accentColor, primaryColor),
         buttonStyle: theme.buttonStyle ?? 'rounded',
     };
 }

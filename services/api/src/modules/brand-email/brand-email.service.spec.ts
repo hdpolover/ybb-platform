@@ -51,10 +51,10 @@ describe('BrandEmailService', () => {
 
     it('syncs the template on save and records the template id', async () => {
         const { service, prisma, listmonk } = setup();
-        await service.saveTheme('b1', { secondaryColor: '#00ff00' });
+        await service.saveTheme('b1', { secondaryColor: '#00ff00', accentColor: '#0000ff' });
         expect(listmonk.upsertCampaignTemplate).toHaveBeenCalledWith('brand:kys', expect.stringContaining('{{ template "content" . }}'));
         const lastCall = prisma.brandSetting.upsert.mock.calls.at(-1)[0];
-        expect(lastCall.update.emailTheme).toMatchObject({ secondaryColor: '#00ff00', sync: { state: 'synced', templateId: 7 } });
+        expect(lastCall.update.emailTheme).toMatchObject({ secondaryColor: '#00ff00', accentColor: '#0000ff', sync: { state: 'synced', templateId: 7 } });
     });
 
     it('keeps the saved theme and records a failed sync when Listmonk errors', async () => {

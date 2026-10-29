@@ -99,15 +99,15 @@ function renderFooter(theme: EffectiveEmailTheme): string {
     );
 
     return (
-        `<tr><td style="padding:0 32px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:2px solid ${safeHex(theme.primaryColor, '#1F2937')};font-size:0;line-height:0;height:2px;">&nbsp;</td></tr></table></td></tr>` +
+        `<tr><td style="padding:0 32px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:2px solid ${safeHex(theme.accentColor, '#1F2937')};font-size:0;line-height:0;height:2px;">&nbsp;</td></tr></table></td></tr>` +
         `<tr><td style="padding:20px 32px 28px 32px;font-family:${FONT};font-size:12px;line-height:18px;color:#6b7280;">${parts.join('')}</td></tr>`
     );
 }
 
 /** Pure: effective theme -> Listmonk campaign template HTML. */
 export function renderBrandEmailTemplate(theme: EffectiveEmailTheme): string {
-    const primary = safeHex(theme.primaryColor, '#1F2937');
-    const secondary = safeHex(theme.secondaryColor, primary);
+    const accent = safeHex(theme.accentColor, '#1F2937');
+    const secondary = safeHex(theme.secondaryColor, safeHex(theme.primaryColor, '#1F2937'));
     const title = escapeHtml(theme.brandName);
 
     return (
@@ -119,7 +119,7 @@ export function renderBrandEmailTemplate(theme: EffectiveEmailTheme): string {
         `<body style="margin:0;padding:0;background-color:#f4f4f5;">\n` +
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;"><tr><td align="center" style="padding:24px 12px;">\n` +
         `<table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#ffffff;">\n` +
-        `<tr><td bgcolor="${primary}" style="background-color:${primary};font-size:0;line-height:0;height:6px;">&nbsp;</td></tr>\n` +
+        `<tr><td bgcolor="${accent}" style="background-color:${accent};font-size:0;line-height:0;height:6px;">&nbsp;</td></tr>\n` +
         `${renderHeader(theme)}\n` +
         `<tr><td class="content" style="padding:24px 32px;font-family:${FONT};font-size:16px;line-height:24px;color:#1f2937;">${CONTENT_TOKEN}</td></tr>\n` +
         `${renderFooter(theme)}\n` +

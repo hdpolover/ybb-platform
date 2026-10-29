@@ -14,6 +14,7 @@ describe('resolveEmailTheme', () => {
         expect(t.replyTo).toBe('help@jys.example.com');
         expect(t.primaryColor).toBe('#AA0000');
         expect(t.secondaryColor).toBe('#AA0000');
+        expect(t.accentColor).toBe('#AA0000');
         expect(t.logoUrl).toBe(brand.logoUrl);
         expect(t.buttonStyle).toBe('rounded');
     });
@@ -21,6 +22,18 @@ describe('resolveEmailTheme', () => {
     it('uses a neutral color when the brand has none or an invalid one', () => {
         expect(resolveEmailTheme({ ...brand, primaryColor: null }, null).primaryColor).toBe(NEUTRAL_COLOR);
         expect(resolveEmailTheme({ ...brand, primaryColor: 'blue' }, null).primaryColor).toBe(NEUTRAL_COLOR);
+    });
+
+    it('accent resolves stored accent, then brand primary, then neutral', () => {
+        expect(resolveEmailTheme(brand, { accentColor: '#00FF00' }).accentColor).toBe('#00FF00');
+        expect(resolveEmailTheme(brand, { accentColor: 'nope' }).accentColor).toBe('#AA0000');
+        expect(resolveEmailTheme({ ...brand, primaryColor: null }, { accentColor: '#00FF00' }).accentColor).toBe('#00FF00');
+        expect(resolveEmailTheme({ ...brand, primaryColor: null }, null).accentColor).toBe(NEUTRAL_COLOR);
+    });
+
+    it('accent does not change secondary or primary', () => {
+        const t = resolveEmailTheme({ ...brand, primaryColor: null }, { accentColor: '#00FF00' });
+        expect([t.primaryColor, t.secondaryColor]).toEqual([NEUTRAL_COLOR, NEUTRAL_COLOR]);
     });
 
     it('stored values win over defaults', () => {
@@ -40,7 +53,7 @@ describe('BrandEmailThemeDto', () => {
     it('accepts an empty object and a full valid one', async () => {
         expect(await check({})).toHaveLength(0);
         expect(
-            await check({ fromName: 'KYS', fromLocalPart: 'kys.news', replyTo: 'a@b.com', bannerUrl: 'https://c.example.com/b.png', footerText: 'hi', secondaryColor: '#12abEF', buttonStyle: 'square' }),
+            await check({ fromName: 'KYS', fromLocalPart: 'kys.news', replyTo: 'a@b.com', bannerUrl: 'https://c.example.com/b.png', footerText: 'hi', secondaryColor: '#12abEF', accentColor: '#0a0B0c', buttonStyle: 'square' }),
         ).toHaveLength(0);
     });
 
@@ -61,6 +74,8 @@ describe('BrandEmailThemeDto', () => {
         ['footerText', 'x'.repeat(501)],
         ['secondaryColor', '#abc'],
         ['secondaryColor', 'red'],
+        ['accentColor', '#abc'],
+        ['accentColor', 'red'],
         ['buttonStyle', 'triangle'],
     ])('rejects invalid %s (%s)', async (field, value) => {
         const errors = await check({ [field]: value });

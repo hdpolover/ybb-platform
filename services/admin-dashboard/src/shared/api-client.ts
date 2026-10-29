@@ -5032,6 +5032,7 @@ export type BrandEmailTheme = {
   bannerUrl?: string;
   footerText?: string;
   secondaryColor?: string;
+  accentColor?: string;
   buttonStyle?: EmailButtonStyle;
 };
 
@@ -5050,6 +5051,7 @@ export type BrandEmailThemeResponse = {
     footerText: string;
     primaryColor: string;
     secondaryColor: string;
+    accentColor: string;
     buttonStyle: EmailButtonStyle;
   };
   sync: {
