@@ -1,6 +1,6 @@
 // src/modules/brand-email/brand-email-template.renderer.spec.ts
 import { EffectiveEmailTheme } from './brand-email-theme';
-import { CONTENT_TOKEN, UNSUBSCRIBE_TOKEN, escapeHtml, renderBrandEmailTemplate, renderCtaButton, renderPreviewHtml, safeHttpsUrl } from './brand-email-template.renderer';
+import { CONTENT_TOKEN, UNSUBSCRIBE_TOKEN, contrastRatio, escapeHtml, pickForeground, renderBrandEmailTemplate, renderCtaButton, renderPreviewHtml, safeHttpsUrl } from './brand-email-template.renderer';
 
 const theme = (over: Partial<EffectiveEmailTheme> = {}): EffectiveEmailTheme => ({
     brandName: 'Korea Youth Summit',
@@ -101,5 +101,31 @@ describe('brand email renderer', () => {
         expect(safeHttpsUrl('https://ok.example.com/x')).toBe('https://ok.example.com/x');
         expect(safeHttpsUrl('not a url')).toBeNull();
         expect(safeHttpsUrl(null)).toBeNull();
+        expect(safeHttpsUrl('koreayouthsummit.com')).toBe('https://koreayouthsummit.com/');
+        expect(safeHttpsUrl(' youthacademicforum.com ')).toBe('https://youthacademicforum.com/');
+        expect(safeHttpsUrl('http://x.example.com')).toBeNull();
+        expect(safeHttpsUrl('javascript:alert(1)')).toBeNull();
+    });
+
+    it('picks the more readable button text, matching the site', () => {
+        // live brand colours: bright ones need dark text, deep ones white
+        expect(pickForeground('#0AF5D9')).toBe('#020617');
+        expect(pickForeground('#EDA507')).toBe('#020617');
+        expect(pickForeground('#FA0000')).toBe('#020617');
+        expect(pickForeground('#1C57B3')).toBe('#ffffff');
+        expect(pickForeground('#886B02')).toBe('#ffffff');
+        expect(contrastRatio('#ffffff', '#000000')).toBeCloseTo(21, 0);
+        expect(renderCtaButton(theme({ secondaryColor: '#0AF5D9' }), 'Go', 'https://a.example.com')).toContain('color:#020617');
+    });
+
+    it('falls back to neutral link colour when the brand colour is unreadable on white', () => {
+        const bright = renderBrandEmailTemplate(theme({ secondaryColor: '#0AF5D9' }));
+        expect(bright).toContain('.content a{color:#1F2937;}');
+        expect(bright).not.toContain('color:#0AF5D9;text-decoration:underline');
+        expect(renderBrandEmailTemplate(theme({ secondaryColor: '#1C57B3' }))).toContain('.content a{color:#1C57B3;}');
+    });
+
+    it('links a scheme-less website url in the footer', () => {
+        expect(renderBrandEmailTemplate(theme({ websiteUrl: 'koreayouthsummit.com' }))).toContain('href="https://koreayouthsummit.com/"');
     });
 });

@@ -1,6 +1,6 @@
 // src/modules/brand-email/brand-email-template.renderer.ts
 import { ButtonStyle } from './dto/brand-email-theme.dto';
-import { EffectiveEmailTheme } from './brand-email-theme';
+import { EffectiveEmailTheme, NEUTRAL_COLOR } from './brand-email-theme';
 
 /** Listmonk (Go template) tokens the renderer emits. Everything else admin-supplied is escaped. */
 export const CONTENT_TOKEN = '{{ template "content" . }}';
@@ -25,11 +25,12 @@ export function escapeHtml(value: string): string {
         .replace(/\}/g, '&#125;');
 }
 
-/** Returns a normalised https URL or null (rejects javascript:, data:, http:, garbage). */
+/** Returns a normalised https URL or null (rejects javascript:, data:, http:, garbage). Bare domains get https://. */
 export function safeHttpsUrl(value: string | null | undefined): string | null {
     if (!value) return null;
+    const trimmed = value.trim();
     try {
-        const url = new URL(value.trim());
+        const url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`);
         return url.protocol === 'https:' ? url.toString() : null;
     } catch {
         return null;
@@ -37,6 +38,31 @@ export function safeHttpsUrl(value: string | null | undefined): string | null {
 }
 
 const safeHex = (value: string, fallback: string): string => (/^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback);
+
+const DARK_TEXT = '#020617';
+const WHITE = '#ffffff';
+const MIN_TEXT_CONTRAST = 4.5;
+
+function relativeLuminance(hex: string): number {
+    const [r, g, b] = [1, 3, 5].map((i) => {
+        const s = parseInt(hex.slice(i, i + 2), 16) / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+export function contrastRatio(a: string, b: string): number {
+    const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Same rule as program-next layout pickForeground, so email buttons match the site. */
+export function pickForeground(hex: string): string {
+    return contrastRatio(hex, DARK_TEXT) >= contrastRatio(hex, WHITE) ? DARK_TEXT : WHITE;
+}
+
+/** Links sit on white; a bright brand colour (e.g. WYF cyan) would be unreadable there. */
+const linkColor = (hex: string): string => (contrastRatio(hex, WHITE) >= MIN_TEXT_CONTRAST ? hex : NEUTRAL_COLOR);
 
 /** Bulletproof-ish button: table cell carries the background so Outlook paints it too. */
 export function renderCtaButton(theme: EffectiveEmailTheme, label: string, url: string): string {
@@ -47,7 +73,7 @@ export function renderCtaButton(theme: EffectiveEmailTheme, label: string, url: 
     return (
         `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:separate;"><tr>` +
         `<td align="center" bgcolor="${color}" style="background-color:${color};border-radius:${radius};">` +
-        `<a href="${escapeHtml(href)}" target="_blank" style="display:inline-block;padding:12px 28px;font-family:${FONT};font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:${radius};">${escapeHtml(label)}</a>` +
+        `<a href="${escapeHtml(href)}" target="_blank" style="display:inline-block;padding:12px 28px;font-family:${FONT};font-size:16px;font-weight:bold;color:${pickForeground(color)};text-decoration:none;border-radius:${radius};">${escapeHtml(label)}</a>` +
         `</td></tr></table>`
     );
 }
@@ -75,7 +101,7 @@ function renderHeader(theme: EffectiveEmailTheme): string {
 }
 
 function renderFooter(theme: EffectiveEmailTheme): string {
-    const secondary = safeHex(theme.secondaryColor, '#1F2937');
+    const secondary = linkColor(safeHex(theme.secondaryColor, NEUTRAL_COLOR));
     const linkStyle = `color:${secondary};text-decoration:underline;`;
     const parts: string[] = [];
 
@@ -107,7 +133,7 @@ function renderFooter(theme: EffectiveEmailTheme): string {
 /** Pure: effective theme -> Listmonk campaign template HTML. */
 export function renderBrandEmailTemplate(theme: EffectiveEmailTheme): string {
     const accent = safeHex(theme.accentColor, '#1F2937');
-    const secondary = safeHex(theme.secondaryColor, safeHex(theme.primaryColor, '#1F2937'));
+    const secondary = linkColor(safeHex(theme.secondaryColor, safeHex(theme.primaryColor, NEUTRAL_COLOR)));
     const title = escapeHtml(theme.brandName);
 
     return (
