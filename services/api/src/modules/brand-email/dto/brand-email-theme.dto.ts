@@ -51,6 +51,12 @@ export class BrandEmailThemeDto {
     @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'secondaryColor must be #RRGGBB' })
     secondaryColor?: string;
 
+    @ApiPropertyOptional({ example: '#1A73E8', description: 'Email-only accent for the top bar and divider; falls back to the brand primary color' })
+    @Transform(emptyToUndefined)
+    @IsOptional()
+    @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'accentColor must be #RRGGBB' })
+    accentColor?: string;
+
     @ApiPropertyOptional({ enum: BUTTON_STYLES })
     @Transform(emptyToUndefined)
     @IsOptional()

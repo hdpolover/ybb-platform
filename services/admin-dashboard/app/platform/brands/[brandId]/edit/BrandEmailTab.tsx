@@ -50,6 +50,7 @@ export function toThemeForm(theme: BrandEmailTheme): ThemeForm {
     bannerUrl: theme.bannerUrl ?? "",
     footerText: theme.footerText ?? "",
     secondaryColor: theme.secondaryColor ?? "",
+    accentColor: theme.accentColor ?? "",
     buttonStyle: theme.buttonStyle ?? "",
   };
 }
@@ -63,6 +64,7 @@ export function toThemePayload(form: ThemeForm): ThemeForm {
     bannerUrl: form.bannerUrl.trim(),
     footerText: form.footerText.trim(),
     secondaryColor: form.secondaryColor.trim(),
+    accentColor: form.accentColor.trim(),
     buttonStyle: form.buttonStyle,
   };
 }
@@ -317,6 +319,29 @@ export function BrandEmailTab({
                 />
               </div>
               <p className="text-xs text-zinc-400">#RRGGBB. Primary color comes from the Identity tab.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="emailAccentColor">Accent color</Label>
+              <div className="flex items-center gap-2">
+                <input
+                  id="emailAccentColor-picker"
+                  type="color"
+                  aria-label="Accent color picker"
+                  value={form.accentColor || effective.accentColor}
+                  onChange={(e) => set("accentColor")(e.target.value)}
+                  className="h-9 w-10 cursor-pointer rounded border border-zinc-200 bg-white p-0.5"
+                />
+                <Input
+                  id="emailAccentColor"
+                  value={form.accentColor}
+                  onChange={(e) => set("accentColor")(e.target.value)}
+                  placeholder={effective.accentColor}
+                  className="font-mono"
+                />
+              </div>
+              <p className="text-xs text-zinc-400">
+                Top bar and divider. Leave empty to use the brand primary color.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="emailButtonStyle">Button style</Label>

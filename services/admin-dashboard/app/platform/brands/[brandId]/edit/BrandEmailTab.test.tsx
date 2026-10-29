@@ -28,6 +28,7 @@ const RESPONSE = {
     footerText: "default footer",
     primaryColor: "#112233",
     secondaryColor: "#1F2937",
+    accentColor: "#112233",
     buttonStyle: "rounded",
   },
   sync: { state: "never" },
@@ -55,8 +56,19 @@ describe("BrandEmailTab", () => {
       bannerUrl: "",
       footerText: "Bye",
       secondaryColor: "",
+      accentColor: "",
       buttonStyle: "pill",
     });
+  });
+
+  it("shows the effective accent as placeholder and sends a typed accent", async () => {
+    render(<BrandEmailTab brandId="b1" />);
+    const accent = await screen.findByLabelText("Accent color");
+    expect(accent).toHaveAttribute("placeholder", "#112233");
+    fireEvent.change(accent, { target: { value: " #abcdef " } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(saveBrandEmailTheme).toHaveBeenCalledTimes(1));
+    expect(saveBrandEmailTheme.mock.calls[0][1].accentColor).toBe("#abcdef");
   });
 
   it("shows effective defaults as placeholders, a read-only domain and a sandboxed preview", async () => {
@@ -73,7 +85,7 @@ describe("toThemePayload", () => {
   it("lowercases the local part and trims text", () => {
     const out = toThemePayload({
       fromName: " a ", fromLocalPart: " News ", replyTo: "", bannerUrl: "",
-      footerText: "", secondaryColor: "", buttonStyle: "",
+      footerText: "", secondaryColor: "", accentColor: "", buttonStyle: "",
     });
     expect(out.fromLocalPart).toBe("news");
     expect(out.fromName).toBe("a");
