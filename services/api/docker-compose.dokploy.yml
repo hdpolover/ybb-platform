@@ -40,6 +40,12 @@ services:
       PAYMENT_SERVICE_FALLBACK_URL: ${PAYMENT_SERVICE_FALLBACK_URL}
       PAYMENT_SERVICE_INTERNAL_KEY: ${PAYMENT_SERVICE_INTERNAL_KEY}
       RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
+      # Promotional email (Listmonk). All optional: unset = brand email-theme saves
+      # still work, Listmonk sync reports "not configured".
+      LISTMONK_URL: ${LISTMONK_URL:-}
+      LISTMONK_API_USER: ${LISTMONK_API_USER:-}
+      LISTMONK_API_TOKEN: ${LISTMONK_API_TOKEN:-}
+      MARKETING_FROM_DOMAIN: ${MARKETING_FROM_DOMAIN:-news.youthbreaktheboundaries.com}
       PAYMENT_GRPC_URL: ${PAYMENT_GRPC_URL}
       FILE_SERVICE_URL: ${FILE_SERVICE_URL}
       FILE_SERVICE_INTERNAL_KEY: ${FILE_SERVICE_INTERNAL_KEY}
