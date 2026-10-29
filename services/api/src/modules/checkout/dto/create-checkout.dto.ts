@@ -1,7 +1,7 @@
 // services/api/src/modules/checkout/dto/create-checkout.dto.ts
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ApplicationCategory } from '@prisma/client';
-import { Equals, IsEmail, IsEnum, IsNotEmpty, IsString, IsUUID, Matches, MaxLength, MinLength } from 'class-validator';
+import { Equals, IsBoolean, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength } from 'class-validator';
 import { NormalizeEmail } from '@shared/decorators/normalize-email.decorator';
 import { IsEnglishName } from '@shared/validators/english-text.validator';
 
@@ -46,6 +46,11 @@ export class CreateCheckoutDto {
     @ApiProperty({ description: 'Terms, Privacy Policy and refund terms accepted. Must be true.' })
     @Equals(true, { message: 'You must accept the terms, privacy policy and refund terms' })
     consent!: boolean;
+
+    @ApiPropertyOptional({ description: 'Optional, unticked-by-default opt-in to marketing emails.' })
+    @IsOptional()
+    @IsBoolean()
+    marketingOptIn?: boolean;
 
     @ApiProperty({ description: 'Cloudflare Turnstile response token' })
     @IsString()

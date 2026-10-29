@@ -15,5 +15,6 @@ export class RegisterCommand {
     public readonly userAgent?: string,
     public readonly applicationCategory?: ApplicationCategory,
     public readonly adAttribution?: AdAttributionInput,
+    public readonly marketingOptIn?: boolean,
   ) {}
 }

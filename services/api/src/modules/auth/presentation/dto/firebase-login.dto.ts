@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
 import { ApplicationCategory } from '@prisma/client';
 import { AdAttributionDto } from './ad-attribution.dto';
 
@@ -78,4 +78,11 @@ export class FirebaseLoginDto {
   @ValidateNested()
   @Type(() => AdAttributionDto)
   adAttribution?: AdAttributionDto;
+
+  @ApiPropertyOptional({
+    description: '(Registration only) Explicit opt-in to marketing emails. Ignored for returning users; they use the preferences endpoint.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  marketingOptIn?: boolean;
 }

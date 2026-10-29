@@ -276,6 +276,7 @@ export class AuthController {
       dto.referralCode,
       dto.applicationCategory,
       dto.adAttribution,
+      dto.marketingOptIn,
     );
     return this.firebaseLoginHandler.execute(command, brandDomain);
   }
@@ -416,6 +417,7 @@ export class AuthController {
       userAgent,
       dto.applicationCategory,
       dto.adAttribution,
+      dto.marketingOptIn,
     );
     return this.registerHandler.execute(command, brandDomain);
   }

@@ -737,4 +737,46 @@ describe('FirebaseLoginHandler - existing-participant referral attribution', () 
       warnSpy.mockRestore();
     });
   });
+  describe('marketing email opt-in on first sign-in', () => {
+    beforeEach(() => {
+      mockPrismaService.participant.findUnique.mockResolvedValue(null);
+    });
+
+    const run = async (marketingOptIn?: boolean) => {
+      const upsert = jest.fn();
+      const consentCreate = jest.fn();
+      mockUnitOfWork.execute.mockImplementation(async (work: any) =>
+        work({
+          tx: {
+            participant: { create: jest.fn().mockResolvedValue({ id: 'new-participant-id', userId: existingUser.id }) },
+            userPreference: { upsert },
+            userPrivacyConsent: { create: consentCreate },
+          },
+          createAmbassadorReferral: jest.fn(),
+          incrementAmbassadorReferrals: jest.fn(),
+        }),
+      );
+      await handler.execute(new FirebaseLoginCommand(
+        'firebase-id-token', 'provider-id-123', '127.0.0.1', 'Mozilla/5.0 Chrome/120', 'brand-id-123',
+        undefined, undefined, undefined, undefined, undefined, marketingOptIn,
+      ));
+      return { upsert, consentCreate };
+    };
+
+    it('subscribes and writes a granted audit row when the box was ticked', async () => {
+      const { upsert, consentCreate } = await run(true);
+
+      expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ create: { userId: existingUser.id, marketingEmails: true } }));
+      expect(consentCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ userId: existingUser.id, consentType: 'marketing_emails', isGranted: true }),
+      });
+    });
+
+    it('writes nothing when the box was not ticked', async () => {
+      const { upsert, consentCreate } = await run(undefined);
+
+      expect(upsert).not.toHaveBeenCalled();
+      expect(consentCreate).not.toHaveBeenCalled();
+    });
+  });
 });

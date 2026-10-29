@@ -153,6 +153,8 @@ export class CheckoutHandler {
             ctx.ip,
             ctx.userAgent,
             offer.category,
+            undefined,
+            dto.marketingOptIn,
         );
         try {
             // Unchanged register path: creates the user, participant and application and

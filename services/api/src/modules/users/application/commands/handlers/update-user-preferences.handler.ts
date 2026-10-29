@@ -3,16 +3,27 @@ import { UpdateUserPreferencesCommand } from '../update-user-preferences.command
 import { UserPreferenceResponseDto } from '../../../presentation/dto/user-preference.dto';
 import { IUserPreferenceRepository } from '@core/interfaces/repositories/user-preference.repository.interface';
 import { UserPreference } from '@core/entities/user-preference.entity';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { recordMarketingConsent } from '../../utils/marketing-consent.util';
 
 @Injectable()
 export class UpdateUserPreferencesHandler {
     constructor(
         @Inject(IUserPreferenceRepository)
         private readonly userPreferenceRepository: IUserPreferenceRepository,
+        private readonly prisma: PrismaService,
     ) { }
 
     async execute(command: UpdateUserPreferencesCommand): Promise<UserPreferenceResponseDto> {
         let preferences = await this.userPreferenceRepository.findByUserId(command.userId);
+
+        // Audit only a real change: clients resend the whole form, and an untouched
+        // value is not a new consent event. Written first and not swallowed, so a
+        // failed audit write leaves the preference as it was.
+        const requested = command.updates.marketingEmails;
+        if (requested !== undefined && requested !== (preferences?.marketingEmails ?? false)) {
+            await recordMarketingConsent(this.prisma, command.userId, requested, command.consentContext);
+        }
 
         if (!preferences) {
             // Create new if not exists

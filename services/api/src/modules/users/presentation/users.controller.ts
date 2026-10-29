@@ -86,8 +86,10 @@ export class UsersController {
   async updateMyPreferences(
     @CurrentUser() user: CurrentUserData,
     @Body() dto: UpdateUserPreferenceDto,
+    @ClientIp() ip?: string,
+    @Headers('user-agent') userAgent?: string,
   ): Promise<UserPreferenceResponseDto> {
-    const command = new UpdateUserPreferencesCommand(user.userId, dto);
+    const command = new UpdateUserPreferencesCommand(user.userId, dto, { ipAddress: ip, userAgent });
     return this.updateUserPreferencesHandler.execute(command);
   }
 
