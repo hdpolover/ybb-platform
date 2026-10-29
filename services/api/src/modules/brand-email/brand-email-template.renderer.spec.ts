@@ -26,6 +26,8 @@ describe('brand email renderer', () => {
         expect(html).toContain(CONTENT_TOKEN);
         expect(html).toContain(`href="${UNSUBSCRIBE_TOKEN}"`);
         expect(html).toContain('Organized by Youth Break the Boundaries (YBB)');
+        expect(html).toContain('Jl. Rejodani No.2');
+        expect(html).toContain('Yogyakarta 55581, Indonesia');
         expect(html).toContain('You are receiving this because you registered for a Korea Youth Summit program.');
     });
 

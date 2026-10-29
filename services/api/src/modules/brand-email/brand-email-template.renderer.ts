@@ -7,6 +7,9 @@ export const CONTENT_TOKEN = '{{ template "content" . }}';
 export const UNSUBSCRIBE_TOKEN = '{{ UnsubscribeURL }}';
 
 const ORGANIZER_LINE = 'Organized by Youth Break the Boundaries (YBB)';
+// physical postal address is required in commercial email (CAN-SPAM) and checked by SES reviewers
+const ORG_ADDRESS =
+    'Grand STR Palagan, Jl. Rejodani No.2, Prumpung, Sardonoharjo, Kec. Ngaglik, Kabupaten Sleman, Daerah Istimewa Yogyakarta 55581, Indonesia';
 const BUTTON_RADIUS: Record<ButtonStyle, string> = { rounded: '6px', square: '0', pill: '999px' };
 const FONT = "Arial, Helvetica, sans-serif";
 
@@ -118,7 +121,7 @@ function renderFooter(theme: EffectiveEmailTheme): string {
     if (theme.footerText.trim()) {
         parts.push(`<p style="margin:0 0 12px 0;">${escapeHtml(theme.footerText.trim()).replace(/\r?\n/g, '<br>')}</p>`);
     }
-    parts.push(`<p style="margin:0 0 12px 0;">${ORGANIZER_LINE}</p>`);
+    parts.push(`<p style="margin:0 0 12px 0;">${ORGANIZER_LINE}<br>${ORG_ADDRESS}</p>`);
     parts.push(
         `<p style="margin:0;">You are receiving this because you registered for a ${escapeHtml(theme.brandName)} program. ` +
             `<a href="${UNSUBSCRIBE_TOKEN}" style="${linkStyle}">Unsubscribe</a></p>`,
