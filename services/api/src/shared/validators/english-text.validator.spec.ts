@@ -259,6 +259,14 @@ describe('IsSubmissionDataEnglish', () => {
             const msgs = await validate_data({ full_name: 'John2 Doe' });
             expect(msgs.length).toBeGreaterThan(0);
         });
+
+        it.each(['instagram_username', 'instagramUsername', 'tiktok_user_name'])(
+            'allows digits and underscores in handle key %s',
+            async (key) => {
+                const msgs = await validate_data({ [key]: 'kashivya_03' });
+                expect(msgs).toHaveLength(0);
+            },
+        );
     });
 });
 
