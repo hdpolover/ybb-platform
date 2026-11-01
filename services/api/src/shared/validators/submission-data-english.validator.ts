@@ -24,6 +24,9 @@ const ENGLISH_TEXT_REGEX = /^[\x20-\x7E\n\r\t]*$/;
  */
 const NAME_KEY_PATTERN = /name/i;
 
+/** A username is a handle, not a person's name: digits and underscores are legal. */
+const USERNAME_KEY_PATTERN = /user[\s_-]?name/i;
+
 /**
  * Keys whose string values should be exempt from text-content validation
  * because they hold structured identifiers (UUIDs, ISO codes, URLs, etc.).
@@ -61,7 +64,7 @@ export class SubmissionDataEnglishConstraint implements ValidatorConstraintInter
             if (typeof value !== 'string' || value === '') continue;
             if (EXEMPT_KEY_PATTERN.test(key)) continue;
 
-            if (NAME_KEY_PATTERN.test(key)) {
+            if (NAME_KEY_PATTERN.test(key) && !USERNAME_KEY_PATTERN.test(key)) {
                 if (!ENGLISH_NAME_REGEX.test(value)) {
                     this.failedField = key;
                     this.failedReason = "must use the English alphabet only (letters, spaces, - ' .)";
