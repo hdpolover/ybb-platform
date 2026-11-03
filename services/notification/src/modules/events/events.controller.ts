@@ -1155,10 +1155,8 @@ export class EventsController {
 
         // Per-recipient errors are caught and logged rather than thrown: this
         // event carries the whole batch as one message, so throwing would
-        // nack the entire message and (depending on retry/idempotency state)
-        // either resend to already-succeeded recipients or, once the
-        // dedupe key set by canProcess() is already claimed, get silently
-        // skipped on retry. Best-effort per recipient avoids both.
+        // nack the entire message and resend to every recipient who already
+        // succeeded on the retry. Best-effort per recipient avoids that.
         //
         // Each outcome is now also collected and reported back to the API
         // (which owns the database) so the failures below stop being
@@ -1297,9 +1295,9 @@ export class EventsController {
 
         // Per-recipient errors are caught and logged rather than thrown: this
         // event carries the whole audience as one message, so throwing would
-        // nack it and either re-mail everyone who already succeeded or, once
-        // the dedupe key is claimed, silently skip the whole thing. Best-effort
-        // per recipient avoids both — one bad address must not cost the rest.
+        // nack it and re-mail everyone who already succeeded on the retry.
+        // Best-effort per recipient avoids that — one bad address must not
+        // cost the rest.
         const results: ParticipantReminderSendResult[] = [];
 
         for (const recipient of recipients) {
@@ -1417,7 +1415,6 @@ export class EventsController {
 
     try {
       await processor();
-      this.acknowledgeMessage(context, eventType, 'processed');
     } catch (error) {
       this.logger.error(
         `[notification-retry] processing failed event=${eventType}; routing to retry queue`,
@@ -1427,7 +1424,10 @@ export class EventsController {
       // ponytail: a handler that sent some emails before failing resends them on retry; a duplicate beats a silent drop.
       await this.idempotencyService.release(dedupeKey);
       this.rejectForRetry(context, eventType);
+      return;
     }
+    // Outside the try: an ack failure after a successful send must not release the key and resend.
+    this.acknowledgeMessage(context, eventType, 'processed');
   }
 
   private acknowledgeMessage(

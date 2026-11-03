@@ -1141,6 +1141,21 @@ describe('EventsController.processEvent — failed send retry', () => {
     expect(channel.ack).not.toHaveBeenCalled();
   });
 
+  it('does not release the key when the ack throws after a successful send', async () => {
+    const send = jest.fn().mockResolvedValue(undefined);
+    const { controller, idempotency, channel, context } = makeController(send);
+    channel.ack.mockImplementation(() => {
+      throw new Error('Channel closed');
+    });
+
+    await expect(
+      controller.handleVerifyEmail(payload, context),
+    ).rejects.toThrow('Channel closed');
+
+    expect(idempotency.release).not.toHaveBeenCalled();
+    expect(channel.nack).not.toHaveBeenCalled();
+  });
+
   it('keeps the dedupe key when the send succeeds', async () => {
     const send = jest.fn().mockResolvedValue(undefined);
     const { controller, idempotency, channel, context } = makeController(send);
