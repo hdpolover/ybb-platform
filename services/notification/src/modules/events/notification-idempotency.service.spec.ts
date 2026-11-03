@@ -23,6 +23,7 @@ describe('NotificationIdempotencyService', () => {
       .mockResolvedValueOnce(null);
     service.setRedisClientForTesting({
       set: setMock,
+      del: jest.fn(),
       disconnect: jest.fn(),
     });
 
@@ -69,6 +70,7 @@ describe('NotificationIdempotencyService', () => {
 
     service.setRedisClientForTesting({
       set: jest.fn().mockRejectedValue(new Error('redis down')),
+      del: jest.fn(),
       disconnect: jest.fn(),
     });
 
@@ -88,6 +90,7 @@ describe('NotificationIdempotencyService', () => {
     );
     service.setRedisClientForTesting({
       set: jest.fn().mockRejectedValue(new Error('redis down')),
+      del: jest.fn(),
       disconnect: jest.fn(),
     });
 
@@ -102,6 +105,59 @@ describe('NotificationIdempotencyService', () => {
 
     // Only the first failure should have triggered an error log
     expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  describe('release', () => {
+    it('deletes the claimed key so a retried message is processed again', async () => {
+      const service = new NotificationIdempotencyService(
+        makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'true' }),
+      );
+      const keys = new Set<string>();
+      service.setRedisClientForTesting({
+        set: jest.fn((key: string) => {
+          if (keys.has(key)) return Promise.resolve(null);
+          keys.add(key);
+          return Promise.resolve('OK' as const);
+        }),
+        del: jest.fn((key: string) =>
+          Promise.resolve(Number(keys.delete(key))),
+        ),
+        disconnect: jest.fn(),
+      });
+      const payload = { email: 'a@example.com', token: 't-1' };
+
+      const first = await service.shouldProcess(
+        'user.verify-email',
+        payload,
+        {},
+      );
+      await service.release(first.dedupeKey);
+      const retry = await service.shouldProcess(
+        'user.verify-email',
+        payload,
+        {},
+      );
+
+      expect(retry.shouldProcess).toBe(true);
+      expect(retry.reason).toBe('new');
+    });
+
+    it('logs and does not throw when redis del fails', async () => {
+      const service = new NotificationIdempotencyService(
+        makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'true' }),
+      );
+      service.setRedisClientForTesting({
+        set: jest.fn(),
+        del: jest.fn().mockRejectedValue(new Error('redis down')),
+        disconnect: jest.fn(),
+      });
+      const loggerErrorSpy = jest
+        .spyOn(service['logger'], 'error')
+        .mockImplementation(() => undefined);
+
+      await expect(service.release('some-key')).resolves.toBeUndefined();
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('dedupeKey derivation', () => {

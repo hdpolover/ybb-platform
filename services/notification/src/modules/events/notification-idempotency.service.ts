@@ -22,6 +22,7 @@ interface RedisSetClient {
     seconds: number,
     condition: 'NX',
   ): Promise<'OK' | null>;
+  del(key: string): Promise<number>;
   disconnect(): void;
 }
 
@@ -126,6 +127,22 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
           now + NotificationIdempotencyService.CIRCUIT_COOLDOWN_MS;
       }
       return { shouldProcess: true, dedupeKey, reason: 'fallback' };
+    }
+  }
+
+  /**
+   * Frees a key claimed by shouldProcess() when processing failed. Without
+   * this the DLX retry of the same message is deduped and the email is lost.
+   */
+  async release(dedupeKey: string): Promise<void> {
+    if (!this.redisClient) return;
+    try {
+      await this.redisClient.del(dedupeKey);
+    } catch (error) {
+      this.logger.error(
+        `Failed to release idempotency key ${abbreviateDedupeKey(dedupeKey)}; the retry will be deduped`,
+        error instanceof Error ? error.stack : String(error),
+      );
     }
   }
 

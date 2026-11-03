@@ -1409,7 +1409,8 @@ export class EventsController {
     context: RmqContext,
     processor: () => Promise<void>,
   ): Promise<void> {
-    if (!(await this.canProcess(eventType, data, context))) {
+    const dedupeKey = await this.canProcess(eventType, data, context);
+    if (dedupeKey === null) {
       this.acknowledgeMessage(context, eventType, 'skipped');
       return;
     }
@@ -1422,6 +1423,9 @@ export class EventsController {
         `[notification-retry] processing failed event=${eventType}; routing to retry queue`,
         error instanceof Error ? error.stack : String(error),
       );
+      // Free the key, else the DLX retry of this same message is deduped and dropped.
+      // ponytail: a handler that sent some emails before failing resends them on retry; a duplicate beats a silent drop.
+      await this.idempotencyService.release(dedupeKey);
       this.rejectForRetry(context, eventType);
     }
   }
@@ -1461,9 +1465,9 @@ export class EventsController {
     eventType: string,
     data: EventPayload,
     context: RmqContext,
-  ): Promise<boolean> {
+  ): Promise<string | null> {
     if (this.moveToDlqWhenRetryExhausted(eventType, context)) {
-      return false;
+      return null;
     }
 
     const message = context.getMessage();
@@ -1483,7 +1487,7 @@ export class EventsController {
       this.logger.warn(
         `[notification-idempotency] dedupe_hit=true processed=false event=${eventType} key=${abbreviateDedupeKey(decision.dedupeKey)}`,
       );
-      return false;
+      return null;
     }
 
     this.logger.log(
@@ -1496,7 +1500,7 @@ export class EventsController {
       );
     }
 
-    return true;
+    return decision.dedupeKey;
   }
 
   private moveToDlqWhenRetryExhausted(
