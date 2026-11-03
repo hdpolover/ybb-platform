@@ -1155,10 +1155,8 @@ export class EventsController {
 
         // Per-recipient errors are caught and logged rather than thrown: this
         // event carries the whole batch as one message, so throwing would
-        // nack the entire message and (depending on retry/idempotency state)
-        // either resend to already-succeeded recipients or, once the
-        // dedupe key set by canProcess() is already claimed, get silently
-        // skipped on retry. Best-effort per recipient avoids both.
+        // nack the entire message and resend to every recipient who already
+        // succeeded on the retry. Best-effort per recipient avoids that.
         //
         // Each outcome is now also collected and reported back to the API
         // (which owns the database) so the failures below stop being
@@ -1297,9 +1295,9 @@ export class EventsController {
 
         // Per-recipient errors are caught and logged rather than thrown: this
         // event carries the whole audience as one message, so throwing would
-        // nack it and either re-mail everyone who already succeeded or, once
-        // the dedupe key is claimed, silently skip the whole thing. Best-effort
-        // per recipient avoids both — one bad address must not cost the rest.
+        // nack it and re-mail everyone who already succeeded on the retry.
+        // Best-effort per recipient avoids that — one bad address must not
+        // cost the rest.
         const results: ParticipantReminderSendResult[] = [];
 
         for (const recipient of recipients) {
@@ -1409,21 +1407,27 @@ export class EventsController {
     context: RmqContext,
     processor: () => Promise<void>,
   ): Promise<void> {
-    if (!(await this.canProcess(eventType, data, context))) {
+    const dedupeKey = await this.canProcess(eventType, data, context);
+    if (dedupeKey === null) {
       this.acknowledgeMessage(context, eventType, 'skipped');
       return;
     }
 
     try {
       await processor();
-      this.acknowledgeMessage(context, eventType, 'processed');
     } catch (error) {
       this.logger.error(
         `[notification-retry] processing failed event=${eventType}; routing to retry queue`,
         error instanceof Error ? error.stack : String(error),
       );
+      // Free the key, else the DLX retry of this same message is deduped and dropped.
+      // ponytail: a handler that sent some emails before failing resends them on retry; a duplicate beats a silent drop.
+      await this.idempotencyService.release(dedupeKey);
       this.rejectForRetry(context, eventType);
+      return;
     }
+    // Outside the try: an ack failure after a successful send must not release the key and resend.
+    this.acknowledgeMessage(context, eventType, 'processed');
   }
 
   private acknowledgeMessage(
@@ -1461,9 +1465,9 @@ export class EventsController {
     eventType: string,
     data: EventPayload,
     context: RmqContext,
-  ): Promise<boolean> {
+  ): Promise<string | null> {
     if (this.moveToDlqWhenRetryExhausted(eventType, context)) {
-      return false;
+      return null;
     }
 
     const message = context.getMessage();
@@ -1483,7 +1487,7 @@ export class EventsController {
       this.logger.warn(
         `[notification-idempotency] dedupe_hit=true processed=false event=${eventType} key=${abbreviateDedupeKey(decision.dedupeKey)}`,
       );
-      return false;
+      return null;
     }
 
     this.logger.log(
@@ -1496,7 +1500,7 @@ export class EventsController {
       );
     }
 
-    return true;
+    return decision.dedupeKey;
   }
 
   private moveToDlqWhenRetryExhausted(

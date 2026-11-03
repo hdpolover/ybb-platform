@@ -30,6 +30,7 @@ describe('EventsController.handlePaymentFailed — reason field resolution', () 
           reason: 'new',
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       {
         emit: jest.fn().mockResolvedValue(true),
@@ -108,6 +109,7 @@ describe('EventsController.handlePaymentSucceeded — description field resoluti
           reason: 'new',
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       {
         emit: jest.fn().mockResolvedValue(true),
@@ -199,6 +201,7 @@ describe('EventsController.handleLoaBatchReleased', () => {
           reason: 'new',
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       {
         emit: jest.fn().mockResolvedValue(true),
@@ -348,6 +351,7 @@ describe('EventsController.handleSubmissionNudge', () => {
           reason: 'new',
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       {
         emit: jest.fn().mockResolvedValue(true),
@@ -416,6 +420,7 @@ describe('EventsController.handleApplicationAccepted', () => {
           reason: 'new',
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       {
         emit: jest.fn().mockResolvedValue(true),
@@ -484,6 +489,7 @@ describe('EventsController.handleDocumentApproved', () => {
           reason: 'new',
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       {
         emit: jest.fn().mockResolvedValue(true),
@@ -560,6 +566,7 @@ describe('EventsController.handleDocumentRejected', () => {
           reason: 'new',
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       {
         emit: jest.fn().mockResolvedValue(true),
@@ -630,6 +637,7 @@ describe('EventsController.handleDocumentRevisionRequested', () => {
           reason: 'new',
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       {
         emit: jest.fn().mockResolvedValue(true),
@@ -702,6 +710,7 @@ describe('EventsController.handleSubmissionReminder', () => {
           reason: 'new',
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       {
         emit: jest.fn().mockResolvedValue(true),
@@ -780,6 +789,7 @@ describe('EventsController.handleLoaBatchReleased — send result reporting', ()
           reason: 'new',
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       { emit } as unknown as RabbitMQProducerService,
     );
@@ -989,6 +999,7 @@ describe('EventsController.handleParticipantReminderDispatch', () => {
           reason: 'new',
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       { emit } as unknown as RabbitMQProducerService,
     );
@@ -1086,5 +1097,72 @@ describe('EventsController.handleParticipantReminderDispatch', () => {
       controller.handleParticipantReminderDispatch(payload, makeContext()),
     ).resolves.toBeUndefined();
     expect(sendParticipantReminderEmail).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('EventsController.processEvent — failed send retry', () => {
+  const makeController = (sendVerificationEmail: jest.Mock) => {
+    const idempotency = {
+      shouldProcess: jest.fn().mockResolvedValue({
+        shouldProcess: true,
+        dedupeKey: 'verify-key',
+        reason: 'new',
+      }),
+      release: jest.fn().mockResolvedValue(undefined),
+    };
+    const controller = new EventsController(
+      { sendVerificationEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      idempotency as unknown as NotificationIdempotencyService,
+      { emit: jest.fn() } as unknown as RabbitMQProducerService,
+    );
+    const channel = { ack: jest.fn(), nack: jest.fn() };
+    const context = {
+      getMessage: () => ({
+        content: Buffer.from('{}'),
+        properties: { headers: {} },
+      }),
+      getChannelRef: () => channel,
+    } as unknown as RmqContext;
+    return { controller, idempotency, channel, context };
+  };
+  const payload = { email: 'jane@example.com', token: 'tok-1', name: 'Jane' };
+
+  it('releases the dedupe key before nacking so the DLX retry is not deduped', async () => {
+    const send = jest
+      .fn()
+      .mockRejectedValue(new Error('monthly_quota_exceeded'));
+    const { controller, idempotency, channel, context } = makeController(send);
+
+    await controller.handleVerifyEmail(payload, context);
+
+    expect(idempotency.release).toHaveBeenCalledWith('verify-key');
+    expect(channel.nack).toHaveBeenCalledTimes(1);
+    expect(channel.ack).not.toHaveBeenCalled();
+  });
+
+  it('does not release the key when the ack throws after a successful send', async () => {
+    const send = jest.fn().mockResolvedValue(undefined);
+    const { controller, idempotency, channel, context } = makeController(send);
+    channel.ack.mockImplementation(() => {
+      throw new Error('Channel closed');
+    });
+
+    await expect(
+      controller.handleVerifyEmail(payload, context),
+    ).rejects.toThrow('Channel closed');
+
+    expect(idempotency.release).not.toHaveBeenCalled();
+    expect(channel.nack).not.toHaveBeenCalled();
+  });
+
+  it('keeps the dedupe key when the send succeeds', async () => {
+    const send = jest.fn().mockResolvedValue(undefined);
+    const { controller, idempotency, channel, context } = makeController(send);
+
+    await controller.handleVerifyEmail(payload, context);
+
+    expect(idempotency.release).not.toHaveBeenCalled();
+    expect(channel.ack).toHaveBeenCalledTimes(1);
   });
 });
