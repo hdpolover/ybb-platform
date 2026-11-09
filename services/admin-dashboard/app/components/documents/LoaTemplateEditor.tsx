@@ -50,6 +50,7 @@ import {
 } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
 import { sanitizeHtml } from "@/lib/sanitize-html";
+import { getLoaTemplateIssues } from "@/lib/loa-template-issues";
 import { LoaParticipantPicker } from "./LoaParticipantPicker";
 
 const PLACEHOLDER_TOKENS: DocumentTemplatePlaceholder[] = [
@@ -903,6 +904,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
         JSON.stringify({ ...layout, footerHtml: currentFooterHtml }) !==
           JSON.stringify({ ...DEFAULT_LAYOUT, ...(template.layoutConfig ?? {}) })),
   );
+  const templateIssues = getLoaTemplateIssues(layout, { isLegacyHeader: !structuredHeaderConfirmed });
 
   if (loading) {
     return (
@@ -974,6 +976,23 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
       <div className="flex flex-1 gap-4 overflow-hidden">
         {/* Left: editors or preview (60%) */}
         <div className="flex w-[60%] flex-col gap-3 overflow-y-auto">
+          {templateIssues.length > 0 && (
+            <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-amber-900">
+                    The generated letter is missing {templateIssues.length === 1 ? "one thing" : `${templateIssues.length} things`}
+                  </p>
+                  <ul className="list-disc space-y-0.5 pl-4 text-xs text-amber-800">
+                    {templateIssues.map((issue) => (
+                      <li key={issue.key}>{issue.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
           {previewMode ? (
             <div className="flex flex-1 flex-col gap-2 overflow-hidden">
               <div
