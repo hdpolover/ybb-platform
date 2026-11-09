@@ -210,7 +210,9 @@ export function buildGenerateLoaParams(input: BuildGenerateLoaParamsInput): Gene
     programBatch,
   } = input;
 
-  const headerConfig = layoutConfig.header;
+  // No authored freeform header -> auto letterhead (logo + program name) rather
+  // than an empty header band; templates saved with only a logo hit this.
+  const headerConfig = layoutConfig.header ?? (layoutConfig.headerHtml?.trim() ? undefined : {});
   const placeholderData = buildLoaPlaceholderData(placeholders, sourceMap, documentNumber, signerName, signerTitle);
 
   return {
