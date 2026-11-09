@@ -34,6 +34,8 @@ export interface ProgramSpecificsFormValues {
   registrationOpenDate: string;
   /** datetime-local value (business timezone, WIB), empty string clears the bound. */
   registrationCloseDate: string;
+  /** datetime-local value (business timezone, WIB); applicants see their Fully Funded result only after this. Empty clears it. */
+  fundingResultsAnnouncedAt: string;
   requirementsDescription: string;
   benefitsDescription: string;
   termsAndConditions: string;
@@ -311,6 +313,22 @@ export function EditProgramSpecificsModal({
                 "Program Payments"
               )}
               .
+            </p>
+          </div>
+          <div className="md:col-span-2">
+            <label htmlFor="ff-results-announced-at" className="mb-1.5 block text-xs font-medium text-zinc-500">
+              FF results announced on
+            </label>
+            <input
+              id="ff-results-announced-at"
+              type="datetime-local"
+              value={formValues.fundingResultsAnnouncedAt}
+              onChange={(event) => updateField("fundingResultsAnnouncedAt", event.target.value)}
+              className={INPUT_CLS}
+            />
+            <p className="mt-1.5 text-xs text-zinc-500">
+              Applicants see their Fully Funded result on their dashboard only after this date. Leave empty if
+              not scheduled yet. Time is WIB.
             </p>
           </div>
           <div className="md:col-span-2">
