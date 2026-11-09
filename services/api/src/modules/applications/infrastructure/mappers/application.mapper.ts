@@ -55,6 +55,7 @@ export class ApplicationMapper {
       prismaModel.lastEditedAt ?? undefined,
       prismaModel.withdrawnAt ?? undefined,
       prismaModel.withdrawnBy ?? undefined,
+      prismaModel.fundingDecision ?? undefined,
     );
   }
 
@@ -92,6 +93,7 @@ export class ApplicationMapper {
       lastEditedAt: entity.lastEditedAt,
       withdrawnAt: entity.withdrawnAt,
       withdrawnBy: entity.withdrawnBy,
+      fundingDecision: entity.fundingDecision ?? null,
     };
 
     // TODO: If includeRelations is true, populate participant, program, reviewer

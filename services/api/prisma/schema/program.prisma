@@ -198,6 +198,9 @@ model Program {
   requirePayment        Boolean   @default(false) @map("require_payment")
   registrationFee       Decimal?  @map("registration_fee") @db.Decimal(10, 2)
 
+  // Date FF selection results were (or will be) emailed to applicants.
+  fundingResultsAnnouncedAt DateTime? @map("funding_results_announced_at") @db.Timestamptz(6)
+
   // Additional Info
   requirementsDescription String?  @map("requirements_description") @db.Text
   benefitsDescription     String?  @map("benefits_description") @db.Text

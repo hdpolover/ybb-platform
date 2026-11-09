@@ -1,8 +1,14 @@
 import {
+  Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
+  Logger,
   NotFoundException,
   Param,
+  ParseUUIDPipe,
+  Post,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -11,6 +17,11 @@ import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
+import { ApplicationCategory, ApplicationStatus, ChangeType } from '@prisma/client';
+import { SetFundingDecisionDto, SetFundingDecisionResponseDto } from './dto/funding-decision.dto';
 
 /**
  * Admin-only program lookup.
@@ -24,7 +35,51 @@ import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.serv
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @ApiBearerAuth()
 export class AdminProgramsController {
+  private readonly logger = new Logger(AdminProgramsController.name);
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Records the fully-funded selection result for a batch of applications.
+   *
+   * Writes a column only: no status change and NO email (admins send results
+   * manually; an automatic send would double-notify). Only submitted FF
+   * applications are touched - drafts never entered selection and self-funded
+   * applicants are not candidates - so a stray id in the batch is skipped, not
+   * an error. programId comes from the URL so @ScopedBy checks the same value
+   * the WHERE clause filters on; there is no second programId in the body.
+   */
+  @Post(':programId/applications/funding-decision')
+  @UseGuards(AdminScopeGuard)
+  @ScopedBy('program', 'programId')
+  @HttpCode(HttpStatus.OK)
+  @CacheInvalidate(['application:list:*'])
+  @AuditTrail({ entityType: 'Program', action: ChangeType.bulk_update, idParam: 'programId' })
+  @ApiOperation({ summary: 'Bulk set the fully-funded selection result (no email is sent)' })
+  @ApiResponse({ status: 200, type: SetFundingDecisionResponseDto })
+  async setFundingDecision(
+    @Param('programId', ParseUUIDPipe) programId: string,
+    @Body() dto: SetFundingDecisionDto,
+  ): Promise<SetFundingDecisionResponseDto> {
+    const { count } = await this.prisma.participantApplication.updateMany({
+      where: {
+        id: { in: dto.applicationIds },
+        programId,
+        applicationCategory: ApplicationCategory.fully_funded,
+        status: { not: ApplicationStatus.draft },
+        deletedAt: null,
+      },
+      data: {
+        fundingDecision: dto.decision,
+        fundingDecidedAt: dto.decision === null ? null : new Date(),
+      },
+    });
+
+    this.logger.log(
+      `funding decision program=${programId} decision=${dto.decision} requested=${dto.applicationIds.length} updated=${count}`,
+    );
+    return { updated: count };
+  }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get program by ID for admin (bypasses soft-delete filter)' })
@@ -100,6 +155,7 @@ export class AdminProgramsController {
         contactWhatsapp: program.contactWhatsapp ?? null,
         contactAddress: program.contactAddress ?? null,
         partnersCanvaUrl: program.partnersCanvaUrl ?? null,
+        fundingResultsAnnouncedAt: program.fundingResultsAnnouncedAt ?? null,
         landingContent: (program.landingContent as Record<string, unknown>) ?? {},
         deletedAt: program.deletedAt ?? null,
         brand: program.brand,

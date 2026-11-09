@@ -92,6 +92,11 @@ export class UpdateProgramDto {
     @IsOptional()
     registrationCloseDate?: string | null;
 
+    @ApiProperty({ description: 'Date fully-funded selection results were / will be emailed (send null to clear). Informational only: setting it sends nothing.', required: false, nullable: true })
+    @IsDateString()
+    @IsOptional()
+    fundingResultsAnnouncedAt?: string | null;
+
     @ApiProperty({ description: 'Registration fee', required: false })
     @IsNumber()
     @IsOptional()

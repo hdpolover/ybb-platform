@@ -1,4 +1,4 @@
-import { ApplicationStatus, ApplicationCategory, ScoreStatus, DocumentFile, ApplicationStatusHistoryEntry } from '@core/entities/participant-application.entity';
+import { ApplicationStatus, ApplicationCategory, ScoreStatus, DocumentFile, ApplicationStatusHistoryEntry, FundingDecision } from '@core/entities/participant-application.entity';
 
 export class ApplicationStepDto {
   section: string;       // e.g., 'personal_info'
@@ -110,6 +110,9 @@ export class ApplicationResponseDto {
   lastEditedAt?: Date;
   withdrawnAt?: Date;
   withdrawnBy?: string;
+
+  /** FF selection result; null when none recorded. Not a status: not_awarded applicants stay submitted. */
+  fundingDecision: FundingDecision | null;
 
   // Progress Steps for UI
   steps?: ApplicationStepDto[];
