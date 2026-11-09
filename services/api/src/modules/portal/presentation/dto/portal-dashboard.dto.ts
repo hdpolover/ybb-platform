@@ -115,14 +115,14 @@ export class PortalApplicationSummaryDto {
 
     @ApiProperty({
         description:
-            'True when the application is still a draft and its own category has no open submission window and the program deadline has passed (server time). Submitted applications are never closed.',
+            'True when the application is a draft that can no longer be submitted: the program deadline has passed (server time), or its own category\'s registration windows have all ended and the registration fee is unpaid. Submitted applications are never closed.',
     })
     isSubmissionClosed: boolean;
 
     @ApiProperty({
         nullable: true,
         enum: ['awarded', 'not_awarded'],
-        description: 'Fully-funded selection result recorded by admins; null until one is recorded.',
+        description: 'Fully-funded selection result. Embargoed: null until the program\'s fundingResultsAnnouncedAt is set and has passed (server time), even if admins already recorded one.',
     })
     fundingDecision: 'awarded' | 'not_awarded' | null;
 

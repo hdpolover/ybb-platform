@@ -87,7 +87,7 @@ export class ListApplicationsHandler {
       result = { applications: [], total: 0 };
     }
 
-    const dtos = result.applications.map(app => this.applicationMapper.toDto(app));
+    const dtos = result.applications.map(app => this.applicationMapper.toDto(app, false, true));
     await this.attachEssayFilled(dtos, result.applications, isBrandScoped);
 
     return {

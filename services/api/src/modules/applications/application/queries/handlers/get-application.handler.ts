@@ -57,7 +57,7 @@ export class GetApplicationHandler {
       throw new NotFoundException(`Application ${query.applicationId} not found`);
     }
 
-    const dto = this.applicationMapper.toDto(application, query.includeRelations);
+    const dto = this.applicationMapper.toDto(application, query.includeRelations, true);
 
     // Coalesce app-level fields from personalData for dynamic-form participants
     const pd = (application.personalData ?? {}) as Record<string, unknown>;

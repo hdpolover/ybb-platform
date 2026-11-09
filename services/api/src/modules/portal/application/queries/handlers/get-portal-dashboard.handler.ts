@@ -21,7 +21,7 @@ import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/
 import { isPastSubmissionDeadline, resolveSubmissionCutoff } from '@shared/utils/submission-deadline.util';
 import { effectiveStart, getCategoryRegistrationPhase, hasTierPeriodEnded } from '@shared/utils/tier-period.util';
 import { cancelClosedWindowRegistrationInvoices } from '../../utils/cancel-closed-window-invoices';
-import { buildSubmissionChecklist, isSubmissionClosed } from '../../utils/submission-status.util';
+import { buildSubmissionChecklist, isSubmissionClosed, resolveVisibleFundingDecision } from '../../utils/submission-status.util';
 import { GetPortalSubmissionDetailHandler } from './get-portal-submission-detail.handler';
 
 const CLOSED_PROGRAM_STATUSES = new Set(['completed', 'cancelled']);
@@ -363,6 +363,17 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                     ? await this.findIncompleteItems(userId, programId)
                     : null;
 
+            const submissionChecklist = buildSubmissionChecklist({
+                status: latestApplication.status,
+                registrationPaymentStatus: latestApplication.registrationPaymentStatus,
+                invoices: latestApplication.invoices,
+                incompleteItems,
+            });
+            const categoryRegistrationEnded =
+                !!latestApplication.applicationCategory &&
+                getCategoryRegistrationPhase(tiers, String(latestApplication.applicationCategory), now) === 'closed';
+            const announcedAt = latestApplication.program.fundingResultsAnnouncedAt ?? null;
+
             const guidebooks = await Promise.all(
                 latestApplication.program.resources
                     .filter((resource) => typeof resource.fileUrl === 'string' && resource.fileUrl.trim().length > 0)
@@ -388,15 +399,18 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 // Same eligibility rule as the "Switch Available" hint.
                 alternateCategoryDeadline: canSwitchCategory ? alternateCategoryDeadline : null,
                 guidebooks,
-                submissionChecklist: buildSubmissionChecklist({
+                submissionChecklist,
+                isSubmissionClosed: isSubmissionClosed({
                     status: latestApplication.status,
-                    registrationPaymentStatus: latestApplication.registrationPaymentStatus,
-                    invoices: latestApplication.invoices,
-                    incompleteItems,
+                    programDeadline,
+                    categoryRegistrationEnded,
+                    registrationFeePaid: submissionChecklist.registrationFeePaid,
+                    now,
                 }),
-                isSubmissionClosed: isSubmissionClosed(latestApplication.status, categoryWindowEnd, programDeadline, now),
-                fundingDecision: latestApplication.fundingDecision ?? null,
-                fundingResultsAnnouncedAt: latestApplication.program.fundingResultsAnnouncedAt?.toISOString() ?? null,
+                // Embargo: admins record decisions before results are emailed, so the
+                // portal only reveals one once the announcement date has arrived.
+                fundingDecision: resolveVisibleFundingDecision(latestApplication.fundingDecision, announcedAt, now),
+                fundingResultsAnnouncedAt: announcedAt?.toISOString() ?? null,
             };
 
             const sysAnnouncements = latestApplication.program.announcements.map(a => ({

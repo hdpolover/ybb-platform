@@ -1,5 +1,5 @@
 // services/api/src/modules/portal/application/utils/submission-status.util.spec.ts
-import { buildSubmissionChecklist, isSubmissionClosed } from './submission-status.util';
+import { buildSubmissionChecklist, isSubmissionClosed, resolveVisibleFundingDecision } from './submission-status.util';
 
 describe('buildSubmissionChecklist', () => {
     const base = { status: 'draft', registrationPaymentStatus: 'unpaid', invoices: [], incompleteItems: [] as string[] | null };
@@ -43,29 +43,58 @@ describe('isSubmissionClosed', () => {
     const now = new Date('2026-11-09T05:00:00Z');
     const past = new Date('2026-10-01T00:00:00Z');
     const future = new Date('2026-12-01T00:00:00Z');
+    const open = { status: 'draft', programDeadline: future, categoryRegistrationEnded: false, registrationFeePaid: false, now };
 
-    it('is closed for a draft with no open category window and a passed program deadline', () => {
-        expect(isSubmissionClosed('draft', null, past, now)).toBe(true);
+    it('is open for a draft with the deadline ahead and its category window not ended', () => {
+        expect(isSubmissionClosed(open)).toBe(false);
     });
 
-    it('is open while the program deadline is ahead (gap between category windows)', () => {
-        expect(isSubmissionClosed('draft', null, future, now)).toBe(false);
+    it('is closed once the program deadline has passed, even if the fee is paid', () => {
+        expect(isSubmissionClosed({ ...open, programDeadline: past, registrationFeePaid: true })).toBe(true);
     });
 
-    it('is open while the category has an active window', () => {
-        expect(isSubmissionClosed('draft', future, past, now)).toBe(false);
+    it('is closed when the category windows ended and the fee is unpaid', () => {
+        expect(isSubmissionClosed({ ...open, categoryRegistrationEnded: true })).toBe(true);
+    });
+
+    it('stays open when the category windows ended but the fee is already paid (submit still allowed)', () => {
+        expect(isSubmissionClosed({ ...open, categoryRegistrationEnded: true, registrationFeePaid: true })).toBe(false);
     });
 
     it('stays open through the deadline day itself (WIB calendar day rule)', () => {
-        // Deadline stored as 2026-11-09T00:00Z = 07:00 WIB; cutoff is the end of that WIB day.
-        expect(isSubmissionClosed('draft', null, new Date('2026-11-09T00:00:00Z'), now)).toBe(false);
+        // Stored as 2026-11-09T00:00Z = 07:00 WIB; cutoff is the end of that WIB day.
+        expect(isSubmissionClosed({ ...open, programDeadline: new Date('2026-11-09T00:00:00Z') })).toBe(false);
     });
 
     it('is open when the program has no deadline', () => {
-        expect(isSubmissionClosed('draft', null, null, now)).toBe(false);
+        expect(isSubmissionClosed({ ...open, programDeadline: null })).toBe(false);
     });
 
     it('is never closed once submitted', () => {
-        expect(isSubmissionClosed('submitted', null, past, now)).toBe(false);
+        expect(isSubmissionClosed({ ...open, status: 'submitted', programDeadline: past, categoryRegistrationEnded: true })).toBe(false);
+    });
+});
+
+describe('resolveVisibleFundingDecision', () => {
+    const now = new Date('2026-11-09T05:00:00Z');
+
+    it('hides the decision when no announcement date is set', () => {
+        expect(resolveVisibleFundingDecision('awarded', null, now)).toBeNull();
+    });
+
+    it('hides the decision while the announcement date is in the future', () => {
+        expect(resolveVisibleFundingDecision('not_awarded', new Date('2026-11-20T00:00:00Z'), now)).toBeNull();
+    });
+
+    it('shows the decision once the announcement date has passed', () => {
+        expect(resolveVisibleFundingDecision('awarded', new Date('2026-11-01T00:00:00Z'), now)).toBe('awarded');
+    });
+
+    it('shows the decision at exactly the announcement instant', () => {
+        expect(resolveVisibleFundingDecision('awarded', now, now)).toBe('awarded');
+    });
+
+    it('stays null when no decision was recorded', () => {
+        expect(resolveVisibleFundingDecision(null, new Date('2026-11-01T00:00:00Z'), now)).toBeNull();
     });
 });

@@ -108,4 +108,17 @@ describe('ApplicationMapper', () => {
       expect(result).not.toHaveProperty('applicationCategory');
     });
   });
+
+  describe('toDto fundingDecision', () => {
+    const awarded = () => Object.assign(buildEntity({}), { fundingDecision: 'awarded' as const });
+
+    it('omits the FF result by default so participant-reachable responses never carry it', () => {
+      expect(mapper.toDto(awarded())).not.toHaveProperty('fundingDecision');
+    });
+
+    it('includes it for admin read paths, null when none is recorded', () => {
+      expect(mapper.toDto(awarded(), false, true).fundingDecision).toBe('awarded');
+      expect(mapper.toDto(buildEntity({}), false, true).fundingDecision).toBeNull();
+    });
+  });
 });

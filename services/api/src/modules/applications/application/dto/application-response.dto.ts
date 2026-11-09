@@ -111,8 +111,12 @@ export class ApplicationResponseDto {
   withdrawnAt?: Date;
   withdrawnBy?: string;
 
-  /** FF selection result; null when none recorded. Not a status: not_awarded applicants stay submitted. */
-  fundingDecision: FundingDecision | null;
+  /**
+   * FF selection result, present on the admin list/detail only (null when none recorded).
+   * Deliberately absent from participant-reachable responses: results are embargoed until
+   * the program's fundingResultsAnnouncedAt. Not a status: not_awarded applicants stay submitted.
+   */
+  fundingDecision?: FundingDecision | null;
 
   // Progress Steps for UI
   steps?: ApplicationStepDto[];

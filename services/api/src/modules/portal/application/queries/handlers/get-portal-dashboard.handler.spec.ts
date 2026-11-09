@@ -214,8 +214,31 @@ describe('GetPortalDashboardHandler', () => {
             expect(result.activeApplication?.isSubmissionClosed).toBe(true);
         });
 
+        it('hides a recorded decision while the announcement date is unset', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                buildApp({ status: 'submitted', fundingDecision: 'awarded' }),
+            );
+
+            const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+            expect(result.activeApplication?.fundingDecision).toBeNull();
+            expect(result.activeApplication?.fundingResultsAnnouncedAt).toBeNull();
+        });
+
+        it('hides a recorded decision while the announcement date is in the future, but still returns the date', async () => {
+            const announced = new Date(Date.now() + 7 * 86400000);
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                buildApp({ status: 'submitted', fundingDecision: 'not_awarded' }, { fundingResultsAnnouncedAt: announced }),
+            );
+
+            const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+            expect(result.activeApplication?.fundingDecision).toBeNull();
+            expect(result.activeApplication?.fundingResultsAnnouncedAt).toBe(announced.toISOString());
+        });
+
         it('returns the recorded decision and the program announcement date, and skips the form check once submitted', async () => {
-            const announced = new Date('2026-11-20T00:00:00Z');
+            const announced = new Date('2026-11-01T00:00:00Z');
             mockPrisma.participantApplication.findFirst.mockResolvedValue(
                 buildApp(
                     { status: 'submitted', fundingDecision: 'awarded', registrationPaymentStatus: 'paid' },

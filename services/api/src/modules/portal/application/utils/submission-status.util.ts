@@ -39,18 +39,35 @@ export function buildSubmissionChecklist(input: SubmissionChecklistInput): Submi
 }
 
 /**
- * A draft can no longer be submitted once its own category has no open window
- * (categoryWindowEnd is the end of the window active now, null when none) AND
- * the program deadline, which the submit path enforces (isPastSubmissionDeadline),
- * has passed. A gap between windows with the program deadline still ahead is not
- * closed: the dashboard falls back to the program deadline in that case.
- * A program with no deadline is never closed.
+ * A draft is closed when it can no longer be submitted:
+ *  - the program deadline has passed (the one thing the submit path rejects,
+ *    via isPastSubmissionDeadline), or
+ *  - its own category's registration windows have all ended and the registration
+ *    fee is still unpaid: the mandatory fee can no longer be taken, so the
+ *    application cannot be completed. A paid draft can still submit until the
+ *    program deadline, so it stays open. Gaps between windows and programs with
+ *    no windows configured are not "ended".
+ * A program with no deadline never closes on the first rule.
  */
-export function isSubmissionClosed(
-    status: string,
-    categoryWindowEnd: Date | null,
-    programDeadline: Date | null | undefined,
+export function isSubmissionClosed(input: {
+    status: string;
+    programDeadline: Date | null | undefined;
+    categoryRegistrationEnded: boolean;
+    registrationFeePaid: boolean;
+    now: Date;
+}): boolean {
+    if (input.status !== 'draft') return false;
+    return (
+        isPastSubmissionDeadline(input.programDeadline, input.now) ||
+        (input.categoryRegistrationEnded && !input.registrationFeePaid)
+    );
+}
+
+/** FF results are embargoed until the program's announcement date has arrived. */
+export function resolveVisibleFundingDecision<T extends string>(
+    decision: T | null | undefined,
+    announcedAt: Date | null | undefined,
     now: Date,
-): boolean {
-    return status === 'draft' && categoryWindowEnd === null && isPastSubmissionDeadline(programDeadline, now);
+): T | null {
+    return decision && announcedAt && announcedAt.getTime() <= now.getTime() ? decision : null;
 }
