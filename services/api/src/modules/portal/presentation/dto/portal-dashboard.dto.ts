@@ -105,6 +105,32 @@ export class PortalApplicationSummaryDto {
 
     @ApiProperty({ required: false, type: [PortalGuidebookDto] })
     guidebooks?: PortalGuidebookDto[];
+
+    @ApiProperty({
+        description:
+            'Submission progress. formComplete is only computed while the application is a draft; a submitted application reports formComplete and registrationFeePaid as true.',
+        example: { formComplete: true, registrationFeePaid: false, submitted: false },
+    })
+    submissionChecklist: { formComplete: boolean; registrationFeePaid: boolean; submitted: boolean };
+
+    @ApiProperty({
+        description:
+            'True when the application is a draft that can no longer be submitted: the program deadline has passed (server time), or its own category\'s registration windows have all ended and the registration fee is unpaid. Submitted applications are never closed.',
+    })
+    isSubmissionClosed: boolean;
+
+    @ApiProperty({
+        nullable: true,
+        enum: ['awarded', 'not_awarded'],
+        description: 'Fully-funded selection result. Embargoed: null until the program\'s fundingResultsAnnouncedAt is set and has passed (server time), even if admins already recorded one.',
+    })
+    fundingDecision: 'awarded' | 'not_awarded' | null;
+
+    @ApiProperty({
+        nullable: true,
+        description: 'ISO date the program\'s FF results were (or will be) emailed; null when not set.',
+    })
+    fundingResultsAnnouncedAt: string | null;
 }
 
 export class PortalDashboardMoneyDto {

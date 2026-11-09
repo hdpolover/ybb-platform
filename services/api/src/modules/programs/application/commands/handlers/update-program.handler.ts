@@ -38,6 +38,8 @@ export class UpdateProgramHandler implements ICommandHandler<UpdateProgramComman
         if (programData.applicationDeadline) programData.applicationDeadline = new Date(programData.applicationDeadline as string);
         if (programData.registrationOpenDate) programData.registrationOpenDate = new Date(programData.registrationOpenDate as string);
         if (programData.registrationCloseDate) programData.registrationCloseDate = new Date(programData.registrationCloseDate as string);
+        // null clears it (passed through as-is); undefined leaves it untouched.
+        if (programData.fundingResultsAnnouncedAt) programData.fundingResultsAnnouncedAt = new Date(programData.fundingResultsAnnouncedAt as string);
 
         // Only validate when this request actually touches one of the three date
         // fields; an already-misconfigured program must stay editable on unrelated

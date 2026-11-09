@@ -163,6 +163,10 @@ model ParticipantApplication {
 
   submittedAt DateTime? @map("submission_date") @db.Timestamptz(6)
 
+  // Fully-funded selection result, recorded by admins. Null = no result recorded.
+  fundingDecision  FundingDecision? @map("funding_decision")
+  fundingDecidedAt DateTime?        @map("funding_decided_at") @db.Timestamptz(6)
+
   // Application Content (separate columns enable full-text search & filtering)
   motivationLetter String? @map("motivation_letter") @db.Text
   achievements     String? @db.Text

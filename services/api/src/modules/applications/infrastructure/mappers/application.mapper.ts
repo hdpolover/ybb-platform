@@ -55,6 +55,7 @@ export class ApplicationMapper {
       prismaModel.lastEditedAt ?? undefined,
       prismaModel.withdrawnAt ?? undefined,
       prismaModel.withdrawnBy ?? undefined,
+      prismaModel.fundingDecision ?? undefined,
     );
   }
 
@@ -64,6 +65,9 @@ export class ApplicationMapper {
   toDto(
     entity: ParticipantApplication,
     includeRelations: boolean = false,
+    // Admin read paths only. Participants reach this mapper through switch-category,
+    // submit etc., and must not see an FF result before the program announces it.
+    includeFundingDecision: boolean = false,
   ): ApplicationResponseDto {
     const dto: ApplicationResponseDto = {
       id: entity.id,
@@ -92,6 +96,7 @@ export class ApplicationMapper {
       lastEditedAt: entity.lastEditedAt,
       withdrawnAt: entity.withdrawnAt,
       withdrawnBy: entity.withdrawnBy,
+      ...(includeFundingDecision ? { fundingDecision: entity.fundingDecision ?? null } : {}),
     };
 
     // TODO: If includeRelations is true, populate participant, program, reviewer

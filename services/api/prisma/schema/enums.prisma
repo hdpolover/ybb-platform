@@ -26,6 +26,13 @@ enum ApplicationCategory {
   self_funded
 }
 
+// Fully-funded selection outcome. Deliberately NOT an ApplicationStatus: not
+// being awarded FF is not a program rejection (LOA eligibility keys off status).
+enum FundingDecision {
+  awarded
+  not_awarded
+}
+
 enum ApplicationStatus {
   draft
   submitted

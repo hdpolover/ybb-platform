@@ -1,4 +1,4 @@
-import { ApplicationStatus, ApplicationCategory, ScoreStatus, DocumentFile, ApplicationStatusHistoryEntry } from '@core/entities/participant-application.entity';
+import { ApplicationStatus, ApplicationCategory, ScoreStatus, DocumentFile, ApplicationStatusHistoryEntry, FundingDecision } from '@core/entities/participant-application.entity';
 
 export class ApplicationStepDto {
   section: string;       // e.g., 'personal_info'
@@ -110,6 +110,13 @@ export class ApplicationResponseDto {
   lastEditedAt?: Date;
   withdrawnAt?: Date;
   withdrawnBy?: string;
+
+  /**
+   * FF selection result, present on the admin list/detail only (null when none recorded).
+   * Deliberately absent from participant-reachable responses: results are embargoed until
+   * the program's fundingResultsAnnouncedAt. Not a status: not_awarded applicants stay submitted.
+   */
+  fundingDecision?: FundingDecision | null;
 
   // Progress Steps for UI
   steps?: ApplicationStepDto[];

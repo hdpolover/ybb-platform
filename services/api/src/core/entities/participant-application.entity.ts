@@ -21,6 +21,9 @@ export enum ApplicationCategory {
   SELF_FUNDED = 'self_funded',
 }
 
+/** Fully-funded selection outcome. Separate from status: not awarded is not a rejection. */
+export type FundingDecision = 'awarded' | 'not_awarded';
+
 export enum ScoreStatus {
   PENDING = 'pending',
   SCORED = 'scored',
@@ -104,6 +107,7 @@ export class ParticipantApplication {
     public readonly lastEditedAt?: Date,
     public withdrawnAt?: Date,
     public withdrawnBy?: string,
+    public fundingDecision?: FundingDecision,
   ) {}
 
   /**

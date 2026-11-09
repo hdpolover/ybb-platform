@@ -1,5 +1,5 @@
 import { IQueryHandler, QueryHandler } from '@nestjs/cqrs';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
@@ -21,16 +21,21 @@ import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/
 import { isPastSubmissionDeadline, resolveSubmissionCutoff } from '@shared/utils/submission-deadline.util';
 import { effectiveStart, getCategoryRegistrationPhase, hasTierPeriodEnded } from '@shared/utils/tier-period.util';
 import { cancelClosedWindowRegistrationInvoices } from '../../utils/cancel-closed-window-invoices';
+import { buildSubmissionChecklist, isSubmissionClosed, resolveVisibleFundingDecision } from '../../utils/submission-status.util';
+import { GetPortalSubmissionDetailHandler } from './get-portal-submission-detail.handler';
 
 const CLOSED_PROGRAM_STATUSES = new Set(['completed', 'cancelled']);
 
 @Injectable()
 @QueryHandler(GetPortalDashboardQuery)
 export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboardQuery> {
+    private readonly logger = new Logger(GetPortalDashboardHandler.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
         private readonly portalCacheService: PortalCacheService,
+        private readonly submissionDetail: GetPortalSubmissionDetailHandler,
     ) {}
 
     async execute(query: GetPortalDashboardQuery): Promise<PortalDashboardResponseDto> {
@@ -62,6 +67,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 id: true,
                 status: true,
                 applicationCategory: true,
+                fundingDecision: true,
                 updatedAt: true,
                 personalData: true,
                 essayAnswers: true,
@@ -73,6 +79,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                         status: true,
                         currency: true,
                         applicationDeadline: true,
+                        fundingResultsAnnouncedAt: true,
                         formFields: {
                             where: { isActive: true },
                             select: {
@@ -347,6 +354,26 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
 
             const canSwitchCategory = !switchCategoryMessage;
 
+            // formComplete reuses the submit gate's own completeness check (a full
+            // detail load), so it only runs for a draft: a submitted application
+            // already passed that gate. One draft per dashboard load, and the
+            // whole response is cached for CACHE_TTL.MEDIUM.
+            const incompleteItems =
+                latestApplication.status === 'draft'
+                    ? await this.findIncompleteItems(userId, programId)
+                    : null;
+
+            const submissionChecklist = buildSubmissionChecklist({
+                status: latestApplication.status,
+                registrationPaymentStatus: latestApplication.registrationPaymentStatus,
+                invoices: latestApplication.invoices,
+                incompleteItems,
+            });
+            const categoryRegistrationEnded =
+                !!latestApplication.applicationCategory &&
+                getCategoryRegistrationPhase(tiers, String(latestApplication.applicationCategory), now) === 'closed';
+            const announcedAt = latestApplication.program.fundingResultsAnnouncedAt ?? null;
+
             const guidebooks = await Promise.all(
                 latestApplication.program.resources
                     .filter((resource) => typeof resource.fileUrl === 'string' && resource.fileUrl.trim().length > 0)
@@ -372,6 +399,18 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                 // Same eligibility rule as the "Switch Available" hint.
                 alternateCategoryDeadline: canSwitchCategory ? alternateCategoryDeadline : null,
                 guidebooks,
+                submissionChecklist,
+                isSubmissionClosed: isSubmissionClosed({
+                    status: latestApplication.status,
+                    programDeadline,
+                    categoryRegistrationEnded,
+                    registrationFeePaid: submissionChecklist.registrationFeePaid,
+                    now,
+                }),
+                // Embargo: admins record decisions before results are emailed, so the
+                // portal only reveals one once the announcement date has arrived.
+                fundingDecision: resolveVisibleFundingDecision(latestApplication.fundingDecision, announcedAt, now),
+                fundingResultsAnnouncedAt: announcedAt?.toISOString() ?? null,
             };
 
             const sysAnnouncements = latestApplication.program.announcements.map(a => ({
@@ -417,6 +456,18 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
         await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM);
 
         return result;
+    }
+
+    /** null (unknown) on failure: a checklist hiccup must not take the dashboard down. */
+    private async findIncompleteItems(userId: string, programId?: string): Promise<string[] | null> {
+        try {
+            return await this.submissionDetail.findIncompleteRequiredItems(userId, programId);
+        } catch (error) {
+            this.logger.warn(
+                `Could not compute formComplete for user ${userId}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            return null;
+        }
     }
 
     private buildOnboardingDashboard(): PortalDashboardResponseDto {

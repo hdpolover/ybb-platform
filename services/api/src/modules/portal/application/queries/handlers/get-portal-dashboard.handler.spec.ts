@@ -5,6 +5,7 @@ import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '@shared/constants/cache-keys';
 import { PortalCacheService } from '../../services/portal-cache.service';
 import { GetPortalDashboardQuery } from '../portal-queries';
+import { GetPortalSubmissionDetailHandler } from './get-portal-submission-detail.handler';
 
 describe('GetPortalDashboardHandler', () => {
     let handler: GetPortalDashboardHandler;
@@ -34,6 +35,10 @@ describe('GetPortalDashboardHandler', () => {
         getParticipantStats: jest.fn(),
     };
 
+    const mockSubmissionDetail = {
+        findIncompleteRequiredItems: jest.fn().mockResolvedValue([]),
+    };
+
     beforeEach(async () => {
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -49,6 +54,10 @@ describe('GetPortalDashboardHandler', () => {
                 {
                     provide: PortalCacheService,
                     useValue: mockPortalCacheService,
+                },
+                {
+                    provide: GetPortalSubmissionDetailHandler,
+                    useValue: mockSubmissionDetail,
                 },
             ],
         }).compile();
@@ -140,6 +149,124 @@ describe('GetPortalDashboardHandler', () => {
         expect(result.stats?.applicationsCount).toBe(1);
         expect(result.stats?.certificatesCount).toBe(2);
         expect(result.stats?.totalRequired).toEqual({ amount: 0, currency: 'USD' });
+    });
+
+    describe('funding status fields', () => {
+        const buildApp = (overrides: Record<string, unknown> = {}, programOverrides: Record<string, unknown> = {}) => ({
+            id: 'app-ff',
+            status: 'draft',
+            updatedAt: new Date(),
+            applicationCategory: 'fully_funded',
+            fundingDecision: null,
+            personalData: {},
+            essayAnswers: {},
+            uploadedFiles: {},
+            registrationPaymentStatus: 'unpaid',
+            invoices: [],
+            program: {
+                id: 'prog-ff',
+                name: 'YBB FF',
+                currency: 'USD',
+                status: 'published',
+                applicationDeadline: new Date(Date.now() + 86400000),
+                fundingResultsAnnouncedAt: null,
+                formFields: [],
+                essays: [],
+                requirements: [],
+                pricingTiers: [],
+                resources: [],
+                announcements: [],
+                ...programOverrides,
+            },
+            ...overrides,
+        });
+
+        beforeEach(() => {
+            mockCacheService.get.mockResolvedValue(null);
+            mockPortalCacheService.getParticipantProfile.mockResolvedValue({ id: 'p-1', userId: 'u-1', fullName: 'Test User' });
+            mockPortalCacheService.getParticipantStats.mockResolvedValue({ applicationsCount: 1, completedProgramsCount: 0, certificatesCount: 0 });
+            mockSubmissionDetail.findIncompleteRequiredItems.mockResolvedValue([]);
+        });
+
+        it('reports an open, unpaid draft with a complete form', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(buildApp());
+
+            const result = await handler.execute(new GetPortalDashboardQuery('u-1', 'prog-ff'));
+
+            expect(result.activeApplication?.submissionChecklist).toEqual({
+                formComplete: true,
+                registrationFeePaid: false,
+                submitted: false,
+            });
+            expect(result.activeApplication?.isSubmissionClosed).toBe(false);
+            expect(result.activeApplication?.fundingDecision).toBeNull();
+            expect(result.activeApplication?.fundingResultsAnnouncedAt).toBeNull();
+            expect(mockSubmissionDetail.findIncompleteRequiredItems).toHaveBeenCalledWith('u-1', 'prog-ff');
+        });
+
+        it('flags a draft past its deadline as closed', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                buildApp({}, { applicationDeadline: new Date('2020-01-01T00:00:00Z') }),
+            );
+
+            const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+            expect(result.activeApplication?.isSubmissionClosed).toBe(true);
+        });
+
+        it('hides a recorded decision while the announcement date is unset', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                buildApp({ status: 'submitted', fundingDecision: 'awarded' }),
+            );
+
+            const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+            expect(result.activeApplication?.fundingDecision).toBeNull();
+            expect(result.activeApplication?.fundingResultsAnnouncedAt).toBeNull();
+        });
+
+        it('hides a recorded decision while the announcement date is in the future, but still returns the date', async () => {
+            const announced = new Date(Date.now() + 7 * 86400000);
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                buildApp({ status: 'submitted', fundingDecision: 'not_awarded' }, { fundingResultsAnnouncedAt: announced }),
+            );
+
+            const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+            expect(result.activeApplication?.fundingDecision).toBeNull();
+            expect(result.activeApplication?.fundingResultsAnnouncedAt).toBe(announced.toISOString());
+        });
+
+        it('returns the recorded decision and the program announcement date, and skips the form check once submitted', async () => {
+            const announced = new Date('2026-11-01T00:00:00Z');
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(
+                buildApp(
+                    { status: 'submitted', fundingDecision: 'awarded', registrationPaymentStatus: 'paid' },
+                    { fundingResultsAnnouncedAt: announced },
+                ),
+            );
+
+            const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+            expect(result.activeApplication?.fundingDecision).toBe('awarded');
+            expect(result.activeApplication?.fundingResultsAnnouncedAt).toBe(announced.toISOString());
+            expect(result.activeApplication?.submissionChecklist).toEqual({
+                formComplete: true,
+                registrationFeePaid: true,
+                submitted: true,
+            });
+            expect(result.activeApplication?.isSubmissionClosed).toBe(false);
+            expect(mockSubmissionDetail.findIncompleteRequiredItems).not.toHaveBeenCalled();
+        });
+
+        it('falls back to formComplete=false when the completeness check fails', async () => {
+            mockSubmissionDetail.findIncompleteRequiredItems.mockRejectedValue(new Error('boom'));
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(buildApp());
+
+            const result = await handler.execute(new GetPortalDashboardQuery('u-1'));
+
+            expect(result.activeApplication?.submissionChecklist.formComplete).toBe(false);
+        });
     });
 
     it('should sum only unpaid and failed invoices for totalRequired', async () => {
@@ -881,6 +1008,7 @@ describe('GetPortalDashboardHandler - programId scoping', () => {
                 { provide: PrismaService, useValue: mockPrisma },
                 { provide: CacheService, useValue: mockCacheService },
                 { provide: PortalCacheService, useValue: mockPortalCacheService },
+                { provide: GetPortalSubmissionDetailHandler, useValue: { findIncompleteRequiredItems: jest.fn().mockResolvedValue([]) } },
             ],
         }).compile();
 
