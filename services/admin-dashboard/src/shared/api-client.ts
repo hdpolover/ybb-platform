@@ -640,6 +640,8 @@ export type SubmissionSectionAdmin = {
   fields: SubmissionFormFieldAdmin[];
 };
 
+export type FundingDecision = "awarded" | "not_awarded";
+
 export type Application = {
   id: string;
   programId: string;
@@ -657,6 +659,8 @@ export type Application = {
   essayFilled?: "filled" | "partial" | "empty";
   registrationPaymentStatus: string;
   programPaymentStatus: string;
+  /** Fully Funded selection result; null until an admin records one. Only meaningful for fully_funded applications. */
+  fundingDecision?: FundingDecision | null;
   motivationLetter?: string;
   achievements?: string;
   experiences?: string;
@@ -1268,6 +1272,8 @@ export type ProgramConfig = {
   allowRegistration: boolean;
   requireEmailVerification: boolean;
   usdInIdr: number | null;
+  /** ISO instant after which applicants can see their Fully Funded result; null = not scheduled. */
+  fundingResultsAnnouncedAt?: string | null;
 };
 
 export function getProgramConfig(programId: string): Promise<ProgramConfig> {
@@ -1989,6 +1995,22 @@ export async function listApplications(params?: {
   if (params?.brandId) q.set("brandId", params.brandId);
   const raw = await request<{ applications?: Application[]; data?: Application[]; total: number }>(`/applications?${q}`);
   return { data: raw.applications ?? raw.data ?? [], total: raw.total };
+}
+
+/**
+ * Records (or clears, with `decision: null`) the Fully Funded result for the
+ * given applications. The API silently skips self_funded, draft and deleted
+ * rows, so `updated` can be lower than `applicationIds.length`.
+ */
+export function setApplicationsFundingDecision(
+  programId: string,
+  applicationIds: string[],
+  decision: FundingDecision | null,
+): Promise<{ updated: number }> {
+  return request<{ updated: number }>(
+    `/admin/programs/${encodeURIComponent(programId)}/applications/funding-decision`,
+    { method: "POST", body: JSON.stringify({ applicationIds, decision }) },
+  );
 }
 
 function extractDownloadFilename(contentDisposition: string | null): string | null {

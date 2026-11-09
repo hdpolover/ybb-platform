@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from "nuqs";
-import { Eye } from "lucide-react";
+import { AlertTriangle, Eye } from "lucide-react";
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
@@ -11,6 +11,7 @@ import {
 } from "@heroicons/react/24/outline";
 import {
   exportApplicationsExcel,
+  getProgramConfig,
   listApplications,
   type Application,
 } from "@/src/shared/api-client";
@@ -22,6 +23,8 @@ import { FilterField } from "@/src/ui/filter-grid";
 import { FilterPanel, type FilterPanelActiveFilter } from "@/src/ui/filter-panel";
 import { RowActions } from "@/src/ui/row-actions";
 import { formatDate } from "@/lib/utils";
+import { getFfResultsHiddenNotice } from "@/lib/ff-results-notice";
+import { FfResultBadge, FfResultBulkAction } from "@/app/components/participants/FfResult";
 
 const regionNames = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
 function formatCountry(raw: string | null | undefined): string {
@@ -163,6 +166,10 @@ export default function ParticipantsPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Row selection for the bulk FF-result action; only Fully Funded rows are selectable.
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  // undefined = not loaded yet (or failed); null = loaded, no date scheduled.
+  const [ffAnnouncedAt, setFfAnnouncedAt] = useState<string | null | undefined>(undefined);
 
   // All filters live in the URL via nuqs (batched updates -> single history write per change).
   const [filters, setFilters] = useQueryStates(participantsFilterParsers);
@@ -253,6 +260,7 @@ export default function ParticipantsPage() {
       });
       setItems(res.data);
       setTotal(res.total);
+      setSelectedIds(new Set());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
@@ -278,6 +286,35 @@ export default function ParticipantsPage() {
   useEffect(() => {
     void fetchParticipants();
   }, [fetchParticipants]);
+
+  useEffect(() => {
+    if (!resolvedProgramId) return;
+    getProgramConfig(resolvedProgramId)
+      .then((config) => setFfAnnouncedAt(config.fundingResultsAnnouncedAt ?? null))
+      .catch(() => setFfAnnouncedAt(undefined));
+  }, [resolvedProgramId]);
+
+  const selectableIds = useMemo(
+    () => items.filter((app) => app.applicationCategory === "fully_funded").map((app) => app.id),
+    [items],
+  );
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+  const toggleRow = useCallback((id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
+
+  // Only this page is inspected: the list API has no "any result recorded" filter.
+  const ffNotice =
+    ffAnnouncedAt === undefined
+      ? null
+      : getFfResultsHiddenNotice({
+          hasDecisions: items.some((app) => app.applicationCategory === "fully_funded" && app.fundingDecision),
+          announcedAt: ffAnnouncedAt,
+        });
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -612,17 +649,39 @@ export default function ParticipantsPage() {
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        {ffNotice && (
+          <div role="status" className="mb-3 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <p className="text-sm text-amber-800">{ffNotice}</p>
+          </div>
+        )}
+        <FfResultBulkAction
+          programId={resolvedProgramId}
+          selectedIds={[...selectedIds]}
+          onDone={() => void fetchParticipants()}
+        />
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
         <div className="overflow-hidden rounded-md border border-zinc-200">
           <table className="min-w-full text-left text-[11px]">
             <thead className="bg-zinc-50 text-zinc-600">
               <tr>
+                <th className="w-8 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all Fully Funded participants on this page"
+                    checked={allSelected}
+                    disabled={selectableIds.length === 0}
+                    onChange={() => setSelectedIds(allSelected ? new Set() : new Set(selectableIds))}
+                    className="h-3.5 w-3.5 rounded border-zinc-300"
+                  />
+                </th>
                 <th className="px-3 py-2 font-semibold">Participant</th>
                 <th className="px-3 py-2 font-semibold">Country</th>
                 <th className="px-3 py-2 font-semibold">Status</th>
                 <th className="px-3 py-2 font-semibold">Reg. Payment</th>
                 <th className="px-3 py-2 font-semibold">Prog. Payment</th>
+                <th className="px-3 py-2 font-semibold">FF Result</th>
                 <th className="px-3 py-2 font-semibold">Created At</th>
                 <th className="px-3 py-2 font-semibold">Updated At</th>
                 <th className="px-3 py-2 text-right font-semibold">Actions</th>
@@ -631,12 +690,12 @@ export default function ParticipantsPage() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-zinc-400">Loading…</td>
+                  <td colSpan={10} className="px-3 py-6 text-center text-zinc-400">Loading…</td>
                 </tr>
               )}
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-2">
+                  <td colSpan={10} className="px-3 py-2">
                     <EmptyState
                       title="No participants found"
                       description="Try adjusting the search, status, payment, country, or date filters."
@@ -650,6 +709,17 @@ export default function ParticipantsPage() {
                   key={app.id}
                   className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}
                 >
+                  <td className="px-3 py-2">
+                    {app.applicationCategory === "fully_funded" && (
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${app.participant?.fullName ?? "participant"}`}
+                        checked={selectedIds.has(app.id)}
+                        onChange={() => toggleRow(app.id)}
+                        className="h-3.5 w-3.5 rounded border-zinc-300"
+                      />
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <p className="font-medium text-zinc-900">{app.participant?.fullName ?? "—"}</p>
                     <p className="text-zinc-400">{app.participant?.email ?? ""}</p>
@@ -671,6 +741,9 @@ export default function ParticipantsPage() {
                     <span className={"rounded-full px-2 py-0.5 text-[10px] font-semibold " + (PAYMENT_BADGE[app.programPaymentStatus] ?? "bg-zinc-100 text-zinc-600")}>
                       {app.programPaymentStatus}
                     </span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <FfResultBadge category={app.applicationCategory} decision={app.fundingDecision} />
                   </td>
                   <td className="px-3 py-2 text-zinc-500">
                     {formatDate(app.createdAt)}

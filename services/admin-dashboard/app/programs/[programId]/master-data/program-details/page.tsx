@@ -58,6 +58,7 @@ type ProgramDetail = {
   applicationDeadline?: string | null;
   registrationOpenDate?: string | null;
   registrationCloseDate?: string | null;
+  fundingResultsAnnouncedAt?: string | null;
   location?: string | null;
   capacity?: number | null;
   logoUrl?: string | null;
@@ -193,6 +194,7 @@ function toProgramSpecificsData(detail: ProgramDetail): ProgramSpecificsData {
       isSwitchedOffDuringOpenWindow: isSwitchedOffDuringOpenWindow(detail),
       registrationOpenDate: detail.registrationOpenDate ? `${formatBusinessDateTime(detail.registrationOpenDate)} WIB` : "Not configured",
       registrationCloseDate: detail.registrationCloseDate ? `${formatBusinessDateTime(detail.registrationCloseDate)} WIB` : "Not configured",
+      ffResultsAnnouncedAt: detail.fundingResultsAnnouncedAt ? `${formatBusinessDateTime(detail.fundingResultsAnnouncedAt)} WIB` : "Not scheduled",
       requirePayment: detail.requirePayment ? "Required" : "Not required",
       currency: formatDisplayValue(detail.currency ?? "USD"),
       registrationFee:
@@ -245,6 +247,7 @@ function toSpecificsFormValues(detail: ProgramDetail): ProgramSpecificsFormValue
     allowRegistration: detail.allowRegistration,
     registrationOpenDate: toLocalDatetimeInputValue(detail.registrationOpenDate),
     registrationCloseDate: toLocalDatetimeInputValue(detail.registrationCloseDate),
+    fundingResultsAnnouncedAt: toLocalDatetimeInputValue(detail.fundingResultsAnnouncedAt),
     requirementsDescription: detail.requirementsDescription ?? "",
     benefitsDescription: detail.benefitsDescription ?? "",
     termsAndConditions: detail.termsAndConditions ?? "",
@@ -372,6 +375,7 @@ export default function ProgramDetailsPage({
         // instead of being dropped as "no change" — see toUtcIsoFromLocalInput.
         registrationOpenDate: toUtcIsoFromLocalInput(values.registrationOpenDate),
         registrationCloseDate: toUtcIsoFromLocalInput(values.registrationCloseDate),
+        fundingResultsAnnouncedAt: toUtcIsoFromLocalInput(values.fundingResultsAnnouncedAt),
         requirementsDescription: values.requirementsDescription.trim() || undefined,
         benefitsDescription: values.benefitsDescription.trim() || undefined,
         termsAndConditions: values.termsAndConditions.trim() || undefined,

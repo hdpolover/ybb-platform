@@ -53,6 +53,7 @@ export interface ProgramSpecificsData {
     isSwitchedOffDuringOpenWindow: boolean;
     registrationOpenDate: string;
     registrationCloseDate: string;
+    ffResultsAnnouncedAt: string;
     requirePayment: string;
     currency: string;
     registrationFee: string;
@@ -272,6 +273,12 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
             <dt className="mb-1.5 block text-xs font-medium text-zinc-500">Registration Closes</dt>
             <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
               {data.operations.registrationCloseDate}
+            </dd>
+          </div>
+          <div>
+            <dt className="mb-1.5 block text-xs font-medium text-zinc-500">FF Results Announced</dt>
+            <dd className="rounded-md border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 shadow-sm">
+              {data.operations.ffResultsAnnouncedAt}
             </dd>
           </div>
         </dl>

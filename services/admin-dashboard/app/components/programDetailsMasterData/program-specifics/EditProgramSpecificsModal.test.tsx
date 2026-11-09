@@ -19,6 +19,7 @@ const VALUES: ProgramSpecificsFormValues = {
   allowRegistration: false,
   registrationOpenDate: "2026-10-05T23:59",
   registrationCloseDate: "2027-04-10T23:59",
+  fundingResultsAnnouncedAt: "",
   requirementsDescription: "",
   benefitsDescription: "",
   termsAndConditions: "",
@@ -66,6 +67,29 @@ describe("EditProgramSpecificsModal registration switch", () => {
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ allowRegistration: true })),
+    );
+  });
+});
+
+describe("EditProgramSpecificsModal FF results date", () => {
+  it("submits the chosen announcement date", async () => {
+    const onSubmit = renderModal(VALUES);
+
+    fireEvent.change(screen.getByLabelText("FF results announced on"), { target: { value: "2027-05-01T09:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ fundingResultsAnnouncedAt: "2027-05-01T09:00" })),
+    );
+  });
+
+  it("submits an empty value (clears the date) when the field is left empty", async () => {
+    const onSubmit = renderModal(VALUES);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ fundingResultsAnnouncedAt: "" })),
     );
   });
 });
