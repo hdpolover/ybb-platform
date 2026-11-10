@@ -232,6 +232,28 @@ describe('ScoringRubricRepository', () => {
       expectNoOuterWrites(mockPrisma);
     });
 
+    it('clears the description on an explicit null but inherits it when the payload omits it', async () => {
+      const active = { ...makeActiveSchema(), description: 'Old description' };
+      mockTx.scoringSchema.findFirst.mockResolvedValue(active);
+      mockTx.scoringSchema.aggregate.mockResolvedValue({ _max: { version: 1 } });
+      const createdV2 = { ...active, id: 'schema-uuid-v2', version: 2 };
+      mockTx.scoringSchema.create.mockResolvedValue(createdV2);
+      mockTx.scoringCategory.create.mockResolvedValue({ ...active.categories[0], criteria: [] });
+      mockTx.scoringCriterion.create.mockResolvedValue(active.categories[0].criteria[0]);
+      mockTx.scoringSchema.findMany.mockResolvedValue([createdV2]);
+      const changed = { ...payload, passThreshold: 80 };
+
+      await repo.mintRubricVersion(programId, ScoringStage.application, { ...changed, description: null }, 'admin-1');
+      expect(mockTx.scoringSchema.create).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ description: null }) }),
+      );
+
+      await repo.mintRubricVersion(programId, ScoringStage.application, changed, 'admin-1');
+      expect(mockTx.scoringSchema.create).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ description: 'Old description' }) }),
+      );
+    });
+
     it('returns the existing active version unchanged and mints nothing when the payload is semantically identical', async () => {
       const active = makeActiveSchema();
       mockTx.scoringSchema.findFirst.mockResolvedValue(active);

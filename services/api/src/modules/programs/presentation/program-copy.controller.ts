@@ -1,5 +1,5 @@
 // services/api/src/modules/programs/presentation/program-copy.controller.ts
-import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, NotFoundException, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
@@ -36,7 +36,16 @@ export class ProgramCopyController {
   // a route-level guard) because the requirement depends on the entity key.
   private async assertCopierPermission(copier: ProgramCopier, user: CurrentUserData, programId: string): Promise<void> {
     if (!copier.requiredPermissions) return;
-    await assertProgramPermission(this.prismaRead, user, programId, copier.requiredPermissions);
+    try {
+      await assertProgramPermission(this.prismaRead, user, programId, copier.requiredPermissions);
+    } catch (error) {
+      if (!(error instanceof ForbiddenException)) throw error;
+      // clone-from refuses the whole batch, so say which entity to deselect.
+      throw new ForbiddenException({
+        code: 'copy_permission_required',
+        message: `You do not have permission to copy ${copier.label} into this program. Deselect it and try again.`,
+      });
+    }
   }
 
   @Get('copy/:entityKey/counts')

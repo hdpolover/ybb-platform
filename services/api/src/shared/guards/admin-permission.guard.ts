@@ -49,7 +49,11 @@ export async function assertProgramPermission(
   programId: string,
   anyOf: readonly string[],
 ): Promise<void> {
-  if (!user?.adminId) {
+  // An undefined programId (a route whose param name does not match the
+  // decorator's) must not reach the queries below: the soft-delete extension
+  // turns findUnique({ id: undefined }) into "first program", which would
+  // count some unrelated brand's grants.
+  if (!user?.adminId || !programId) {
     throw new ForbiddenException(FORBIDDEN_MESSAGE);
   }
 

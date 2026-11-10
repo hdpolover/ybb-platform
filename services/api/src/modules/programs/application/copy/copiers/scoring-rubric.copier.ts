@@ -50,7 +50,10 @@ function toTemplateItem(row: ScoringSchemaWithNested): TemplateItem {
 function toMintPayload(item: TemplateItem): UpsertRubricPayload {
   return {
     name: item.name,
-    description: item.description ?? undefined,
+    // null, not undefined: a copy is exact, so a source without a description
+    // must clear the target's rather than inherit it (which would also make
+    // every repeat copy look different and mint a fresh version).
+    description: item.description,
     passThreshold: item.passThreshold,
     categories: item.categories.map((cat) => ({
       name: cat.name,

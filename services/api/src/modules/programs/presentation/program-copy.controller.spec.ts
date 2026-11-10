@@ -188,7 +188,13 @@ describe('ProgramCopyController', () => {
   // A copier that declares requiredPermissions (scoring-rubric) must not be a
   // way around the permission gate on that entity's own write endpoint.
   describe('permission-gated copiers', () => {
-    const gatedCopier = () => ({ supportsAppend: true, requiredPermissions: ['program:write'], copy: jest.fn(), applyTemplate: jest.fn() });
+    const gatedCopier = () => ({
+      label: 'Scoring Rubric',
+      supportsAppend: true,
+      requiredPermissions: ['program:write'],
+      copy: jest.fn(),
+      applyTemplate: jest.fn(),
+    });
 
     it('copy: refuses a caller without the permission before any write', async () => {
       mockRegistryGet.mockReturnValue(gatedCopier());
@@ -235,7 +241,9 @@ describe('ProgramCopyController', () => {
           { sourceProgramId: 'src', entities: [{ key: 'faqs', mode: 'append' }, { key: 'scoring-rubric', mode: 'append' }] },
           CALLER,
         ),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      ).rejects.toMatchObject({
+        response: { code: 'copy_permission_required', message: expect.stringContaining('Scoring Rubric') },
+      });
       expect(mockPrismaTransaction).not.toHaveBeenCalled();
     });
   });

@@ -169,7 +169,7 @@ export async function mintRubricVersionInTx(
       programId,
       stage,
       name: payload.name ?? active?.name ?? `${stage} Rubric`,
-      description: payload.description ?? active?.description ?? null,
+      description: payload.description !== undefined ? payload.description : (active?.description ?? null),
       isActive: true,
       version: nextVersion,
       createdById,

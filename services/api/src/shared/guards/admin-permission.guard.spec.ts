@@ -48,6 +48,14 @@ describe('assertProgramPermission', () => {
     expect(prisma.admin.findUnique).not.toHaveBeenCalled();
   });
 
+  it('rejects a missing program id without querying', async () => {
+    const prisma = buildPrisma(admin({ role: { name: 'admin', permissions: ['program:write'] } }));
+    await expect(
+      assertProgramPermission(prisma as never, USER, undefined as unknown as string, ['program:write']),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.admin.findUnique).not.toHaveBeenCalled();
+  });
+
   it('rejects when the admin row does not exist', async () => {
     await expect(check(null)).rejects.toBeInstanceOf(ForbiddenException);
   });

@@ -59,7 +59,8 @@ export type UpsertCategoryPayload = {
 
 export type UpsertRubricPayload = {
   name?: string;
-  description?: string;
+  /** undefined = keep the active version's description; null = clear it. */
+  description?: string | null;
   passThreshold?: number;
   categories: UpsertCategoryPayload[];
 };
