@@ -2,12 +2,41 @@
 
 import React from "react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
+import { FilterSelect } from "@/src/ui/select";
+import {
+  SORT_BY_OPTIONS,
+  SORT_ORDER_OPTIONS,
+  type FullyFundedSortBy,
+  type FullyFundedSortOrder,
+} from "./FullyFundedParticipantsFilters";
+
+// Subset of the shared sort options that make sense for the interview tab.
+const INTERVIEW_SORT_VALUES: readonly FullyFundedSortBy[] = [
+  "scoreTotal",
+  "participantName",
+  "country",
+  "scoreStatus",
+  "createdAt",
+];
+const INTERVIEW_SORT_BY_OPTIONS = SORT_BY_OPTIONS.filter((option) =>
+  INTERVIEW_SORT_VALUES.includes(option.value),
+);
 
 interface InterviewParticipantsHeaderProps {
   onSearch?: (value: string) => void;
+  sortBy: FullyFundedSortBy;
+  sortOrder: FullyFundedSortOrder;
+  onSortByChange: (value: FullyFundedSortBy) => void;
+  onSortOrderChange: (value: FullyFundedSortOrder) => void;
 }
 
-export function InterviewParticipantsHeader({ onSearch }: InterviewParticipantsHeaderProps) {
+export function InterviewParticipantsHeader({
+  onSearch,
+  sortBy,
+  sortOrder,
+  onSortByChange,
+  onSortOrderChange,
+}: InterviewParticipantsHeaderProps) {
   const [value, setValue] = React.useState("");
 
   function handleSubmit(event: React.FormEvent) {
@@ -40,6 +69,36 @@ export function InterviewParticipantsHeader({ onSearch }: InterviewParticipantsH
             <MagnifyingGlassIcon className="h-3.5 w-3.5" />
             Search
           </button>
+        </div>
+        <div className="flex flex-wrap gap-3 pt-1">
+          <div className="w-full md:w-44">
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Sort by</label>
+            <FilterSelect
+              aria-label="Sort by"
+              value={sortBy}
+              onChange={(e) => onSortByChange(e.target.value as FullyFundedSortBy)}
+            >
+              {INTERVIEW_SORT_BY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </FilterSelect>
+          </div>
+          <div className="w-full md:w-36">
+            <label className="mb-1.5 block text-xs font-medium text-zinc-500">Sort order</label>
+            <FilterSelect
+              aria-label="Sort order"
+              value={sortOrder}
+              onChange={(e) => onSortOrderChange(e.target.value as FullyFundedSortOrder)}
+            >
+              {SORT_ORDER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </FilterSelect>
+          </div>
         </div>
       </form>
     </section>
