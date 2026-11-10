@@ -21,7 +21,7 @@ import { CreateTemplateFromProgramDialog } from "@/app/components/shared/content
 import { EditContentTemplateDialog } from "@/app/components/shared/content-templates/EditContentTemplateDialog";
 import { ContentTemplateDetailDrawer } from "@/app/components/shared/content-templates/ContentTemplateDetailDrawer";
 
-// Matches the seven registered ProgramCopier key/label pairs exactly
+// Matches the registered ProgramCopier key/label pairs exactly
 // (form-fields.copier.ts, participation-categories.copier.ts, etc.). Not
 // fetched from the registry endpoint: that endpoint is scoped to a
 // :programId and this screen has no natural program to call it against.
@@ -33,6 +33,7 @@ const ENTITY_TYPES = [
   { key: "faqs", label: "FAQs" },
   { key: "payments", label: "Payment Options" },
   { key: "program-details", label: "Participant-Facing Content" },
+  { key: "scoring-rubric", label: "Scoring Rubric" },
 ] as const;
 
 export default function ContentTemplatesPage() {

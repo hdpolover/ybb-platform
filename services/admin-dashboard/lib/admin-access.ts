@@ -86,6 +86,8 @@ const menuPermissionRules: Record<string, string[]> = {
   scoring: ["review:read", "review:write", "applications:read", "applications:write"],
   "scoring-fully-funded": ["review:read", "review:write", "applications:read", "applications:write"],
   "scoring-interview": ["review:read", "review:write", "applications:read", "applications:write"],
+  // Authoring a rubric changes how every applicant is scored, so write-only.
+  "scoring-rubric": ["review:write"],
   participants: ["participants:read", "participants:write", "applications:read", "program:write"],
   ambassadors: ["participants:read", "participants:write", "program:write"],
   "support-tickets": ["support:read", "support:write", "admin.manage"],

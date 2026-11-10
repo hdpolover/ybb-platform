@@ -1,11 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { PlusIcon, TrashIcon } from "@heroicons/react/24/solid";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { formatDate } from "@/lib/utils";
+import {
+  buildPermissionSet,
+  getRequiredPermissionsForMenuItem,
+  hasRequiredPermissions,
+} from "@/lib/admin-access";
+import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
+import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 import { Button } from "@/src/ui/button";
 import { Badge } from "@/src/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/src/ui/card";
@@ -369,8 +376,20 @@ export function RubricBuilderClient() {
   const params = useParams<{ programId: string }>();
   const rawProgramId = params.programId;
   const programId = useResolvedProgramId(rawProgramId);
-  const { accessConfig } = useAuth();
+  const { accessConfig, adminProfile } = useAuth();
+  // Same rule as the "Rubric" nav item; the API re-checks program scope.
+  const canManageRubric = useMemo(
+    () =>
+      accessConfig.isSuperAdmin ||
+      hasRequiredPermissions(
+        buildPermissionSet(adminProfile, programId),
+        getRequiredPermissionsForMenuItem("scoring-rubric"),
+      ),
+    [accessConfig.isSuperAdmin, adminProfile, programId],
+  );
 
+  const [copyTemplateOpen, setCopyTemplateOpen] = useState(false);
+  const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
   const [activeStage, setActiveStage] = useState<Stage>("application");
   const [states, setStates] = useState<Record<Stage, RubricState>>({
     application: emptyRubricState(),
@@ -433,6 +452,14 @@ export function RubricBuilderClient() {
     setViewedVersionError(null);
     setShowSaveConfirm(false);
   }, [activeStage]);
+
+  const handleCopyApplied = () => {
+    setCopyTemplateOpen(false);
+    setCopyFromProgramOpen(false);
+    setViewedVersion(null);
+    void loadRubrics();
+    void loadVersionSummaries();
+  };
 
   const performSave = async () => {
     setSaveError(null);
@@ -530,12 +557,11 @@ export function RubricBuilderClient() {
     });
   };
 
-  // Super-admin gate
-  if (!accessConfig.isSuperAdmin) {
+  if (!canManageRubric) {
     return (
       <div className="space-y-6">
         <p className="text-sm text-zinc-500">
-          Rubric management is only available to super admins.
+          You do not have permission to manage rubrics for this program.
         </p>
       </div>
     );
@@ -565,7 +591,7 @@ export function RubricBuilderClient() {
 
   // Maps a WeightValidationError's category-scoped path (e.g. "categories[1].criteria")
   // back to that category's display name, so the UI never shows a raw category UUID (or
-  // "draft-N" placeholder) to a SuperAdmin. Falls back to the message as-is for the
+  // "draft-N" placeholder) to an admin. Falls back to the message as-is for the
   // top-level "categories" sum error, which does not interpolate any category identifier.
   function displayWeightError(err: WeightValidationError): string {
     const match = /^categories\[(\d+)\]/.exec(err.path);
@@ -580,11 +606,21 @@ export function RubricBuilderClient() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-zinc-900">Scoring Rubric</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Define categories and criteria for scoring applicants.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-zinc-900">Scoring Rubric</h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            Define categories and criteria for scoring applicants.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setCopyTemplateOpen(true)}>
+            Copy from Template
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setCopyFromProgramOpen(true)}>
+            Copy from Program
+          </Button>
+        </div>
       </div>
 
       {/* Stage tabs */}
@@ -823,6 +859,26 @@ export function RubricBuilderClient() {
           )}
         </CardContent>
       </Card>
+
+      <CopyFromTemplateDialog
+        open={copyTemplateOpen}
+        entityKey="scoring-rubric"
+        entityLabel="Scoring Rubric"
+        programId={programId}
+        supportsAppend
+        onClose={() => setCopyTemplateOpen(false)}
+        onApplied={handleCopyApplied}
+      />
+      <CopyFromProgramDialog
+        open={copyFromProgramOpen}
+        entityKey="scoring-rubric"
+        entityLabel="Scoring Rubric"
+        programId={programId}
+        supportsAppend
+        replaceCaveat="Existing scores stay pinned to the rubric version they were given under."
+        onClose={() => setCopyFromProgramOpen(false)}
+        onApplied={handleCopyApplied}
+      />
     </div>
   );
 }
