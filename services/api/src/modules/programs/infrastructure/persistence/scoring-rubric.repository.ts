@@ -9,7 +9,7 @@ import {
   UpsertCategoryPayload,
 } from '../../../../core/interfaces/repositories/scoring-rubric.repository.interface';
 
-const CATEGORIES_INCLUDE = {
+export const CATEGORIES_INCLUDE = {
   categories: {
     orderBy: { order: 'asc' as const },
     include: {
@@ -20,7 +20,7 @@ const CATEGORIES_INCLUDE = {
   },
 };
 
-function toNumber(value: Prisma.Decimal | number): number {
+export function toNumber(value: Prisma.Decimal | number): number {
   return value instanceof Prisma.Decimal ? value.toNumber() : Number(value);
 }
 
@@ -113,94 +113,109 @@ export class ScoringRubricRepository implements IScoringRubricRepository {
     payload: UpsertRubricPayload,
     createdById: string | null,
   ): Promise<ScoringSchemaWithNested> {
-    return this.prisma.$transaction(async (tx) => {
-      const active = (await tx.scoringSchema.findFirst({
-        where: { programId, stage, isActive: true, deletedAt: null },
-        include: CATEGORIES_INCLUDE,
-      })) as ScoringSchemaWithNested | null;
+    return this.prisma.$transaction((tx) =>
+      mintRubricVersionInTx(tx, programId, stage, payload, createdById),
+    );
+  }
+}
 
-      if (active && isSemanticallyIdentical(active, payload)) {
-        return active;
-      }
+/**
+ * The mint body, runnable on any open transaction client. Exported so a caller
+ * already inside its own $transaction (ScoringRubricCopier) can mint on that
+ * transaction instead of nesting a second one.
+ */
+export async function mintRubricVersionInTx(
+  tx: Prisma.TransactionClient,
+  programId: string,
+  stage: ScoringStage,
+  payload: UpsertRubricPayload,
+  createdById: string | null,
+): Promise<ScoringSchemaWithNested> {
+  const active = (await tx.scoringSchema.findFirst({
+    where: { programId, stage, isActive: true, deletedAt: null },
+    include: CATEGORIES_INCLUDE,
+  })) as ScoringSchemaWithNested | null;
 
-      // MAX(version) across ALL rows for this (programId, stage), including
-      // soft-deleted ones. @@unique([programId, stage, version]) has no
-      // deletedAt filter, so a soft-deleted row still reserves its version
-      // number forever; deriving the next version from active-row count (or
-      // from active.version alone, when there is no active row) would
-      // collide with a version a deleted row already occupies.
-      const versionAggregate = await tx.scoringSchema.aggregate({
-        where: { programId, stage },
-        _max: { version: true },
-      });
-      const nextVersion = (versionAggregate._max.version ?? 0) + 1;
+  if (active && isSemanticallyIdentical(active, payload)) {
+    return active;
+  }
 
-      // Deactivate the previous active row BEFORE inserting the new one.
-      // scoring_schemas_one_active_per_program_stage_uidx is a partial
-      // unique index on (program_id, stage) WHERE is_active AND deleted_at
-      // IS NULL -- inserting the new active row first would collide with
-      // the still-active old row and be rejected by that index.
-      if (active) {
-        await tx.scoringSchema.update({
-          where: { id: active.id },
-          data: { isActive: false },
-        });
-      }
+  // MAX(version) across ALL rows for this (programId, stage), including
+  // soft-deleted ones. @@unique([programId, stage, version]) has no
+  // deletedAt filter, so a soft-deleted row still reserves its version
+  // number forever; deriving the next version from active-row count (or
+  // from active.version alone, when there is no active row) would
+  // collide with a version a deleted row already occupies.
+  const versionAggregate = await tx.scoringSchema.aggregate({
+    where: { programId, stage },
+    _max: { version: true },
+  });
+  const nextVersion = (versionAggregate._max.version ?? 0) + 1;
 
-      const created = await tx.scoringSchema.create({
-        data: {
-          programId,
-          stage,
-          name: payload.name ?? active?.name ?? `${stage} Rubric`,
-          description: payload.description ?? active?.description ?? null,
-          isActive: true,
-          version: nextVersion,
-          createdById,
-          passThreshold: payload.passThreshold ?? (active ? toNumber(active.passThreshold) : 75),
-        },
-      });
-
-      for (const cat of payload.categories) {
-        await this.createCategoryWithCriteria(tx, created.id, cat);
-      }
-
-      const rows = await tx.scoringSchema.findMany({
-        where: { id: created.id },
-        include: CATEGORIES_INCLUDE,
-      });
-
-      const result = rows[0];
-      if (!result) throw new Error(`ScoringSchema ${created.id} disappeared mid-transaction`);
-      return result as ScoringSchemaWithNested;
+  // Deactivate the previous active row BEFORE inserting the new one.
+  // scoring_schemas_one_active_per_program_stage_uidx is a partial
+  // unique index on (program_id, stage) WHERE is_active AND deleted_at
+  // IS NULL -- inserting the new active row first would collide with
+  // the still-active old row and be rejected by that index.
+  if (active) {
+    await tx.scoringSchema.update({
+      where: { id: active.id },
+      data: { isActive: false },
     });
   }
 
-  private async createCategoryWithCriteria(
-    tx: Prisma.TransactionClient,
-    schemaId: string,
-    cat: UpsertCategoryPayload,
-  ): Promise<void> {
-    const createdCategory = await tx.scoringCategory.create({
+  const created = await tx.scoringSchema.create({
+    data: {
+      programId,
+      stage,
+      name: payload.name ?? active?.name ?? `${stage} Rubric`,
+      description: payload.description ?? active?.description ?? null,
+      isActive: true,
+      version: nextVersion,
+      createdById,
+      passThreshold: payload.passThreshold ?? (active ? toNumber(active.passThreshold) : 75),
+    },
+  });
+
+  for (const cat of payload.categories) {
+    await createCategoryWithCriteria(tx, created.id, cat);
+  }
+
+  const rows = await tx.scoringSchema.findMany({
+    where: { id: created.id },
+    include: CATEGORIES_INCLUDE,
+  });
+
+  const result = rows[0];
+  if (!result) throw new Error(`ScoringSchema ${created.id} disappeared mid-transaction`);
+  return result as ScoringSchemaWithNested;
+}
+
+async function createCategoryWithCriteria(
+  tx: Prisma.TransactionClient,
+  schemaId: string,
+  cat: UpsertCategoryPayload,
+): Promise<void> {
+  const createdCategory = await tx.scoringCategory.create({
+    data: {
+      schemaId,
+      name: cat.name,
+      description: cat.description ?? null,
+      weight: cat.weight,
+      order: cat.order,
+    },
+  });
+
+  for (const crit of cat.criteria) {
+    await tx.scoringCriterion.create({
       data: {
-        schemaId,
-        name: cat.name,
-        description: cat.description ?? null,
-        weight: cat.weight,
-        order: cat.order,
+        categoryId: createdCategory.id,
+        name: crit.name,
+        description: crit.description ?? null,
+        weight: crit.weight,
+        maxScore: crit.maxScore,
+        order: crit.order,
       },
     });
-
-    for (const crit of cat.criteria) {
-      await tx.scoringCriterion.create({
-        data: {
-          categoryId: createdCategory.id,
-          name: crit.name,
-          description: crit.description ?? null,
-          weight: crit.weight,
-          maxScore: crit.maxScore,
-          order: crit.order,
-        },
-      });
-    }
   }
 }
