@@ -6,13 +6,16 @@ import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
+import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS } from '@shared/constants/cache-patterns';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { LandingCacheInvalidationService } from '../../brands/application/services/landing-cache-invalidation.service';
 import { ProgramCopierRegistry } from '../application/copy/program-copier.registry';
 import { CopyEntityDto, ApplyTemplateEntityDto, CloneFromProgramDto } from './dto/copy-entity.dto';
-import { CopyPreviewItem, CopyResult, PrismaTx, TemplatePayload } from '../application/copy/program-copier.interface';
+import { CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier, TemplatePayload } from '../application/copy/program-copier.interface';
 import { invalidateLandingCacheByProgramId } from '../application/commands/handlers/manage-program-content.handlers';
 
 @ApiTags('Program Content Copy')
@@ -25,7 +28,16 @@ export class ProgramCopyController {
     private readonly registry: ProgramCopierRegistry,
     private readonly prisma: PrismaService,
     private readonly landingCacheInvalidation: LandingCacheInvalidationService,
+    private readonly prismaRead: PrismaReadService,
   ) {}
+
+  // An entity whose own write endpoint is permission-gated must not become
+  // writable around that gate by copying it in. Checked per copier (not with
+  // a route-level guard) because the requirement depends on the entity key.
+  private async assertCopierPermission(copier: ProgramCopier, user: CurrentUserData, programId: string): Promise<void> {
+    if (!copier.requiredPermissions) return;
+    await assertProgramPermission(this.prismaRead, user, programId, copier.requiredPermissions);
+  }
 
   @Get('copy/:entityKey/counts')
   @ApiOperation({ summary: 'Count how many items of one entity type each candidate source program has.' })
@@ -62,8 +74,10 @@ export class ProgramCopyController {
     @Param('programId') programId: string,
     @Param('entityKey') entityKey: string,
     @Body() dto: CopyEntityDto,
+    @CurrentUser() user: CurrentUserData,
   ): Promise<CopyResult> {
     const copier = this.registry.get(entityKey);
+    await this.assertCopierPermission(copier, user, programId);
     const mode = dto.mode ?? 'append';
 
     if (dto.sourceProgramId === programId) {
@@ -116,8 +130,10 @@ export class ProgramCopyController {
     @Param('programId') programId: string,
     @Param('entityKey') entityKey: string,
     @Body() dto: ApplyTemplateEntityDto,
+    @CurrentUser() user: CurrentUserData,
   ): Promise<CopyResult> {
     const copier = this.registry.get(entityKey);
+    await this.assertCopierPermission(copier, user, programId);
     const mode = dto.mode ?? 'append';
 
     const template = await this.prisma.contentTemplate.findFirst({ where: { id: dto.templateId, deletedAt: null } });
@@ -164,7 +180,11 @@ export class ProgramCopyController {
   @ScopedBy('program', 'id')
   @ApiOperation({ summary: 'Clone selected content types from a sibling program into this one, in one transaction.' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
-  async cloneFrom(@Param('id') id: string, @Body() dto: CloneFromProgramDto): Promise<Record<string, CopyResult>> {
+  async cloneFrom(
+    @Param('id') id: string,
+    @Body() dto: CloneFromProgramDto,
+    @CurrentUser() user: CurrentUserData,
+  ): Promise<Record<string, CopyResult>> {
     if (dto.sourceProgramId === id) {
       throw new BadRequestException({ code: 'invalid_source', message: 'Source program must differ from the target program.' });
     }
@@ -179,6 +199,7 @@ export class ProgramCopyController {
       if (entity.mode === 'append' && !copier.supportsAppend) {
         throw new BadRequestException({ code: 'append_not_supported', message: `'${entity.key}' only supports replace mode.` });
       }
+      await this.assertCopierPermission(copier, user, id);
     }
 
     const results = await this.prisma.$transaction(async (tx: unknown) => {

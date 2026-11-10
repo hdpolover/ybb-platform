@@ -1,6 +1,6 @@
 // services/api/src/modules/programs/presentation/program-copy.controller.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ExecutionContext, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ExecutionContext, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
@@ -20,11 +20,25 @@ jest.mock('../application/commands/handlers/manage-program-content.handlers', ()
   invalidateLandingCacheByProgramId: jest.fn().mockResolvedValue(undefined),
 }));
 
+const CALLER = { userId: 'user-1', email: 'admin@example.com', brandId: 'brand-1', adminId: 'admin-1' };
+const ADMIN_ROW = {
+  accessLevel: 1,
+  canManageAdmins: false,
+  canAssignRoles: false,
+  customPermissions: [],
+  role: { name: 'reviewer', permissions: ['review:write'] },
+  adminBrands: [],
+  adminPrograms: [],
+};
+const PROGRAM_WRITER = { ...ADMIN_ROW, role: { name: 'admin', permissions: ['program:write'] } };
+
 describe('ProgramCopyController', () => {
   let controller: ProgramCopyController;
   const mockRegistryGet = jest.fn();
   const mockPrismaTransaction = jest.fn();
   const mockLandingCacheInvalidation = { invalidate: jest.fn() };
+  const mockAdminFindUnique = jest.fn();
+  const mockPrismaRead = { admin: { findUnique: mockAdminFindUnique }, program: { findUnique: jest.fn() } };
   const mockInvalidateLandingCache = manageProgramContentHandlers.invalidateLandingCacheByProgramId as jest.Mock;
 
   beforeEach(async () => {
@@ -34,6 +48,7 @@ describe('ProgramCopyController', () => {
         { provide: ProgramCopierRegistry, useValue: { get: mockRegistryGet, list: jest.fn() } },
         { provide: PrismaService, useValue: { $transaction: mockPrismaTransaction } },
         { provide: LandingCacheInvalidationService, useValue: mockLandingCacheInvalidation },
+        { provide: PrismaReadService, useValue: mockPrismaRead },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -87,7 +102,7 @@ describe('ProgramCopyController', () => {
     it('rejects when sourceProgramId equals the target programId', async () => {
       mockRegistryGet.mockReturnValue({ supportsAppend: true, copy: jest.fn() });
       await expect(
-        controller.copy('prog-1', 'faqs', { sourceProgramId: 'prog-1', mode: 'append' }),
+        controller.copy('prog-1', 'faqs', { sourceProgramId: 'prog-1', mode: 'append' }, CALLER),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(mockPrismaTransaction).not.toHaveBeenCalled();
     });
@@ -95,7 +110,7 @@ describe('ProgramCopyController', () => {
     it('rejects replace mode without confirm: true', async () => {
       mockRegistryGet.mockReturnValue({ supportsAppend: true, copy: jest.fn() });
       await expect(
-        controller.copy('tgt', 'faqs', { sourceProgramId: 'src', mode: 'replace' }),
+        controller.copy('tgt', 'faqs', { sourceProgramId: 'src', mode: 'replace' }, CALLER),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(mockPrismaTransaction).not.toHaveBeenCalled();
     });
@@ -103,7 +118,7 @@ describe('ProgramCopyController', () => {
     it('rejects append mode when the copier does not support it', async () => {
       mockRegistryGet.mockReturnValue({ supportsAppend: false, copy: jest.fn() });
       await expect(
-        controller.copy('tgt', 'program-details', { sourceProgramId: 'src', mode: 'append' }),
+        controller.copy('tgt', 'program-details', { sourceProgramId: 'src', mode: 'append' }, CALLER),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(mockPrismaTransaction).not.toHaveBeenCalled();
     });
@@ -117,7 +132,7 @@ describe('ProgramCopyController', () => {
         sourceProgramId: 'src',
         itemIds: ['a', 'b'],
         mode: 'append',
-      });
+      }, CALLER);
 
       expect(copy).toHaveBeenCalledWith('fake-tx', {
         sourceProgramId: 'src',
@@ -133,7 +148,7 @@ describe('ProgramCopyController', () => {
       mockRegistryGet.mockReturnValue({ supportsAppend: true, copy });
       mockPrismaTransaction.mockImplementation((cb: (tx: unknown) => Promise<unknown>) => cb('fake-tx'));
 
-      const result = await controller.copy('tgt', 'faqs', { sourceProgramId: 'src', mode: 'replace', confirm: true });
+      const result = await controller.copy('tgt', 'faqs', { sourceProgramId: 'src', mode: 'replace', confirm: true }, CALLER);
 
       expect(copy).toHaveBeenCalledWith('fake-tx', { sourceProgramId: 'src', targetProgramId: 'tgt', itemIds: undefined, mode: 'replace' });
       expect(result).toEqual({ created: 0, skipped: 0, replaced: 4 });
@@ -150,7 +165,7 @@ describe('ProgramCopyController', () => {
       mockRegistryGet.mockReturnValue({ supportsAppend: true, copy });
       mockPrismaTransaction.mockImplementation((cb: (tx: unknown) => Promise<unknown>) => cb('fake-tx'));
 
-      await controller.copy('tgt', 'faqs', { sourceProgramId: 'src', mode: 'append' });
+      await controller.copy('tgt', 'faqs', { sourceProgramId: 'src', mode: 'append' }, CALLER);
 
       expect(mockInvalidateLandingCache).toHaveBeenCalledTimes(1);
       expect(mockInvalidateLandingCache).toHaveBeenCalledWith('tgt', expect.anything(), mockLandingCacheInvalidation);
@@ -164,9 +179,64 @@ describe('ProgramCopyController', () => {
     it('does not invalidate the landing cache when the request is rejected before the transaction opens', async () => {
       mockRegistryGet.mockReturnValue({ supportsAppend: true, copy: jest.fn() });
       await expect(
-        controller.copy('prog-1', 'faqs', { sourceProgramId: 'prog-1', mode: 'append' }),
+        controller.copy('prog-1', 'faqs', { sourceProgramId: 'prog-1', mode: 'append' }, CALLER),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(mockInvalidateLandingCache).not.toHaveBeenCalled();
+    });
+  });
+
+  // A copier that declares requiredPermissions (scoring-rubric) must not be a
+  // way around the permission gate on that entity's own write endpoint.
+  describe('permission-gated copiers', () => {
+    const gatedCopier = () => ({ supportsAppend: true, requiredPermissions: ['program:write'], copy: jest.fn(), applyTemplate: jest.fn() });
+
+    it('copy: refuses a caller without the permission before any write', async () => {
+      mockRegistryGet.mockReturnValue(gatedCopier());
+      mockAdminFindUnique.mockResolvedValue(ADMIN_ROW);
+      await expect(
+        controller.copy('tgt', 'scoring-rubric', { sourceProgramId: 'src', mode: 'append' }, CALLER),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockPrismaTransaction).not.toHaveBeenCalled();
+    });
+
+    it('copy: lets a caller with the permission through', async () => {
+      mockRegistryGet.mockReturnValue(gatedCopier());
+      mockAdminFindUnique.mockResolvedValue(PROGRAM_WRITER);
+      mockPrismaTransaction.mockResolvedValue({ created: 1, skipped: 0, replaced: 0 });
+      await expect(
+        controller.copy('tgt', 'scoring-rubric', { sourceProgramId: 'src', mode: 'append' }, CALLER),
+      ).resolves.toEqual({ created: 1, skipped: 0, replaced: 0 });
+    });
+
+    it('copy: an ungated copier costs no permission lookup', async () => {
+      mockRegistryGet.mockReturnValue({ supportsAppend: true, copy: jest.fn() });
+      mockPrismaTransaction.mockResolvedValue({ created: 0, skipped: 0, replaced: 0 });
+      await controller.copy('tgt', 'faqs', { sourceProgramId: 'src', mode: 'append' }, CALLER);
+      expect(mockAdminFindUnique).not.toHaveBeenCalled();
+    });
+
+    it('applyTemplate: refuses a caller without the permission before reading the template', async () => {
+      mockRegistryGet.mockReturnValue(gatedCopier());
+      mockAdminFindUnique.mockResolvedValue(ADMIN_ROW);
+      await expect(
+        controller.applyTemplate('tgt', 'scoring-rubric', { templateId: 'tpl-1', mode: 'append' }, CALLER),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockPrismaTransaction).not.toHaveBeenCalled();
+    });
+
+    it('cloneFrom: one gated entity the caller cannot write refuses the whole clone', async () => {
+      mockRegistryGet.mockImplementation((key: string) =>
+        key === 'scoring-rubric' ? gatedCopier() : { supportsAppend: true, copy: jest.fn() },
+      );
+      mockAdminFindUnique.mockResolvedValue(ADMIN_ROW);
+      await expect(
+        controller.cloneFrom(
+          'tgt',
+          { sourceProgramId: 'src', entities: [{ key: 'faqs', mode: 'append' }, { key: 'scoring-rubric', mode: 'append' }] },
+          CALLER,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockPrismaTransaction).not.toHaveBeenCalled();
     });
   });
 
@@ -181,7 +251,7 @@ describe('ProgramCopyController', () => {
 
     it('404s when the template does not exist', async () => {
       mockPrismaFindTemplate.mockResolvedValue(null);
-      await expect(controller.applyTemplate('tgt', 'faqs', { templateId: 'missing', mode: 'append' })).rejects.toBeInstanceOf(NotFoundException);
+      await expect(controller.applyTemplate('tgt', 'faqs', { templateId: 'missing', mode: 'append' }, CALLER)).rejects.toBeInstanceOf(NotFoundException);
       // The point of a guard test is that the mutation did not happen, not
       // merely that it threw — a guard firing after the write still throws.
       expect(mockPrismaTransaction).not.toHaveBeenCalled();
@@ -189,14 +259,14 @@ describe('ProgramCopyController', () => {
 
     it('rejects when the template\'s entityType does not match the :entityKey in the URL', async () => {
       mockPrismaFindTemplate.mockResolvedValue({ id: 't1', entityType: 'timelines', payload: { entityType: 'timelines', payloadVersion: 1, items: [] } });
-      await expect(controller.applyTemplate('tgt', 'faqs', { templateId: 't1', mode: 'append' })).rejects.toBeInstanceOf(BadRequestException);
+      await expect(controller.applyTemplate('tgt', 'faqs', { templateId: 't1', mode: 'append' }, CALLER)).rejects.toBeInstanceOf(BadRequestException);
       expect(mockPrismaTransaction).not.toHaveBeenCalled();
     });
 
     it('rejects replace mode without confirm: true', async () => {
       mockPrismaFindTemplate.mockResolvedValue({ id: 't1', entityType: 'faqs', payload: { entityType: 'faqs', payloadVersion: 1, items: [] } });
       mockRegistryGet.mockReturnValue({ supportsAppend: true, applyTemplate: jest.fn() });
-      await expect(controller.applyTemplate('tgt', 'faqs', { templateId: 't1', mode: 'replace' })).rejects.toBeInstanceOf(BadRequestException);
+      await expect(controller.applyTemplate('tgt', 'faqs', { templateId: 't1', mode: 'replace' }, CALLER)).rejects.toBeInstanceOf(BadRequestException);
       expect(mockPrismaTransaction).not.toHaveBeenCalled();
     });
 
@@ -207,7 +277,7 @@ describe('ProgramCopyController', () => {
       mockRegistryGet.mockReturnValue({ supportsAppend: true, applyTemplate });
       mockPrismaTransaction.mockImplementation((cb: (tx: unknown) => Promise<unknown>) => cb('fake-tx'));
 
-      const result = await controller.applyTemplate('tgt', 'faqs', { templateId: 't1', mode: 'append' });
+      const result = await controller.applyTemplate('tgt', 'faqs', { templateId: 't1', mode: 'append' }, CALLER);
 
       expect(applyTemplate).toHaveBeenCalledWith('fake-tx', payload, 'tgt', 'append');
       expect(result).toEqual({ created: 1, skipped: 0, replaced: 0 });
@@ -240,7 +310,7 @@ describe('ProgramCopyController', () => {
   describe('cloneFrom', () => {
     it('rejects when sourceProgramId equals the target :id', async () => {
       await expect(
-        controller.cloneFrom('prog-1', { sourceProgramId: 'prog-1', entities: [{ key: 'faqs', mode: 'append' }] }),
+        controller.cloneFrom('prog-1', { sourceProgramId: 'prog-1', entities: [{ key: 'faqs', mode: 'append' }] }, CALLER),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(mockPrismaTransaction).not.toHaveBeenCalled();
     });
@@ -248,7 +318,7 @@ describe('ProgramCopyController', () => {
     it('rejects when any entity requests replace without top-level confirmReplace: true', async () => {
       mockRegistryGet.mockReturnValue({ supportsAppend: true, copy: jest.fn() });
       await expect(
-        controller.cloneFrom('tgt', { sourceProgramId: 'src', entities: [{ key: 'faqs', mode: 'replace' }] }),
+        controller.cloneFrom('tgt', { sourceProgramId: 'src', entities: [{ key: 'faqs', mode: 'replace' }] }, CALLER),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(mockPrismaTransaction).not.toHaveBeenCalled();
     });
@@ -256,7 +326,7 @@ describe('ProgramCopyController', () => {
     it('rejects an entity requesting append on a copier that does not support it', async () => {
       mockRegistryGet.mockReturnValue({ supportsAppend: false, copy: jest.fn() });
       await expect(
-        controller.cloneFrom('tgt', { sourceProgramId: 'src', entities: [{ key: 'program-details', mode: 'append' }] }),
+        controller.cloneFrom('tgt', { sourceProgramId: 'src', entities: [{ key: 'program-details', mode: 'append' }] }, CALLER),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(mockPrismaTransaction).not.toHaveBeenCalled();
     });
@@ -272,7 +342,7 @@ describe('ProgramCopyController', () => {
       const result = await controller.cloneFrom('tgt', {
         sourceProgramId: 'src',
         entities: [{ key: 'faqs', mode: 'append' }, { key: 'timelines', mode: 'append' }],
-      });
+      }, CALLER);
 
       expect(faqsCopy).toHaveBeenCalledWith('fake-tx', { sourceProgramId: 'src', targetProgramId: 'tgt', itemIds: undefined, mode: 'append' });
       expect(timelinesCopy).toHaveBeenCalledWith('fake-tx', { sourceProgramId: 'src', targetProgramId: 'tgt', itemIds: undefined, mode: 'append' });
@@ -291,7 +361,7 @@ describe('ProgramCopyController', () => {
       mockPrismaTransaction.mockImplementation((cb: (tx: unknown) => Promise<unknown>) => cb('fake-tx'));
 
       await expect(
-        controller.cloneFrom('tgt', { sourceProgramId: 'src', entities: [{ key: 'faqs', mode: 'append' }, { key: 'timelines', mode: 'append' }] }),
+        controller.cloneFrom('tgt', { sourceProgramId: 'src', entities: [{ key: 'faqs', mode: 'append' }, { key: 'timelines', mode: 'append' }] }, CALLER),
       ).rejects.toThrow('boom');
     });
   });

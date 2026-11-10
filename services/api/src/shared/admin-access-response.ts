@@ -115,7 +115,7 @@ function buildPermissionSet(admin: AdminAccessLike): Set<string> {
   return new Set(values);
 }
 
-function isSuperAdmin(admin: AdminAccessLike): boolean {
+export function isSuperAdmin(admin: AdminAccessLike): boolean {
   const roleName = admin.role?.name?.toLowerCase() ?? '';
   const permissionSet = buildPermissionSet(admin);
 

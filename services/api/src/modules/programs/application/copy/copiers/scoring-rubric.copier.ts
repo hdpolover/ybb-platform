@@ -108,6 +108,8 @@ export class ScoringRubricCopier implements ProgramCopier {
   readonly key = 'scoring-rubric';
   readonly label = 'Scoring Rubric';
   readonly supportsAppend = true;
+  // Mirrors @RequiresProgramPermission on PUT :programId/scoring-rubrics/:stage.
+  readonly requiredPermissions = ['program:write'] as const;
 
   constructor(private readonly prisma: PrismaService) {}
 
