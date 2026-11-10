@@ -1,6 +1,9 @@
 // services/api/src/modules/programs/presentation/program-copy.controller.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ExecutionContext, NotFoundException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ProgramCopyController } from './program-copy.controller';
 import { ProgramCopierRegistry } from '../application/copy/program-copier.registry';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -36,6 +39,8 @@ describe('ProgramCopyController', () => {
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(AdminScopeGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -289,5 +294,112 @@ describe('ProgramCopyController', () => {
         controller.cloneFrom('tgt', { sourceProgramId: 'src', entities: [{ key: 'faqs', mode: 'append' }, { key: 'timelines', mode: 'append' }] }),
       ).rejects.toThrow('boom');
     });
+  });
+});
+
+// Drives the REAL AdminScopeGuard against the real route metadata (only
+// PrismaReadService is faked), so this fails if the decorators are dropped,
+// point at the wrong param, or the guard stops refusing out-of-scope admins.
+// Unit specs above stub the guard out and cannot see any of that.
+describe('ProgramCopyController write-route scope enforcement (real AdminScopeGuard)', () => {
+  const BRAND_ADMIN = {
+    accessLevel: 3,
+    canManageAdmins: false,
+    canAssignRoles: false,
+    customPermissions: [],
+    role: { name: 'admin', permissions: [] },
+    adminBrands: [{ brandId: 'brand-a', permissions: [] }],
+    adminPrograms: [],
+  };
+  const PLATFORM_ADMIN = { ...BRAND_ADMIN, accessLevel: 10, role: { name: 'super admin', permissions: ['*'] }, adminBrands: [] };
+
+  const prismaRead = { admin: { findUnique: jest.fn() }, program: { findUnique: jest.fn() } };
+  const guard = new AdminScopeGuard(new Reflector(), prismaRead as unknown as PrismaReadService);
+
+  function contextFor(handler: (...args: never[]) => unknown, params: Record<string, string>): ExecutionContext {
+    const request = { user: { adminId: 'admin-1' }, params };
+    return {
+      getHandler: () => handler,
+      getClass: () => ProgramCopyController,
+      switchToHttp: () => ({ getRequest: () => request }),
+    } as unknown as ExecutionContext;
+  }
+
+  const routes: Array<[string, (...args: never[]) => unknown, Record<string, string>]> = [
+    ['POST :programId/copy/:entityKey', ProgramCopyController.prototype.copy, { entityKey: 'scoring-rubric' }],
+    ['POST :programId/copy/:entityKey/apply-template', ProgramCopyController.prototype.applyTemplate, { entityKey: 'scoring-rubric' }],
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prismaRead.program.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+      Promise.resolve({ id: where.id, brandId: where.id === 'prog-a' ? 'brand-a' : 'brand-b', name: 'P', deletedAt: null }),
+    );
+  });
+
+  it.each(routes)('%s: a brand-scoped admin is refused (404) on another brand\'s program', async (_name, handler, params) => {
+    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+    await expect(guard.canActivate(contextFor(handler, { ...params, programId: 'prog-b' }))).rejects.toThrow(NotFoundException);
+  });
+
+  it.each(routes)('%s: a brand-scoped admin passes on a program in their own brand', async (_name, handler, params) => {
+    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+    await expect(guard.canActivate(contextFor(handler, { ...params, programId: 'prog-a' }))).resolves.toBe(true);
+  });
+
+  it.each(routes)('%s: a platform admin passes on any program', async (_name, handler, params) => {
+    prismaRead.admin.findUnique.mockResolvedValue(PLATFORM_ADMIN);
+    await expect(guard.canActivate(contextFor(handler, { ...params, programId: 'prog-b' }))).resolves.toBe(true);
+  });
+});
+
+describe('ProgramCopyController clone-from scope enforcement (real AdminScopeGuard)', () => {
+  const BRAND_ADMIN = {
+    accessLevel: 3,
+    canManageAdmins: false,
+    canAssignRoles: false,
+    customPermissions: [],
+    role: { name: 'admin', permissions: [] },
+    adminBrands: [{ brandId: 'brand-a', permissions: [] }],
+    adminPrograms: [],
+  };
+  const PLATFORM_ADMIN = { ...BRAND_ADMIN, accessLevel: 10, role: { name: 'super admin', permissions: ['*'] }, adminBrands: [] };
+
+  const prismaRead = { admin: { findUnique: jest.fn() }, program: { findUnique: jest.fn() } };
+  const guard = new AdminScopeGuard(new Reflector(), prismaRead as unknown as PrismaReadService);
+
+  function contextFor(handler: (...args: never[]) => unknown, params: Record<string, string>): ExecutionContext {
+    const request = { user: { adminId: 'admin-1' }, params };
+    return {
+      getHandler: () => handler,
+      getClass: () => ProgramCopyController,
+      switchToHttp: () => ({ getRequest: () => request }),
+    } as unknown as ExecutionContext;
+  }
+
+  const routes: Array<[string, (...args: never[]) => unknown, Record<string, string>]> = [
+    ['POST :id/clone-from', ProgramCopyController.prototype.cloneFrom, {}],
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prismaRead.program.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+      Promise.resolve({ id: where.id, brandId: where.id === 'prog-a' ? 'brand-a' : 'brand-b', name: 'P', deletedAt: null }),
+    );
+  });
+
+  it.each(routes)('%s: a brand-scoped admin is refused (404) on another brand\'s program', async (_name, handler, params) => {
+    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+    await expect(guard.canActivate(contextFor(handler, { ...params, id: 'prog-b' }))).rejects.toThrow(NotFoundException);
+  });
+
+  it.each(routes)('%s: a brand-scoped admin passes on a program in their own brand', async (_name, handler, params) => {
+    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+    await expect(guard.canActivate(contextFor(handler, { ...params, id: 'prog-a' }))).resolves.toBe(true);
+  });
+
+  it.each(routes)('%s: a platform admin passes on any program', async (_name, handler, params) => {
+    prismaRead.admin.findUnique.mockResolvedValue(PLATFORM_ADMIN);
+    await expect(guard.canActivate(contextFor(handler, { ...params, id: 'prog-b' }))).resolves.toBe(true);
   });
 });

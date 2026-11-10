@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS } from '@shared/constants/cache-patterns';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -49,7 +50,12 @@ export class ProgramCopyController {
     return copier.preview(programId);
   }
 
+  // Write routes carry AdminScopeGuard against the TARGET program (the id the
+  // copier writes to). Source-program reads stay unscoped: copying across
+  // programs is intended. Class-level guards run first, so request.user is set.
   @Post(':programId/copy/:entityKey')
+  @UseGuards(AdminScopeGuard)
+  @ScopedBy('program', 'programId')
   @ApiOperation({ summary: 'Copy one entity type from another program into this program (append or replace).' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async copy(
@@ -102,6 +108,8 @@ export class ProgramCopyController {
   }
 
   @Post(':programId/copy/:entityKey/apply-template')
+  @UseGuards(AdminScopeGuard)
+  @ScopedBy('program', 'programId')
   @ApiOperation({ summary: 'Apply a saved content template into this program (append or replace).' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async applyTemplate(
@@ -148,7 +156,12 @@ export class ProgramCopyController {
     return copiers.map((c, i) => ({ key: c.key, label: c.label, supportsAppend: c.supportsAppend, count: counts[i] }));
   }
 
+  // Safe to scope: creating a program requires platform scope or a grant on the
+  // program's brand (ProgramsController.create -> assertBrandAccess), and both
+  // pass assertProgramAccess for the program they just created.
   @Post(':id/clone-from')
+  @UseGuards(AdminScopeGuard)
+  @ScopedBy('program', 'id')
   @ApiOperation({ summary: 'Clone selected content types from a sibling program into this one, in one transaction.' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
   async cloneFrom(@Param('id') id: string, @Body() dto: CloneFromProgramDto): Promise<Record<string, CopyResult>> {

@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-au
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import { UserRole } from '@core/entities/user.entity';
 import { resolveActingAdminId } from '@shared/utils/resolve-acting-admin-id';
 import { GetScoringRubricsHandler } from '../application/queries/handlers/get-scoring-rubrics.handler';
@@ -92,11 +93,15 @@ export class ProgramScoringController {
     );
   }
 
+  // RolesGuard only compares the coarse role, so ADMIN alone would let a
+  // brand/program-scoped admin mint rubrics for any program by id.
+  // AdminScopeGuard + @ScopedBy narrows it to programs the caller's scope covers.
   @Put(':programId/scoring-rubrics/:stage')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Mint a new rubric version for a stage (super admin only)' })
+  @ApiOperation({ summary: 'Mint a new rubric version for a stage (admin, scoped to their programs)' })
   async upsertScoringRubric(
     @Param('programId') programId: string,
     @Param('stage') stageParam: string,

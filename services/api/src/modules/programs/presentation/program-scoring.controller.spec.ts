@@ -1,6 +1,9 @@
 // services/api/src/modules/programs/presentation/program-scoring.controller.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { ExecutionContext, INestApplication, NotFoundException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { ScoringStage } from '@prisma/client';
@@ -30,6 +33,8 @@ describe('ProgramScoringController', () => {
       ],
     })
       .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(AdminScopeGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -196,6 +201,8 @@ describe('ProgramScoringController route resolution (real HTTP layer)', () => {
           return true;
         },
       })
+      .overrideGuard(AdminScopeGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     app = module.createNestApplication();
@@ -249,5 +256,60 @@ describe('UpsertScoringRubricDto: weight/maxScore validation via controller DTO'
     });
     const errors = await validate(dto, { whitelist: true });
     expect(errors.length).toBeGreaterThan(0);
+  });
+});
+
+// Drives the REAL AdminScopeGuard against the real route metadata (only
+// PrismaReadService is faked), so this fails if the decorators are dropped,
+// point at the wrong param, or the guard stops refusing out-of-scope admins.
+// Unit specs above stub the guard out and cannot see any of that.
+describe('ProgramScoringController write-route scope enforcement (real AdminScopeGuard)', () => {
+  const BRAND_ADMIN = {
+    accessLevel: 3,
+    canManageAdmins: false,
+    canAssignRoles: false,
+    customPermissions: [],
+    role: { name: 'admin', permissions: [] },
+    adminBrands: [{ brandId: 'brand-a', permissions: [] }],
+    adminPrograms: [],
+  };
+  const PLATFORM_ADMIN = { ...BRAND_ADMIN, accessLevel: 10, role: { name: 'super admin', permissions: ['*'] }, adminBrands: [] };
+
+  const prismaRead = { admin: { findUnique: jest.fn() }, program: { findUnique: jest.fn() } };
+  const guard = new AdminScopeGuard(new Reflector(), prismaRead as unknown as PrismaReadService);
+
+  function contextFor(handler: (...args: never[]) => unknown, params: Record<string, string>): ExecutionContext {
+    const request = { user: { adminId: 'admin-1' }, params };
+    return {
+      getHandler: () => handler,
+      getClass: () => ProgramScoringController,
+      switchToHttp: () => ({ getRequest: () => request }),
+    } as unknown as ExecutionContext;
+  }
+
+  const routes: Array<[string, (...args: never[]) => unknown, Record<string, string>]> = [
+    ['PUT :programId/scoring-rubrics/:stage', ProgramScoringController.prototype.upsertScoringRubric, { stage: 'application' }],
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prismaRead.program.findUnique.mockImplementation(({ where }: { where: { id: string } }) =>
+      Promise.resolve({ id: where.id, brandId: where.id === 'prog-a' ? 'brand-a' : 'brand-b', name: 'P', deletedAt: null }),
+    );
+  });
+
+  it.each(routes)('%s: a brand-scoped admin is refused (404) on another brand\'s program', async (_name, handler, params) => {
+    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+    await expect(guard.canActivate(contextFor(handler, { ...params, programId: 'prog-b' }))).rejects.toThrow(NotFoundException);
+  });
+
+  it.each(routes)('%s: a brand-scoped admin passes on a program in their own brand', async (_name, handler, params) => {
+    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+    await expect(guard.canActivate(contextFor(handler, { ...params, programId: 'prog-a' }))).resolves.toBe(true);
+  });
+
+  it.each(routes)('%s: a platform admin passes on any program', async (_name, handler, params) => {
+    prismaRead.admin.findUnique.mockResolvedValue(PLATFORM_ADMIN);
+    await expect(guard.canActivate(contextFor(handler, { ...params, programId: 'prog-b' }))).resolves.toBe(true);
   });
 });
