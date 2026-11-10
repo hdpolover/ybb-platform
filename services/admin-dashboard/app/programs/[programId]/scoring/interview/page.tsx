@@ -5,6 +5,10 @@ import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { exportApplicationsExcel } from "@/src/shared/api-client";
 import { InterviewParticipantsHeader } from "@/app/components/scoring/InterviewParticipantsHeader";
+import type {
+  FullyFundedSortBy,
+  FullyFundedSortOrder,
+} from "@/app/components/scoring/FullyFundedParticipantsFilters";
 import { InterviewParticipantsTable, INTERVIEW_TAB_SCORE_STATUSES } from "@/app/components/scoring/InterviewParticipantsTable";
 
 export default function InterviewScoringPage({
@@ -24,6 +28,8 @@ export default function InterviewScoringPage({
   );
 
   const [searchValue, setSearchValue] = useState("");
+  const [sortBy, setSortBy] = useState<FullyFundedSortBy>("scoreTotal");
+  const [sortOrder, setSortOrder] = useState<FullyFundedSortOrder>("desc");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
@@ -61,10 +67,18 @@ export default function InterviewScoringPage({
       </div>
 
       <div className="space-y-4">
-        <InterviewParticipantsHeader onSearch={handleSearch} />
+        <InterviewParticipantsHeader
+          onSearch={handleSearch}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSortByChange={setSortBy}
+          onSortOrderChange={setSortOrder}
+        />
         <InterviewParticipantsTable
           programId={resolvedProgramId}
           search={searchValue}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
           resolvedBrandId={resolvedBrandId}
           onExport={handleExport}
           exporting={exporting}

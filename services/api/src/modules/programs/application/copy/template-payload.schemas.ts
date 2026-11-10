@@ -6,6 +6,7 @@ import {
   Prisma,
   PricingFeeType,
   PricingTarget,
+  ScoringStage,
   TimelineCompletionType,
   TimelineType,
 } from '@prisma/client';
@@ -72,6 +73,7 @@ const pricingTargetSchema = enumSchema(PricingTarget);
 const faqCategorySchema = enumSchema(FaqCategory);
 const pricingFeeTypeSchema = enumSchema(PricingFeeType);
 const applicationCategorySchema = enumSchema(ApplicationCategory);
+const scoringStageSchema = enumSchema(ScoringStage);
 
 // form-fields: system-sourced items are intentionally thin (see
 // program-copier.interface.ts's TemplatePayload doc and this plan's Global
@@ -305,6 +307,41 @@ const essaysItemSchema = z
   })
   .strict();
 
+// ScoringRubricCopier: one item per stage's active rubric, nested
+// categories -> criteria. Weights are plain numbers (fractions 0..1);
+// decimalSchema lets exportTemplate hand over Prisma.Decimal rows directly.
+// The weight-sum rule (each level sums to 1) is NOT expressed here — it is
+// cross-field, so applyTemplate enforces it with validateWeightSums.
+const scoringRubricCriterionSchema = z
+  .object({
+    name: z.string().min(1),
+    description: z.string().nullable(),
+    weight: decimalSchema,
+    maxScore: decimalSchema,
+    order: z.number(),
+  })
+  .strict();
+
+const scoringRubricCategorySchema = z
+  .object({
+    name: z.string().min(1),
+    description: z.string().nullable(),
+    weight: decimalSchema,
+    order: z.number(),
+    criteria: z.array(scoringRubricCriterionSchema),
+  })
+  .strict();
+
+const scoringRubricItemSchema = z
+  .object({
+    stage: scoringStageSchema,
+    name: z.string().min(1),
+    description: z.string().nullable(),
+    passThreshold: decimalSchema,
+    categories: z.array(scoringRubricCategorySchema),
+  })
+  .strict();
+
 // Keyed by ProgramCopier.key — adding another copier means adding one
 // entry here, not touching any call site.
 const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
@@ -322,6 +359,7 @@ const TEMPLATE_ITEM_SCHEMAS: Record<string, z.ZodTypeAny> = {
   photos: photosItemSchema,
   'sub-themes': subThemesItemSchema,
   essays: essaysItemSchema,
+  'scoring-rubric': scoringRubricItemSchema,
 };
 
 /**

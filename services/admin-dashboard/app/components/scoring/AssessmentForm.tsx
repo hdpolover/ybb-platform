@@ -387,7 +387,7 @@ export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormPro
     return (
       <EmptyState
         title="No rubric configured"
-        description={`No ${stage} rubric has been set up for this program yet. A super admin can create one on the Rubric page.`}
+        description={`No ${stage} rubric has been set up for this program yet. A program admin can create one on the Rubric page, or copy one from another program.`}
       />
     );
   }

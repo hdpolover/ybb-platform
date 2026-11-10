@@ -47,6 +47,7 @@ import { LandingCopier } from './application/copy/copiers/landing.copier';
 import { SpeakersCopier } from './application/copy/copiers/speakers.copier';
 import { TestimonialsCopier } from './application/copy/copiers/testimonials.copier';
 import { PhotosCopier } from './application/copy/copiers/photos.copier';
+import { ScoringRubricCopier } from './application/copy/copiers/scoring-rubric.copier';
 import {
   GetContentTemplatesHandler,
   GetContentTemplateByIdHandler,
@@ -258,6 +259,7 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
     TestimonialsCopier,
     PhotosCopier,
     EssaysCopier,
+    ScoringRubricCopier,
     {
       provide: ProgramCopierRegistry,
       useFactory: (...copiers: ProgramCopier[]) => new ProgramCopierRegistry(...copiers),
@@ -276,6 +278,7 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
         TestimonialsCopier,
         PhotosCopier,
         EssaysCopier,
+        ScoringRubricCopier,
       ],
     },
 

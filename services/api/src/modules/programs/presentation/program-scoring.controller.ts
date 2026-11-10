@@ -15,7 +15,9 @@ import { ScoringStage } from '@prisma/client';
 import { JwtAuthGuard } from '../../../modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
+import { AdminPermissionGuard, RequiresProgramPermission } from '@shared/guards/admin-permission.guard';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import { UserRole } from '@core/entities/user.entity';
 import { resolveActingAdminId } from '@shared/utils/resolve-acting-admin-id';
 import { GetScoringRubricsHandler } from '../application/queries/handlers/get-scoring-rubrics.handler';
@@ -92,11 +94,18 @@ export class ProgramScoringController {
     );
   }
 
+  // RolesGuard only compares the coarse role, so ADMIN alone would let a
+  // brand/program-scoped admin mint rubrics for any program by id.
+  // AdminScopeGuard + @ScopedBy narrows it to programs the caller's scope covers.
+  // The rubric is program configuration, so it also needs program:write:
+  // a reviewer (review:write) scores against it but must not change it.
   @Put(':programId/scoring-rubrics/:stage')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SUPER_ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
+  @RequiresProgramPermission(['program:write'])
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Mint a new rubric version for a stage (super admin only)' })
+  @ApiOperation({ summary: 'Mint a new rubric version for a stage (admin with program:write, scoped to their programs)' })
   async upsertScoringRubric(
     @Param('programId') programId: string,
     @Param('stage') stageParam: string,

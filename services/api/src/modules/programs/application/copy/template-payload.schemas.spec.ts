@@ -324,6 +324,34 @@ describe('parseTemplateItems', () => {
     expect(() => parseTemplateItems('program-details', [{ requirementsDescription: 1 }])).toThrow(BadRequestException);
   });
 
+  it('scoring-rubric: accepts the nested shape, normalizing Prisma.Decimal weights to numbers', () => {
+    const item = {
+      stage: 'interview',
+      name: 'Interview rubric',
+      description: 'Panel',
+      passThreshold: new Prisma.Decimal(80),
+      categories: [
+        {
+          name: 'Fit',
+          description: null,
+          weight: new Prisma.Decimal(1),
+          order: 0,
+          criteria: [{ name: 'Motivation', description: null, weight: new Prisma.Decimal('0.5'), maxScore: new Prisma.Decimal(10), order: 0 }],
+        },
+      ],
+    };
+    const [parsed] = parseTemplateItems('scoring-rubric', [item]) as any[];
+    expect(parsed.passThreshold).toBe(80);
+    expect(parsed.categories[0].weight).toBe(1);
+    expect(parsed.categories[0].criteria[0]).toMatchObject({ weight: 0.5, maxScore: 10 });
+  });
+
+  it('scoring-rubric: rejects an unknown stage and a nameless category', () => {
+    expect(() => parseTemplateItems('scoring-rubric', [{ stage: 'final' }])).toThrow(BadRequestException);
+    const noName = { stage: 'application', name: 'R', description: null, passThreshold: 75, categories: [{ name: '', description: null, weight: 1, order: 0, criteria: [] }] };
+    expect(() => parseTemplateItems('scoring-rubric', [noName])).toThrow(BadRequestException);
+  });
+
   // Every schema is .strict() so a field an entityType's copier doesn't
   // recognize is a loud validation failure instead of a silent drop — the
   // form-fields media fields (mediaUrl/mediaAlt/helpAssets) were exactly
@@ -383,6 +411,21 @@ describe('parseTemplateItems', () => {
         },
       ],
       ['program-details', { requirementsDescription: null, benefitsDescription: null, termsAndConditions: null }],
+      ['scoring-rubric', {
+  stage: 'application',
+  name: 'Application rubric',
+  description: null,
+  passThreshold: 75,
+  categories: [
+    {
+      name: 'Essay',
+      description: null,
+      weight: 1,
+      order: 0,
+      criteria: [{ name: 'Clarity', description: null, weight: 1, maxScore: 100, order: 0 }],
+    },
+  ],
+}],
     ])('%s', (entityType, validItem) => {
       expect(() => parseTemplateItems(entityType, [{ ...validItem, unexpectedField: 'nope' }])).toThrow(BadRequestException);
     });

@@ -6,6 +6,7 @@ import { listApplications, type Application } from "@/src/shared/api-client";
 import { EmptyState } from "@/src/admin/empty-state";
 import { formatDate } from "@/lib/utils";
 import { ScoreStatusBadge } from "./ScoreStatusBadge";
+import type { FullyFundedSortBy, FullyFundedSortOrder } from "./FullyFundedParticipantsFilters";
 
 /**
  * Scoring never sets status = interview_scheduled; it sets scoreStatus. The tab
@@ -19,6 +20,8 @@ interface InterviewParticipantsTableProps {
   exporting?: boolean;
   programId?: string;
   search?: string;
+  sortBy?: FullyFundedSortBy;
+  sortOrder?: FullyFundedSortOrder;
   resolvedBrandId?: string;
 }
 
@@ -27,6 +30,8 @@ export function InterviewParticipantsTable({
   exporting,
   programId,
   search,
+  sortBy,
+  sortOrder,
 }: InterviewParticipantsTableProps) {
   const [items, setItems] = useState<Application[]>([]);
   const [total, setTotal] = useState(0);
@@ -34,6 +39,14 @@ export function InterviewParticipantsTable({
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const pageSize = 10;
+
+  // Back to page 1 whenever the query changes (render-time guard, not an effect).
+  const queryKey = `${search ?? ""}|${sortBy}|${sortOrder}`;
+  const [prevQueryKey, setPrevQueryKey] = useState(queryKey);
+  if (queryKey !== prevQueryKey) {
+    setPrevQueryKey(queryKey);
+    setPage(1);
+  }
 
   const fetchData = useCallback(async () => {
     if (!programId) return;
@@ -44,6 +57,8 @@ export function InterviewParticipantsTable({
         programId,
         scoreStatus: [...INTERVIEW_TAB_SCORE_STATUSES],
         search: search || undefined,
+        sortBy,
+        sortOrder,
         limit: pageSize,
         offset: (page - 1) * pageSize,
       });
@@ -54,21 +69,19 @@ export function InterviewParticipantsTable({
     } finally {
       setLoading(false);
     }
-  }, [programId, search, page, pageSize]);
+  }, [programId, search, sortBy, sortOrder, page, pageSize]);
 
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [search]);
-
   const rows = items.map((app) => ({
     id: app.id,
     name: app.participant?.fullName ?? "Unknown",
     email: app.participant?.email ?? "",
+    country: app.participant?.nationality ?? app.participant?.originCountry ?? "",
     registeredOn: formatDate(app.createdAt),
+    scoreTotal: app.scoreTotal,
     scoreStatus: app.scoreStatus,
   }));
 
@@ -104,26 +117,28 @@ export function InterviewParticipantsTable({
             <tr className="border-y border-zinc-200 bg-zinc-50 text-[11px] uppercase tracking-wide text-zinc-500">
               <th className="w-10 px-3 py-2">#</th>
               <th className="px-3 py-2">Participant Details</th>
+              <th className="px-3 py-2">Country</th>
               <th className="px-3 py-2">Registered On</th>
+              <th className="px-3 py-2">Score</th>
               <th className="px-3 py-2">Score Status</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={4}>
+                <td colSpan={6}>
                   <div className="py-8 text-center text-sm text-zinc-500">Loading...</div>
                 </td>
               </tr>
             ) : error ? (
               <tr>
-                <td colSpan={4} className="px-3 py-8 text-center text-sm text-red-600">
+                <td colSpan={6} className="px-3 py-8 text-center text-sm text-red-600">
                   {error}
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-3 py-6">
+                <td colSpan={6} className="px-3 py-6">
                   <EmptyState
                     title="No interview participants"
                     description="No participants are currently in the interview stage."
@@ -141,7 +156,13 @@ export function InterviewParticipantsTable({
                     <div className="text-[11px] text-zinc-500">{row.email}</div>
                   </td>
                   <td className="px-3 py-2 align-top">
+                    <div>{row.country || "—"}</div>
+                  </td>
+                  <td className="px-3 py-2 align-top">
                     <div>{row.registeredOn}</div>
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    <span className="text-xs font-semibold text-zinc-900">{row.scoreTotal ?? "—"}</span>
                   </td>
                   <td className="px-3 py-2 align-top">
                     <ScoreStatusBadge status={row.scoreStatus} />

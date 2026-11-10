@@ -13,6 +13,7 @@ import { PaymentsCopier } from './application/copy/copiers/payments.copier';
 import { ProgramDetailsCopier } from './application/copy/copiers/program-details.copier';
 import { ContactCopier } from './application/copy/copiers/contact.copier';
 import { LandingCopier } from './application/copy/copiers/landing.copier';
+import { ScoringRubricCopier } from './application/copy/copiers/scoring-rubric.copier';
 
 // This spec exercises the *exact* provider registration shape used in
 // programs.module.ts for the copy feature: the nine copiers as ordinary
@@ -55,6 +56,7 @@ describe('ProgramsModule copy DI graph', () => {
         ProgramDetailsCopier,
         ContactCopier,
         LandingCopier,
+        ScoringRubricCopier,
         {
           provide: ProgramCopierRegistry,
           useFactory: (...copiers: ProgramCopier[]) => new ProgramCopierRegistry(...copiers),
@@ -68,6 +70,7 @@ describe('ProgramsModule copy DI graph', () => {
             ProgramDetailsCopier,
             ContactCopier,
             LandingCopier,
+            ScoringRubricCopier,
           ],
         },
       ],
@@ -84,8 +87,8 @@ describe('ProgramsModule copy DI graph', () => {
     expect(registry).toBeInstanceOf(ProgramCopierRegistry);
   });
 
-  it('lists exactly nine copiers', () => {
-    expect(registry.list()).toHaveLength(9);
+  it('lists exactly ten copiers', () => {
+    expect(registry.list()).toHaveLength(10);
   });
 
   it.each([
@@ -98,6 +101,7 @@ describe('ProgramsModule copy DI graph', () => {
     ['program-details', ProgramDetailsCopier],
     ['contact', ContactCopier],
     ['landing', LandingCopier],
+    ['scoring-rubric', ScoringRubricCopier],
   ] as const)('get(%s) returns the %s instance', (key, CopierClass) => {
     expect(registry.get(key)).toBeInstanceOf(CopierClass);
   });
