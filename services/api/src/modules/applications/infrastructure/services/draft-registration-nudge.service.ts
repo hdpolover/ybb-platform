@@ -9,6 +9,7 @@ import { startOfWibDay, addDays } from '@shared/utils/wib-time';
 import { isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
 import { buildParticipantSubmissionUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { ACTIVE_PARTICIPANT_WHERE } from '@shared/utils/active-participant.filter';
+import { buildNotificationBrandBlock } from './notification-brand-block.util';
 
 /**
  * Forward-only: only applications created on/after this instant are ever
@@ -243,23 +244,7 @@ function buildClaimWhere(
 
 function buildNudgePayload(candidate: NudgeCandidate, email: string, nudge: NudgeNumber) {
   const rawBrand = candidate.program?.brand ?? null;
-  const brand = rawBrand
-    ? {
-        name: rawBrand.name,
-        primaryColor: rawBrand.primaryColor,
-        logoUrl: rawBrand.logoUrl,
-        websiteUrl: rawBrand.websiteUrl,
-        contactEmail: candidate.program?.contactEmail ?? null,
-        contactAddress: candidate.program?.contactAddress ?? null,
-        socialMediaLinks: rawBrand.socialMediaLinks,
-        settings: rawBrand.settings
-          ? {
-              footerNavigation: rawBrand.settings.footerNavigation,
-              supportEmail: rawBrand.settings.supportEmail,
-            }
-          : null,
-      }
-    : null;
+  const brand = buildNotificationBrandBlock(rawBrand, candidate.program);
 
   return {
     email,

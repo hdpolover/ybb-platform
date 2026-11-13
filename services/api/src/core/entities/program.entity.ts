@@ -55,5 +55,6 @@ export class Program {
         public readonly landingContent?: Record<string, unknown>,
         public readonly partnersCanvaUrl?: string | null,
         public readonly fundingResultsAnnouncedAt?: Date | null,
+        public readonly fundingResultEmailsEnabled?: boolean,
     ) { }
 }

@@ -287,6 +287,7 @@ export class GetProgramDetailHandler {
       registrationOpenDate: program.registrationOpenDate,
       registrationCloseDate: program.registrationCloseDate,
       fundingResultsAnnouncedAt: program.fundingResultsAnnouncedAt ?? null,
+      fundingResultEmailsEnabled: program.fundingResultEmailsEnabled ?? false,
       location: program.location,
       thumbnailUrl: program.thumbnailUrl,
       bannerUrl: program.bannerUrl,

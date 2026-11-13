@@ -282,6 +282,7 @@ export class ProgramRepository implements IProgramRepository {
                 landingContent: data.landingContent as Prisma.InputJsonValue | undefined,
                 partnersCanvaUrl: data.partnersCanvaUrl,
                 fundingResultsAnnouncedAt: data.fundingResultsAnnouncedAt,
+                fundingResultEmailsEnabled: data.fundingResultEmailsEnabled,
             },
             include: {
                 brand: {
@@ -406,6 +407,7 @@ export class ProgramRepository implements IProgramRepository {
             (prismaEntity.landingContent as Record<string, unknown>) ?? {},
             prismaEntity.partnersCanvaUrl ?? null,
             prismaEntity.fundingResultsAnnouncedAt ?? null,
+            prismaEntity.fundingResultEmailsEnabled ?? false,
         );
     }
 }

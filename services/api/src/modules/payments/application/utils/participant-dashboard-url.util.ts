@@ -11,6 +11,12 @@ function normalizeParticipantDashboardBaseUrl(brand: ParticipantBrandUrls): stri
   return base;
 }
 
+export function buildParticipantDashboardUrl(brand: ParticipantBrandUrls): string {
+  const base = normalizeParticipantDashboardBaseUrl(brand);
+  if (!base) return '';
+  return `${base}/dashboard`;
+}
+
 export function buildParticipantPaymentsUrl(brand: ParticipantBrandUrls): string {
   const base = normalizeParticipantDashboardBaseUrl(brand);
   if (!base) return '';
