@@ -481,6 +481,88 @@ describe('EventsController.handleDraftNudge', () => {
   });
 });
 
+describe('EventsController.handleFundingResult', () => {
+  let controller: EventsController;
+  let sendFundingResultEmail: jest.Mock;
+  let shouldProcess: jest.Mock;
+
+  beforeEach(() => {
+    sendFundingResultEmail = jest.fn().mockResolvedValue(undefined);
+    shouldProcess = jest.fn().mockResolvedValue({
+      shouldProcess: true,
+      dedupeKey: 'key',
+      reason: 'new',
+    });
+    controller = new EventsController(
+      { sendFundingResultEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess,
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+      {
+        emit: jest.fn().mockResolvedValue(true),
+      } as unknown as RabbitMQProducerService,
+    );
+  });
+
+  const payload = {
+    email: 'jane@example.com',
+    customer_name: 'Jane Doe',
+    program_name: 'YBB Summit 2026',
+    application_id: 'app-1',
+    decision: 'awarded',
+    portal_url: 'https://portal.example.com/dashboard',
+    brand: { name: 'YBB' },
+  };
+
+  it('sends the funding result with the mapped fields', async () => {
+    await controller.handleFundingResult(payload, makeContext());
+
+    expect(sendFundingResultEmail).toHaveBeenCalledWith('jane@example.com', {
+      name: 'Jane Doe',
+      program: 'YBB Summit 2026',
+      decision: 'awarded',
+      portalUrl: 'https://portal.example.com/dashboard',
+      brand: { name: 'YBB' },
+    });
+  });
+
+  it('passes not_awarded through and tolerates an empty name', async () => {
+    await controller.handleFundingResult(
+      { ...payload, customer_name: '', decision: 'not_awarded' },
+      makeContext(),
+    );
+
+    expect(sendFundingResultEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({ name: undefined, decision: 'not_awarded' }),
+    );
+  });
+
+  it('sends nothing for an unknown or missing decision', async () => {
+    await controller.handleFundingResult({ ...payload, decision: 'maybe' }, makeContext());
+    await controller.handleFundingResult({ ...payload, decision: undefined }, makeContext());
+
+    expect(sendFundingResultEmail).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the payload has no email', async () => {
+    await controller.handleFundingResult({ decision: 'awarded' }, makeContext());
+
+    expect(sendFundingResultEmail).not.toHaveBeenCalled();
+  });
+
+  it('does not send a duplicate delivery of the same message', async () => {
+    shouldProcess.mockResolvedValueOnce({ shouldProcess: false, dedupeKey: 'key', reason: 'duplicate' });
+
+    await controller.handleFundingResult(payload, makeContext());
+
+    expect(sendFundingResultEmail).not.toHaveBeenCalled();
+  });
+});
+
 describe('EventsController.handleApplicationSubmitted', () => {
   let controller: EventsController;
   let sendApplicationSubmittedEmail: jest.Mock;

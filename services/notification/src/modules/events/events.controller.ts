@@ -288,6 +288,44 @@ export class EventsController {
     );
   }
 
+  @EventPattern('notification.funding_result')
+  async handleFundingResult(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'notification.funding_result',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received notification.funding_result event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        if (!email) return;
+
+        // Never guess: a wrong "you were selected" email is worse than none.
+        const decision = getString(payload, 'decision');
+        if (decision !== 'awarded' && decision !== 'not_awarded') {
+          this.logger.warn(
+            `Ignoring notification.funding_result with unknown decision for application ${getString(payload, 'application_id')}`,
+          );
+          return;
+        }
+
+        await this.emailService.sendFundingResultEmail(email, {
+          name: getString(payload, 'customer_name'),
+          program: getString(payload, 'program_name'),
+          decision,
+          portalUrl: getString(payload, 'portal_url') || '#',
+          brand: payload.brand ?? undefined,
+        });
+      },
+    );
+  }
+
   @EventPattern('application.submitted')
   async handleApplicationSubmitted(
     @Payload() data: unknown,

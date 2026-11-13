@@ -691,6 +691,37 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
+  // Fully Funded selection result. Factual and transactional: no fee amounts,
+  // no dates promised. Not awarded is not a rejection - the applicant can still
+  // join as Self-Funded - and the copy must keep saying so.
+  async sendFundingResultEmail(
+    to: string,
+    data: {
+      name?: string;
+      program?: string;
+      decision: 'awarded' | 'not_awarded';
+      portalUrl: string;
+      brand?: any;
+    },
+  ) {
+    const templateData = {
+      // full_name is '' until onboarding; never render "Hi ,".
+      name: data.name?.trim() || 'there',
+      program: data.program,
+      isAwarded: data.decision === 'awarded',
+      portalUrl: data.portalUrl,
+      brand: data.brand,
+    };
+    const baseSubject = 'Your Fully Funded Result';
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'funding_result',
+      fallbackTemplateName: 'funding-result',
+      fallbackSubject: this.subjectWithProgram(baseSubject, baseSubject, data.program),
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
   // The ONLY message in the system permitted to say an application is
   // approved — every other acceptance-adjacent email (LoA-ready, reminders)
   // must stay silent on approval status so this stays the single source of

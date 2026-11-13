@@ -187,4 +187,70 @@ describe('EmailService fallback subjects', () => {
       expect(html).toContain('December 21, 2026');
     });
   });
+
+  describe('sendFundingResultEmail', () => {
+    const base = {
+      name: 'Jane',
+      portalUrl: 'https://www.example.com/dashboard',
+    };
+
+    it('puts the program in the subject, with a generic fallback', async () => {
+      await service.sendFundingResultEmail('j@example.com', {
+        ...base,
+        decision: 'awarded',
+        program: 'Korea Youth Summit',
+      });
+      await service.sendFundingResultEmail('j@example.com', {
+        ...base,
+        decision: 'not_awarded',
+        program: '',
+      });
+
+      expect(sendRawEmail.mock.calls[0][1]).toBe('Your Fully Funded Result - Korea Youth Summit');
+      expect(sendRawEmail.mock.calls[1][1]).toBe('Your Fully Funded Result');
+    });
+
+    it('awarded: congratulates, points to the portal next steps, links the portal', async () => {
+      await service.sendFundingResultEmail('j@example.com', {
+        ...base,
+        decision: 'awarded',
+        program: 'Korea Youth Summit',
+      });
+
+      const html = sendRawEmail.mock.calls[0][2] as string;
+      expect(html).toContain('Congratulations, Jane!');
+      expect(html).toContain('selected for the Fully Funded scheme');
+      expect(html).toContain('Your next steps are in the participant portal');
+      expect(html).toContain('href="https://www.example.com/dashboard"');
+      expect(html).not.toContain('Self-Funded');
+      expect(html).not.toMatch(/undefined|Hi ,/);
+    });
+
+    it('not awarded: factual, offers Self-Funded, no congratulations', async () => {
+      await service.sendFundingResultEmail('j@example.com', {
+        ...base,
+        decision: 'not_awarded',
+        program: 'Korea Youth Summit',
+      });
+
+      const html = sendRawEmail.mock.calls[0][2] as string;
+      expect(html).toContain('not able to select you for the Fully Funded scheme this time');
+      expect(html).toContain('still join the program as a Self-Funded participant');
+      expect(html).toContain('details are in your participant portal');
+      expect(html).toContain('href="https://www.example.com/dashboard"');
+      expect(html).not.toContain('Congratulations');
+      expect(html).not.toMatch(/undefined|Hi ,/);
+    });
+
+    it.each(['awarded', 'not_awarded'] as const)(
+      '%s: falls back to "there" when full_name is blank',
+      async (decision) => {
+        await service.sendFundingResultEmail('j@example.com', { ...base, name: '', decision });
+
+        const html = sendRawEmail.mock.calls[0][2] as string;
+        expect(html).toContain('there');
+        expect(html).not.toMatch(/undefined|Hi ,|Congratulations, !/);
+      },
+    );
+  });
 });
