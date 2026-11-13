@@ -155,7 +155,9 @@ export class PortalSubmitApplicationHandler {
 
         // Only the writer that won the draft->submitted race reaches here, so a
         // double-tap emits once; the notification side also dedupes on messageId.
-        await this.emitApplicationSubmittedNotification(application, submittedAt);
+        // Not awaited: the producer has no publish timeout, so a broker outage
+        // would otherwise hang an already-persisted submit. The helper never rejects.
+        void this.emitApplicationSubmittedNotification(application, submittedAt);
 
         await this.invalidateCaches(userId, participant.id);
 
