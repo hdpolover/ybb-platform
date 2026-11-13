@@ -20,6 +20,7 @@ const VALUES: ProgramSpecificsFormValues = {
   registrationOpenDate: "2026-10-05T23:59",
   registrationCloseDate: "2027-04-10T23:59",
   fundingResultsAnnouncedAt: "",
+  fundingResultEmailsEnabled: false,
   requirementsDescription: "",
   benefitsDescription: "",
   termsAndConditions: "",
@@ -67,6 +68,38 @@ describe("EditProgramSpecificsModal registration switch", () => {
 
     await waitFor(() =>
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ allowRegistration: true })),
+    );
+  });
+});
+
+describe("EditProgramSpecificsModal FF result emails", () => {
+  const LABEL = /^Email FF results to applicants when announced/;
+
+  it("loads the saved value (off by default)", () => {
+    renderModal(VALUES);
+
+    expect(screen.getByRole("checkbox", { name: LABEL })).not.toBeChecked();
+  });
+
+  it("submits true after the box is ticked", async () => {
+    const onSubmit = renderModal(VALUES);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: LABEL }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ fundingResultEmailsEnabled: true })),
+    );
+  });
+
+  it("keeps a saved true value when untouched", async () => {
+    const onSubmit = renderModal({ ...VALUES, fundingResultEmailsEnabled: true });
+
+    expect(screen.getByRole("checkbox", { name: LABEL })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ fundingResultEmailsEnabled: true })),
     );
   });
 });

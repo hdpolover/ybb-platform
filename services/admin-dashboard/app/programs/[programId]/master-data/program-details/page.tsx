@@ -59,6 +59,7 @@ type ProgramDetail = {
   registrationOpenDate?: string | null;
   registrationCloseDate?: string | null;
   fundingResultsAnnouncedAt?: string | null;
+  fundingResultEmailsEnabled?: boolean;
   location?: string | null;
   capacity?: number | null;
   logoUrl?: string | null;
@@ -248,6 +249,7 @@ function toSpecificsFormValues(detail: ProgramDetail): ProgramSpecificsFormValue
     registrationOpenDate: toLocalDatetimeInputValue(detail.registrationOpenDate),
     registrationCloseDate: toLocalDatetimeInputValue(detail.registrationCloseDate),
     fundingResultsAnnouncedAt: toLocalDatetimeInputValue(detail.fundingResultsAnnouncedAt),
+    fundingResultEmailsEnabled: detail.fundingResultEmailsEnabled ?? false,
     requirementsDescription: detail.requirementsDescription ?? "",
     benefitsDescription: detail.benefitsDescription ?? "",
     termsAndConditions: detail.termsAndConditions ?? "",
@@ -376,6 +378,7 @@ export default function ProgramDetailsPage({
         registrationOpenDate: toUtcIsoFromLocalInput(values.registrationOpenDate),
         registrationCloseDate: toUtcIsoFromLocalInput(values.registrationCloseDate),
         fundingResultsAnnouncedAt: toUtcIsoFromLocalInput(values.fundingResultsAnnouncedAt),
+        fundingResultEmailsEnabled: values.fundingResultEmailsEnabled,
         requirementsDescription: values.requirementsDescription.trim() || undefined,
         benefitsDescription: values.benefitsDescription.trim() || undefined,
         termsAndConditions: values.termsAndConditions.trim() || undefined,

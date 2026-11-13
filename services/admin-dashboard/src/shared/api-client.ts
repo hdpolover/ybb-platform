@@ -1274,6 +1274,8 @@ export type ProgramConfig = {
   usdInIdr: number | null;
   /** ISO instant after which applicants can see their Fully Funded result; null = not scheduled. */
   fundingResultsAnnouncedAt?: string | null;
+  /** Opt-in: email applicants their FF result once the announcement date has passed. */
+  fundingResultEmailsEnabled?: boolean;
 };
 
 export function getProgramConfig(programId: string): Promise<ProgramConfig> {
