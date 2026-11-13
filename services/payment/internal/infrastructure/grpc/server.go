@@ -281,6 +281,27 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 		}
 	}
 
+	// Manual methods: one NEEDS_REVIEW transaction per intent (migration 024).
+	// A repeat call returns the one already awaiting review instead of a second row.
+	var manualMeta map[string]string
+	if method.Type.IsManual() {
+		manualMeta = map[string]string{
+			"is_manual":      "true",
+			"bank_name":      method.BankName,
+			"account_number": method.AccountNumber,
+			"account_name":   method.AccountName,
+			"instructions":   method.Instructions,
+		}
+		existing, findErr := services.FindNeedsReviewTransaction(ctx, s.txRepo, intent.ID)
+		if findErr != nil {
+			s.failIdempotency(ctx, idempotencyRecord, findErr)
+			return nil, status.Errorf(codes.Internal, "failed to look up existing manual transaction: %v", findErr)
+		}
+		if existing != nil {
+			return s.manualProcessResponse(ctx, idempotencyRecord, existing, manualMeta), nil
+		}
+	}
+
 	// 3. Create Transaction (Pending)
 	tx := entities.NewPaymentTransaction(intent.ID, req.PaymentMethodId, chargeTotal)
 	tx.GatewayConfigID = gatewayConfigID
@@ -290,44 +311,31 @@ func (s *PaymentGrpcServer) ProcessPayment(ctx context.Context, req *pb.ProcessP
 	tx.NetAmount = chargeNet
 	tx.Currency = chargeCurrency
 
+	if method.Type.IsManual() {
+		// Manual payments are waiting for proof/admin review. Written in the
+		// single insert so the NEEDS_REVIEW unique index is hit at Create, not at
+		// a later Update whose error used to be dropped.
+		tx.Status = entities.TransactionStatusNeedsReview
+		gwRespMap := map[string]interface{}{}
+		for k, v := range manualMeta {
+			gwRespMap[k] = v
+		}
+		tx.GatewayResponse, _ = json.Marshal(gwRespMap)
+	}
+
 	if err := s.txRepo.Create(ctx, tx); err != nil {
+		if method.Type.IsManual() && errors.Is(err, exceptions.ErrDuplicateNeedsReview) {
+			winner, findErr := services.FindNeedsReviewTransaction(ctx, s.txRepo, intent.ID)
+			if findErr == nil && winner != nil {
+				return s.manualProcessResponse(ctx, idempotencyRecord, winner, manualMeta), nil
+			}
+		}
 		s.failIdempotency(ctx, idempotencyRecord, err)
 		return nil, status.Errorf(codes.Internal, "failed to create transaction: %v", err)
 	}
 
-	// Special Handling for Manual Methods
 	if method.Type.IsManual() {
-		// Create metadata with bank info
-		meta := map[string]string{
-			"is_manual":      "true",
-			"bank_name":      method.BankName,
-			"account_number": method.AccountNumber,
-			"account_name":   method.AccountName,
-			"instructions":   method.Instructions,
-		}
-
-		// Manual payments are waiting for proof/admin review.
-		tx.Status = entities.TransactionStatusNeedsReview
-
-		// Save metadata to tx.GatewayResponse
-		gwRespMap := map[string]interface{}{}
-		for k, v := range meta {
-			gwRespMap[k] = v
-		}
-		rawBytes, _ := json.Marshal(gwRespMap)
-		tx.GatewayResponse = rawBytes
-		s.txRepo.Update(ctx, tx)
-
-		response := &pb.ProcessPaymentResponse{
-			Status:        string(tx.Status),
-			TransactionId: tx.ID,
-			Action: &pb.ProcessPaymentAction{
-				Type: "manual_transfer",
-			},
-			Metadata: meta,
-		}
-		s.completeIdempotency(ctx, idempotencyRecord, tx.ID, response)
-		return response, nil
+		return s.manualProcessResponse(ctx, idempotencyRecord, tx, manualMeta), nil
 	}
 
 	// Parse Payment Details
@@ -650,11 +658,34 @@ func toIDR(amount float64, rate float64) float64 {
 	return math.Round(amount * rate)
 }
 
+func (s *PaymentGrpcServer) manualProcessResponse(ctx context.Context, record *entities.PaymentIdempotencyKey, tx *entities.PaymentTransaction, meta map[string]string) *pb.ProcessPaymentResponse {
+	response := &pb.ProcessPaymentResponse{
+		Status:        string(tx.Status),
+		TransactionId: tx.ID,
+		Action:        &pb.ProcessPaymentAction{Type: "manual_transfer"},
+		Metadata:      meta,
+	}
+	s.completeIdempotency(ctx, record, tx.ID, response)
+	return response
+}
+
 func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.SubmitManualPaymentRequest) (*pb.SubmitManualPaymentResponse, error) {
 	// 1. Get Intent
 	intent, err := s.intentRepo.FindByID(ctx, req.IntentId)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "intent not found")
+	}
+
+	// At most one NEEDS_REVIEW transaction per intent (migration 024). A repeat
+	// submit (double-click, bot burst) returns the one already awaiting review:
+	// first proof wins, nothing is overwritten under an admin who may be
+	// reviewing it, and no second payment.created event goes out.
+	existing, err := services.FindNeedsReviewTransaction(ctx, s.txRepo, intent.ID)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to look up existing manual transaction: %v", err)
+	}
+	if existing != nil {
+		return manualSubmitResponse(existing), nil
 	}
 
 	// 2. Create Transaction. Manual submissions go straight to NEEDS_REVIEW so the
@@ -715,15 +746,26 @@ func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.Sub
 
 	// Persist Transaction
 	if err := s.txRepo.Create(ctx, tx); err != nil {
+		if errors.Is(err, exceptions.ErrDuplicateNeedsReview) {
+			// Lost a race against a concurrent submit: return the winner, publish nothing.
+			winner, findErr := services.FindNeedsReviewTransaction(ctx, s.txRepo, intent.ID)
+			if findErr == nil && winner != nil {
+				return manualSubmitResponse(winner), nil
+			}
+		}
 		return nil, status.Errorf(codes.Internal, "failed to create manual transaction: %v", err)
 	}
 
 	s.publisher.Publish(ctx, event)
 
+	return manualSubmitResponse(tx), nil
+}
+
+func manualSubmitResponse(tx *entities.PaymentTransaction) *pb.SubmitManualPaymentResponse {
 	return &pb.SubmitManualPaymentResponse{
 		Status:        "PENDING_REVIEW", // Informational string for frontend
 		TransactionId: tx.ID,
-	}, nil
+	}
 }
 
 func (s *PaymentGrpcServer) VerifyManualPayment(ctx context.Context, req *pb.VerifyManualPaymentRequest) (*pb.VerifyManualPaymentResponse, error) {

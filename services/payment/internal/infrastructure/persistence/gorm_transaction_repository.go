@@ -2,14 +2,33 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/domain/exceptions"
 	"github.com/ybb-platform/payment/internal/domain/repositories"
 )
+
+// needsReviewIndexName is the partial unique index from migration 024.
+const needsReviewIndexName = "idx_payment_transactions_one_needs_review_per_intent"
+
+// isNeedsReviewConflict matches the 024 index specifically (by constraint
+// name) so no other unique violation is misreported as a duplicate review.
+func isNeedsReviewConflict(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolationCode && pgErr.ConstraintName == needsReviewIndexName
+}
+
+func wrapTxWriteError(op string, err error) error {
+	if isNeedsReviewConflict(err) {
+		return fmt.Errorf("failed to %s transaction: %w", op, exceptions.ErrDuplicateNeedsReview)
+	}
+	return fmt.Errorf("failed to %s transaction: %w", op, err)
+}
 
 type GormPaymentTransactionRepository struct {
 	db *gorm.DB
@@ -21,7 +40,7 @@ func NewGormPaymentTransactionRepository(db *gorm.DB) repositories.PaymentTransa
 
 func (r *GormPaymentTransactionRepository) Create(ctx context.Context, tx *entities.PaymentTransaction) error {
 	if err := r.db.WithContext(ctx).Create(tx).Error; err != nil {
-		return fmt.Errorf("failed to create transaction: %w", err)
+		return wrapTxWriteError("create", err)
 	}
 	return nil
 }
@@ -39,7 +58,7 @@ func (r *GormPaymentTransactionRepository) FindByID(ctx context.Context, id stri
 
 func (r *GormPaymentTransactionRepository) Update(ctx context.Context, tx *entities.PaymentTransaction) error {
 	if err := r.db.WithContext(ctx).Save(tx).Error; err != nil {
-		return fmt.Errorf("failed to update transaction: %w", err)
+		return wrapTxWriteError("update", err)
 	}
 	return nil
 }
