@@ -130,4 +130,61 @@ describe('EmailService fallback subjects', () => {
       },
     );
   });
+
+  describe('sendDraftNudgeEmail', () => {
+    const base = {
+      name: 'Jane',
+      nudgeNumber: 1,
+      submissionUrl: 'https://www.example.com/dashboard/submission',
+    };
+
+    it('uses the program in the subject, with a stronger subject for nudge 2', async () => {
+      await service.sendDraftNudgeEmail('j@example.com', { ...base, program: 'Korea Youth Summit' });
+      await service.sendDraftNudgeEmail('j@example.com', {
+        ...base,
+        nudgeNumber: 2,
+        program: 'Korea Youth Summit',
+      });
+
+      expect(sendRawEmail.mock.calls[0][1]).toBe('Complete Your Registration - Korea Youth Summit');
+      expect(sendRawEmail.mock.calls[1][1]).toBe(
+        'Last Reminder: Complete Your Registration - Korea Youth Summit',
+      );
+    });
+
+    it('falls back to a generic subject without a program', async () => {
+      await service.sendDraftNudgeEmail('j@example.com', { ...base, program: '' });
+      await service.sendDraftNudgeEmail('j@example.com', { ...base, nudgeNumber: 2 });
+
+      expect(sendRawEmail.mock.calls[0][1]).toBe('Complete Your Registration');
+      expect(sendRawEmail.mock.calls[1][1]).toBe('Last Reminder: Complete Your Registration');
+    });
+
+    it('renders without a deadline: no deadline line, no "undefined", no blank greeting', async () => {
+      await service.sendDraftNudgeEmail('j@example.com', {
+        ...base,
+        name: '',
+        program: 'Korea Youth Summit',
+      });
+
+      const html = sendRawEmail.mock.calls[0][2] as string;
+      expect(html).toContain('Hi there,');
+      expect(html).toContain('Korea Youth Summit');
+      expect(html).toContain('registration fee is required');
+      expect(html).toContain('https://www.example.com/dashboard/submission');
+      expect(html).not.toContain('Submission deadline');
+      expect(html).not.toMatch(/undefined|Hi ,/);
+    });
+
+    it('renders the deadline as a WIB calendar date when present', async () => {
+      await service.sendDraftNudgeEmail('j@example.com', {
+        ...base,
+        deadline: '2026-12-20T17:30:00.000Z', // 21 Dec 00:30 WIB
+      });
+
+      const html = sendRawEmail.mock.calls[0][2] as string;
+      expect(html).toContain('Submission deadline');
+      expect(html).toContain('December 21, 2026');
+    });
+  });
 });

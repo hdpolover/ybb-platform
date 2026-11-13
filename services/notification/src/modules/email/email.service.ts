@@ -646,6 +646,51 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
+  // Lifecycle nudge to a draft that never started the registration fee.
+  // Factual and transactional: no promises, no marketing. Nudge 2 is the
+  // last one the system ever sends for the application.
+  async sendDraftNudgeEmail(
+    to: string,
+    data: {
+      name?: string;
+      program?: string;
+      nudgeNumber: number;
+      submissionUrl: string;
+      deadline?: string;
+      brand?: any;
+    },
+  ) {
+    const isLast = data.nudgeNumber >= 2;
+    const baseSubject = isLast
+      ? 'Last Reminder: Complete Your Registration'
+      : 'Complete Your Registration';
+    const deadline = data.deadline ? new Date(data.deadline) : null;
+    const templateData = {
+      // full_name is '' until onboarding; never render "Hi ,".
+      name: data.name?.trim() || 'there',
+      program: data.program,
+      isLast,
+      submissionUrl: data.submissionUrl,
+      deadlineFormatted:
+        deadline && !Number.isNaN(deadline.getTime())
+          ? deadline.toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              timeZone: 'Asia/Jakarta', // program deadlines are in WIB
+            })
+          : undefined,
+      brand: data.brand,
+    };
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'draft_nudge',
+      fallbackTemplateName: 'draft-nudge',
+      fallbackSubject: this.subjectWithProgram(baseSubject, baseSubject, data.program),
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
+  }
+
   // The ONLY message in the system permitted to say an application is
   // approved — every other acceptance-adjacent email (LoA-ready, reminders)
   // must stay silent on approval status so this stays the single source of
