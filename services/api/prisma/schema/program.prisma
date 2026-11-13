@@ -200,6 +200,8 @@ model Program {
 
   // Date FF selection results were (or will be) emailed to applicants.
   fundingResultsAnnouncedAt DateTime? @map("funding_results_announced_at") @db.Timestamptz(6)
+  // Opt-in per program: some programs already emailed FF results by hand.
+  fundingResultEmailsEnabled Boolean @default(false) @map("funding_result_emails_enabled")
 
   // Additional Info
   requirementsDescription String?  @map("requirements_description") @db.Text

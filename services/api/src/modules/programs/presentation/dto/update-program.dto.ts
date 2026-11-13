@@ -97,6 +97,11 @@ export class UpdateProgramDto {
     @IsOptional()
     fundingResultsAnnouncedAt?: string | null;
 
+    @ApiProperty({ description: 'Email Fully Funded results to applicants once the announcement date has passed. Off by default.', required: false })
+    @IsBoolean()
+    @IsOptional()
+    fundingResultEmailsEnabled?: boolean;
+
     @ApiProperty({ description: 'Registration fee', required: false })
     @IsNumber()
     @IsOptional()

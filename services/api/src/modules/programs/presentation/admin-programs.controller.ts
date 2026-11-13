@@ -156,6 +156,7 @@ export class AdminProgramsController {
         contactAddress: program.contactAddress ?? null,
         partnersCanvaUrl: program.partnersCanvaUrl ?? null,
         fundingResultsAnnouncedAt: program.fundingResultsAnnouncedAt ?? null,
+        fundingResultEmailsEnabled: program.fundingResultEmailsEnabled ?? false,
         landingContent: (program.landingContent as Record<string, unknown>) ?? {},
         deletedAt: program.deletedAt ?? null,
         brand: program.brand,

@@ -1,0 +1,39 @@
+<div style="text-align: center;">
+    <h2 style="font-size: 24px; font-weight: 700; color: {{theme.primaryDark}}; margin: 0 0 8px;">
+        {{#if isAwarded}}
+        Congratulations, {{name}}!
+        {{else}}
+        Your Fully Funded Result
+        {{/if}}
+    </h2>
+    <p style="font-size: 16px; color: #6b7280; margin: 0 0 24px;">
+        {{#if isAwarded}}
+        You have been selected for the Fully Funded scheme.
+        {{else}}
+        Hi {{name}}, thank you for applying.
+        {{/if}}
+    </p>
+
+    {{#if program}}
+    <p style="font-size: 13px; color: #6b7280; text-align: center; margin: 0 0 24px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">
+        {{program}}
+    </p>
+    {{/if}}
+
+    {{#if isAwarded}}
+    <p style="font-size: 15px; color: #4b5563; line-height: 1.6; text-align: left; margin: 0 0 24px;">
+        Your next steps are in the participant portal. Sign in to see what to do next.
+    </p>
+    {{else}}
+    <p style="font-size: 15px; color: #4b5563; line-height: 1.6; text-align: left; margin: 0 0 16px;">
+        We were not able to select you for the Fully Funded scheme this time.
+    </p>
+    <p style="font-size: 15px; color: #4b5563; line-height: 1.6; text-align: left; margin: 0 0 24px;">
+        You can still join the program as a Self-Funded participant. The details are in your participant portal.
+    </p>
+    {{/if}}
+
+    <a href="{{portalUrl}}" class="cta-button">
+        Open Your Portal
+    </a>
+</div>

@@ -36,6 +36,8 @@ export interface ProgramSpecificsFormValues {
   registrationCloseDate: string;
   /** datetime-local value (business timezone, WIB); applicants see their Fully Funded result only after this. Empty clears it. */
   fundingResultsAnnouncedAt: string;
+  /** Opt-in: email applicants their FF result once the announcement date has passed. */
+  fundingResultEmailsEnabled: boolean;
   requirementsDescription: string;
   benefitsDescription: string;
   termsAndConditions: string;
@@ -330,6 +332,27 @@ export function EditProgramSpecificsModal({
               Applicants see their Fully Funded result on their dashboard only after this date. Leave empty if
               not scheduled yet. Time is WIB.
             </p>
+            <label
+              htmlFor="ff-result-emails-enabled"
+              className="mt-3 flex cursor-pointer items-start gap-2.5"
+            >
+              <input
+                id="ff-result-emails-enabled"
+                type="checkbox"
+                checked={formValues.fundingResultEmailsEnabled}
+                onChange={(event) => updateField("fundingResultEmailsEnabled", event.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-zinc-300"
+              />
+              <span>
+                <span className="block text-sm font-medium text-zinc-900">
+                  Email FF results to applicants when announced
+                </span>
+                <span className="mt-0.5 block text-xs text-zinc-500">
+                  Sends each applicant with a recorded result an email once the date above has passed, including
+                  results recorded later. Leave off if results were already sent by hand.
+                </span>
+              </span>
+            </label>
           </div>
           <div className="md:col-span-2">
             <label className="mb-1.5 block text-xs font-medium text-zinc-500">Application Deadline</label>

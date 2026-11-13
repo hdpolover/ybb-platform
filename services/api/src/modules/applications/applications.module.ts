@@ -34,6 +34,7 @@ import { ApplicationMapper } from './infrastructure/mappers/application.mapper';
 import { SubmissionDeadlineReminderService } from './infrastructure/services/submission-deadline-reminder.service';
 import { PostPaymentFollowupService } from './infrastructure/services/post-payment-followup.service';
 import { DraftRegistrationNudgeService } from './infrastructure/services/draft-registration-nudge.service';
+import { FundingResultEmailService } from './infrastructure/services/funding-result-email.service';
 import { PrismaModule } from '@shared/infrastructure/prisma/prisma.module';
 import { MetricsCoreModule } from '@shared/infrastructure/monitoring/metrics-core.module';
 import { APPLICATION_REPOSITORY } from './infrastructure/tokens';
@@ -77,6 +78,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
     SubmissionDeadlineReminderService,
     PostPaymentFollowupService,
     DraftRegistrationNudgeService,
+    FundingResultEmailService,
     {
       provide: APPLICATION_REPOSITORY,
       useClass: ApplicationRepository,

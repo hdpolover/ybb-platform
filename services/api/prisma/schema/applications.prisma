@@ -211,6 +211,10 @@ model ParticipantApplication {
   draftNudge1SentAt DateTime? @map("draft_nudge_1_sent_at") @db.Timestamptz(6)
   draftNudge2SentAt DateTime? @map("draft_nudge_2_sent_at") @db.Timestamptz(6)
 
+  // Claim marker for FundingResultEmailService: stamped when the FF result email
+  // is claimed for sending, so the hourly cron never double-fires.
+  fundingResultEmailSentAt DateTime? @map("funding_result_email_sent_at") @db.Timestamptz(6)
+
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedBy   String?   @map("deleted_by") @db.Uuid
   withdrawnBy String?   @map("withdrawn_by") @db.Uuid
