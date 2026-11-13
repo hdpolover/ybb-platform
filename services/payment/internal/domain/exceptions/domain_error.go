@@ -34,6 +34,11 @@ var (
 
 	ErrDuplicateOpenIntent = NewDomainError("DUPLICATE_OPEN_INTENT", "An open payment intent already exists for this reference")
 
+	// ErrDuplicateNeedsReview is raised when a second NEEDS_REVIEW transaction
+	// is written for an intent (migration 024: one per intent). Callers resolve
+	// it by returning the transaction already awaiting review.
+	ErrDuplicateNeedsReview = NewDomainError("DUPLICATE_NEEDS_REVIEW", "A transaction is already awaiting review for this intent")
+
 	// ErrDuplicatePaymentMethod covers the unique constraints on
 	// payment_methods.name and .code. Payment methods are shared master data,
 	// so the name an admin types is unique across every program — a collision

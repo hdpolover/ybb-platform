@@ -135,6 +135,19 @@ func (h *ConfirmIntentHandler) Handle(ctx context.Context, cmd *commands.Confirm
 		return nil, fmt.Errorf("gateway not found: %v", err)
 	}
 
+	// One NEEDS_REVIEW transaction per intent (migration 024): a repeat manual
+	// confirm returns the one already awaiting review instead of a second row.
+	if method.Type.IsManual() {
+		existing, findErr := services.FindNeedsReviewTransaction(ctx, h.txRepo, intent.ID)
+		if findErr != nil {
+			h.failIdempotency(ctx, idempotencyRecord, findErr)
+			return nil, fmt.Errorf("failed to look up existing manual transaction: %w", findErr)
+		}
+		if existing != nil {
+			return h.existingManualResponse(ctx, idempotencyRecord, existing), nil
+		}
+	}
+
 	tx := entities.NewPaymentTransaction(intent.ID, method.Code, intent.Amount)
 	tx.Currency = intent.Currency
 	tx.GatewayReferenceID = ""
@@ -219,6 +232,17 @@ func (h *ConfirmIntentHandler) Handle(ctx context.Context, cmd *commands.Confirm
 
 	// Save Updates
 	if err := h.txRepo.Update(ctx, tx); err != nil {
+		if errors.Is(err, exceptions.ErrDuplicateNeedsReview) {
+			// Lost a race to a concurrent manual confirm: retire our row, return the winner.
+			if winner, findErr := services.FindNeedsReviewTransaction(ctx, h.txRepo, intent.ID); findErr == nil && winner != nil {
+				tx.Status = entities.TransactionStatusVoid
+				tx.AdminNotes = "superseded by concurrent manual confirm " + winner.ID
+				if voidErr := h.txRepo.Update(ctx, tx); voidErr != nil {
+					log.Printf("Failed to void superseded transaction %s: %v", tx.ID, voidErr)
+				}
+				return h.existingManualResponse(ctx, idempotencyRecord, winner), nil
+			}
+		}
 		log.Printf("Failed to update transaction: %v", err)
 	}
 
@@ -236,6 +260,21 @@ func (h *ConfirmIntentHandler) Handle(ctx context.Context, cmd *commands.Confirm
 	log.Printf("confirm_intent_handler completed request_id=%s intent_id=%s transaction_id=%s status=%s", requestID, cmd.IntentID, tx.ID, tx.Status)
 	h.completeIdempotency(ctx, idempotencyRecord, tx.ID, response)
 	return response, nil
+}
+
+func (h *ConfirmIntentHandler) existingManualResponse(ctx context.Context, record *entities.PaymentIdempotencyKey, tx *entities.PaymentTransaction) *dto.ConfirmPaymentResponse {
+	var gatewayResp map[string]interface{}
+	if len(tx.GatewayResponse) > 0 {
+		_ = json.Unmarshal(tx.GatewayResponse, &gatewayResp)
+	}
+	response := &dto.ConfirmPaymentResponse{
+		TransactionID: tx.ID,
+		Status:        string(tx.Status),
+		Action:        &dto.PaymentActionDTO{Type: "manual_instruction"},
+		GatewayResp:   gatewayResp,
+	}
+	h.completeIdempotency(ctx, record, tx.ID, response)
+	return response
 }
 
 func (h *ConfirmIntentHandler) completeIdempotency(ctx context.Context, record *entities.PaymentIdempotencyKey, transactionID string, response *dto.ConfirmPaymentResponse) {

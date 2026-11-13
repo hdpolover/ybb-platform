@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -14,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ybb-platform/payment/internal/domain/entities"
 	"github.com/ybb-platform/payment/internal/domain/events"
+	"github.com/ybb-platform/payment/internal/domain/exceptions"
 	domainGateways "github.com/ybb-platform/payment/internal/domain/gateways"
 	"github.com/ybb-platform/payment/internal/domain/repositories"
 	infraGateways "github.com/ybb-platform/payment/internal/infrastructure/gateways"
@@ -509,6 +511,11 @@ func (h *PaymentHandler) UploadProof(c *gin.Context) {
 		}
 
 		if err := h.txRepo.Update(c.Request.Context(), tx); err != nil {
+			if errors.Is(err, exceptions.ErrDuplicateNeedsReview) {
+				// Another transaction on this intent is already awaiting review (migration 024).
+				c.JSON(http.StatusConflict, gin.H{"error": "another payment proof for this intent is already awaiting review"})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update transaction proof"})
 			return
 		}
