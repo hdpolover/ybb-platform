@@ -516,30 +516,6 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
-  async sendEmailVerifiedEmail(to: string, name: string, brand?: any) {
-    let baseUrl =
-      this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
-    if (brand?.websiteUrl) {
-      baseUrl = brand.websiteUrl.replace(/\/$/, '');
-    }
-
-    const templateData = {
-      name,
-      loginUrl: `${baseUrl}/login`,
-      brand,
-    };
-    const fallbackSubject = brand
-      ? `Email Verified - ${brand.name}`
-      : 'Email Verified';
-    const { subject, html } = await this.resolveEmailContent({
-      type: 'email_verified',
-      fallbackTemplateName: 'email-verified',
-      fallbackSubject,
-      data: templateData,
-    });
-    return this.sendRawEmail(to, subject, html);
-  }
-
   async sendPaymentSuccessEmail(
     to: string,
     paymentData: any,
@@ -619,7 +595,7 @@ export class EmailService {
               year: 'numeric',
               month: 'long',
               day: 'numeric',
-              timeZone: 'UTC',
+              timeZone: 'Asia/Jakarta', // program deadlines are in WIB
             })
           : undefined,
       portalUrl: data.portalUrl,

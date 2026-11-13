@@ -932,31 +932,11 @@ export class EventsController {
     });
   }
 
+  // No email: verify-email already emits user.registered in the same request,
+  // whose Welcome email is the confirmation. The event stays for audit/reporting.
   @EventPattern('user.email-verified')
-  async handleEmailVerified(
-    @Payload() data: unknown,
-    @Ctx() context: RmqContext,
-  ) {
-    const payload = asRecord(data);
-    await this.processEvent(
-      'user.email-verified',
-      payload,
-      context,
-      async () => {
-        this.logger.log(
-          `Received user.email-verified event: ${JSON.stringify(summarizeEventPayload(payload))}`,
-        );
-
-        const email = getString(payload, 'email');
-        if (!email) return;
-
-        await this.emailService.sendEmailVerifiedEmail(
-          email,
-          getString(payload, 'name') || 'there',
-          payload.brand,
-        );
-      },
-    );
+  handleEmailVerified(@Ctx() context: RmqContext) {
+    this.acknowledgeMessage(context, 'user.email-verified', 'skipped');
   }
 
   @EventPattern('user.account-deletion-requested')

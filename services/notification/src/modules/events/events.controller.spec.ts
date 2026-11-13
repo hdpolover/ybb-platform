@@ -1259,3 +1259,26 @@ describe('EventsController.processEvent — failed send retry', () => {
     expect(channel.ack).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('EventsController.handleEmailVerified', () => {
+  it('acks without sending: the Welcome email from user.registered is the confirmation', () => {
+    const emailService = { sendRawEmail: jest.fn(), sendWelcomeEmail: jest.fn() };
+    const controller = new EventsController(
+      emailService as unknown as EmailService,
+      {} as ReceiptService,
+      {} as NotificationIdempotencyService,
+      { emit: jest.fn() } as unknown as RabbitMQProducerService,
+    );
+    const channel = { ack: jest.fn(), nack: jest.fn() };
+    const context = {
+      getMessage: () => ({ content: Buffer.from('{}'), properties: { headers: {} } }),
+      getChannelRef: () => channel,
+    } as unknown as RmqContext;
+
+    controller.handleEmailVerified(context);
+
+    expect(channel.ack).toHaveBeenCalledTimes(1);
+    expect(emailService.sendRawEmail).not.toHaveBeenCalled();
+    expect(emailService.sendWelcomeEmail).not.toHaveBeenCalled();
+  });
+});
