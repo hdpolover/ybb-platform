@@ -77,6 +77,10 @@ services:
       JWT_ADMIN_EXPIRES_IN: ${JWT_ADMIN_EXPIRES_IN:-8h}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       ADMIN_REGISTRATION_SECRET: ${ADMIN_REGISTRATION_SECRET}
+      # Ambassador share links are AES-GCM keyed by this, falling back to
+      # JWT_SECRET when empty. Separate so JWT_SECRET can rotate without
+      # breaking share links already in circulation.
+      AMBASSADOR_SHARE_TOKEN_SECRET: ${AMBASSADOR_SHARE_TOKEN_SECRET:-}
       # Checkout (inline signup + payment). Mapped explicitly: Dokploy UI values
       # never reach the container unless listed here.
       CHECKOUT_ENABLED: ${CHECKOUT_ENABLED:-false}
