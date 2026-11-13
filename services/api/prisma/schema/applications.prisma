@@ -205,6 +205,12 @@ model ParticipantApplication {
   // the registration payment instead of the deadline.
   postPaymentFollowupSentAt DateTime? @map("post_payment_followup_sent_at") @db.Timestamptz(6)
 
+  // Claim markers for DraftRegistrationNudgeService (forward-only lifecycle
+  // nudge to drafts that never paid): nudge 1 at createdAt+2d, nudge 2 at
+  // createdAt+7d. Each is stamped when claimed, so a tick can never re-send it.
+  draftNudge1SentAt DateTime? @map("draft_nudge_1_sent_at") @db.Timestamptz(6)
+  draftNudge2SentAt DateTime? @map("draft_nudge_2_sent_at") @db.Timestamptz(6)
+
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedBy   String?   @map("deleted_by") @db.Uuid
   withdrawnBy String?   @map("withdrawn_by") @db.Uuid
@@ -241,6 +247,8 @@ model ParticipantApplication {
   //   idx_apps_program_status_updated_active     (program_id, status, updated_at DESC)
   //   idx_apps_program_created_active            (program_id, created_at DESC)
   //     ...all WHERE deleted_at IS NULL.
+  //   idx_apps_draft_nudge_candidates (created_at) WHERE status = 'draft' AND
+  //     deleted_at IS NULL AND legacy_id IS NULL AND draft_nudge_2_sent_at IS NULL
   //
   // participantId has no @@index of its own: the unique below already indexes
   // it as the leading column.

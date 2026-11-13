@@ -404,6 +404,83 @@ describe('EventsController.handleSubmissionNudge', () => {
   });
 });
 
+describe('EventsController.handleDraftNudge', () => {
+  let controller: EventsController;
+  let sendDraftNudgeEmail: jest.Mock;
+  let shouldProcess: jest.Mock;
+
+  beforeEach(() => {
+    sendDraftNudgeEmail = jest.fn().mockResolvedValue(undefined);
+    shouldProcess = jest.fn().mockResolvedValue({
+      shouldProcess: true,
+      dedupeKey: 'key',
+      reason: 'new',
+    });
+    controller = new EventsController(
+      { sendDraftNudgeEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess,
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+      {
+        emit: jest.fn().mockResolvedValue(true),
+      } as unknown as RabbitMQProducerService,
+    );
+  });
+
+  const payload = {
+    email: 'jane@example.com',
+    customer_name: 'Jane Doe',
+    program_name: 'YBB Summit 2026',
+    application_id: 'app-1',
+    nudge_number: 2,
+    submission_url: 'https://portal.example.com/dashboard/submission',
+    deadline: '2026-12-20T00:00:00.000Z',
+    brand: { name: 'YBB' },
+  };
+
+  it('sends the draft nudge with the mapped fields', async () => {
+    await controller.handleDraftNudge(payload, makeContext());
+
+    expect(sendDraftNudgeEmail).toHaveBeenCalledWith('jane@example.com', {
+      name: 'Jane Doe',
+      program: 'YBB Summit 2026',
+      nudgeNumber: 2,
+      submissionUrl: 'https://portal.example.com/dashboard/submission',
+      deadline: '2026-12-20T00:00:00.000Z',
+      brand: { name: 'YBB' },
+    });
+  });
+
+  it('defaults to nudge 1 and tolerates a null deadline and empty name', async () => {
+    await controller.handleDraftNudge(
+      { email: 'jane@example.com', customer_name: '', deadline: null },
+      makeContext(),
+    );
+
+    expect(sendDraftNudgeEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({ name: undefined, nudgeNumber: 1, deadline: undefined, submissionUrl: '#' }),
+    );
+  });
+
+  it('does nothing when the payload has no email', async () => {
+    await controller.handleDraftNudge({ nudge_number: 1 }, makeContext());
+
+    expect(sendDraftNudgeEmail).not.toHaveBeenCalled();
+  });
+
+  it('does not send a duplicate delivery of the same message', async () => {
+    shouldProcess.mockResolvedValueOnce({ shouldProcess: false, dedupeKey: 'key', reason: 'duplicate' });
+
+    await controller.handleDraftNudge(payload, makeContext());
+
+    expect(sendDraftNudgeEmail).not.toHaveBeenCalled();
+  });
+});
+
 describe('EventsController.handleApplicationSubmitted', () => {
   let controller: EventsController;
   let sendApplicationSubmittedEmail: jest.Mock;

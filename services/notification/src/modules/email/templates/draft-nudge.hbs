@@ -1,0 +1,32 @@
+<div style="text-align: center;">
+    <h2 style="font-size: 24px; font-weight: 700; color: {{theme.primaryDark}}; margin: 0 0 8px;">
+        {{#if isLast}}
+        Last Reminder: Complete Your Registration
+        {{else}}
+        Complete Your Registration
+        {{/if}}
+    </h2>
+    <p style="font-size: 16px; color: #6b7280; margin: 0 0 24px;">
+        Hi {{name}}, you started an application{{#if program}} for {{program}}{{/if}}, but it hasn&rsquo;t been completed yet.
+    </p>
+
+    {{#if program}}
+    <p style="font-size: 13px; color: #6b7280; text-align: center; margin: 0 0 24px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">
+        {{program}}
+    </p>
+    {{/if}}
+
+    <p style="font-size: 15px; color: #4b5563; line-height: 1.6; text-align: left; margin: 0 0 16px;">
+        Your application is saved as a draft in your participant portal. The registration fee is required before an application can be submitted.
+    </p>
+
+    {{#if deadlineFormatted}}
+    <p style="font-size: 15px; color: #4b5563; line-height: 1.6; text-align: left; margin: 0 0 24px;">
+        <strong>Submission deadline:</strong> {{deadlineFormatted}}
+    </p>
+    {{/if}}
+
+    <a href="{{submissionUrl}}" class="cta-button">
+        Continue Your Application
+    </a>
+</div>

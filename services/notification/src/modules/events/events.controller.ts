@@ -258,6 +258,36 @@ export class EventsController {
     );
   }
 
+  @EventPattern('notification.draft_nudge')
+  async handleDraftNudge(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'notification.draft_nudge',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received notification.draft_nudge event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        if (!email) return;
+
+        await this.emailService.sendDraftNudgeEmail(email, {
+          name: getString(payload, 'customer_name'),
+          program: getString(payload, 'program_name'),
+          nudgeNumber: getNumber(payload, 'nudge_number') || 1,
+          submissionUrl: getString(payload, 'submission_url') || '#',
+          deadline: getString(payload, 'deadline') || undefined,
+          brand: payload.brand ?? undefined,
+        });
+      },
+    );
+  }
+
   @EventPattern('application.submitted')
   async handleApplicationSubmitted(
     @Payload() data: unknown,
