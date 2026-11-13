@@ -99,6 +99,12 @@ describe('EmailService fallback subjects', () => {
         'Alternative Payment Options - KYS',
         'Alternative Payment Options for Your YBB Program',
       ],
+      [
+        'sendManualPaymentReceivedEmail',
+        { program: 'KYS' },
+        'Payment Proof Received - KYS',
+        'Payment Proof Received',
+      ],
     ])(
       '%s: names the program, falls back to the generic subject',
       async (method, withProgram, named, generic) => {

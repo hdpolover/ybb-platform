@@ -524,6 +524,7 @@ export class EventsController {
           getString(payload, 'order_id') ||
           getString(payload, 'payment_id') ||
           'unknown-order',
+        program: getString(payload, 'program') || getString(metadata, 'program'),
         brand: payload.brand ?? undefined,
       });
     });
