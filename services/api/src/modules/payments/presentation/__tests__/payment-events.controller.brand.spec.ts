@@ -38,6 +38,7 @@ const MOCK_PARTICIPANT = {
 
 const MOCK_PROGRAM = {
     id: 'program-1',
+    name: 'Test Program',
     usdInIdr: null,
     contactEmail: 'info@example.com',
     contactAddress: '123 Test St',
@@ -380,7 +381,7 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
                     currency: 'IDR',
                     order_id: 'invoice-1',
                     // MOCK_PROGRAM carries no `name` field.
-                    program: null,
+                    program: 'Test Program',
                     paymentsPageUrl: expect.stringContaining('/dashboard/payments'),
                     brandId: 'brand-1',
                     programId: 'program-1',
@@ -626,6 +627,7 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
             expect(producer.emit).toHaveBeenCalledWith(
                 'notification.payment_created',
                 expect.objectContaining({
+                    program: 'Test Program',
                     metadata: { application_id: 'app-1', invoice_id: 'invoice-1' },
                 }),
             );

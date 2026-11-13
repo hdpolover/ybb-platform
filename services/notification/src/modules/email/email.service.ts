@@ -1029,7 +1029,11 @@ export class EmailService {
     const { subject, html } = await this.resolveEmailContent({
       type: 'manual_payment_received',
       fallbackTemplateName: 'manual-payment-received',
-      fallbackSubject: 'Payment Proof Received',
+      fallbackSubject: this.subjectWithProgram(
+        'Payment Proof Received',
+        'Payment Proof Received',
+        paymentData.program,
+      ),
       data: templateData,
     });
     return this.sendRawEmail(to, subject, html);

@@ -139,6 +139,7 @@ export class PaymentEventsController {
                 currency: getString(data, 'currency') || 'IDR',
                 order_id: invoiceWithBrand.id || getString(data, 'order_id') || '',
                 status,
+                program: rawProgram?.name ?? null,
                 metadata: { application_id: invoiceWithBrand.applicationId, invoice_id: invoiceWithBrand.id },
                 brand: brandPayload,
             });
