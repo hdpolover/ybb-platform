@@ -887,6 +887,7 @@ export class PaymentAdminController {
                         },
                         program: {
                             select: {
+                                name: true,
                                 contactEmail: true,
                                 contactAddress: true,
                                 brand: {
@@ -1081,6 +1082,7 @@ export class PaymentAdminController {
                             amount: Number(invoice.amount),
                             currency: invoice.currency,
                             order_id: invoice.id,
+                            program: rawProgram?.name ?? null,
                             reason: body.reason?.trim() || 'No reason provided',
                             paymentsPageUrl,
                             brand: brandPayload,
@@ -1712,6 +1714,7 @@ export class PaymentAdminController {
                         currency: updatedInvoice.currency || 'IDR',
                         order_id: updatedInvoice.id,
                         payment_id: updatedInvoice.externalTransactionId || updatedInvoice.id,
+                        program: rawProgram?.name ?? null,
                         description: updatedInvoice.pricingTier?.name
                             ? `Payment for ${updatedInvoice.pricingTier.name}`
                             : 'Payment for services',

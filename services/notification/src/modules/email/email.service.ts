@@ -574,10 +574,68 @@ export class EmailService {
     const { subject, html } = await this.resolveEmailContent({
       type: 'payment_received',
       fallbackTemplateName: 'payment-success',
-      fallbackSubject: 'Payment Confirmation',
+      fallbackSubject: this.subjectWithProgram(
+        'Payment Confirmed',
+        'Payment Confirmation',
+        paymentData.program,
+      ),
       data: templateData,
     });
     return this.sendRawEmail(to, subject, html, attachments);
+  }
+
+  // "<base> - <program>", or the generic subject when the name is missing, so
+  // a blank program never renders as "<base> - " or "undefined".
+  private subjectWithProgram(
+    base: string,
+    genericSubject: string,
+    program?: string | null,
+  ): string {
+    const name = typeof program === 'string' ? program.trim() : '';
+    return name ? `${base} - ${name}` : genericSubject;
+  }
+
+  // Receipt that the application was submitted. Says nothing about review
+  // outcome or timing: acceptance is announced only by application_accepted.
+  async sendApplicationSubmittedEmail(
+    to: string,
+    data: {
+      name: string;
+      program?: string;
+      applicationId?: string;
+      submittedAt?: string;
+      portalUrl: string;
+      brand?: any;
+    },
+  ) {
+    const submittedDate = data.submittedAt ? new Date(data.submittedAt) : null;
+    const templateData = {
+      name: data.name,
+      program: data.program,
+      applicationId: data.applicationId,
+      submittedDateFormatted:
+        submittedDate && !Number.isNaN(submittedDate.getTime())
+          ? submittedDate.toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              timeZone: 'UTC',
+            })
+          : undefined,
+      portalUrl: data.portalUrl,
+      brand: data.brand,
+    };
+    const { subject, html } = await this.resolveEmailContent({
+      type: 'application_submitted',
+      fallbackTemplateName: 'application-submitted',
+      fallbackSubject: this.subjectWithProgram(
+        'Application Submitted',
+        'Application Submitted',
+        data.program || data.brand?.name,
+      ),
+      data: templateData,
+    });
+    return this.sendRawEmail(to, subject, html);
   }
 
   // Sent ~3 days after payment if the application still hasn't been
@@ -1025,7 +1083,11 @@ export class EmailService {
     const { subject, html } = await this.resolveEmailContent({
       type: 'payment_issue_alternative',
       fallbackTemplateName: 'payment-issue-alternative',
-      fallbackSubject: 'Alternative Payment Options for Your YBB Program',
+      fallbackSubject: this.subjectWithProgram(
+        'Alternative Payment Options',
+        'Alternative Payment Options for Your YBB Program',
+        paymentData.programName,
+      ),
       data: templateData,
     });
     return this.sendRawEmail(to, subject, html);
@@ -1052,7 +1114,11 @@ export class EmailService {
     const { subject, html } = await this.resolveEmailContent({
       type: 'payment_rejected',
       fallbackTemplateName: 'payment-rejected',
-      fallbackSubject: 'Payment Not Verified',
+      fallbackSubject: this.subjectWithProgram(
+        'Payment Not Verified',
+        'Payment Not Verified',
+        paymentData.program,
+      ),
       data: templateData,
     });
     return this.sendRawEmail(to, subject, html);

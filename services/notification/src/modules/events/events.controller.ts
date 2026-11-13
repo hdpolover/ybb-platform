@@ -202,6 +202,7 @@ export class EventsController {
           currency,
           orderId,
           description,
+          program: getString(payload, 'program') || getString(metadata, 'program'),
           invoiceUrl:
             getString(payload, 'invoiceUrl') ||
             getString(payload, 'invoice_url') ||
@@ -251,6 +252,36 @@ export class EventsController {
           program: getString(payload, 'program_name'),
           applicationId: getString(payload, 'application_id'),
           submissionUrl: getString(payload, 'submission_url') || '#',
+          brand: payload.brand ?? undefined,
+        });
+      },
+    );
+  }
+
+  @EventPattern('application.submitted')
+  async handleApplicationSubmitted(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'application.submitted',
+      payload,
+      context,
+      async () => {
+        this.logger.log(
+          `Received application.submitted event: ${JSON.stringify(summarizeEventPayload(payload))}`,
+        );
+
+        const email = getString(payload, 'email');
+        if (!email) return;
+
+        await this.emailService.sendApplicationSubmittedEmail(email, {
+          name: getString(payload, 'customer_name') || 'Participant',
+          program: getString(payload, 'program_name'),
+          applicationId: getString(payload, 'application_id'),
+          submittedAt: getString(payload, 'submitted_at'),
+          portalUrl: getString(payload, 'portal_url') || '#',
           brand: payload.brand ?? undefined,
         });
       },
@@ -555,6 +586,7 @@ export class EventsController {
           'Participant',
         amount: getNumber(payload, 'amount'),
         currency: getString(payload, 'currency') || 'IDR',
+        program: getString(payload, 'program') || getString(metadata, 'program'),
         orderId:
           getString(payload, 'order_id') ||
           getString(payload, 'invoice_id') ||

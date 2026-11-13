@@ -404,6 +404,99 @@ describe('EventsController.handleSubmissionNudge', () => {
   });
 });
 
+describe('EventsController.handleApplicationSubmitted', () => {
+  let controller: EventsController;
+  let sendApplicationSubmittedEmail: jest.Mock;
+  let shouldProcess: jest.Mock;
+
+  beforeEach(() => {
+    sendApplicationSubmittedEmail = jest.fn().mockResolvedValue(undefined);
+    shouldProcess = jest.fn().mockResolvedValue({
+      shouldProcess: true,
+      dedupeKey: 'key',
+      reason: 'new',
+    });
+    controller = new EventsController(
+      { sendApplicationSubmittedEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess,
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+      {
+        emit: jest.fn().mockResolvedValue(true),
+      } as unknown as RabbitMQProducerService,
+    );
+  });
+
+  it('sends the submitted email with program, date and portal link', async () => {
+    const payload = {
+      email: 'jane@example.com',
+      customer_name: 'Jane Doe',
+      program_name: 'Korea Youth Summit',
+      application_id: 'app-1',
+      submitted_at: '2026-11-12T10:00:00.000Z',
+      portal_url: 'https://www.example.com/dashboard/submission',
+      brand: { name: 'YBB' },
+    };
+
+    await controller.handleApplicationSubmitted(payload, makeContext());
+
+    expect(shouldProcess).toHaveBeenCalledWith(
+      'application.submitted',
+      payload,
+      expect.anything(),
+    );
+    expect(sendApplicationSubmittedEmail).toHaveBeenCalledWith(
+      'jane@example.com',
+      expect.objectContaining({
+        name: 'Jane Doe',
+        program: 'Korea Youth Summit',
+        applicationId: 'app-1',
+        submittedAt: '2026-11-12T10:00:00.000Z',
+        portalUrl: 'https://www.example.com/dashboard/submission',
+        brand: { name: 'YBB' },
+      }),
+    );
+  });
+
+  it('does not send when the idempotency check reports a duplicate', async () => {
+    shouldProcess.mockResolvedValue({
+      shouldProcess: false,
+      dedupeKey: 'key',
+      reason: 'duplicate',
+    });
+
+    await controller.handleApplicationSubmitted(
+      { email: 'jane@example.com' },
+      makeContext(),
+    );
+
+    expect(sendApplicationSubmittedEmail).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the payload has no email', async () => {
+    await controller.handleApplicationSubmitted(
+      { customer_name: 'Jane Doe' },
+      makeContext(),
+    );
+
+    expect(sendApplicationSubmittedEmail).not.toHaveBeenCalled();
+  });
+
+  it('does not crash the consumer when the send fails', async () => {
+    sendApplicationSubmittedEmail.mockRejectedValueOnce(new Error('smtp down'));
+
+    await expect(
+      controller.handleApplicationSubmitted(
+        { email: 'jane@example.com' },
+        makeContext(),
+      ),
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe('EventsController.handleApplicationAccepted', () => {
   let controller: EventsController;
   let sendApplicationAcceptedEmail: jest.Mock;

@@ -1,0 +1,28 @@
+<div style="text-align: center;">
+    <h2 style="font-size: 24px; font-weight: 700; color: {{theme.primaryDark}}; margin: 0 0 8px;">
+        Application Received
+    </h2>
+    <p style="font-size: 16px; color: #6b7280; margin: 0 0 24px;">
+        Hi {{name}}, we&rsquo;ve received your application.
+    </p>
+
+    {{#if program}}
+    <p style="font-size: 13px; color: #6b7280; text-align: center; margin: 0 0 24px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;">
+        {{program}}
+    </p>
+    {{/if}}
+
+    {{#if submittedDateFormatted}}
+    <p style="font-size: 15px; color: #4b5563; line-height: 1.6; text-align: left; margin: 0 0 16px;">
+        <strong>Submitted on:</strong> {{submittedDateFormatted}}
+    </p>
+    {{/if}}
+
+    <p style="font-size: 15px; color: #4b5563; line-height: 1.6; text-align: left; margin: 0 0 24px;">
+        Your application will now be reviewed. We&rsquo;ll let you know about the next steps by email and in your participant portal, where you can also check on your submission at any time.
+    </p>
+
+    <a href="{{portalUrl}}" class="cta-button">
+        View Your Submission
+    </a>
+</div>
