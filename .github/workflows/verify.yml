@@ -154,3 +154,58 @@ jobs:
 
       - name: Test
         run: python -m pytest
+
+
+  payment:
+    name: Payment service (build, vet, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/payment
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Read from go.mod so CI follows the toolchain the service declares.
+          go-version-file: services/payment/go.mod
+          cache: true
+          cache-dependency-path: services/payment/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      # No gofmt check on purpose: internal/infrastructure/grpc/server.go has a
+      # known pre-existing formatting nit near toIDR.
+      - name: Test
+        run: go test -race ./...
+
+
+  notification:
+    name: Notification service (typecheck, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/notification
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches services/notification/Dockerfile.prod (node:20-alpine).
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: services/notification/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # maxWorkers is capped because hosted runners are small and Nest specs
+      # build real DI graphs.
+      - name: Test
+        run: npx jest --maxWorkers=2
