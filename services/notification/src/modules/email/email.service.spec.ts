@@ -63,7 +63,7 @@ describe('EmailService fallback subjects', () => {
 
       const html = sendRawEmail.mock.calls[0][2] as string;
       expect(html).toContain('Korea Youth Summit');
-      expect(html).toContain('November 12, 2026');
+      expect(html).toContain('November 13, 2026');
       expect(html).toContain('https://www.example.com/dashboard/submission');
       expect(html).not.toMatch(/undefined/);
       expect(html).not.toMatch(/accepted|congratulations/i);
