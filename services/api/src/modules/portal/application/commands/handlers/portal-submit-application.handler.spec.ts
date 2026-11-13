@@ -8,6 +8,7 @@ import { RegistrationFeeGateService } from '@modules/payments/application/servic
 import { ReferralFunnelService } from '@modules/participants/application/services/referral-funnel.service';
 import { GetPortalSubmissionDetailHandler } from '../../queries/handlers/get-portal-submission-detail.handler';
 import { PortalSubmitApplicationCommand } from '../../queries/portal-queries';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { makePrismaTxMock, expectNoOuterWrites } from '@test/utils/prisma-tx-mock';
 
 describe('PortalSubmitApplicationHandler', () => {
@@ -74,6 +75,10 @@ describe('PortalSubmitApplicationHandler', () => {
         findIncompleteRequiredItems: jest.fn(),
     };
 
+    const mockProducer = {
+        emit: jest.fn().mockResolvedValue(true),
+    };
+
     const mockReferralFunnel = {
         advanceToApplied: jest.fn().mockResolvedValue(undefined),
     };
@@ -88,6 +93,7 @@ describe('PortalSubmitApplicationHandler', () => {
                 { provide: RegistrationFeeGateService, useValue: mockGateService },
                 { provide: ReferralFunnelService, useValue: mockReferralFunnel },
                 { provide: GetPortalSubmissionDetailHandler, useValue: mockDetailHandler },
+                { provide: RabbitMQProducerService, useValue: mockProducer },
             ],
         }).compile();
 
@@ -103,6 +109,7 @@ describe('PortalSubmitApplicationHandler', () => {
         mockPrisma.$transaction.mockImplementation((cb: (tx: typeof mockTx) => Promise<unknown>) => cb(mockTx));
         // Default: application is complete
         mockDetailHandler.findIncompleteRequiredItems.mockResolvedValue([]);
+        mockProducer.emit.mockResolvedValue(true);
         // Default: advanceToApplied succeeds
         mockReferralFunnel.advanceToApplied.mockResolvedValue(undefined);
     });
@@ -125,8 +132,20 @@ describe('PortalSubmitApplicationHandler', () => {
         personalData: overrides.personalData ?? {},
         participantId: 'participant-1',
         programId: overrides.programId ?? null,
+        participant: { fullName: 'Jane Doe', user: { email: 'jane@example.com' } },
         program: {
             name: overrides.programName ?? 'Test Program',
+            contactEmail: 'hello@example.com',
+            contactAddress: null,
+            brand: {
+                name: 'Test Brand',
+                primaryColor: '#112233',
+                logoUrl: null,
+                websiteUrl: 'https://www.example.com',
+                landingUrl: 'https://www.example.com/',
+                socialMediaLinks: null,
+                settings: null,
+            },
             // Default non-null: the referral block's brand-scoping guard
             // treats a missing brandId as "cannot verify brand, skip
             // attribution" (fail closed) — see portal-submit-application.handler.ts.
@@ -800,6 +819,86 @@ describe('PortalSubmitApplicationHandler', () => {
             const result = await handler.execute(command);
 
             expect(result.success).toBe(true);
+        });
+    });
+
+    // -- application.submitted notification ---------------------------------
+
+    describe('application.submitted notification', () => {
+        const command: PortalSubmitApplicationCommand = { userId: 'user-1', programId: 'program-123' };
+
+        it('emits after the submit is persisted, with branding, portal link and a deterministic messageId', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp({ programName: 'Korea Youth Summit' }));
+
+            await handler.execute(command);
+
+            expect(mockProducer.emit).toHaveBeenCalledTimes(1);
+            const [pattern, payload, options] = mockProducer.emit.mock.calls[0];
+            expect(pattern).toBe('application.submitted');
+            expect(payload).toEqual(
+                expect.objectContaining({
+                    email: 'jane@example.com',
+                    customer_name: 'Jane Doe',
+                    program_name: 'Korea Youth Summit',
+                    application_id: 'app-1',
+                    portal_url: 'https://www.example.com/dashboard/submission',
+                    brand: expect.objectContaining({ name: 'Test Brand', contactEmail: 'hello@example.com' }),
+                }),
+            );
+            expect(Number.isNaN(Date.parse(payload.submitted_at))).toBe(false);
+            expect(options).toEqual({ messageId: 'application.submitted:app-1' });
+            // Emit must come after the write, never before.
+            expect(mockPrisma.participantApplication.updateMany.mock.invocationCallOrder[0]).toBeLessThan(
+                mockProducer.emit.mock.invocationCallOrder[0],
+            );
+        });
+
+        it('does not emit when a gate rejects the submit', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
+            mockDetailHandler.findIncompleteRequiredItems.mockResolvedValue(['Complete Personal Details']);
+
+            await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
+
+            expect(mockProducer.emit).not.toHaveBeenCalled();
+        });
+
+        it('does not emit for a non-draft application', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp({ status: 'submitted' }));
+
+            await expect(handler.execute(command)).rejects.toThrow(BadRequestException);
+
+            expect(mockProducer.emit).not.toHaveBeenCalled();
+        });
+
+        it('does not emit for the loser of a double-submit race', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
+            mockPrisma.participantApplication.updateMany.mockResolvedValue({ count: 0 });
+
+            const result = await handler.execute(command);
+
+            expect(result.success).toBe(true);
+            expect(mockProducer.emit).not.toHaveBeenCalled();
+        });
+
+        it('still succeeds when the emit fails', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue(makeApp());
+            mockProducer.emit.mockRejectedValue(new Error('broker down'));
+
+            const result = await handler.execute(command);
+
+            expect(result).toEqual({ success: true, applicationId: 'app-1', status: 'submitted' });
+        });
+
+        it('skips the emit when the participant has no email', async () => {
+            mockPrisma.participantApplication.findFirst.mockResolvedValue({
+                ...makeApp(),
+                participant: { fullName: 'Jane Doe', user: null },
+            });
+
+            const result = await handler.execute(command);
+
+            expect(result.success).toBe(true);
+            expect(mockProducer.emit).not.toHaveBeenCalled();
         });
     });
 });

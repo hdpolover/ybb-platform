@@ -496,6 +496,7 @@ export class PaymentEventsController {
                         currency: getString(data, 'currency') || 'IDR',
                         order_id: result?.invoiceId || '',
                         payment_id: getString(data, 'payment_id') || getString(data, 'transaction_id'),
+                        program: rawProgram?.name ?? null,
                         description:
                             getString(asRecord(data.metadata as Record<string, unknown>), 'description') ||
                             'Payment for services',

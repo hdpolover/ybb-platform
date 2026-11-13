@@ -10,6 +10,9 @@ import { ReferralFunnelService } from '@modules/participants/application/service
 import { formatSubmissionDeadlineMessage, isPastSubmissionDeadline } from '@shared/utils/submission-deadline.util';
 import { currentApplicationWhere, currentApplicationOrderBy } from '../../utils/current-application.query';
 import { normalizeReferralCode } from '@modules/participants/application/utils/referral-code.util';
+import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { buildParticipantSubmissionUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
+import { buildNotificationBrandPayload, NotificationBrandSource } from '../../utils/notification-brand-payload.util';
 
 /**
  * Portal Submit Application Handler
@@ -32,6 +35,7 @@ export class PortalSubmitApplicationHandler {
         private readonly registrationFeeGate: RegistrationFeeGateService,
         private readonly referralFunnel: ReferralFunnelService,
         private readonly submissionDetail: GetPortalSubmissionDetailHandler,
+        private readonly rabbitmqProducer: RabbitMQProducerService,
     ) { }
 
     async execute(command: PortalSubmitApplicationCommand): Promise<{ success: boolean; applicationId: string; status: string }> {
@@ -49,10 +53,16 @@ export class PortalSubmitApplicationHandler {
                 personalData: true,
                 participantId: true,
                 programId: true,
+                participant: {
+                    select: { fullName: true, user: { select: { email: true } } },
+                },
                 program: {
                     select: {
                         name: true,
                         brandId: true,
+                        contactEmail: true,
+                        contactAddress: true,
+                        brand: { include: { settings: true } },
                         applicationDeadline: true,
                         formFields: {
                             // Only fields the participant could actually see,
@@ -118,11 +128,12 @@ export class PortalSubmitApplicationHandler {
         // Submit the application. Guarded on status: 'draft' so a double-tapped
         // Submit (or two tabs) can't both pass the draft check above and both
         // write - only the first writer's updateMany actually matches a row.
+        const submittedAt = new Date();
         const submitResult = await this.prisma.participantApplication.updateMany({
             where: { id: application.id, status: 'draft' },
             data: {
                 status: 'submitted',
-                submittedAt: new Date(),
+                submittedAt,
             },
         });
 
@@ -141,6 +152,10 @@ export class PortalSubmitApplicationHandler {
                 status: 'submitted',
             };
         }
+
+        // Only the writer that won the draft->submitted race reaches here, so a
+        // double-tap emits once; the notification side also dedupes on messageId.
+        await this.emitApplicationSubmittedNotification(application, submittedAt);
 
         await this.invalidateCaches(userId, participant.id);
 
@@ -276,6 +291,55 @@ export class PortalSubmitApplicationHandler {
             applicationId: application.id,
             status: 'submitted',
         };
+    }
+
+    /**
+     * Best-effort emit of application.submitted. Runs after the submit is
+     * persisted, so nothing here may ever surface as a submit failure.
+     */
+    private async emitApplicationSubmittedNotification(
+        application: {
+            id: string;
+            participant?: { fullName: string; user?: { email: string } | null } | null;
+            program?: {
+                name: string;
+                contactEmail: string | null;
+                contactAddress: string | null;
+                brand: NotificationBrandSource;
+            } | null;
+        },
+        submittedAt: Date,
+    ): Promise<void> {
+        try {
+            const email = application.participant?.user?.email;
+            if (!email) {
+                this.logger.warn(`[application_submitted] skipping application ${application.id}: no email on file`);
+                return;
+            }
+
+            const rawBrand = application.program?.brand ?? null;
+            await this.rabbitmqProducer.emit(
+                'application.submitted',
+                {
+                    email,
+                    customer_name: application.participant?.fullName || 'Participant',
+                    program_name: application.program?.name ?? '',
+                    application_id: application.id,
+                    submitted_at: submittedAt.toISOString(),
+                    portal_url: buildParticipantSubmissionUrl(rawBrand),
+                    brand: buildNotificationBrandPayload(application.program, rawBrand),
+                    metadata: { application_id: application.id },
+                },
+                // Deterministic id: the notification idempotency key is built from
+                // messageId first, so a duplicate publish is dropped downstream.
+                { messageId: `application.submitted:${application.id}` },
+            );
+        } catch (error) {
+            this.logger.error(
+                `[application_submitted] failed to emit for application ${application.id}`,
+                error instanceof Error ? error.stack : String(error),
+            );
+        }
     }
 
     private validatePreviewAcknowledgements(personalData: Record<string, unknown>): void {
