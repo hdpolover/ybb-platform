@@ -185,7 +185,7 @@ export class DraftRegistrationNudgeService {
       { messageId: `draft_nudge:${candidate.id}:${nudge}` },
     );
 
-    this.logger.log(`[draft-nudge] sent application=${candidate.id} nudge=${nudge} email=${email}`);
+    this.logger.log(`[draft-nudge] sent application=${candidate.id} nudge=${nudge}`);
     return 'sent';
   }
 }
