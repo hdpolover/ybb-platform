@@ -17,6 +17,7 @@ import {
 } from '@shared/infrastructure/rabbitmq/rmq-ack';
 import { buildParticipantPaymentsUrl, buildParticipantInvoiceUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
+import { isUuid } from '@shared/utils/url-slug';
 import { PaymentGatewayClient } from '../infrastructure/services/payment-gateway.client';
 import { MetaCapiService } from '@modules/meta/meta-capi.service';
 import { parseAdAttribution } from '@modules/auth/application/services/ad-attribution.util';
@@ -80,12 +81,17 @@ export class PaymentEventsController {
         const data = asRecord(payload);
         try {
             const status = getString(data, 'status');
-            const applicationId = getString(asRecord(data.metadata), 'application_id');
-            if (status !== 'PENDING_REVIEW' || !applicationId) {
+            const metadata = asRecord(data.metadata);
+            const applicationId = getString(metadata, 'application_id');
+            // Go's top-level application_id carries intent.ReferenceID, which the
+            // portal sets to the invoice id - a fallback when metadata is absent.
+            const rawInvoiceId = getString(metadata, 'invoice_id') || getString(data, 'application_id');
+            const invoiceId = rawInvoiceId && isUuid(rawInvoiceId) ? rawInvoiceId : '';
+            if (status !== 'PENDING_REVIEW' || (!applicationId && !invoiceId)) {
                 return;
             }
             const invoiceWithBrand = await this.prisma.applicationInvoice.findFirst({
-                where: { applicationId },
+                where: invoiceId ? { id: invoiceId } : { applicationId },
                 orderBy: { createdAt: 'desc' },
                 include: {
                     application: {
@@ -99,7 +105,9 @@ export class PaymentEventsController {
                 },
             });
             if (!invoiceWithBrand) {
-                this.logger.warn(`handlePaymentCreated: no invoice found for applicationId=${applicationId}`);
+                this.logger.warn(
+                    `handlePaymentCreated: no invoice found for invoiceId=${invoiceId} applicationId=${applicationId}`,
+                );
                 return;
             }
             const rawBrand = invoiceWithBrand?.application?.program?.brand ?? null;
@@ -131,7 +139,7 @@ export class PaymentEventsController {
                 currency: getString(data, 'currency') || 'IDR',
                 order_id: invoiceWithBrand.id || getString(data, 'order_id') || '',
                 status,
-                metadata: { application_id: applicationId, invoice_id: invoiceWithBrand.id },
+                metadata: { application_id: invoiceWithBrand.applicationId, invoice_id: invoiceWithBrand.id },
                 brand: brandPayload,
             });
         } catch (err) {

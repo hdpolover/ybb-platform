@@ -605,5 +605,43 @@ describe('PaymentEventsController — brand-aware notification re-emit', () => {
 
             expect(producer.emit).not.toHaveBeenCalled();
         });
+
+        it('falls back to the top-level application_id (Go intent.ReferenceID = invoice id) when metadata is missing', async () => {
+            (prisma.applicationInvoice.findFirst as jest.Mock).mockResolvedValue(MOCK_INVOICE_WITH_BRAND);
+            const invoiceUuid = '132cc722-e10a-4114-9228-5b592fb1d74e';
+            const payload = {
+                email: 'john@example.com',
+                amount: 500000,
+                currency: 'IDR',
+                status: 'PENDING_REVIEW',
+                application_id: invoiceUuid,
+            };
+            const context = makeRmqContext({ getPattern: () => 'payment.created' });
+
+            await controller.handlePaymentCreated(payload as any, context);
+
+            expect(prisma.applicationInvoice.findFirst).toHaveBeenCalledWith(
+                expect.objectContaining({ where: { id: invoiceUuid } }),
+            );
+            expect(producer.emit).toHaveBeenCalledWith(
+                'notification.payment_created',
+                expect.objectContaining({
+                    metadata: { application_id: 'app-1', invoice_id: 'invoice-1' },
+                }),
+            );
+        });
+
+        it('does not query with a non-uuid fallback id and skips when nothing usable is present', async () => {
+            const payload = {
+                status: 'PENDING_REVIEW',
+                application_id: 'not-a-uuid',
+            };
+            const context = makeRmqContext({ getPattern: () => 'payment.created' });
+
+            await controller.handlePaymentCreated(payload as any, context);
+
+            expect(prisma.applicationInvoice.findFirst).not.toHaveBeenCalled();
+            expect(producer.emit).not.toHaveBeenCalled();
+        });
     });
 });

@@ -677,8 +677,8 @@ func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.Sub
 	tx.GatewayResponse = rawProof
 
 	email := ""
+	var meta map[string]interface{}
 	if len(intent.Metadata) > 0 {
-		var meta map[string]interface{}
 		if err := json.Unmarshal(intent.Metadata, &meta); err == nil {
 			if e, ok := meta["email"].(string); ok {
 				email = e
@@ -707,6 +707,11 @@ func (s *PaymentGrpcServer) SubmitManualPayment(ctx context.Context, req *pb.Sub
 		tx.Currency,
 		tx.PaymentMethodID,
 	)
+	// The API resolves the invoice from metadata.application_id/invoice_id;
+	// without it the "proof received" email is silently skipped.
+	if meta != nil {
+		event.Metadata = meta
+	}
 
 	// Persist Transaction
 	if err := s.txRepo.Create(ctx, tx); err != nil {
