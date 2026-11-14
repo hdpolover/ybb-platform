@@ -38,6 +38,13 @@ export class EmailService {
     if (this.configService.get('SMTP_HOST') || !resendKey) {
       this.createTransporter();
     }
+    if (
+      this.configService.get('SMTP_HOST') &&
+      !this.configService.get('SMTP_FROM')
+    ) {
+      // SES rejects the unverified default sender, so every email would silently go via Resend.
+      this.logger.error('SMTP_HOST is set but SMTP_FROM is empty');
+    }
     this.registerPartials();
   }
 
@@ -76,6 +83,7 @@ export class EmailService {
         host: smtpHost,
         port: Number(this.configService.get('SMTP_PORT')) || 587,
         secure: this.configService.get('SMTP_SECURE') === 'true',
+        requireTLS: this.configService.get('SMTP_SECURE') !== 'true',
         // Fail fast so a hung SMTP connection falls back to Resend instead of
         // holding the consumer (nodemailer's default socket timeout is 10 min).
         connectionTimeout: 10_000,
