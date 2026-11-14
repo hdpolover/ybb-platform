@@ -1,14 +1,13 @@
 // src/modules/applications/infrastructure/services/submission-deadline-reminder.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { ApplicationStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CronLockService } from '@shared/infrastructure/database/cron-lock.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { startOfWibDay, addDays } from '@shared/utils/wib-time';
 import { resolveSubmissionCutoff } from '@shared/utils/submission-deadline.util';
 import { buildParticipantSubmissionUrl } from '@modules/payments/application/utils/participant-dashboard-url.util';
-import { ACTIVE_PARTICIPANT_WHERE } from '@shared/utils/active-participant.filter';
 
 /**
  * Days before Program.applicationDeadline at which a participant with a
@@ -20,8 +19,11 @@ import { ACTIVE_PARTICIPANT_WHERE } from '@shared/utils/active-participant.filte
  * previously locked ~130 participants out of application creation, so this
  * choice is deliberate, not a guess - see decisionsForHuman in the PR/task
  * notes for the human sign-off this warrants before going live.
+ *
+ * Ordered most urgent first: the offsets share one per-tick budget, and a
+ * missed H-1 reminder cannot be made up the next day.
  */
-const REMINDER_OFFSET_DAYS = [7, 3, 1] as const;
+const REMINDER_OFFSET_DAYS = [1, 3, 7] as const;
 type ReminderOffsetDays = (typeof REMINDER_OFFSET_DAYS)[number];
 
 /**
@@ -84,10 +86,10 @@ export class SubmissionDeadlineReminderService {
    * Ticks every minute from 08:00 to 20:59 WIB, sending at most
    * MAX_REMINDERS_PER_TICK per tick - scheduled directly in Asia/Jakarta
    * (rather than a computed UTC cron expression) so the fire time is correct
-   * regardless of the host container's TZ setting. Each tick resumes from the
-   * claims already in submission_reminder_logs (see findCandidates), so a run
-   * interrupted by a redeploy picks up where it stopped. 13 hours of ticks
-   * cover 117k reminders a day.
+   * regardless of the host container's TZ setting. Each tick only selects
+   * applications with no claim yet (see findCandidates), so a run interrupted
+   * by a redeploy picks up where it stopped. 13 hours of ticks cover 117k
+   * reminders a day.
    *
    * HTTP-app-only: ApplicationsModule (which provides this service) is only
    * imported by the root AppModule, never by any of the RMQ consumer bootstrap
@@ -126,7 +128,7 @@ export class SubmissionDeadlineReminderService {
    * application.submission_reminder event for each one not already sent.
    *
    * Matching by WIB calendar day (not a raw millisecond subtraction) means a
-   * deadline of any time-of-day still reminds on the correct WIB date, and the
+   * deadline of any time-of-day still reminds on the correct WIB date, and
    * every tick of the same WIB day resolves to the same set.
    *
    * The window's upper bound is computed via resolveSubmissionCutoff() - the
@@ -158,7 +160,6 @@ export class SubmissionDeadlineReminderService {
       const candidates = await this.findCandidates(
         offsetDays,
         { gte: targetDayStart, lt: targetDayEnd },
-        startOfWibDay(referenceDate),
         budget,
       );
 
@@ -184,51 +185,54 @@ export class SubmissionDeadlineReminderService {
   }
 
   /**
-   * The next `take` unclaimed candidates for one offset, in id order.
+   * Up to `take` candidates for one offset that have no claim yet.
    *
-   * SubmissionReminderLog has no Prisma relation to the application, so
-   * "not yet claimed" cannot be a filter. Instead candidates are always walked
-   * in id order and the highest application id claimed today for this offset
-   * marks where the previous tick stopped. A candidate that failed before its
-   * claim sits behind that mark and is not retried, same as a failed send
-   * (see remindOne).
+   * SubmissionReminderLog has no Prisma relation to the application, so "not
+   * yet claimed" is not expressible as a Prisma filter - hence the raw
+   * anti-join. It is the ONLY place eligibility is decided: the second query
+   * just loads the payload by id. A condition added to that second query alone
+   * would leave rows that are selected here every tick but never claimed, and
+   * they would fill the LIMIT and block everyone behind them.
+   *
+   * The participant/user conditions mirror ACTIVE_PARTICIPANT_WHERE
+   * (shared/utils/active-participant.filter.ts); keep the
+   * two in step.
    */
   private async findCandidates(
     offsetDays: ReminderOffsetDays,
     deadlineWindow: { gte: Date; lt: Date },
-    todayStart: Date,
     take: number,
   ): Promise<ReminderCandidate[]> {
-    // Resolved to ids first, not joined: with literal program ids the planner
-    // picks the program index for a small program and the id index for a large
-    // one. Filtering through the deadline join made it walk the whole
-    // applications table in id order. No program due is the usual case.
+    // No program due is the usual case: one read of a 30-row table per offset.
     const duePrograms = await this.prisma.program.findMany({
       where: { applicationDeadline: deadlineWindow },
       select: { id: true },
     });
     if (duePrograms.length === 0) return [];
 
-    // ponytail: scans submission_reminder_logs, which has no index on
-    // (reminder_offset, sent_at). Fine at ~100k rows; add the index past ~1M.
-    const lastClaim = await this.prisma.submissionReminderLog.findFirst({
-      where: { reminderOffset: offsetDays, sentAt: { gte: todayStart } },
-      orderBy: { applicationId: 'desc' },
-      select: { applicationId: true },
-    });
+    const programIds = duePrograms.map((program) => program.id);
+    const unclaimed = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT pa.id
+      FROM participant_applications pa
+      JOIN participants pt ON pt.id = pa.participant_id
+      JOIN users u ON u.id = pt.user_id
+      WHERE pa.program_id = ANY(${programIds}::uuid[])
+        AND pa.status = 'draft'
+        AND pa.deleted_at IS NULL
+        AND pt.deleted_at IS NULL
+        AND u.is_active
+        AND u.deleted_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM submission_reminder_logs l
+          WHERE l.application_id = pa.id AND l.reminder_offset = ${offsetDays}
+        )
+      LIMIT ${take}
+    `;
+    if (unclaimed.length === 0) return [];
 
     return this.prisma.participantApplication.findMany({
-      where: {
-        status: ApplicationStatus.draft,
-        deletedAt: null,
-        programId: { in: duePrograms.map((program) => program.id) },
-        // Deactivated/deleted accounts don't get nudged to submit.
-        participant: ACTIVE_PARTICIPANT_WHERE,
-        ...(lastClaim ? { id: { gt: lastClaim.applicationId } } : {}),
-      },
+      where: { id: { in: unclaimed.map((row) => row.id) } },
       select: REMINDER_CANDIDATE_SELECT,
-      orderBy: { id: 'asc' },
-      take,
     });
   }
 
@@ -238,12 +242,10 @@ export class SubmissionDeadlineReminderService {
    * guarantees at-most-once delivery - not timing. A duplicate claim
    * (P2002) means this offset was already sent (by an earlier run, another
    * replica, or a retry) and is skipped. A claim that succeeds but whose
-   * publish then fails is left to propagate to the caller (counted as an
-   * error, logged, and NOT retried - matching the best-effort emitReminder()
-   * precedent in PaymentReconciliationService). offsetDays is fixed, so there
-   * is no later day on which this same offset would naturally recur to retry
-   * against - a publish failure here means this one offset's reminder is
-   * permanently missed for this application, by design.
+   * publish then fails is released again, so the next tick selects the
+   * application once more; the failure still propagates and is counted as an
+   * error. Without the release, a broker outage would burn one tick's worth of
+   * claims every minute for as long as it lasted.
    */
   private async remindOne(
     candidate: ReminderCandidate,
@@ -264,21 +266,28 @@ export class SubmissionDeadlineReminderService {
 
     const submissionPageUrl = buildParticipantSubmissionUrl(candidate.program.brand);
 
-    await this.rabbitmqProducer.emit('application.submission_reminder', {
-      email,
-      customer_name: candidate.participant?.fullName ?? 'Participant',
-      program: candidate.program.name,
-      programId: candidate.program.id,
-      brandId: candidate.program.brandId,
-      deadline: candidate.program.applicationDeadline.toISOString(),
-      daysRemaining: offsetDays,
-      submissionPageUrl,
-      metadata: {
-        application_id: candidate.id,
-        program_id: candidate.program.id,
-        reminder_offset: offsetDays,
-      },
-    });
+    try {
+      await this.rabbitmqProducer.emit('application.submission_reminder', {
+        email,
+        customer_name: candidate.participant?.fullName ?? 'Participant',
+        program: candidate.program.name,
+        programId: candidate.program.id,
+        brandId: candidate.program.brandId,
+        deadline: candidate.program.applicationDeadline.toISOString(),
+        daysRemaining: offsetDays,
+        submissionPageUrl,
+        metadata: {
+          application_id: candidate.id,
+          program_id: candidate.program.id,
+          reminder_offset: offsetDays,
+        },
+      });
+    } catch (error) {
+      await this.prisma.submissionReminderLog.deleteMany({
+        where: { applicationId: candidate.id, reminderOffset: offsetDays },
+      });
+      throw error;
+    }
 
     // NOT yet picked up by AuditController (src/modules/audit/audit.controller.ts):
     // that consumer only persists an audit_log row for event names it explicitly
