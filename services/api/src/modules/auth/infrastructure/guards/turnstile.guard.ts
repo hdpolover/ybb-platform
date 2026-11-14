@@ -52,9 +52,13 @@ export class TurnstileGuard implements CanActivate {
 
     if (!enforce) {
       // Dry run: only a configured deployment can verify, and nothing here may block.
-      if (token && this.turnstile.isConfigured()) {
-        const ok = await this.verifyQuietly(token, req);
-        if (!ok) this.logger.warn(`Turnstile token rejected on ${req.method} ${req.path} (not enforcing)`);
+      // One line per request so the enforce decision rests on real per-brand rates:
+      // "missing" and "rejected" are exactly what enforcement would 403.
+      if (this.turnstile.isConfigured()) {
+        const where = `${req.method} ${req.path} brand=${headerValue(req.headers?.['x-brand-domain']) ?? '-'}`;
+        if (!token) this.logger.log(`Turnstile dry-run missing on ${where}`);
+        else if (await this.verifyQuietly(token, req)) this.logger.log(`Turnstile dry-run accepted on ${where}`);
+        else this.logger.warn(`Turnstile dry-run rejected on ${where}`);
       }
       return true;
     }
