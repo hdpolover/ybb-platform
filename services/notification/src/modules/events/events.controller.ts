@@ -71,6 +71,7 @@ type ReadinessRegressionBlocker = {
   symptom: string;
 };
 type RmqMessage = {
+  fields?: { redelivered?: boolean };
   content?: Buffer;
   properties?: {
     headers?: Record<string, unknown>;
@@ -1565,6 +1566,19 @@ export class EventsController {
     );
 
     if (!decision.shouldProcess) {
+      // The broker redelivers a message only when the consumer holding it went
+      // away without acking - in practice a redeploy killing the process
+      // mid-send. That consumer had already claimed the key, so here the key
+      // means "started", not "sent": skipping would drop the email.
+      // ponytail: a consumer that died after sending but before acking gets its
+      // email sent twice; a duplicate beats a silent drop.
+      if ((message as RmqMessage | undefined)?.fields?.redelivered) {
+        this.logger.warn(
+          `[notification-idempotency] dedupe_hit=true processed=true event=${eventType} key=${abbreviateDedupeKey(decision.dedupeKey)} reason=redelivered`,
+        );
+        return decision.dedupeKey;
+      }
+
       this.logger.warn(
         `[notification-idempotency] dedupe_hit=true processed=false event=${eventType} key=${abbreviateDedupeKey(decision.dedupeKey)}`,
       );

@@ -479,6 +479,25 @@ describe('EventsController.handleDraftNudge', () => {
 
     expect(sendDraftNudgeEmail).not.toHaveBeenCalled();
   });
+
+  it('sends a broker-redelivered message even though its dedupe key is already claimed', async () => {
+    // The consumer that claimed the key was killed before it sent or acked.
+    shouldProcess.mockResolvedValueOnce({ shouldProcess: false, dedupeKey: 'key', reason: 'duplicate' });
+    const ack = jest.fn();
+    const redelivered = {
+      getMessage: () => ({
+        fields: { redelivered: true },
+        content: Buffer.from('{}'),
+        properties: { headers: {} },
+      }),
+      getChannelRef: () => ({ ack, nack: jest.fn() }),
+    } as unknown as RmqContext;
+
+    await controller.handleDraftNudge(payload, redelivered);
+
+    expect(sendDraftNudgeEmail).toHaveBeenCalledTimes(1);
+    expect(ack).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('EventsController.handleFundingResult', () => {
