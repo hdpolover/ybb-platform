@@ -101,8 +101,6 @@ export class EmailService {
         maxConnections: EMAIL_SEND_CONCURRENCY,
         rateDelta: 1000,
         rateLimit: SMTP_MAX_MESSAGES_PER_SECOND,
-        // One retry when SES drops a pooled connection mid-send, then fall back.
-        maxRequeues: 1,
         // Fail fast so a hung SMTP connection falls back to Resend instead of
         // holding the consumer (nodemailer's default socket timeout is 10 min).
         connectionTimeout: 10_000,

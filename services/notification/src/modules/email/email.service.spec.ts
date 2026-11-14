@@ -326,7 +326,6 @@ describe('EmailService transport routing (SES SMTP primary, Resend fallback)', (
         maxConnections: EMAIL_SEND_CONCURRENCY,
         rateDelta: 1000,
         rateLimit: SMTP_MAX_MESSAGES_PER_SECOND,
-        maxRequeues: 1,
       }),
     );
     expect(SMTP_MAX_MESSAGES_PER_SECOND).toBeLessThan(14);
