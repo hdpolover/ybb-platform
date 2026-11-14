@@ -1,21 +1,35 @@
 // services/api/src/modules/auth/infrastructure/guards/turnstile.guard.spec.ts
 import { ExecutionContext, ForbiddenException, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Reflector } from '@nestjs/core';
 import { TurnstileGuard } from './turnstile.guard';
 
 const SECRET = 'test-secret';
 const jwt = new JwtService({ secret: SECRET });
-const ADMIN_CLAIMS = { sub: 'u1', roles: ['admin', 'super_admin'], adminId: 'a1', type: 'access' };
+const ADMIN_CLAIMS = { sub: 'u1', roles: ['admin', 'super_admin'], adminId: 'a1', type: 'access', jti: 'j1' };
 
-function mkContext(headers: Record<string, string> = {}): ExecutionContext {
-  const req = { headers, method: 'POST', path: '/v1/auth/register', ip: '10.0.0.1' };
-  return { switchToHttp: () => ({ getRequest: () => req }) } as unknown as ExecutionContext;
+function mkContext(headers: Record<string, string> = {}, adminBypass = true): ExecutionContext {
+  const req = { headers, method: 'POST', path: '/v1/auth/resend-verification', ip: '10.0.0.1' };
+  const handler = () => undefined;
+  if (adminBypass) Reflect.defineMetadata('turnstile:adminBypass', true, handler);
+  return {
+    switchToHttp: () => ({ getRequest: () => req }),
+    getHandler: () => handler,
+  } as unknown as ExecutionContext;
 }
 
-function mkGuard(env: Record<string, string | undefined>, verify: jest.Mock = jest.fn().mockResolvedValue(true)) {
+function mkGuard(
+  env: Record<string, string | undefined>,
+  verify: jest.Mock = jest.fn().mockResolvedValue(true),
+  revoked: string[] = [],
+) {
   const config = { get: (k: string) => env[k] };
   const turnstile = { isConfigured: () => Boolean(env.TURNSTILE_SECRET_KEY), verify };
-  return { guard: new TurnstileGuard(config as never, turnstile as never, jwt), verify };
+  const blacklist = { isBlacklisted: jest.fn(async (jti: string) => revoked.includes(jti)) };
+  return {
+    guard: new TurnstileGuard(config as never, turnstile as never, jwt, new Reflector(), blacklist as never),
+    verify,
+  };
 }
 
 const ENFORCING = { AUTH_TURNSTILE_ENFORCE: 'true', TURNSTILE_SECRET_KEY: 's' };
@@ -107,6 +121,18 @@ describe('TurnstileGuard', () => {
       expect(verify).not.toHaveBeenCalled();
     });
 
+    it('does NOT skip for an admin token on a route without the bypass marker', async () => {
+      const { guard } = mkGuard(ENFORCING);
+      const authorization = `Bearer ${jwt.sign(ADMIN_CLAIMS)}`;
+      await expect(guard.canActivate(mkContext({ authorization }, false))).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('does NOT skip for a revoked (logged-out) admin token', async () => {
+      const { guard } = mkGuard(ENFORCING, undefined, ['j1']);
+      const authorization = `Bearer ${jwt.sign(ADMIN_CLAIMS)}`;
+      await expect(guard.canActivate(mkContext({ authorization }))).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
     it('does NOT skip for a forged token (wrong signature) claiming admin', async () => {
       const { guard } = mkGuard(ENFORCING);
       const forged = new JwtService({ secret: 'attacker' }).sign(ADMIN_CLAIMS);
@@ -135,7 +161,8 @@ describe('TurnstileGuard', () => {
     it.each([
       ['a participant access token', { sub: 'u2', roles: [], type: 'access' }],
       ['an admin refresh token', { ...ADMIN_CLAIMS, type: 'refresh' }],
-      ['an admin token without adminId', { sub: 'u1', roles: ['admin'], type: 'access' }],
+      ['an admin token without adminId', { sub: 'u1', roles: ['admin'], type: 'access', jti: 'j2' }],
+      ['an admin token without jti', { sub: 'u1', roles: ['admin'], adminId: 'a1', type: 'access' }],
     ])('does NOT skip for %s', async (_label, claims) => {
       const { guard } = mkGuard(ENFORCING);
       const authorization = `Bearer ${jwt.sign(claims)}`;

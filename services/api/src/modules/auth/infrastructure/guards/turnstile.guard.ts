@@ -1,13 +1,19 @@
 // services/api/src/modules/auth/infrastructure/guards/turnstile.guard.ts
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Logger, SetMetadata } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { resolveClientIp } from '../../../../shared/utils/client-ip';
 import { TurnstileService } from '../../../../shared/infrastructure/turnstile/turnstile.service';
+import { TokenBlacklistService } from '../services/token-blacklist.service';
 
 export const TURNSTILE_HEADER = 'x-turnstile-token';
 // Cloudflare caps tokens at 2048 chars; anything longer is junk, skip the round trip.
 const MAX_TOKEN_LENGTH = 2048;
+
+const ADMIN_BYPASS_KEY = 'turnstile:adminBypass';
+/** Lets a live, unrevoked admin access token skip the challenge on this route only. */
+export const TurnstileAdminBypass = () => SetMetadata(ADMIN_BYPASS_KEY, true);
 
 const headerValue = (value: string | string[] | undefined): string | undefined =>
   (Array.isArray(value) ? value[0] : value) || undefined;
@@ -34,6 +40,8 @@ export class TurnstileGuard implements CanActivate {
     private readonly config: ConfigService,
     private readonly turnstile: TurnstileService,
     private readonly jwtService: JwtService,
+    private readonly reflector: Reflector,
+    private readonly tokenBlacklist: TokenBlacklistService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -51,7 +59,8 @@ export class TurnstileGuard implements CanActivate {
       return true;
     }
 
-    if (this.isAdminRequest(req)) return true;
+    const allowsAdmin = this.reflector.get<boolean>(ADMIN_BYPASS_KEY, context.getHandler()) === true;
+    if (allowsAdmin && (await this.isAdminRequest(req))) return true;
     if (!token || token.length > MAX_TOKEN_LENGTH) throw new ForbiddenException(CHALLENGE_MESSAGE);
     // A siteverify outage throws 503 from the service: fail closed, don't blame the user.
     if (!(await this.turnstile.verify(token, resolveClientIp(req) ?? undefined))) {
@@ -71,9 +80,10 @@ export class TurnstileGuard implements CanActivate {
   /**
    * The admin dashboard calls /auth/resend-verification from the browser with its
    * admin bearer. VERIFIED, never decoded: anyone can write {"roles":["admin"]}.
-   * Mirrors admin-login.handler's claims (type 'access', roles incl. 'admin', adminId).
+   * Mirrors admin-login.handler's claims (type 'access', roles incl. 'admin', adminId, jti)
+   * and JwtAuthGuard's revocation check, so a logged-out token does not skip.
    */
-  private isAdminRequest(req: { headers?: Record<string, string | string[] | undefined> }): boolean {
+  private async isAdminRequest(req: { headers?: Record<string, string | string[] | undefined> }): Promise<boolean> {
     const raw = headerValue(req.headers?.authorization);
     const match = raw ? /^Bearer\s+(\S+)$/i.exec(raw.trim()) : null;
     if (!match) return false;
@@ -82,14 +92,17 @@ export class TurnstileGuard implements CanActivate {
         type?: unknown;
         roles?: unknown;
         adminId?: unknown;
+        jti?: unknown;
       };
-      return (
+      const isAdminAccess =
         payload.type === 'access' &&
         Array.isArray(payload.roles) &&
         payload.roles.includes('admin') &&
         typeof payload.adminId === 'string' &&
-        payload.adminId.length > 0
-      );
+        payload.adminId.length > 0 &&
+        typeof payload.jti === 'string' &&
+        payload.jti.length > 0;
+      return isAdminAccess && !(await this.tokenBlacklist.isBlacklisted(payload.jti as string));
     } catch {
       return false;
     }
