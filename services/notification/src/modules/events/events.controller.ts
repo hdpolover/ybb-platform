@@ -1,4 +1,5 @@
 import { Controller, Logger } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import { EmailService } from '../email/email.service';
 import { ReceiptService } from '../email/receipt.service';
@@ -111,18 +112,6 @@ type RabbitChannel = {
   ack: (message: unknown) => void;
   nack: (message: unknown, allUpTo?: boolean, requeue?: boolean) => void;
 };
-
-/**
- * One message, many recipients, sent in a loop with no per-recipient record.
- * Reprocessing a redelivery of one of these would mail everyone already sent
- * to again, so they keep the plain duplicate skip.
- * ponytail: the recipients not yet reached when the consumer died are dropped
- * (as before). Per-recipient dedupe keys inside those loops would fix both.
- */
-const FAN_OUT_EVENTS = new Set([
-  'loa.batch.released',
-  'reminder.participant.dispatch',
-]);
 
 @Controller()
 export class EventsController {
@@ -1223,7 +1212,7 @@ export class EventsController {
       'loa.batch.released',
       payload,
       context,
-      async () => {
+      async (dedupeKey) => {
         this.logger.log(
           `Received loa.batch.released event: ${JSON.stringify(summarizeEventPayload(payload))}`,
         );
@@ -1252,43 +1241,34 @@ export class EventsController {
         // nack the entire message and resend to every recipient who already
         // succeeded on the retry. Best-effort per recipient avoids that.
         //
-        // Each outcome is now also collected and reported back to the API
-        // (which owns the database) so the failures below stop being
-        // log-only — container logs retain ~2 days while batches are
-        // released weeks apart.
+        // Each outcome is also collected and reported back to the API
+        // (which owns the database) so failures are not log-only: container
+        // logs retain ~2 days while batches are released weeks apart.
+        //
+        // Outcomes are recorded per recipient in Redis (sendOncePerRecipient),
+        // so a redelivered batch resumes with the recipients not yet sent to.
         const results: LoaSendResult[] = [];
 
         for (const recipient of recipients) {
-          try {
-            // EmailService is untyped at this boundary; extractProviderMessageId
-            // narrows the transport's response shape rather than trusting it.
-            const response: unknown = await this.emailService.sendLoaReadyEmail(
-              recipient.email,
-              {
+          const result = await this.sendOncePerRecipient(
+            dedupeKey,
+            recipient,
+            // EmailService is untyped at this boundary; the helper narrows the
+            // transport's response shape rather than trusting it.
+            () =>
+              this.emailService.sendLoaReadyEmail(recipient.email, {
                 name: recipient.fullName || 'Participant',
                 program: programName,
                 programId,
                 brand,
-              },
-            );
-            results.push({
-              participantId: recipient.participantId,
-              providerMessageId: extractProviderMessageId(response),
-              error: null,
-            });
-          } catch (error) {
-            this.logger.error(
-              `[loa-batch] failed to send LOA-ready email batch=${batchId} to=${maskEmail(recipient.email)}`,
-              error instanceof Error ? error.stack : String(error),
-            );
-            results.push({
-              participantId: recipient.participantId,
-              providerMessageId: null,
-              error: truncateSendError(
-                error instanceof Error ? error.message : String(error),
+              }),
+            (error) =>
+              this.logger.error(
+                `[loa-batch] failed to send LOA-ready email batch=${batchId} to=${maskEmail(recipient.email)}`,
+                error instanceof Error ? error.stack : String(error),
               ),
-            });
-          }
+          );
+          if (result) results.push(result);
         }
 
         await this.reportLoaSendResults(batchId, programId, results);
@@ -1299,10 +1279,11 @@ export class EventsController {
   /**
    * Best-effort reporting: the audit trail exists to explain the send, so a
    * failure to publish it must never fail the send or nack the message —
-   * every email above has already gone out by this point, and re-delivering
-   * this event would re-send them all. A publish failure leaves the API's
-   * rows in `pending`, which reads as "outcome unknown" rather than
-   * falsely as "sent".
+   * every email above has already gone out by this point. A publish failure
+   * leaves the API's rows in `pending`, which reads as "outcome unknown"
+   * rather than falsely as "sent". (A consumer killed before it publishes
+   * has its recipients reported by the redelivery, which replays them from
+   * their recorded outcomes.)
    */
   private async reportLoaSendResults(
     batchId: string | undefined,
@@ -1350,7 +1331,7 @@ export class EventsController {
       'reminder.participant.dispatch',
       payload,
       context,
-      async () => {
+      async (dedupeKey) => {
         this.logger.log(
           `Received reminder.participant.dispatch event: ${JSON.stringify(summarizeEventPayload(payload))}`,
         );
@@ -1391,43 +1372,33 @@ export class EventsController {
         // event carries the whole audience as one message, so throwing would
         // nack it and re-mail everyone who already succeeded on the retry.
         // Best-effort per recipient avoids that — one bad address must not
-        // cost the rest.
+        // cost the rest. Outcomes are recorded per recipient in Redis
+        // (sendOncePerRecipient), so a redelivered message resumes with the
+        // recipients not yet sent to.
         const results: ParticipantReminderSendResult[] = [];
 
         for (const recipient of recipients) {
-          try {
-            const response: unknown =
-              await this.emailService.sendParticipantReminderEmail(
-                recipient.email,
-                {
-                  subject,
-                  body,
-                  participantName: recipient.fullName || 'Participant',
-                  programName,
-                  paymentsUrl,
-                  brand,
-                  brandId,
-                  programId,
-                },
-              );
-            results.push({
-              participantId: recipient.participantId,
-              providerMessageId: extractProviderMessageId(response),
-              error: null,
-            });
-          } catch (error) {
-            this.logger.error(
-              `[participant-reminder] failed to send reminder=${reminderId} to=${maskEmail(recipient.email)}`,
-              error instanceof Error ? error.stack : String(error),
-            );
-            results.push({
-              participantId: recipient.participantId,
-              providerMessageId: null,
-              error: truncateSendError(
-                error instanceof Error ? error.message : String(error),
+          const result = await this.sendOncePerRecipient(
+            dedupeKey,
+            recipient,
+            () =>
+              this.emailService.sendParticipantReminderEmail(recipient.email, {
+                subject,
+                body,
+                participantName: recipient.fullName || 'Participant',
+                programName,
+                paymentsUrl,
+                brand,
+                brandId,
+                programId,
+              }),
+            (error) =>
+              this.logger.error(
+                `[participant-reminder] failed to send reminder=${reminderId} to=${maskEmail(recipient.email)}`,
+                error instanceof Error ? error.stack : String(error),
               ),
-            });
-          }
+          );
+          if (result) results.push(result);
         }
 
         await this.reportParticipantReminderResults(
@@ -1499,7 +1470,7 @@ export class EventsController {
     eventType: string,
     data: EventPayload,
     context: RmqContext,
-    processor: () => Promise<void>,
+    processor: (dedupeKey: string) => Promise<void>,
   ): Promise<void> {
     const dedupeKey = await this.canProcess(eventType, data, context);
     if (dedupeKey === null) {
@@ -1508,14 +1479,14 @@ export class EventsController {
     }
 
     try {
-      await processor();
+      await processor(dedupeKey);
     } catch (error) {
       this.logger.error(
         `[notification-retry] processing failed event=${eventType}; routing to retry queue`,
         error instanceof Error ? error.stack : String(error),
       );
       // Free the key, else the DLX retry of this same message is deduped and dropped.
-      // ponytail: a handler that sent some emails before failing resends them on retry; a duplicate beats a silent drop.
+      // ponytail: other handlers that sent some emails before failing resend them on retry; a duplicate beats a silent drop. (Fan-out handlers resume from their per-recipient records.)
       await this.idempotencyService.release(dedupeKey);
       this.rejectForRetry(context, eventType);
       return;
@@ -1524,6 +1495,65 @@ export class EventsController {
     // (If the ack failed because the channel died, the broker redelivers the message and
     // canProcess reprocesses it once - see the redelivery branch there.)
     this.acknowledgeMessage(context, eventType, 'processed');
+  }
+
+  /**
+   * Sends one fan-out recipient at most once per message, recording the
+   * outcome in Redis so a reprocessed (redelivered) message resumes instead of
+   * re-mailing. Returns the result to report, or null when another live
+   * handler in this process owns the recipient and will report it itself.
+   * ponytail: a process killed after the email left but before markRecipientSent
+   * lands re-mails that one recipient on takeover; a duplicate beats a drop.
+   */
+  private async sendOncePerRecipient(
+    dedupeKey: string,
+    recipient: { participantId: string; email: string },
+    send: () => Promise<unknown>,
+    logFailure: (error: unknown) => void,
+  ): Promise<{
+    participantId: string;
+    providerMessageId: string | null;
+    error: string | null;
+  } | null> {
+    // Never the raw address: keys show up in Redis tooling and logs.
+    const recipientId =
+      recipient.participantId ||
+      createHash('sha256')
+        .update(recipient.email.toLowerCase())
+        .digest('hex')
+        .slice(0, 24);
+    const key = `${dedupeKey}:recipient:${recipientId}`;
+
+    const claim = await this.idempotencyService.claimRecipient(key);
+    if (claim.state === 'in_progress') return null;
+    if (claim.state === 'sent') {
+      return {
+        participantId: recipient.participantId,
+        providerMessageId: claim.providerMessageId,
+        error: null,
+      };
+    }
+
+    try {
+      const providerMessageId = extractProviderMessageId(await send());
+      await this.idempotencyService.markRecipientSent(key, providerMessageId);
+      return {
+        participantId: recipient.participantId,
+        providerMessageId,
+        error: null,
+      };
+    } catch (error) {
+      logFailure(error);
+      // Free the recipient so a later reprocessing retries them.
+      await this.idempotencyService.release(key);
+      return {
+        participantId: recipient.participantId,
+        providerMessageId: null,
+        error: truncateSendError(
+          error instanceof Error ? error.message : String(error),
+        ),
+      };
+    }
   }
 
   private acknowledgeMessage(
@@ -1588,7 +1618,6 @@ export class EventsController {
       // before acking gets its email sent twice; a duplicate beats a silent drop.
       if (
         (message as RmqMessage | undefined)?.fields?.redelivered &&
-        !FAN_OUT_EVENTS.has(eventType) &&
         (await this.idempotencyService.claimRedelivery(decision.dedupeKey))
       ) {
         this.logger.warn(
