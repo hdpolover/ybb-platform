@@ -254,3 +254,52 @@ describe('EmailService fallback subjects', () => {
     );
   });
 });
+
+describe('EmailService transport routing (SES SMTP primary, Resend fallback)', () => {
+  const build = (opts: { smtp: boolean; resend: boolean }) => {
+    const service = new EmailService({
+      get: (key: string) => (key === 'SMTP_HOST' ? 'localhost' : undefined),
+    } as unknown as ConfigService);
+    const sendMail = jest.fn().mockResolvedValue({ messageId: 'ses-1' });
+    const resendSend = jest
+      .fn()
+      .mockResolvedValue({ data: { id: 'rs-1' }, error: null });
+    (service as any).transporter = opts.smtp ? { sendMail } : undefined;
+    (service as any).resend = opts.resend
+      ? { emails: { send: resendSend } }
+      : undefined;
+    return { service, sendMail, resendSend };
+  };
+
+  it('sends via SMTP and never touches Resend when SMTP succeeds', async () => {
+    const { service, sendMail, resendSend } = build({ smtp: true, resend: true });
+
+    await expect(service.sendRawEmail('a@x.com', 'S', '<p>h</p>')).resolves.toEqual({
+      messageId: 'ses-1',
+    });
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    expect(resendSend).not.toHaveBeenCalled();
+  });
+
+  it('falls back to Resend when SMTP fails', async () => {
+    const { service, sendMail, resendSend } = build({ smtp: true, resend: true });
+    sendMail.mockRejectedValue(new Error('Throttling: Maximum sending rate exceeded'));
+
+    await service.sendRawEmail('a@x.com', 'S', '<p>h</p>');
+    expect(resendSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('rethrows the SMTP error when there is no Resend fallback', async () => {
+    const { service, sendMail } = build({ smtp: true, resend: false });
+    sendMail.mockRejectedValue(new Error('boom'));
+
+    await expect(service.sendRawEmail('a@x.com', 'S', '<p>h</p>')).rejects.toThrow('boom');
+  });
+
+  it('uses Resend alone when SMTP is not configured', async () => {
+    const { service, resendSend } = build({ smtp: false, resend: true });
+
+    await service.sendRawEmail('a@x.com', 'S', '<p>h</p>');
+    expect(resendSend).toHaveBeenCalledTimes(1);
+  });
+});

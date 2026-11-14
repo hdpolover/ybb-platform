@@ -33,7 +33,9 @@ export class EmailService {
     if (resendKey) {
       this.resend = new Resend(resendKey);
       this.logger.log('Resend client initialized');
-    } else {
+    }
+    // SMTP (SES in prod) is primary when configured; Resend becomes the fallback.
+    if (this.configService.get('SMTP_HOST') || !resendKey) {
       this.createTransporter();
     }
     this.registerPartials();
@@ -74,6 +76,11 @@ export class EmailService {
         host: smtpHost,
         port: Number(this.configService.get('SMTP_PORT')) || 587,
         secure: this.configService.get('SMTP_SECURE') === 'true',
+        // Fail fast so a hung SMTP connection falls back to Resend instead of
+        // holding the consumer (nodemailer's default socket timeout is 10 min).
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 30_000,
         auth: {
           user: this.configService.get('SMTP_USER'),
           pass: this.configService.get('SMTP_PASS'),
@@ -409,59 +416,79 @@ export class EmailService {
       `[sendRawEmail] Attempting email delivery to=${maskEmail(to)}, subject="${subject}"`,
     );
 
-    // Option 1: Use Resend if available
-    if (this.resend) {
+    if (this.transporter) {
       try {
-        // If using Resend, we must use a verified sender or the onboarding one
-        // For development, we might use onboarding@resend.dev
-        // For production, we should use the configured sender
-        const fromAddress =
-          this.configService.get('RESEND_FROM') || 'onboarding@resend.dev';
-
-        this.logger.log(
-          `[sendRawEmail] Sending via Resend from=${fromAddress}`,
-        );
-
-        const response = await this.resend.emails.send({
-          from: fromAddress,
-          to: to,
-          subject: subject,
-          html: html,
-          attachments: attachments,
-        });
-
-        if (response.error) {
-          this.logger.error(
-            `Resend API Error: ${JSON.stringify(response.error)}`,
-          );
-          throw new Error(response.error.message);
-        }
-
-        this.logger.log(
-          `Email sent via Resend. id=${response.data?.id ?? 'unknown'}`,
-        );
-        return response;
+        return await this.sendViaSmtp(to, subject, html, attachments);
       } catch (error) {
-        this.logger.error(
-          `Failed to send email via Resend to ${maskEmail(to)}: ${error.message}`,
-          error.stack,
+        if (!this.resend) throw error;
+        // ponytail: an SMTP timeout after SES accepted the mail resends via Resend; a duplicate beats a drop.
+        this.logger.warn(
+          `[sendRawEmail] SMTP failed, falling back to Resend: ${error.message}`,
         );
-        throw error;
       }
     }
 
-    // Option 2: Use Nodemailer (Fallback/Dev)
-    if (!this.transporter) {
-      await this.createTransporter();
+    if (this.resend) {
+      return this.sendViaResend(to, subject, html, attachments);
     }
 
+    // Dev without SMTP_HOST: the Ethereal transporter is created async.
+    await this.createTransporter();
     if (!this.transporter) {
       this.logger.warn(
         `Email not sent (no transporter): ${subject} to ${maskEmail(to)}`,
       );
       return;
     }
+    return this.sendViaSmtp(to, subject, html, attachments);
+  }
 
+  private async sendViaResend(
+    to: string,
+    subject: string,
+    html: string,
+    attachments?: any[],
+  ) {
+    try {
+      const fromAddress =
+        this.configService.get('RESEND_FROM') || 'onboarding@resend.dev';
+
+      this.logger.log(`[sendRawEmail] Sending via Resend from=${fromAddress}`);
+
+      const response = await this.resend.emails.send({
+        from: fromAddress,
+        to: to,
+        subject: subject,
+        html: html,
+        attachments: attachments,
+      });
+
+      if (response.error) {
+        this.logger.error(
+          `Resend API Error: ${JSON.stringify(response.error)}`,
+        );
+        throw new Error(response.error.message);
+      }
+
+      this.logger.log(
+        `Email sent via Resend. id=${response.data?.id ?? 'unknown'}`,
+      );
+      return response;
+    } catch (error) {
+      this.logger.error(
+        `Failed to send email via Resend to ${maskEmail(to)}: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  private async sendViaSmtp(
+    to: string,
+    subject: string,
+    html: string,
+    attachments?: any[],
+  ) {
     try {
       const info = await this.transporter.sendMail({
         from:
