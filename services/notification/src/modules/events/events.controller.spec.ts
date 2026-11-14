@@ -507,7 +507,7 @@ describe('EventsController.handleDraftNudge', () => {
 
       await controller.handleDraftNudge(payload, redeliveredContext(ack));
 
-      expect(claimRedelivery).toHaveBeenCalledWith('key');
+      expect(claimRedelivery).toHaveBeenCalledWith('key', 1);
       expect(sendDraftNudgeEmail).toHaveBeenCalledTimes(1);
       expect(ack).toHaveBeenCalledTimes(1);
     });
@@ -567,7 +567,8 @@ describe('EventsController.handleDraftNudge', () => {
         redeliveredContext(),
       );
 
-      expect(claimRedelivery).toHaveBeenCalledWith('key');
+      // A resumable batch may be cut short by more than one redeploy.
+      expect(claimRedelivery).toHaveBeenCalledWith('key', 5);
       expect(claimRecipient).toHaveBeenCalledWith('key:recipient:p-a');
       expect(sendLoaReadyEmail).toHaveBeenCalledTimes(1);
       expect(sendLoaReadyEmail).toHaveBeenCalledWith('b@example.com', expect.anything());

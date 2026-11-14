@@ -162,23 +162,30 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
   }
 
   /**
-   * Grants ONE reprocessing of a message the broker redelivered after its
-   * first consumer died holding the key. Returns false on the second ask (and
-   * on a Redis error), so a message that kills the process every time it is
-   * handled is skipped on its next delivery, not reprocessed forever: a
-   * redelivery is never nacked, so the retry/DLQ cap would not stop it.
+   * Grants a reprocessing of a message the broker redelivered after its
+   * consumer died holding the key, at most `maxGrants` times. Returns false
+   * once they are used up (and on a Redis error), so a message that kills the
+   * process every time it is handled is eventually skipped, not reprocessed
+   * forever: a redelivery is never nacked, so the retry/DLQ cap would not stop
+   * it.
    */
-  async claimRedelivery(dedupeKey: string): Promise<boolean> {
+  async claimRedelivery(dedupeKey: string, maxGrants = 1): Promise<boolean> {
     if (!this.redisClient) return false;
     try {
-      const setResult = await this.redisClient.set(
-        `${dedupeKey}:redelivered`,
-        '1',
-        'EX',
-        this.defaultTtlSeconds,
-        'NX',
-      );
-      return setResult === 'OK';
+      for (let grant = 1; grant <= maxGrants; grant += 1) {
+        const setResult = await this.redisClient.set(
+          // The first grant keeps the bare name: release() deletes that one.
+          grant === 1
+            ? `${dedupeKey}:redelivered`
+            : `${dedupeKey}:redelivered:${grant}`,
+          '1',
+          'EX',
+          this.defaultTtlSeconds,
+          'NX',
+        );
+        if (setResult === 'OK') return true;
+      }
+      return false;
     } catch (error) {
       this.logger.error(
         `Failed to claim redelivery for ${abbreviateDedupeKey(dedupeKey)}; treating it as a duplicate`,
@@ -194,6 +201,10 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
    * died mid-send, so it is taken over (the email may then go out twice, the
    * same trade as claimRedelivery). Every failure mode falls back to 'claimed':
    * a duplicate beats a silent drop.
+   * ponytail: "another instance" is read as "dead", which holds while exactly
+   * one notification process consumes the queue. With two live ones they would
+   * take each other's recipients over and mail a batch twice; make the
+   * takeover a compare-and-set (Lua) before running a second replica.
    */
   async claimRecipient(key: string): Promise<RecipientClaim> {
     if (!this.enabled || !this.redisClient) return { state: 'claimed' };
@@ -210,9 +221,15 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
 
       const existing = await this.redisClient.get(key);
       if (existing === null) {
-        // Expired or released between the two calls: nothing holds it now.
-        await this.redisClient.set(key, mine, 'EX', this.defaultTtlSeconds);
-        return { state: 'claimed' };
+        // Expired or released between the two calls; whoever wins the retry sends.
+        const retried = await this.redisClient.set(
+          key,
+          mine,
+          'EX',
+          this.defaultTtlSeconds,
+          'NX',
+        );
+        return { state: retried === 'OK' ? 'claimed' : 'in_progress' };
       }
       if (existing.startsWith(RECIPIENT_SENT_PREFIX)) {
         return {
@@ -226,9 +243,9 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
       await this.redisClient.set(key, mine, 'EX', this.defaultTtlSeconds);
       return { state: 'claimed' };
     } catch (error) {
-      this.logger.error(
+      this.logRedisFailure(
         `Failed to claim recipient ${abbreviateDedupeKey(key)}; sending in fallback mode`,
-        error instanceof Error ? error.stack : String(error),
+        error,
       );
       return { state: 'claimed' };
     }
@@ -248,11 +265,23 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
         this.defaultTtlSeconds,
       );
     } catch (error) {
-      this.logger.error(
+      this.logRedisFailure(
         `Failed to record sent recipient ${abbreviateDedupeKey(key)}; a reprocessed batch may mail them again`,
-        error instanceof Error ? error.stack : String(error),
+        error,
       );
     }
+  }
+
+  /** One line per cooldown, not one stack trace per recipient of a batch, while Redis is down. */
+  private logRedisFailure(message: string, error: unknown): void {
+    const now = Date.now();
+    if (now < this.circuitOpenUntil) return;
+    this.circuitOpenUntil =
+      now + NotificationIdempotencyService.CIRCUIT_COOLDOWN_MS;
+    this.logger.error(
+      `${message} (further Redis errors suppressed for ${NotificationIdempotencyService.CIRCUIT_COOLDOWN_SECONDS}s)`,
+      error instanceof Error ? error.stack : String(error),
+    );
   }
 
   onModuleDestroy() {

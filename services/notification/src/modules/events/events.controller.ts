@@ -113,6 +113,19 @@ type RabbitChannel = {
   nack: (message: unknown, allUpTo?: boolean, requeue?: boolean) => void;
 };
 
+/**
+ * Batches that record each recipient's outcome (sendOncePerRecipient), so
+ * reprocessing one only sends what is still owed. A long batch can be cut
+ * short by more than one redeploy, hence more than the single redelivery
+ * grant other events get; still capped, in case the batch itself is what
+ * kills the process.
+ */
+const RESUMABLE_EVENTS = new Set([
+  'loa.batch.released',
+  'reminder.participant.dispatch',
+]);
+const RESUMABLE_REDELIVERY_GRANTS = 5;
+
 @Controller()
 export class EventsController {
   private readonly logger = new Logger(EventsController.name);
@@ -1618,7 +1631,10 @@ export class EventsController {
       // before acking gets its email sent twice; a duplicate beats a silent drop.
       if (
         (message as RmqMessage | undefined)?.fields?.redelivered &&
-        (await this.idempotencyService.claimRedelivery(decision.dedupeKey))
+        (await this.idempotencyService.claimRedelivery(
+          decision.dedupeKey,
+          RESUMABLE_EVENTS.has(eventType) ? RESUMABLE_REDELIVERY_GRANTS : 1,
+        ))
       ) {
         this.logger.warn(
           `[notification-idempotency] dedupe_hit=true processed=true event=${eventType} key=${abbreviateDedupeKey(decision.dedupeKey)} reason=redelivered`,
