@@ -71,6 +71,7 @@ type ReadinessRegressionBlocker = {
   symptom: string;
 };
 type RmqMessage = {
+  fields?: { redelivered?: boolean };
   content?: Buffer;
   properties?: {
     headers?: Record<string, unknown>;
@@ -110,6 +111,18 @@ type RabbitChannel = {
   ack: (message: unknown) => void;
   nack: (message: unknown, allUpTo?: boolean, requeue?: boolean) => void;
 };
+
+/**
+ * One message, many recipients, sent in a loop with no per-recipient record.
+ * Reprocessing a redelivery of one of these would mail everyone already sent
+ * to again, so they keep the plain duplicate skip.
+ * ponytail: the recipients not yet reached when the consumer died are dropped
+ * (as before). Per-recipient dedupe keys inside those loops would fix both.
+ */
+const FAN_OUT_EVENTS = new Set([
+  'loa.batch.released',
+  'reminder.participant.dispatch',
+]);
 
 @Controller()
 export class EventsController {
@@ -1508,6 +1521,8 @@ export class EventsController {
       return;
     }
     // Outside the try: an ack failure after a successful send must not release the key and resend.
+    // (If the ack failed because the channel died, the broker redelivers the message and
+    // canProcess reprocesses it once - see the redelivery branch there.)
     this.acknowledgeMessage(context, eventType, 'processed');
   }
 
@@ -1565,6 +1580,23 @@ export class EventsController {
     );
 
     if (!decision.shouldProcess) {
+      // The broker redelivers a message only when the consumer holding it went
+      // away without acking - in practice a redeploy killing the process
+      // mid-send. That consumer had already claimed the key, so here the key
+      // means "started", not "sent": skipping would drop the email.
+      // ponytail: a consumer that died (or lost its channel) after sending but
+      // before acking gets its email sent twice; a duplicate beats a silent drop.
+      if (
+        (message as RmqMessage | undefined)?.fields?.redelivered &&
+        !FAN_OUT_EVENTS.has(eventType) &&
+        (await this.idempotencyService.claimRedelivery(decision.dedupeKey))
+      ) {
+        this.logger.warn(
+          `[notification-idempotency] dedupe_hit=true processed=true event=${eventType} key=${abbreviateDedupeKey(decision.dedupeKey)} reason=redelivered`,
+        );
+        return decision.dedupeKey;
+      }
+
       this.logger.warn(
         `[notification-idempotency] dedupe_hit=true processed=false event=${eventType} key=${abbreviateDedupeKey(decision.dedupeKey)}`,
       );

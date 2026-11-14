@@ -408,6 +408,7 @@ describe('EventsController.handleDraftNudge', () => {
   let controller: EventsController;
   let sendDraftNudgeEmail: jest.Mock;
   let shouldProcess: jest.Mock;
+  let claimRedelivery: jest.Mock;
 
   beforeEach(() => {
     sendDraftNudgeEmail = jest.fn().mockResolvedValue(undefined);
@@ -416,11 +417,13 @@ describe('EventsController.handleDraftNudge', () => {
       dedupeKey: 'key',
       reason: 'new',
     });
+    claimRedelivery = jest.fn().mockResolvedValue(false);
     controller = new EventsController(
       { sendDraftNudgeEmail } as unknown as EmailService,
       {} as ReceiptService,
       {
         shouldProcess,
+        claimRedelivery,
         markProcessed: jest.fn().mockResolvedValue(undefined),
         release: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
@@ -478,6 +481,71 @@ describe('EventsController.handleDraftNudge', () => {
     await controller.handleDraftNudge(payload, makeContext());
 
     expect(sendDraftNudgeEmail).not.toHaveBeenCalled();
+  });
+
+  describe('broker redelivery of a message whose dedupe key is already claimed', () => {
+    // The consumer that claimed the key was killed before it sent or acked.
+    const redeliveredContext = (ack = jest.fn()): RmqContext =>
+      ({
+        getMessage: () => ({
+          fields: { redelivered: true },
+          content: Buffer.from('{}'),
+          properties: { headers: {} },
+        }),
+        getChannelRef: () => ({ ack, nack: jest.fn() }),
+      }) as unknown as RmqContext;
+
+    beforeEach(() => {
+      shouldProcess.mockResolvedValue({ shouldProcess: false, dedupeKey: 'key', reason: 'duplicate' });
+    });
+
+    it('sends it once more', async () => {
+      claimRedelivery.mockResolvedValueOnce(true);
+      const ack = jest.fn();
+
+      await controller.handleDraftNudge(payload, redeliveredContext(ack));
+
+      expect(claimRedelivery).toHaveBeenCalledWith('key');
+      expect(sendDraftNudgeEmail).toHaveBeenCalledTimes(1);
+      expect(ack).toHaveBeenCalledTimes(1);
+    });
+
+    it('still skips a duplicate the broker did not redeliver', async () => {
+      claimRedelivery.mockResolvedValue(true);
+
+      await controller.handleDraftNudge(payload, makeContext());
+
+      expect(claimRedelivery).not.toHaveBeenCalled();
+      expect(sendDraftNudgeEmail).not.toHaveBeenCalled();
+    });
+
+    it('skips it when the one reprocessing was already used', async () => {
+      claimRedelivery.mockResolvedValueOnce(false);
+      const ack = jest.fn();
+
+      await controller.handleDraftNudge(payload, redeliveredContext(ack));
+
+      expect(sendDraftNudgeEmail).not.toHaveBeenCalled();
+      expect(ack).toHaveBeenCalledTimes(1);
+    });
+
+    it('never reprocesses a fan-out batch, which would re-mail every recipient already sent to', async () => {
+      const sendLoaReleasedEmail = jest.fn().mockResolvedValue(undefined);
+      const fanOutController = new EventsController(
+        { sendLoaReleasedEmail } as unknown as EmailService,
+        {} as ReceiptService,
+        { shouldProcess, claimRedelivery, release: jest.fn() } as unknown as NotificationIdempotencyService,
+        { emit: jest.fn().mockResolvedValue(true) } as unknown as RabbitMQProducerService,
+      );
+
+      await fanOutController.handleLoaBatchReleased(
+        { recipients: [{ email: 'jane@example.com' }] },
+        redeliveredContext(),
+      );
+
+      expect(claimRedelivery).not.toHaveBeenCalled();
+      expect(sendLoaReleasedEmail).not.toHaveBeenCalled();
+    });
   });
 });
 
