@@ -147,6 +147,8 @@ export class SubmissionDeadlineReminderService {
     };
 
     let budget = MAX_REMINDERS_PER_TICK;
+    // A claim only counts if it was made today: see findCandidates.
+    const todayStart = startOfWibDay(referenceDate);
 
     for (const offsetDays of REMINDER_OFFSET_DAYS) {
       if (budget <= 0) break;
@@ -160,6 +162,7 @@ export class SubmissionDeadlineReminderService {
       const candidates = await this.findCandidates(
         offsetDays,
         { gte: targetDayStart, lt: targetDayEnd },
+        todayStart,
         budget,
       );
 
@@ -168,7 +171,7 @@ export class SubmissionDeadlineReminderService {
 
       for (const candidate of candidates) {
         try {
-          const outcome = await this.remindOne(candidate, offsetDays);
+          const outcome = await this.remindOne(candidate, offsetDays, todayStart);
           if (outcome === 'sent') report.sent += 1;
           else if (outcome === 'already_sent') report.alreadySent += 1;
           else report.skippedNoEmail += 1;
@@ -185,7 +188,16 @@ export class SubmissionDeadlineReminderService {
   }
 
   /**
-   * Up to `take` candidates for one offset that have no claim yet.
+   * Up to `take` candidates for one offset that have no claim from today.
+   *
+   * "From today" because the log is unique per application + offset, with no
+   * record of which deadline a claim was for. An offset only ever falls due on
+   * one day per deadline, so a claim made on an earlier day belongs to an
+   * earlier deadline: the program's deadline was moved, and the application is
+   * due this reminder again (claimReminder takes the old row over).
+   *
+   * Only verified addresses are selected. An unverified one is where typos
+   * and dead mailboxes are, and a bounce costs sender reputation.
    *
    * SubmissionReminderLog has no Prisma relation to the application, so "not
    * yet claimed" is not expressible as a Prisma filter - hence the raw
@@ -202,6 +214,7 @@ export class SubmissionDeadlineReminderService {
   private async findCandidates(
     offsetDays: ReminderOffsetDays,
     deadlineWindow: { gte: Date; lt: Date },
+    todayStart: Date,
     take: number,
   ): Promise<ReminderCandidate[]> {
     // No program due is the usual case: one read of a 30-row table per offset.
@@ -224,9 +237,12 @@ export class SubmissionDeadlineReminderService {
         AND u.is_active
         AND u.deleted_at IS NULL
         AND u.email <> ''
+        AND u.email_verified
         AND NOT EXISTS (
           SELECT 1 FROM submission_reminder_logs l
-          WHERE l.application_id = pa.id AND l.reminder_offset = ${offsetDays}
+          WHERE l.application_id = pa.id
+            AND l.reminder_offset = ${offsetDays}
+            AND l.sent_at >= ${todayStart}
         )
       LIMIT ${take}
     `;
@@ -242,8 +258,8 @@ export class SubmissionDeadlineReminderService {
    * Claim-then-send: the unique (application_id, reminder_offset) row is
    * inserted BEFORE the event is emitted, so the DB constraint is what
    * guarantees at-most-once delivery - not timing. A duplicate claim
-   * (P2002) means this offset was already sent (by an earlier run, another
-   * replica, or a retry) and is skipped. A claim that succeeds but whose
+   * (P2002) made today means this offset was already sent (by an earlier
+   * tick, another replica, or a retry) and is skipped. A claim that succeeds but whose
    * publish then fails is released again, so the next tick selects the
    * application once more; the failure still propagates and is counted as an
    * error. Without the release, every tick in which emit keeps throwing (for
@@ -253,6 +269,7 @@ export class SubmissionDeadlineReminderService {
   private async remindOne(
     candidate: ReminderCandidate,
     offsetDays: ReminderOffsetDays,
+    todayStart: Date,
   ): Promise<'sent' | 'already_sent' | 'skipped_no_email'> {
     const email = candidate.participant?.user?.email;
     if (!email) {
@@ -262,7 +279,7 @@ export class SubmissionDeadlineReminderService {
       return 'skipped_no_email';
     }
 
-    const claimed = await this.claimReminder(candidate.id, offsetDays);
+    const claimed = await this.claimReminder(candidate.id, offsetDays, todayStart);
     if (!claimed) {
       return 'already_sent';
     }
@@ -309,8 +326,17 @@ export class SubmissionDeadlineReminderService {
     return 'sent';
   }
 
-  /** Returns true if this call claimed the row (i.e. no reminder sent yet for this offset). */
-  private async claimReminder(applicationId: string, offsetDays: ReminderOffsetDays): Promise<boolean> {
+  /**
+   * Returns true if this call claimed the row: no reminder sent yet today for
+   * this offset. A row left by an earlier deadline (sent before today) is
+   * taken over by moving its sent_at; the conditional update is atomic, so two
+   * replicas cannot both take it.
+   */
+  private async claimReminder(
+    applicationId: string,
+    offsetDays: ReminderOffsetDays,
+    todayStart: Date,
+  ): Promise<boolean> {
     try {
       await this.prisma.submissionReminderLog.create({
         data: { applicationId, reminderOffset: offsetDays },
@@ -318,13 +344,18 @@ export class SubmissionDeadlineReminderService {
       return true;
     } catch (error) {
       if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === PRISMA_UNIQUE_CONSTRAINT_VIOLATION
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== PRISMA_UNIQUE_CONSTRAINT_VIOLATION
       ) {
-        return false;
+        throw error;
       }
-      throw error;
     }
+
+    const takenOver = await this.prisma.submissionReminderLog.updateMany({
+      where: { applicationId, reminderOffset: offsetDays, sentAt: { lt: todayStart } },
+      data: { sentAt: new Date() },
+    });
+    return takenOver.count === 1;
   }
 }
 

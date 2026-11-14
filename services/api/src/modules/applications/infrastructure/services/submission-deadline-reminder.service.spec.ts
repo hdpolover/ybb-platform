@@ -41,7 +41,7 @@ describe('SubmissionDeadlineReminderService', () => {
     program: { findMany: jest.Mock };
     $queryRaw: jest.Mock;
     participantApplication: { findMany: jest.Mock };
-    submissionReminderLog: { create: jest.Mock; deleteMany: jest.Mock };
+    submissionReminderLog: { create: jest.Mock; updateMany: jest.Mock; deleteMany: jest.Mock };
   };
   let mockRabbitmq: { emit: jest.Mock };
 
@@ -56,6 +56,7 @@ describe('SubmissionDeadlineReminderService', () => {
       participantApplication: { findMany: jest.fn().mockResolvedValue([]) },
       submissionReminderLog: {
         create: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
@@ -86,13 +87,14 @@ describe('SubmissionDeadlineReminderService', () => {
       const dayStart = startOfWibDay(addDays(referenceDate, offsetDays));
       const dayEnd = addDays(dayStart, 1);
       const programCall = mockPrisma.program.findMany.mock.calls[index][0];
-      // Tagged template: [sql fragments, due program ids, offset, limit].
-      const [, programIds, offset] = mockPrisma.$queryRaw.mock.calls[index];
+      // Tagged template: [sql fragments, due program ids, offset, start of today, limit].
+      const [, programIds, offset, todayStart] = mockPrisma.$queryRaw.mock.calls[index];
 
       expect(programCall.where.applicationDeadline.gte).toEqual(dayStart);
       expect(programCall.where.applicationDeadline.lt).toEqual(dayEnd);
       expect(programIds).toEqual(['prog-1']);
       expect(offset).toBe(offsetDays);
+      expect(todayStart).toEqual(startOfWibDay(referenceDate));
     });
   });
 
@@ -108,7 +110,10 @@ describe('SubmissionDeadlineReminderService', () => {
     expect(sql).toContain('u.is_active');
     expect(sql).toContain('u.deleted_at IS NULL');
     expect(sql).toContain("u.email <> ''"); // an unsendable row would be re-selected every tick
+    expect(sql).toContain('u.email_verified');
     expect(sql).toMatch(/NOT EXISTS \(\s*SELECT 1 FROM submission_reminder_logs/);
+    // Only a claim made today blocks: one from an earlier deadline does not.
+    expect(sql).toMatch(/l\.sent_at >= \?/);
     // Eligibility is decided by the SQL alone: an extra condition here would
     // leave rows selected every tick but never claimed.
     expect(mockPrisma.participantApplication.findMany.mock.calls[0][0].where).toEqual({
@@ -260,13 +265,32 @@ describe('SubmissionDeadlineReminderService', () => {
 
     const report = await service.sendDueReminders(referenceDate);
 
-    const queried = mockPrisma.$queryRaw.mock.calls.map(([, , offset, take]) => [offset, take]);
+    const queried = mockPrisma.$queryRaw.mock.calls.map(([, , offset, , take]) => [offset, take]);
     expect(queried).toEqual([
       [1, 150],
       [3, 50],
     ]); // offset 7 is not queried: no budget left
     expect(report.sent).toBe(150);
     expect(mockRabbitmq.emit).toHaveBeenCalledTimes(150);
+  });
+
+  it('reminds again when the only claim is from an earlier deadline, by taking that row over', async () => {
+    mockPrisma.participantApplication.findMany.mockResolvedValueOnce([makeCandidate()]); // offset 1
+    mockPrisma.submissionReminderLog.create.mockRejectedValueOnce(uniqueViolation());
+    mockPrisma.submissionReminderLog.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    const report = await service.sendDueReminders(referenceDate);
+
+    expect(mockPrisma.submissionReminderLog.updateMany).toHaveBeenCalledWith({
+      where: {
+        applicationId: 'app-1',
+        reminderOffset: 1,
+        sentAt: { lt: startOfWibDay(referenceDate) },
+      },
+      data: { sentAt: expect.any(Date) },
+    });
+    expect(mockRabbitmq.emit).toHaveBeenCalledTimes(1);
+    expect(report.sent).toBe(1);
   });
 
   it('releases the claim when the publish fails, so the next tick selects the application again', async () => {
