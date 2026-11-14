@@ -17,126 +17,15 @@
 # The old data volume (postgres_api_data_prod) is NOT deleted by this change; it
 # stays on disk until someone removes it explicitly.
 services:
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
-    restart: always
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-    # No ports exposed to host, only via Traefik
-    environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      PORT: ${PORT:-4000}
-      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@${DATABASE_HOST:?DATABASE_HOST must be set}:5432/${DATABASE_NAME}
-      REDIS_URL: redis://default:${REDIS_PASSWORD}@${REDIS_HOST:-ybb-platform-redis-service-omv9vw}:6379
-      REDIS_HOST: ${REDIS_HOST:-ybb-platform-redis-service-omv9vw}
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      # Links to other services (on same dokploy-network)
-      PAYMENT_SERVICE_URL: ${PAYMENT_SERVICE_URL}
-      PAYMENT_SERVICE_FALLBACK_URL: ${PAYMENT_SERVICE_FALLBACK_URL}
-      PAYMENT_SERVICE_INTERNAL_KEY: ${PAYMENT_SERVICE_INTERNAL_KEY}
-      RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
-      # Promotional email (Listmonk). All optional: unset = brand email-theme saves
-      # still work, Listmonk sync reports "not configured".
-      LISTMONK_URL: ${LISTMONK_URL:-}
-      LISTMONK_API_USER: ${LISTMONK_API_USER:-}
-      LISTMONK_API_TOKEN: ${LISTMONK_API_TOKEN:-}
-      MARKETING_FROM_DOMAIN: ${MARKETING_FROM_DOMAIN:-news.youthbreaktheboundaries.com}
-      PAYMENT_GRPC_URL: ${PAYMENT_GRPC_URL}
-      FILE_SERVICE_URL: ${FILE_SERVICE_URL}
-      FILE_SERVICE_INTERNAL_KEY: ${FILE_SERVICE_INTERNAL_KEY}
-      STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL}
-      CORS_ORIGINS: ${CORS_ORIGINS}
-      # Without these the API sends no Authorization header to the landing
-      # app's revalidate hooks, every call 401s, LandingRevalidationService
-      # swallows the failure, and brand/program content edits stay invisible
-      # publicly until the 1h snapshot TTL expires. The values were already
-      # configured in Dokploy; they were simply never mapped into the
-      # container, so the process could not see them.
-      SETTINGS_REVALIDATE_SECRET: ${SETTINGS_REVALIDATE_SECRET}
-      HOME_REVALIDATE_SECRET: ${HOME_REVALIDATE_SECRET}
-      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@ybb-prod-shared-rabbitmq:5672/
-      RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY: ${RABBITMQ_QUEUE_CLEANUP_ON_DEPLOY:-false}
-      # NOTE: api-service-payment-events must NOT be a cleanup target. Purging it
-      # drops in-flight payment.succeeded events, which silently leaves paid invoices
-      # stuck unpaid and blocks application submission. Reconciliation is the safety net.
-      RABBITMQ_QUEUE_CLEANUP_TARGETS: ${RABBITMQ_QUEUE_CLEANUP_TARGETS:-audit_log_queue,reporting_queue}
-      RABBITMQ_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ: ${RABBITMQ_QUEUE_CLEANUP_INCLUDE_RETRY_DLQ:-true}
-      # Optional overrides for RabbitMQ Management API used by cleanup script
-      RABBITMQ_MANAGEMENT_URL: ${RABBITMQ_MANAGEMENT_URL:-}
-      RABBITMQ_MANAGEMENT_USER: ${RABBITMQ_MANAGEMENT_USER:-}
-      RABBITMQ_MANAGEMENT_PASS: ${RABBITMQ_MANAGEMENT_PASS:-}
-      RABBITMQ_MANAGEMENT_VHOST: ${RABBITMQ_MANAGEMENT_VHOST:-}
-      # Auth
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
-      JWT_ADMIN_EXPIRES_IN: ${JWT_ADMIN_EXPIRES_IN:-8h}
-      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      ADMIN_REGISTRATION_SECRET: ${ADMIN_REGISTRATION_SECRET}
-      # Ambassador share links are AES-GCM keyed by this, falling back to
-      # JWT_SECRET when empty. Separate so JWT_SECRET can rotate without
-      # breaking share links already in circulation.
-      AMBASSADOR_SHARE_TOKEN_SECRET: ${AMBASSADOR_SHARE_TOKEN_SECRET:-}
-      # Checkout (inline signup + payment). Mapped explicitly: Dokploy UI values
-      # never reach the container unless listed here.
-      CHECKOUT_ENABLED: ${CHECKOUT_ENABLED:-false}
-      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
-      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
-      # Turnstile on register/login/forgot-password/resend-verification. Dry run (log only) unless "true".
-      AUTH_TURNSTILE_ENFORCE: ${AUTH_TURNSTILE_ENFORCE:-false}
-      # Rate Limiting
-      THROTTLE_SHORT_LIMIT: ${THROTTLE_SHORT_LIMIT:-20}
-      THROTTLE_MEDIUM_LIMIT: ${THROTTLE_MEDIUM_LIMIT:-100}
-      THROTTLE_LONG_LIMIT: ${THROTTLE_LONG_LIMIT:-300}
-      # gRPC
-      FILE_GRPC_URL: ${FILE_GRPC_URL:-ybb-prod-file:50052}
-      # Firebase Admin
-      # Option 1: Full JSON in Env Var (Recommended for Dokploy)
-      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON}
-      # Firebase Client
-      FIREBASE_API_KEY: ${FIREBASE_API_KEY}
-      FIREBASE_AUTH_DOMAIN: ${FIREBASE_AUTH_DOMAIN}
-      FIREBASE_STORAGE_BUCKET: ${FIREBASE_STORAGE_BUCKET}
-      FIREBASE_MESSAGING_SENDER_ID: ${FIREBASE_MESSAGING_SENDER_ID}
-      FIREBASE_APP_ID: ${FIREBASE_APP_ID}
-      FIREBASE_MEASUREMENT_ID: ${FIREBASE_MEASUREMENT_ID}
-      # Advanced Features Configuration
-      READ_REPLICA_URL: ${READ_REPLICA_URL:-}
-      CIRCUIT_BREAKER_FAILURE_THRESHOLD: ${CIRCUIT_BREAKER_FAILURE_THRESHOLD:-5}
-      CIRCUIT_BREAKER_SUCCESS_THRESHOLD: ${CIRCUIT_BREAKER_SUCCESS_THRESHOLD:-3}
-      CIRCUIT_BREAKER_TIMEOUT: ${CIRCUIT_BREAKER_TIMEOUT:-60000}
-      # Ops alerts (pricing-tier coverage cron) - comma-separated recipient list.
-      # Must be listed here or the value set in the Dokploy panel never reaches
-      # the container (same gap that broke SETTINGS_REVALIDATE_SECRET above).
-      OPS_ALERT_EMAILS: ${OPS_ALERT_EMAILS}
-      # Observability
-      LOKI_URL: ${LOKI_URL}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
-      OTEL_LOG_LEVEL: ${OTEL_LOG_LEVEL:-info}
-      # Release tasks run once, in api-release below, not on every boot.
-      SKIP_RELEASE_TASKS: "true"
-    depends_on:
-      api-release:
-        condition: service_completed_successfully
-    # Readiness is defined ONCE, as a HEALTHCHECK in Dockerfile.prod, so compose
-    # and Swarm cannot disagree about what "ready" means. Swarm reads health from
-    # the image, so it has to live there; repeating it here would be a second
-    # source of truth for the same thing.
-    networks:
-      - dokploy-network
-    # Dokploy handles Traefik labels and SSL termination automatically via the UI
+  # The long-running `api` service that used to live here was retired on
+  # 2026-11-14. The API runs only as the Dokploy Swarm application
+  # ybb-platform-api-swarm-dfnvo6 (2 replicas, health-gated rolling deploys);
+  # the portal reaches it via API_INTERNAL_URL=http://ybb-platform-api-swarm-dfnvo6:4000/v1.
+  # This compose project keeps only the per-deploy release step and backups.
 
   # One-shot: queue cleanup, prisma migrate deploy, reference seed — then exits.
-  # The api service waits on it completing successfully, so ordering is
-  # unchanged; what changes is that this work happens ONCE per deploy instead of
-  # once per container start, and is not sitting in front of the port opening.
-  #
-  # Same build as api, so the image is built once and reused rather than pulled
-  # or rebuilt separately.
+  # Runs once per deploy of this compose project (every push touching
+  # services/api/**). The Swarm API skips release tasks (SKIP_RELEASE_TASKS).
   api-release:
     build:
       context: .
