@@ -107,6 +107,7 @@ describe('SubmissionDeadlineReminderService', () => {
     expect(sql).toContain('pt.deleted_at IS NULL');
     expect(sql).toContain('u.is_active');
     expect(sql).toContain('u.deleted_at IS NULL');
+    expect(sql).toContain("u.email <> ''"); // an unsendable row would be re-selected every tick
     expect(sql).toMatch(/NOT EXISTS \(\s*SELECT 1 FROM submission_reminder_logs/);
     // Eligibility is decided by the SQL alone: an extra condition here would
     // leave rows selected every tick but never claimed.

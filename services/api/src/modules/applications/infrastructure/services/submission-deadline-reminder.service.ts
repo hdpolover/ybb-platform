@@ -194,9 +194,10 @@ export class SubmissionDeadlineReminderService {
    * would leave rows that are selected here every tick but never claimed, and
    * they would fill the LIMIT and block everyone behind them.
    *
-   * The participant/user conditions mirror ACTIVE_PARTICIPANT_WHERE
-   * (shared/utils/active-participant.filter.ts); keep the
-   * two in step.
+   * The email condition is what keeps remindOne's skipped_no_email branch from
+   * being exactly such a row. The participant/user conditions mirror
+   * ACTIVE_PARTICIPANT_WHERE (shared/utils/active-participant.filter.ts);
+   * keep the two in step.
    */
   private async findCandidates(
     offsetDays: ReminderOffsetDays,
@@ -222,6 +223,7 @@ export class SubmissionDeadlineReminderService {
         AND pt.deleted_at IS NULL
         AND u.is_active
         AND u.deleted_at IS NULL
+        AND u.email <> ''
         AND NOT EXISTS (
           SELECT 1 FROM submission_reminder_logs l
           WHERE l.application_id = pa.id AND l.reminder_offset = ${offsetDays}
@@ -244,8 +246,9 @@ export class SubmissionDeadlineReminderService {
    * replica, or a retry) and is skipped. A claim that succeeds but whose
    * publish then fails is released again, so the next tick selects the
    * application once more; the failure still propagates and is counted as an
-   * error. Without the release, a broker outage would burn one tick's worth of
-   * claims every minute for as long as it lasted.
+   * error. Without the release, every tick in which emit keeps throwing (for
+   * example a producer that never initialised) would use up its claims for
+   * nothing.
    */
   private async remindOne(
     candidate: ReminderCandidate,
