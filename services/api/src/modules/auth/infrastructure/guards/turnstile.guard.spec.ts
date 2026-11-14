@@ -49,6 +49,18 @@ describe('TurnstileGuard', () => {
       expect(verify).not.toHaveBeenCalled();
     });
 
+    it('logs missing and accepted outcomes with the brand, for the enforce decision', async () => {
+      const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+      const { guard } = mkGuard(DRY_RUN);
+      await guard.canActivate(mkContext({ 'x-brand-domain': 'chinayouthsummit.com' }));
+      await guard.canActivate(mkContext({ 'x-turnstile-token': 'good', 'x-brand-domain': 'chinayouthsummit.com' }));
+      expect(log.mock.calls.map((c) => c[0])).toEqual([
+        expect.stringMatching(/dry-run missing on POST .* brand=chinayouthsummit\.com/),
+        expect.stringMatching(/dry-run accepted on POST .* brand=chinayouthsummit\.com/),
+      ]);
+      log.mockRestore();
+    });
+
     it('passes a bad token but logs a warning', async () => {
       const { guard, verify } = mkGuard(DRY_RUN, jest.fn().mockResolvedValue(false));
       await expect(guard.canActivate(mkContext({ 'x-turnstile-token': 'bad' }))).resolves.toBe(true);
