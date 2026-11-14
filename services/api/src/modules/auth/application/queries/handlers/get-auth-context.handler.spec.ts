@@ -7,6 +7,7 @@
 import { GetAuthContextHandler } from './get-auth-context.handler';
 import { openRegistrationProgramQuery } from '../../../../../shared/utils/active-program-resolver';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 
 const MEYS_2026 = { id: 'p-2026', slug: 'middle-east-youth-summit-6th', requireEmailVerification: false };
@@ -23,6 +24,9 @@ function mkPrisma(programFindFirst: jest.Mock): PrismaService {
 // Always a cache miss — mirrors the real CacheService's behaviour the first
 // time a key is requested, and keeps these tests exercising the same
 // prisma.authProvider.findMany path they asserted on before caching was added.
+const mkConfig = (siteKey?: string): ConfigService =>
+    ({ get: (k: string) => (k === 'TURNSTILE_SITE_KEY' ? siteKey : undefined) }) as unknown as ConfigService;
+
 function mkCache(): CacheService {
     return {
         get: jest.fn().mockResolvedValue(undefined),
@@ -36,7 +40,7 @@ describe('GetAuthContextHandler — concurrent active programs', () => {
         // published+active but does not open until September, so the old
         // `year desc` query would have returned it.
         const findFirst = jest.fn().mockResolvedValueOnce(MEYS_2026);
-        const handler = new GetAuthContextHandler(mkPrisma(findFirst), mkCache());
+        const handler = new GetAuthContextHandler(mkPrisma(findFirst), mkCache(), mkConfig());
 
         const result = await handler.execute({ brandDomain: 'meys.com' } as any);
 
@@ -50,7 +54,7 @@ describe('GetAuthContextHandler — concurrent active programs', () => {
 
     it('falls back to the newest published+active program when no window is open', async () => {
         const findFirst = jest.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(MEYS_2027);
-        const handler = new GetAuthContextHandler(mkPrisma(findFirst), mkCache());
+        const handler = new GetAuthContextHandler(mkPrisma(findFirst), mkCache(), mkConfig());
 
         const result = await handler.execute({ brandDomain: 'meys.com' } as any);
 
@@ -73,7 +77,7 @@ describe('GetAuthContextHandler — concurrent active programs', () => {
         // inactive program here; that must NOT happen at the registration
         // entry point.
         const findFirst = jest.fn().mockResolvedValue(null);
-        const handler = new GetAuthContextHandler(mkPrisma(findFirst), mkCache());
+        const handler = new GetAuthContextHandler(mkPrisma(findFirst), mkCache(), mkConfig());
 
         const result = await handler.execute({ brandDomain: 'meys.com' } as any);
 
@@ -88,11 +92,31 @@ describe('GetAuthContextHandler — concurrent active programs', () => {
         const prisma = mkPrisma(findFirst);
         const cache = mkCache();
         (cache.get as jest.Mock).mockResolvedValue([{ id: 'cached-local', name: 'local', displayName: 'Email', description: null, isOAuth: false, icon: null, buttonColor: null }]);
-        const handler = new GetAuthContextHandler(prisma, cache);
+        const handler = new GetAuthContextHandler(prisma, cache, mkConfig());
 
         const result = await handler.execute({ brandDomain: 'meys.com' } as any);
 
         expect(result.localProviderId).toBe('cached-local');
         expect(prisma.authProvider.findMany).not.toHaveBeenCalled();
+    });
+
+    it('exposes the Turnstile site key, for a resolved and an unresolved brand', async () => {
+        const findFirst = jest.fn().mockResolvedValue(MEYS_2026);
+        const handler = new GetAuthContextHandler(mkPrisma(findFirst), mkCache(), mkConfig('site-key'));
+
+        expect((await handler.execute({ brandDomain: 'meys.com' } as any)).turnstileSiteKey).toBe('site-key');
+
+        const prisma = mkPrisma(findFirst);
+        (prisma.brand.findFirst as jest.Mock).mockResolvedValue(null);
+        const unresolved = new GetAuthContextHandler(prisma, mkCache(), mkConfig('site-key'));
+        expect((await unresolved.execute({ brandDomain: 'nope.com' } as any)).turnstileSiteKey).toBe('site-key');
+    });
+
+    it('returns a null Turnstile site key when TURNSTILE_SITE_KEY is unset or blank', async () => {
+        const findFirst = jest.fn().mockResolvedValue(MEYS_2026);
+        for (const key of [undefined, '']) {
+            const handler = new GetAuthContextHandler(mkPrisma(findFirst), mkCache(), mkConfig(key));
+            expect((await handler.execute({ brandDomain: 'meys.com' } as any)).turnstileSiteKey).toBeNull();
+        }
     });
 });
