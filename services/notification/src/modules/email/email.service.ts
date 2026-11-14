@@ -19,10 +19,22 @@ interface ManagedEmailTemplate {
   updatedAt?: string;
 }
 
+/**
+ * Emails in flight at once: the size of the SMTP connection pool and the
+ * RabbitMQ prefetch in main.ts, kept equal so neither waits on the other.
+ * A pooled SES send takes about 0.7s from the VPS, so 8 connections reach
+ * roughly 11/s before the rate cap below.
+ */
+export const EMAIL_SEND_CONCURRENCY = 8;
+
+/** SES allows 14/s across the whole account, shared with the marketing sender. */
+export const SMTP_MAX_MESSAGES_PER_SECOND = 10;
+
 @Injectable()
 export class EmailService {
   private transporter: nodemailer.Transporter;
   private resend: Resend;
+  private resendQueue: Promise<unknown> = Promise.resolve();
   private readonly logger = new Logger(EmailService.name);
   private readonly templateCache = new Map<string, hbs.TemplateDelegate>();
 
@@ -84,6 +96,11 @@ export class EmailService {
         port: Number(this.configService.get('SMTP_PORT')) || 587,
         secure: this.configService.get('SMTP_SECURE') === 'true',
         requireTLS: this.configService.get('SMTP_SECURE') !== 'true',
+        // Reuse connections: a fresh TLS handshake per mail costs about 1s.
+        pool: true,
+        maxConnections: EMAIL_SEND_CONCURRENCY,
+        rateDelta: 1000,
+        rateLimit: SMTP_MAX_MESSAGES_PER_SECOND,
         // Fail fast so a hung SMTP connection falls back to Resend instead of
         // holding the consumer (nodemailer's default socket timeout is 10 min).
         connectionTimeout: 10_000,
@@ -451,7 +468,22 @@ export class EmailService {
     return this.sendViaSmtp(to, subject, html, attachments);
   }
 
-  private async sendViaResend(
+  // Resend rate-limits per second and the consumer now runs in parallel, so
+  // Resend sends stay one at a time, as they were when the consumer was serial.
+  private sendViaResend(
+    to: string,
+    subject: string,
+    html: string,
+    attachments?: any[],
+  ) {
+    const send = this.resendQueue.then(() =>
+      this.sendOneViaResend(to, subject, html, attachments),
+    );
+    this.resendQueue = send.catch(() => undefined);
+    return send;
+  }
+
+  private async sendOneViaResend(
     to: string,
     subject: string,
     html: string,

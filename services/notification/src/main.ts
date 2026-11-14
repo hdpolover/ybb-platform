@@ -5,6 +5,7 @@ import { MicroserviceOptions } from '@nestjs/microservices';
 import { AckDropRmqServer } from './common/rmq/ack-drop-rmq.server';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { InboundMessageDeserializer } from './common/deserializers/inbound-message.deserializer';
+import { EMAIL_SEND_CONCURRENCY } from './modules/email/email.service';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 type AmqpChannel = {
@@ -96,7 +97,7 @@ async function bootstrap() {
         ...notificationQueueOptions,
       },
       noAck: false,
-      prefetchCount: 1,
+      prefetchCount: EMAIL_SEND_CONCURRENCY,
       deserializer: new InboundMessageDeserializer(),
     }),
   });
