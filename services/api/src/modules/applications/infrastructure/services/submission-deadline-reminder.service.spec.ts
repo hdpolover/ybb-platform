@@ -38,8 +38,9 @@ const uniqueViolation = () =>
 describe('SubmissionDeadlineReminderService', () => {
   let service: SubmissionDeadlineReminderService;
   let mockPrisma: {
+    program: { findMany: jest.Mock };
     participantApplication: { findMany: jest.Mock };
-    submissionReminderLog: { create: jest.Mock };
+    submissionReminderLog: { create: jest.Mock; findFirst: jest.Mock };
   };
   let mockRabbitmq: { emit: jest.Mock };
 
@@ -47,8 +48,12 @@ describe('SubmissionDeadlineReminderService', () => {
 
   beforeEach(async () => {
     mockPrisma = {
+      program: { findMany: jest.fn().mockResolvedValue([{ id: 'prog-1' }]) },
       participantApplication: { findMany: jest.fn().mockResolvedValue([]) },
-      submissionReminderLog: { create: jest.fn().mockResolvedValue({}) },
+      submissionReminderLog: {
+        create: jest.fn().mockResolvedValue({}),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
     };
     mockRabbitmq = { emit: jest.fn().mockResolvedValue(undefined) };
 
@@ -77,11 +82,13 @@ describe('SubmissionDeadlineReminderService', () => {
       const dayStart = startOfWibDay(addDays(referenceDate, offsetDays));
       const dayEnd = addDays(dayStart, 1);
       const call = mockPrisma.participantApplication.findMany.mock.calls[index][0];
+      const programCall = mockPrisma.program.findMany.mock.calls[index][0];
 
       expect(call.where.status).toBe('draft');
       expect(call.where.deletedAt).toBeNull();
-      expect(call.where.program.applicationDeadline.gte).toEqual(dayStart);
-      expect(call.where.program.applicationDeadline.lt).toEqual(dayEnd);
+      expect(programCall.where.applicationDeadline.gte).toEqual(dayStart);
+      expect(programCall.where.applicationDeadline.lt).toEqual(dayEnd);
+      expect(call.where.programId).toEqual({ in: ['prog-1'] });
       expect(call.where.participant).toEqual({
         deletedAt: null,
         user: { isActive: true, deletedAt: null },
@@ -98,9 +105,9 @@ describe('SubmissionDeadlineReminderService', () => {
     [7, 3, 1].forEach((offsetDays, index) => {
       const targetInstant = addDays(referenceDate, offsetDays);
       const expectedEnd = resolveSubmissionCutoff(targetInstant);
-      const call = mockPrisma.participantApplication.findMany.mock.calls[index][0];
+      const call = mockPrisma.program.findMany.mock.calls[index][0];
 
-      expect(call.where.program.applicationDeadline.lt).toEqual(expectedEnd);
+      expect(call.where.applicationDeadline.lt).toEqual(expectedEnd);
     });
   });
 
@@ -119,8 +126,8 @@ describe('SubmissionDeadlineReminderService', () => {
 
     const report = await service.sendDueReminders(refDate);
 
-    const offset1Call = mockPrisma.participantApplication.findMany.mock.calls[2][0];
-    const { gte, lt } = offset1Call.where.program.applicationDeadline;
+    const offset1Call = mockPrisma.program.findMany.mock.calls[2][0];
+    const { gte, lt } = offset1Call.where.applicationDeadline;
     expect(oddShapeDeadline.getTime()).toBeGreaterThanOrEqual(gte.getTime());
     expect(oddShapeDeadline.getTime()).toBeLessThan(lt.getTime());
     expect(report.sent).toBe(1);
@@ -223,5 +230,45 @@ describe('SubmissionDeadlineReminderService', () => {
 
     expect(mockRabbitmq.emit).not.toHaveBeenCalled();
     expect(report.errors).toBe(1);
+  });
+
+  it('caps one tick at 150 reminders across all offsets', async () => {
+    const page = (count: number, prefix: string) =>
+      Array.from({ length: count }, (_, i) => makeCandidate({ id: `${prefix}-${i}` }));
+    mockPrisma.participantApplication.findMany
+      .mockResolvedValueOnce(page(100, 'seven')) // offset 7
+      .mockResolvedValueOnce(page(50, 'three')); // offset 3 uses up the rest
+
+    const report = await service.sendDueReminders(referenceDate);
+
+    const takes = mockPrisma.participantApplication.findMany.mock.calls.map(([args]) => args.take);
+    expect(takes).toEqual([150, 50]); // offset 1 is not queried: no budget left
+    expect(report.sent).toBe(150);
+    expect(mockRabbitmq.emit).toHaveBeenCalledTimes(150);
+  });
+
+  it("resumes after the highest application id already claimed today for that offset", async () => {
+    mockPrisma.submissionReminderLog.findFirst.mockResolvedValueOnce({ applicationId: 'app-500' });
+
+    await service.sendDueReminders(referenceDate);
+
+    expect(mockPrisma.submissionReminderLog.findFirst.mock.calls[0][0]).toEqual({
+      where: { reminderOffset: 7, sentAt: { gte: startOfWibDay(referenceDate) } },
+      orderBy: { applicationId: 'desc' },
+      select: { applicationId: true },
+    });
+    const [resumed, fresh] = mockPrisma.participantApplication.findMany.mock.calls.map(([args]) => args);
+    expect(resumed.where.id).toEqual({ gt: 'app-500' });
+    expect(resumed.orderBy).toEqual({ id: 'asc' });
+    expect(fresh.where.id).toBeUndefined();
+  });
+
+  it('skips the applications query on a day with no program due', async () => {
+    mockPrisma.program.findMany.mockResolvedValue([]);
+
+    const report = await service.sendDueReminders(referenceDate);
+
+    expect(mockPrisma.participantApplication.findMany).not.toHaveBeenCalled();
+    expect(report.scanned).toBe(0);
   });
 });
