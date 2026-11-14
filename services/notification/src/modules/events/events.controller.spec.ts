@@ -510,6 +510,15 @@ describe('EventsController.handleDraftNudge', () => {
       expect(ack).toHaveBeenCalledTimes(1);
     });
 
+    it('still skips a duplicate the broker did not redeliver', async () => {
+      claimRedelivery.mockResolvedValue(true);
+
+      await controller.handleDraftNudge(payload, makeContext());
+
+      expect(claimRedelivery).not.toHaveBeenCalled();
+      expect(sendDraftNudgeEmail).not.toHaveBeenCalled();
+    });
+
     it('skips it when the one reprocessing was already used', async () => {
       claimRedelivery.mockResolvedValueOnce(false);
       const ack = jest.fn();

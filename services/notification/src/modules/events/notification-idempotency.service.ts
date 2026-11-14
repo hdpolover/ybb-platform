@@ -138,6 +138,8 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
     if (!this.redisClient) return;
     try {
       await this.redisClient.del(dedupeKey);
+      // The retry is a new delivery attempt and gets its own redelivery grant.
+      await this.redisClient.del(`${dedupeKey}:redelivered`);
     } catch (error) {
       this.logger.error(
         `Failed to release idempotency key ${abbreviateDedupeKey(dedupeKey)}; the retry will be deduped`,
