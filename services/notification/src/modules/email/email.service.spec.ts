@@ -1,5 +1,16 @@
 import { ConfigService } from '@nestjs/config';
-import { EmailService } from './email.service';
+import * as nodemailer from 'nodemailer';
+import {
+  EMAIL_SEND_CONCURRENCY,
+  EmailService,
+  SMTP_MAX_MESSAGES_PER_SECOND,
+} from './email.service';
+
+// Real nodemailer, wrapped so the transport options can be asserted.
+jest.mock('nodemailer', () => {
+  const actual = jest.requireActual<typeof import('nodemailer')>('nodemailer');
+  return { ...actual, createTransport: jest.fn(actual.createTransport) };
+});
 
 // Real templates, stubbed transport + managed-template lookup: asserts the
 // fallback subjects and that the new submitted template renders.
@@ -301,5 +312,59 @@ describe('EmailService transport routing (SES SMTP primary, Resend fallback)', (
 
     await service.sendRawEmail('a@x.com', 'S', '<p>h</p>');
     expect(resendSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('pools SMTP connections and caps the send rate under the SES limit', () => {
+    const createTransport = nodemailer.createTransport as jest.Mock;
+    createTransport.mockClear();
+
+    build({ smtp: true, resend: false });
+
+    expect(createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pool: true,
+        maxConnections: EMAIL_SEND_CONCURRENCY,
+        rateDelta: 1000,
+        rateLimit: SMTP_MAX_MESSAGES_PER_SECOND,
+      }),
+    );
+    expect(SMTP_MAX_MESSAGES_PER_SECOND).toBeLessThan(14);
+  });
+
+  it('keeps Resend sends one at a time when the consumer handles messages in parallel', async () => {
+    const { service, resendSend } = build({ smtp: false, resend: true });
+    let inFlight = 0;
+    let maxInFlight = 0;
+    resendSend.mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return { data: { id: 'rs-1' }, error: null };
+    });
+
+    await Promise.all(
+      ['a@x.com', 'b@x.com', 'c@x.com'].map((to) =>
+        service.sendRawEmail(to, 'S', '<p>h</p>'),
+      ),
+    );
+
+    expect(resendSend).toHaveBeenCalledTimes(3);
+    expect(maxInFlight).toBe(1);
+  });
+
+  it('still sends the next Resend mail after one fails', async () => {
+    const { service, resendSend } = build({ smtp: false, resend: true });
+    resendSend
+      .mockRejectedValueOnce(new Error('rate_limit_exceeded'))
+      .mockResolvedValue({ data: { id: 'rs-2' }, error: null });
+
+    const [first, second] = await Promise.allSettled([
+      service.sendRawEmail('a@x.com', 'S', '<p>h</p>'),
+      service.sendRawEmail('b@x.com', 'S', '<p>h</p>'),
+    ]);
+
+    expect(first.status).toBe('rejected');
+    expect(second.status).toBe('fulfilled');
   });
 });
