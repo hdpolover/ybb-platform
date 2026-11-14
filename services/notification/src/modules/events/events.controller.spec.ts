@@ -202,6 +202,8 @@ describe('EventsController.handleLoaBatchReleased', () => {
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
         release: jest.fn().mockResolvedValue(undefined),
+        claimRecipient: jest.fn().mockResolvedValue({ state: 'claimed' }),
+        markRecipientSent: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       {
         emit: jest.fn().mockResolvedValue(true),
@@ -505,7 +507,7 @@ describe('EventsController.handleDraftNudge', () => {
 
       await controller.handleDraftNudge(payload, redeliveredContext(ack));
 
-      expect(claimRedelivery).toHaveBeenCalledWith('key');
+      expect(claimRedelivery).toHaveBeenCalledWith('key', 1);
       expect(sendDraftNudgeEmail).toHaveBeenCalledTimes(1);
       expect(ack).toHaveBeenCalledTimes(1);
     });
@@ -529,22 +531,102 @@ describe('EventsController.handleDraftNudge', () => {
       expect(ack).toHaveBeenCalledTimes(1);
     });
 
-    it('never reprocesses a fan-out batch, which would re-mail every recipient already sent to', async () => {
-      const sendLoaReleasedEmail = jest.fn().mockResolvedValue(undefined);
+    it('reprocesses a fan-out batch from its per-recipient records, not from scratch', async () => {
+      const sendLoaReadyEmail = jest.fn().mockResolvedValue({ data: { id: 'msg-b' } });
+      const emit = jest.fn().mockResolvedValue(true);
+      const claimRecipient = jest
+        .fn()
+        .mockResolvedValueOnce({ state: 'sent', providerMessageId: 'msg-a' })
+        .mockResolvedValueOnce({ state: 'claimed' })
+        .mockResolvedValueOnce({ state: 'in_progress' });
+      const markRecipientSent = jest.fn().mockResolvedValue(undefined);
+      claimRedelivery.mockResolvedValueOnce(true);
       const fanOutController = new EventsController(
-        { sendLoaReleasedEmail } as unknown as EmailService,
+        { sendLoaReadyEmail } as unknown as EmailService,
         {} as ReceiptService,
-        { shouldProcess, claimRedelivery, release: jest.fn() } as unknown as NotificationIdempotencyService,
-        { emit: jest.fn().mockResolvedValue(true) } as unknown as RabbitMQProducerService,
+        {
+          shouldProcess,
+          claimRedelivery,
+          claimRecipient,
+          markRecipientSent,
+          release: jest.fn(),
+        } as unknown as NotificationIdempotencyService,
+        { emit } as unknown as RabbitMQProducerService,
       );
 
       await fanOutController.handleLoaBatchReleased(
-        { recipients: [{ email: 'jane@example.com' }] },
+        {
+          batchId: 'batch-1',
+          programId: 'prog-1',
+          recipients: [
+            { participantId: 'p-a', email: 'a@example.com' },
+            { participantId: 'p-b', email: 'b@example.com' },
+            { participantId: 'p-c', email: 'c@example.com' },
+          ],
+        },
         redeliveredContext(),
       );
 
-      expect(claimRedelivery).not.toHaveBeenCalled();
-      expect(sendLoaReleasedEmail).not.toHaveBeenCalled();
+      // A resumable batch may be cut short by more than one redeploy.
+      expect(claimRedelivery).toHaveBeenCalledWith('key', 5);
+      expect(claimRecipient).toHaveBeenCalledWith('key:recipient:p-a');
+      expect(sendLoaReadyEmail).toHaveBeenCalledTimes(1);
+      expect(sendLoaReadyEmail).toHaveBeenCalledWith('b@example.com', expect.anything());
+      expect(emit).toHaveBeenCalledWith('loa.batch.send_result', {
+        batchId: 'batch-1',
+        programId: 'prog-1',
+        results: [
+          { participantId: 'p-a', providerMessageId: 'msg-a', error: null },
+          { participantId: 'p-b', providerMessageId: 'msg-b', error: null },
+        ],
+      });
+    });
+
+    it('resumes a redelivered reminder dispatch the same way', async () => {
+      const sendParticipantReminderEmail = jest.fn().mockResolvedValue({ data: { id: 'msg-b' } });
+      const emit = jest.fn().mockResolvedValue(true);
+      const claimRecipient = jest
+        .fn()
+        .mockResolvedValueOnce({ state: 'sent', providerMessageId: null })
+        .mockResolvedValueOnce({ state: 'claimed' });
+      claimRedelivery.mockResolvedValueOnce(true);
+      const fanOutController = new EventsController(
+        { sendParticipantReminderEmail } as unknown as EmailService,
+        {} as ReceiptService,
+        {
+          shouldProcess,
+          claimRedelivery,
+          claimRecipient,
+          markRecipientSent: jest.fn().mockResolvedValue(undefined),
+          release: jest.fn(),
+        } as unknown as NotificationIdempotencyService,
+        { emit } as unknown as RabbitMQProducerService,
+      );
+
+      await fanOutController.handleParticipantReminderDispatch(
+        {
+          reminderId: 'rem-1',
+          programId: 'prog-1',
+          subject: 'Subject',
+          body: 'Body',
+          recipients: [
+            { participantId: 'p-a', email: 'a@example.com' },
+            { participantId: 'p-b', email: 'b@example.com' },
+          ],
+        },
+        redeliveredContext(),
+      );
+
+      expect(sendParticipantReminderEmail).toHaveBeenCalledTimes(1);
+      expect(sendParticipantReminderEmail).toHaveBeenCalledWith('b@example.com', expect.anything());
+      expect(emit).toHaveBeenCalledWith('reminder.participant.send_result', {
+        reminderId: 'rem-1',
+        programId: 'prog-1',
+        results: [
+          { participantId: 'p-a', providerMessageId: null, error: null },
+          { participantId: 'p-b', providerMessageId: 'msg-b', error: null },
+        ],
+      });
     });
   });
 });
@@ -1110,6 +1192,8 @@ describe('EventsController.handleLoaBatchReleased — send result reporting', ()
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
         release: jest.fn().mockResolvedValue(undefined),
+        claimRecipient: jest.fn().mockResolvedValue({ state: 'claimed' }),
+        markRecipientSent: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       { emit } as unknown as RabbitMQProducerService,
     );
@@ -1320,6 +1404,8 @@ describe('EventsController.handleParticipantReminderDispatch', () => {
         }),
         markProcessed: jest.fn().mockResolvedValue(undefined),
         release: jest.fn().mockResolvedValue(undefined),
+        claimRecipient: jest.fn().mockResolvedValue({ state: 'claimed' }),
+        markRecipientSent: jest.fn().mockResolvedValue(undefined),
       } as unknown as NotificationIdempotencyService,
       { emit } as unknown as RabbitMQProducerService,
     );
@@ -1507,5 +1593,90 @@ describe('EventsController.handleEmailVerified', () => {
     expect(channel.ack).toHaveBeenCalledTimes(1);
     expect(emailService.sendRawEmail).not.toHaveBeenCalled();
     expect(emailService.sendWelcomeEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe('EventsController fan-out per-recipient records', () => {
+  const buildController = (sendLoaReadyEmail: jest.Mock) => {
+    const idempotency = {
+      shouldProcess: jest.fn().mockResolvedValue({
+        shouldProcess: true,
+        dedupeKey: 'batch-key',
+        reason: 'new',
+      }),
+      claimRecipient: jest.fn().mockResolvedValue({ state: 'claimed' }),
+      markRecipientSent: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn().mockResolvedValue(undefined),
+    };
+    const emit = jest.fn().mockResolvedValue(true);
+    const controller = new EventsController(
+      { sendLoaReadyEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      idempotency as unknown as NotificationIdempotencyService,
+      { emit } as unknown as RabbitMQProducerService,
+    );
+    return { controller, idempotency, emit };
+  };
+
+  const payloadFor = (recipients: Record<string, string>[]) => ({
+    batchId: 'batch-1',
+    programId: 'prog-1',
+    recipients,
+  });
+
+  it('records the provider message id once a recipient is sent', async () => {
+    const send = jest.fn().mockResolvedValue({ data: { id: 'msg-1' } });
+    const { controller, idempotency } = buildController(send);
+
+    await controller.handleLoaBatchReleased(
+      payloadFor([{ participantId: 'p-1', email: 'a@example.com' }]),
+      makeContext(),
+    );
+
+    expect(idempotency.markRecipientSent).toHaveBeenCalledWith('batch-key:recipient:p-1', 'msg-1');
+    expect(idempotency.release).not.toHaveBeenCalled();
+  });
+
+  it('releases only the failed recipient and reports their error', async () => {
+    const send = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('mailbox full'))
+      .mockResolvedValueOnce({ messageId: 'msg-2' });
+    const { controller, idempotency, emit } = buildController(send);
+
+    await controller.handleLoaBatchReleased(
+      payloadFor([
+        { participantId: 'p-1', email: 'a@example.com' },
+        { participantId: 'p-2', email: 'b@example.com' },
+      ]),
+      makeContext(),
+    );
+
+    expect(idempotency.release).toHaveBeenCalledTimes(1);
+    expect(idempotency.release).toHaveBeenCalledWith('batch-key:recipient:p-1');
+    expect(idempotency.markRecipientSent).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith('loa.batch.send_result', {
+      batchId: 'batch-1',
+      programId: 'prog-1',
+      results: [
+        { participantId: 'p-1', providerMessageId: null, error: 'mailbox full' },
+        { participantId: 'p-2', providerMessageId: 'msg-2', error: null },
+      ],
+    });
+  });
+
+  it('keys a recipient without a participantId by a hash, never by their email', async () => {
+    const send = jest.fn().mockResolvedValue(undefined);
+    const { controller, idempotency } = buildController(send);
+
+    await controller.handleLoaBatchReleased(
+      payloadFor([{ email: 'Jane.Doe@example.com' }]),
+      makeContext(),
+    );
+
+    const [key] = idempotency.claimRecipient.mock.calls[0] as [string];
+    expect(key).toMatch(/^batch-key:recipient:[0-9a-f]{24}$/);
+    expect(key.toLowerCase()).not.toContain('jane');
+    expect(key).not.toContain('example.com');
   });
 });

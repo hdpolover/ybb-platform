@@ -18,10 +18,11 @@ describe('NotificationIdempotencyService', () => {
     );
 
     const setMock = jest
-      .fn<Promise<'OK' | null>, [string, string, 'EX', number, 'NX']>()
+      .fn<Promise<'OK' | null>, [string, string, 'EX', number, 'NX'?]>()
       .mockResolvedValueOnce('OK')
       .mockResolvedValueOnce(null);
     service.setRedisClientForTesting({
+      get: jest.fn(),
       set: setMock,
       del: jest.fn(),
       disconnect: jest.fn(),
@@ -69,6 +70,7 @@ describe('NotificationIdempotencyService', () => {
     );
 
     service.setRedisClientForTesting({
+      get: jest.fn(),
       set: jest.fn().mockRejectedValue(new Error('redis down')),
       del: jest.fn(),
       disconnect: jest.fn(),
@@ -89,11 +91,12 @@ describe('NotificationIdempotencyService', () => {
       makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'true' }),
     );
     const setMock = jest
-      .fn<Promise<'OK' | null>, [string, string, 'EX', number, 'NX']>()
+      .fn<Promise<'OK' | null>, [string, string, 'EX', number, 'NX'?]>()
       .mockResolvedValueOnce('OK')
       .mockResolvedValueOnce(null)
       .mockRejectedValueOnce(new Error('redis down'));
     service.setRedisClientForTesting({
+      get: jest.fn(),
       set: setMock,
       del: jest.fn(),
       disconnect: jest.fn(),
@@ -107,11 +110,84 @@ describe('NotificationIdempotencyService', () => {
     expect(setMock.mock.calls[0][0]).toBe('some:key:redelivered');
   });
 
+  it('grants a resumable batch up to maxGrants redeliveries, then refuses', async () => {
+    const service = new NotificationIdempotencyService(
+      makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'true' }),
+    );
+    const held = new Set<string>();
+    service.setRedisClientForTesting({
+      get: jest.fn(),
+      set: jest.fn(async (key: string) => {
+        if (held.has(key)) return null;
+        held.add(key);
+        return 'OK' as const;
+      }),
+      del: jest.fn(),
+      disconnect: jest.fn(),
+    });
+
+    const grants = [
+      await service.claimRedelivery('batch:key', 3),
+      await service.claimRedelivery('batch:key', 3),
+      await service.claimRedelivery('batch:key', 3),
+      await service.claimRedelivery('batch:key', 3),
+    ];
+
+    expect(grants).toEqual([true, true, true, false]);
+    expect([...held]).toEqual([
+      'batch:key:redelivered',
+      'batch:key:redelivered:2',
+      'batch:key:redelivered:3',
+    ]);
+  });
+
+  it('logs one line, not one per recipient, while Redis is down mid-batch', async () => {
+    const service = new NotificationIdempotencyService(
+      makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'true' }),
+    );
+    service.setRedisClientForTesting({
+      get: jest.fn(),
+      set: jest.fn().mockRejectedValue(new Error('redis down')),
+      del: jest.fn(),
+      disconnect: jest.fn(),
+    });
+    const loggerErrorSpy = jest
+      .spyOn(service['logger'], 'error')
+      .mockImplementation(() => undefined);
+
+    const claims = [
+      await service.claimRecipient('k:recipient:1'),
+      await service.claimRecipient('k:recipient:2'),
+    ];
+    await service.markRecipientSent('k:recipient:1', 'msg-1');
+
+    // Still sends to everyone: a duplicate beats a drop.
+    expect(claims).toEqual([{ state: 'claimed' }, { state: 'claimed' }]);
+    expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not double-claim a recipient key that vanished between the claim and the read', async () => {
+    const service = new NotificationIdempotencyService(
+      makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'true' }),
+    );
+    const setMock = jest.fn().mockResolvedValue(null); // another handler wins both attempts
+    service.setRedisClientForTesting({
+      get: jest.fn().mockResolvedValue(null),
+      set: setMock,
+      del: jest.fn(),
+      disconnect: jest.fn(),
+    });
+
+    expect(await service.claimRecipient('k:recipient:1')).toEqual({ state: 'in_progress' });
+    expect(setMock.mock.calls[1][4]).toBe('NX');
+  });
+
   it('should suppress repeated error logs during Redis outage (circuit breaker)', async () => {
     const service = new NotificationIdempotencyService(
       makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'true' }),
     );
     service.setRedisClientForTesting({
+      get: jest.fn(),
       set: jest.fn().mockRejectedValue(new Error('redis down')),
       del: jest.fn(),
       disconnect: jest.fn(),
@@ -137,6 +213,7 @@ describe('NotificationIdempotencyService', () => {
       );
       const keys = new Set<string>();
       service.setRedisClientForTesting({
+        get: jest.fn(),
         set: jest.fn((key: string) => {
           if (keys.has(key)) return Promise.resolve(null);
           keys.add(key);
@@ -170,6 +247,7 @@ describe('NotificationIdempotencyService', () => {
         makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'true' }),
       );
       service.setRedisClientForTesting({
+        get: jest.fn(),
         set: jest.fn(),
         del: jest.fn().mockRejectedValue(new Error('redis down')),
         disconnect: jest.fn(),
@@ -275,6 +353,148 @@ describe('NotificationIdempotencyService', () => {
       const abbreviated = abbreviateDedupeKey(key, 12);
       expect(abbreviated).toBe('...abcdef123456');
       expect(abbreviated).not.toContain('user@');
+    });
+  });
+
+  describe('per-recipient claims', () => {
+    const KEY = 'notification:idempotency:loa.batch.released:m1:recipient:p-1';
+
+    const makeRecipientService = (client?: Record<string, jest.Mock>) => {
+      const service = new NotificationIdempotencyService(
+        makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'true' }),
+      );
+      const redis = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn().mockResolvedValue('OK'),
+        del: jest.fn(),
+        disconnect: jest.fn(),
+        ...client,
+      };
+      service.setRedisClientForTesting(redis);
+      return { service, redis };
+    };
+
+    it('claims a fresh key with a processing value and the default ttl', async () => {
+      const { service, redis } = makeRecipientService();
+
+      await expect(service.claimRecipient(KEY)).resolves.toEqual({
+        state: 'claimed',
+      });
+      expect(redis.set).toHaveBeenCalledWith(
+        KEY,
+        expect.stringMatching(/^processing:.+/),
+        'EX',
+        24 * 60 * 60,
+        'NX',
+      );
+    });
+
+    it('reports a sent recipient with its provider message id', async () => {
+      const { service } = makeRecipientService({
+        set: jest.fn().mockResolvedValue(null),
+        get: jest.fn().mockResolvedValue('sent:msg-a'),
+      });
+
+      await expect(service.claimRecipient(KEY)).resolves.toEqual({
+        state: 'sent',
+        providerMessageId: 'msg-a',
+      });
+    });
+
+    it('reports a sent recipient with no provider message id as null', async () => {
+      const { service } = makeRecipientService({
+        set: jest.fn().mockResolvedValue(null),
+        get: jest.fn().mockResolvedValue('sent:'),
+      });
+
+      await expect(service.claimRecipient(KEY)).resolves.toEqual({
+        state: 'sent',
+        providerMessageId: null,
+      });
+    });
+
+    it('reports in_progress when this same instance holds the claim', async () => {
+      const store = new Map<string, string>();
+      const { service } = makeRecipientService({
+        set: jest.fn((key: string, value: string, ...rest: unknown[]) => {
+          if (rest.includes('NX') && store.has(key)) return Promise.resolve(null);
+          store.set(key, value);
+          return Promise.resolve('OK');
+        }),
+        get: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
+      });
+
+      await expect(service.claimRecipient(KEY)).resolves.toEqual({ state: 'claimed' });
+      await expect(service.claimRecipient(KEY)).resolves.toEqual({ state: 'in_progress' });
+    });
+
+    it('takes over a claim left by another instance and overwrites it', async () => {
+      const { service, redis } = makeRecipientService({
+        set: jest
+          .fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValue('OK'),
+        get: jest.fn().mockResolvedValue('processing:some-dead-instance'),
+      });
+
+      await expect(service.claimRecipient(KEY)).resolves.toEqual({
+        state: 'claimed',
+      });
+      expect(redis.set).toHaveBeenLastCalledWith(
+        KEY,
+        expect.stringMatching(/^processing:(?!some-dead-instance$).+/),
+        'EX',
+        24 * 60 * 60,
+      );
+    });
+
+    it('claims when Redis throws', async () => {
+      const { service } = makeRecipientService({
+        set: jest.fn().mockRejectedValue(new Error('redis down')),
+      });
+
+      await expect(service.claimRecipient(KEY)).resolves.toEqual({
+        state: 'claimed',
+      });
+    });
+
+    it('claims when Redis is not configured', async () => {
+      const service = new NotificationIdempotencyService(
+        makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'true' }),
+      );
+      service.setRedisClientForTesting(undefined);
+
+      await expect(service.claimRecipient(KEY)).resolves.toEqual({
+        state: 'claimed',
+      });
+    });
+
+    it('claims when idempotency is disabled', async () => {
+      const service = new NotificationIdempotencyService(
+        makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'false' }),
+      );
+
+      await expect(service.claimRecipient(KEY)).resolves.toEqual({
+        state: 'claimed',
+      });
+    });
+
+    it('records a sent recipient with its provider message id', async () => {
+      const { service, redis } = makeRecipientService();
+
+      await service.markRecipientSent(KEY, 'msg-a');
+      await service.markRecipientSent(KEY, null);
+
+      expect(redis.set).toHaveBeenNthCalledWith(1, KEY, 'sent:msg-a', 'EX', 24 * 60 * 60);
+      expect(redis.set).toHaveBeenNthCalledWith(2, KEY, 'sent:', 'EX', 24 * 60 * 60);
+    });
+
+    it('swallows a Redis error when recording a sent recipient', async () => {
+      const { service } = makeRecipientService({
+        set: jest.fn().mockRejectedValue(new Error('redis down')),
+      });
+
+      await expect(service.markRecipientSent(KEY, 'msg-a')).resolves.toBeUndefined();
     });
   });
 });

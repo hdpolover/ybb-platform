@@ -1,12 +1,21 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
 type DedupeMeta = {
   messageId?: string;
   correlationId?: string;
 };
+
+/** Outcome of claiming one recipient of a fan-out batch; see claimRecipient(). */
+export type RecipientClaim =
+  | { state: 'claimed' }
+  | { state: 'sent'; providerMessageId: string | null }
+  | { state: 'in_progress' };
+
+const RECIPIENT_PROCESSING_PREFIX = 'processing:';
+const RECIPIENT_SENT_PREFIX = 'sent:';
 
 type DedupeResult = {
   shouldProcess: boolean;
@@ -15,6 +24,8 @@ type DedupeResult = {
 };
 
 interface RedisSetClient {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string, mode: 'EX', seconds: number): Promise<'OK' | null>;
   set(
     key: string,
     value: string,
@@ -45,6 +56,8 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
   private readonly defaultTtlSeconds: number;
   private readonly paymentTtlSeconds: number;
   private redisClient?: RedisSetClient;
+  /** Tells "this process is sending" from "a dead process was sending" in recipient claims. */
+  private readonly instanceId = randomUUID();
 
   /** Timestamp (ms) until which the circuit is open (error logs are suppressed). */
   private circuitOpenUntil = 0;
@@ -149,23 +162,30 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
   }
 
   /**
-   * Grants ONE reprocessing of a message the broker redelivered after its
-   * first consumer died holding the key. Returns false on the second ask (and
-   * on a Redis error), so a message that kills the process every time it is
-   * handled is skipped on its next delivery, not reprocessed forever: a
-   * redelivery is never nacked, so the retry/DLQ cap would not stop it.
+   * Grants a reprocessing of a message the broker redelivered after its
+   * consumer died holding the key, at most `maxGrants` times. Returns false
+   * once they are used up (and on a Redis error), so a message that kills the
+   * process every time it is handled is eventually skipped, not reprocessed
+   * forever: a redelivery is never nacked, so the retry/DLQ cap would not stop
+   * it.
    */
-  async claimRedelivery(dedupeKey: string): Promise<boolean> {
+  async claimRedelivery(dedupeKey: string, maxGrants = 1): Promise<boolean> {
     if (!this.redisClient) return false;
     try {
-      const setResult = await this.redisClient.set(
-        `${dedupeKey}:redelivered`,
-        '1',
-        'EX',
-        this.defaultTtlSeconds,
-        'NX',
-      );
-      return setResult === 'OK';
+      for (let grant = 1; grant <= maxGrants; grant += 1) {
+        const setResult = await this.redisClient.set(
+          // The first grant keeps the bare name: release() deletes that one.
+          grant === 1
+            ? `${dedupeKey}:redelivered`
+            : `${dedupeKey}:redelivered:${grant}`,
+          '1',
+          'EX',
+          this.defaultTtlSeconds,
+          'NX',
+        );
+        if (setResult === 'OK') return true;
+      }
+      return false;
     } catch (error) {
       this.logger.error(
         `Failed to claim redelivery for ${abbreviateDedupeKey(dedupeKey)}; treating it as a duplicate`,
@@ -173,6 +193,95 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
       );
       return false;
     }
+  }
+
+  /**
+   * Claims one recipient of a fan-out batch so a reprocessed message resumes
+   * instead of re-mailing. A claim left by another instance means that process
+   * died mid-send, so it is taken over (the email may then go out twice, the
+   * same trade as claimRedelivery). Every failure mode falls back to 'claimed':
+   * a duplicate beats a silent drop.
+   * ponytail: "another instance" is read as "dead", which holds while exactly
+   * one notification process consumes the queue. With two live ones they would
+   * take each other's recipients over and mail a batch twice; make the
+   * takeover a compare-and-set (Lua) before running a second replica.
+   */
+  async claimRecipient(key: string): Promise<RecipientClaim> {
+    if (!this.enabled || !this.redisClient) return { state: 'claimed' };
+    const mine = `${RECIPIENT_PROCESSING_PREFIX}${this.instanceId}`;
+    try {
+      const setResult = await this.redisClient.set(
+        key,
+        mine,
+        'EX',
+        this.defaultTtlSeconds,
+        'NX',
+      );
+      if (setResult === 'OK') return { state: 'claimed' };
+
+      const existing = await this.redisClient.get(key);
+      if (existing === null) {
+        // Expired or released between the two calls; whoever wins the retry sends.
+        const retried = await this.redisClient.set(
+          key,
+          mine,
+          'EX',
+          this.defaultTtlSeconds,
+          'NX',
+        );
+        return { state: retried === 'OK' ? 'claimed' : 'in_progress' };
+      }
+      if (existing.startsWith(RECIPIENT_SENT_PREFIX)) {
+        return {
+          state: 'sent',
+          providerMessageId:
+            existing.slice(RECIPIENT_SENT_PREFIX.length) || null,
+        };
+      }
+      if (existing === mine) return { state: 'in_progress' };
+
+      await this.redisClient.set(key, mine, 'EX', this.defaultTtlSeconds);
+      return { state: 'claimed' };
+    } catch (error) {
+      this.logRedisFailure(
+        `Failed to claim recipient ${abbreviateDedupeKey(key)}; sending in fallback mode`,
+        error,
+      );
+      return { state: 'claimed' };
+    }
+  }
+
+  /** Records a delivered email. Never throws: the email is out, so a Redis failure here is not a send failure. */
+  async markRecipientSent(
+    key: string,
+    providerMessageId: string | null,
+  ): Promise<void> {
+    if (!this.redisClient) return;
+    try {
+      await this.redisClient.set(
+        key,
+        `${RECIPIENT_SENT_PREFIX}${providerMessageId ?? ''}`,
+        'EX',
+        this.defaultTtlSeconds,
+      );
+    } catch (error) {
+      this.logRedisFailure(
+        `Failed to record sent recipient ${abbreviateDedupeKey(key)}; a reprocessed batch may mail them again`,
+        error,
+      );
+    }
+  }
+
+  /** One line per cooldown, not one stack trace per recipient of a batch, while Redis is down. */
+  private logRedisFailure(message: string, error: unknown): void {
+    const now = Date.now();
+    if (now < this.circuitOpenUntil) return;
+    this.circuitOpenUntil =
+      now + NotificationIdempotencyService.CIRCUIT_COOLDOWN_MS;
+    this.logger.error(
+      `${message} (further Redis errors suppressed for ${NotificationIdempotencyService.CIRCUIT_COOLDOWN_SECONDS}s)`,
+      error instanceof Error ? error.stack : String(error),
+    );
   }
 
   onModuleDestroy() {
