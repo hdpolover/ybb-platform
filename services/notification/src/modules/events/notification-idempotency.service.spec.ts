@@ -84,6 +84,29 @@ describe('NotificationIdempotencyService', () => {
     expect(result.reason).toBe('fallback');
   });
 
+  it('grants a redelivered message one reprocessing, then refuses', async () => {
+    const service = new NotificationIdempotencyService(
+      makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'true' }),
+    );
+    const setMock = jest
+      .fn<Promise<'OK' | null>, [string, string, 'EX', number, 'NX']>()
+      .mockResolvedValueOnce('OK')
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('redis down'));
+    service.setRedisClientForTesting({
+      set: setMock,
+      del: jest.fn(),
+      disconnect: jest.fn(),
+    });
+    jest.spyOn(service['logger'], 'error').mockImplementation(() => undefined);
+
+    expect(await service.claimRedelivery('some:key')).toBe(true);
+    expect(await service.claimRedelivery('some:key')).toBe(false);
+    // A Redis error must not turn into unbounded reprocessing.
+    expect(await service.claimRedelivery('some:key')).toBe(false);
+    expect(setMock.mock.calls[0][0]).toBe('some:key:redelivered');
+  });
+
   it('should suppress repeated error logs during Redis outage (circuit breaker)', async () => {
     const service = new NotificationIdempotencyService(
       makeConfig({ NOTIFICATION_IDEMPOTENCY_ENABLED: 'true' }),

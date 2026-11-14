@@ -146,6 +146,33 @@ export class NotificationIdempotencyService implements OnModuleDestroy {
     }
   }
 
+  /**
+   * Grants ONE reprocessing of a message the broker redelivered after its
+   * first consumer died holding the key. Returns false on the second ask (and
+   * on a Redis error), so a message that kills the process every time it is
+   * handled is skipped on its next delivery, not reprocessed forever: a
+   * redelivery is never nacked, so the retry/DLQ cap would not stop it.
+   */
+  async claimRedelivery(dedupeKey: string): Promise<boolean> {
+    if (!this.redisClient) return false;
+    try {
+      const setResult = await this.redisClient.set(
+        `${dedupeKey}:redelivered`,
+        '1',
+        'EX',
+        this.defaultTtlSeconds,
+        'NX',
+      );
+      return setResult === 'OK';
+    } catch (error) {
+      this.logger.error(
+        `Failed to claim redelivery for ${abbreviateDedupeKey(dedupeKey)}; treating it as a duplicate`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      return false;
+    }
+  }
+
   onModuleDestroy() {
     this.redisClient?.disconnect();
   }
