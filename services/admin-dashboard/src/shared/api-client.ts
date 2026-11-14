@@ -1040,6 +1040,8 @@ export function resendVerificationEmail(
     headers: {
       'Content-Type': 'application/json',
       'x-brand-domain': brandSlug,
+      // Lets the API's Turnstile guard recognise a verified admin session and skip the challenge.
+      Authorization: `Bearer ${getAccessToken()}`,
     },
     body: JSON.stringify({ email }),
   }).then(async (res) => {

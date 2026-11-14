@@ -33,6 +33,7 @@ import { FirebaseAuthService } from './infrastructure/services/firebase-auth.ser
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AuthLoggingService } from './application/services/auth-logging.service';
 import { GeoIpModule } from '@shared/infrastructure/geoip/geoip.module';
+import { TurnstileModule } from '@shared/infrastructure/turnstile/turnstile.module';
 import { MetricsCoreModule } from '@shared/infrastructure/monitoring/metrics-core.module';
 
 @Module({
@@ -49,6 +50,7 @@ import { MetricsCoreModule } from '@shared/infrastructure/monitoring/metrics-cor
       inject: [ConfigService],
     }),
     GeoIpModule,
+    TurnstileModule,
     // N-2026-09-10-H: MetricsCoreModule, NOT the full MonitoringModule. The
     // login handlers here only inject MetricsService, but MonitoringModule
     // also carries QueueMonitoringService (its own AMQP connection + 15s poll

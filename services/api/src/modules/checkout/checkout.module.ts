@@ -7,16 +7,16 @@ import { CheckoutController } from './checkout.controller';
 import { CheckoutGatewayMethodService } from './checkout-gateway-method.service';
 import { CheckoutHandler } from './checkout.handler';
 import { CheckoutPolicyService } from './checkout-policy.service';
-import { TurnstileService } from './turnstile.service';
+import { TurnstileModule } from '@shared/infrastructure/turnstile/turnstile.module';
 
 @Module({
     // AuthModule: RegisterHandler + guard deps (see platform-settings.module.ts).
     // PortalModule: the invoice and payment handlers the portal itself uses.
     // PaymentsModule: PaymentServiceHttpClient for the method lookup. None of the
     // three imports CheckoutModule, so no cycle.
-    imports: [AuthModule, PaymentsModule, PortalModule],
+    imports: [AuthModule, PaymentsModule, PortalModule, TurnstileModule],
     controllers: [CheckoutController],
-    providers: [CheckoutPolicyService, CheckoutHandler, CheckoutGatewayMethodService, TurnstileService],
+    providers: [CheckoutPolicyService, CheckoutHandler, CheckoutGatewayMethodService],
     exports: [CheckoutPolicyService],
 })
 export class CheckoutModule {}

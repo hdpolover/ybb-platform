@@ -1,4 +1,4 @@
-// services/api/src/modules/checkout/turnstile.service.spec.ts
+// services/api/src/shared/infrastructure/turnstile/turnstile.service.spec.ts
 import { ServiceUnavailableException } from '@nestjs/common';
 import { TurnstileService } from './turnstile.service';
 

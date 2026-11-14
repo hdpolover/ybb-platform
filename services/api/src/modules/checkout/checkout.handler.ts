@@ -20,7 +20,7 @@ import {
 } from '@modules/portal/application/queries/portal-queries';
 import { CheckoutPolicyService } from './checkout-policy.service';
 import { CheckoutGatewayMethodService } from './checkout-gateway-method.service';
-import { TurnstileService } from './turnstile.service';
+import { TurnstileService } from '@shared/infrastructure/turnstile/turnstile.service';
 import { CreateCheckoutDto } from './dto/create-checkout.dto';
 
 export const CHECKOUT_ACCOUNT_EXISTS = 'ACCOUNT_EXISTS';

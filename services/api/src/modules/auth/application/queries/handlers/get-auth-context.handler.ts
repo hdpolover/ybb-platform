@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { activeProgramQuery, openRegistrationProgramQuery } from '../../../../../shared/utils/active-program-resolver';
@@ -17,6 +18,7 @@ export class GetAuthContextHandler {
     constructor(
         private readonly prisma: PrismaService,
         private readonly cacheService: CacheService,
+        private readonly config: ConfigService,
     ) {}
 
     async execute(query: GetAuthContextQuery): Promise<AuthContextResponseDto> {
@@ -25,6 +27,8 @@ export class GetAuthContextHandler {
         const providers = await fetchActiveAuthProviders(this.prisma, this.cacheService);
 
         const localProviderId = providers.find(p => p.name === 'local')?.id ?? null;
+
+        const turnstileSiteKey = this.config.get<string>('TURNSTILE_SITE_KEY') || null;
 
         const brand = await this.resolveBrand(brandDomain);
 
@@ -36,6 +40,7 @@ export class GetAuthContextHandler {
                 programId: null,
                 programSlug: null,
                 localProviderId,
+                turnstileSiteKey,
                 providers: providers.map(p => ({
                     ...p,
                     description: p.description || '',
@@ -80,6 +85,7 @@ export class GetAuthContextHandler {
             programId: program?.id ?? null,
             programSlug: program?.slug ?? null,
             localProviderId,
+            turnstileSiteKey,
             providers: providers.map(p => ({
                 ...p,
                 description: p.description || '',

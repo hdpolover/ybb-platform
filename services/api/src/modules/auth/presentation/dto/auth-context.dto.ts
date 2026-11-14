@@ -22,4 +22,7 @@ export class AuthContextResponseDto {
 
     @ApiProperty({ type: [AuthProviderDto], description: 'All active auth providers' })
     providers!: AuthProviderDto[];
+
+    @ApiPropertyOptional({ description: 'Cloudflare Turnstile site key for the auth forms; null when Turnstile is not configured', nullable: true })
+    turnstileSiteKey!: string | null;
 }

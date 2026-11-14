@@ -57,6 +57,7 @@ import { Public } from '../../../shared/decorators/public.decorator';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { BrandDomain } from '../../../shared/decorators/brand-domain.decorator';
 import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
+import { TurnstileAdminBypass, TurnstileGuard } from '../infrastructure/guards/turnstile.guard';
 import { ClientIp } from '../../../shared/decorators/client-ip.decorator';
 import {
   clientIpTracker,
@@ -283,6 +284,7 @@ export class AuthController {
 
   @Public()
   @Post('login')
+  @UseGuards(TurnstileGuard)
   // Two ceilings, both must pass. See CREDENTIAL_THROTTLE for the sizing
   // argument. The email tier ALONE (what this route used to have) is not a
   // limit at all on a credential route: the caller writes the body, so spraying
@@ -380,6 +382,7 @@ export class AuthController {
 
   @Public()
   @Post('register')
+  @UseGuards(TurnstileGuard)
   // 10/hour per mailbox AND 600/15min per IP, both on their OWN buckets; see
   // MAILBOX_THROTTLE, and RECOVERY_MAIL_THROTTLE for why register is not in
   // the shared recovery bucket.
@@ -450,6 +453,7 @@ export class AuthController {
 
   @Public()
   @Post('forgot-password')
+  @UseGuards(TurnstileGuard)
   // 10/hour per mailbox, SHARED with resend-verification, AND 600/15min per
   // IP (that one per-route); see RECOVERY_MAIL_THROTTLE.
   @Throttle(RECOVERY_MAIL_THROTTLE)
@@ -501,6 +505,9 @@ export class AuthController {
 
   @Public()
   @Post('resend-verification')
+  @UseGuards(TurnstileGuard)
+  // Admin dashboard resends for participants from the browser with its bearer.
+  @TurnstileAdminBypass()
   // 10/hour per mailbox, SHARED with forgot-password, AND 600/15min per IP
   // (that one per-route); see RECOVERY_MAIL_THROTTLE.
   @Throttle(RECOVERY_MAIL_THROTTLE)

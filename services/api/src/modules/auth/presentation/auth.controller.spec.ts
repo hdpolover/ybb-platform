@@ -1,6 +1,7 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
+import { TurnstileGuard } from '../infrastructure/guards/turnstile.guard';
 import { LoginHandler } from '../application/commands/handlers/login.handler';
 import { AdminLoginHandler } from '../application/commands/handlers/admin-login.handler';
 import { AdminRefreshHandler } from '../application/commands/handlers/admin-refresh.handler';
@@ -72,6 +73,8 @@ describe('AuthController', () => {
             ],
         })
         .overrideGuard(JwtAuthGuard)
+        .useValue({ canActivate: () => true })
+        .overrideGuard(TurnstileGuard)
         .useValue({ canActivate: () => true })
         .compile();
 

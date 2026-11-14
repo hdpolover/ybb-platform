@@ -1,4 +1,4 @@
-// services/api/src/modules/checkout/turnstile.service.ts
+// services/api/src/shared/infrastructure/turnstile/turnstile.service.ts
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -21,7 +21,7 @@ export class TurnstileService {
      */
     async verify(token: string, remoteIp?: string): Promise<boolean> {
         const secret = this.config.get<string>('TURNSTILE_SECRET_KEY');
-        if (!secret) throw new ServiceUnavailableException('Checkout is temporarily unavailable.');
+        if (!secret) throw new ServiceUnavailableException('Service temporarily unavailable, please try again.');
 
         const body = new URLSearchParams({ secret, response: token });
         if (remoteIp && remoteIp !== '0.0.0.0') body.set('remoteip', remoteIp);
@@ -37,7 +37,7 @@ export class TurnstileService {
             return json.success === true;
         } catch (error) {
             this.logger.error(`Turnstile verification unavailable: ${(error as Error).message}`);
-            throw new ServiceUnavailableException('Checkout is temporarily unavailable.');
+            throw new ServiceUnavailableException('Service temporarily unavailable, please try again.');
         }
     }
 }
