@@ -18,7 +18,19 @@ describe('ReviewDocumentHandler', () => {
     application: {
       id: 'app-1',
       programId: 'program-1',
-      program: { name: 'Test Program' },
+      program: {
+        name: 'Test Program',
+        contactEmail: 'hello@istanbulyouthsummit.com',
+        contactAddress: null,
+        brand: {
+          name: 'Istanbul Youth Summit',
+          primaryColor: '#c00',
+          logoUrl: null,
+          websiteUrl: 'https://istanbulyouthsummit.com',
+          socialMediaLinks: null,
+          settings: null,
+        },
+      },
       participant: {
         fullName: 'Jane Participant',
         userId: 'user-1',
@@ -134,6 +146,21 @@ describe('ReviewDocumentHandler', () => {
         document_name: 'Agreement Letter',
         outcome: 'rejected',
         note: 'Missing signature',
+      }),
+    );
+  });
+
+  it("carries the program's brand so the email links to the brand portal, not FRONTEND_URL", async () => {
+    await handler.execute(command('approve'));
+
+    expect(mockRabbitmqProducer.emit).toHaveBeenCalledWith(
+      'notification.document_approved',
+      expect.objectContaining({
+        brand: expect.objectContaining({
+          name: 'Istanbul Youth Summit',
+          websiteUrl: 'https://istanbulyouthsummit.com',
+          contactEmail: 'hello@istanbulyouthsummit.com',
+        }),
       }),
     );
   });

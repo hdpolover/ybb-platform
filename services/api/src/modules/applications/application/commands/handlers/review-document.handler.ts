@@ -4,6 +4,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { ReviewDocumentCommand, DocumentReviewAction } from '../review-document.command';
+import { buildNotificationBrandBlock } from '../../../infrastructure/services/notification-brand-block.util';
 
 const REVIEW_ACTION_STATUS: Record<DocumentReviewAction, string> = {
     approve: 'approved',
@@ -63,7 +64,14 @@ export class ReviewDocumentHandler {
                     select: {
                         id: true,
                         programId: true,
-                        program: { select: { name: true } },
+                        program: {
+                            select: {
+                                name: true,
+                                contactEmail: true,
+                                contactAddress: true,
+                                brand: { include: { settings: true } },
+                            },
+                        },
                         participant: {
                             select: { fullName: true, userId: true, user: { select: { email: true } } },
                         },
@@ -131,22 +139,29 @@ export class ReviewDocumentHandler {
             name: string;
             application: {
                 id: string;
-                program: { name: string };
+                program: Parameters<typeof buildNotificationBrandBlock>[1] & {
+                    name: string;
+                    brand: Parameters<typeof buildNotificationBrandBlock>[0];
+                };
                 participant: { fullName: string; user: { email: string } };
             };
         },
         note: string | null,
     ): Promise<void> {
+        const { program } = document.application;
         try {
             await this.rabbitmqProducer.emit(REVIEW_ACTION_EVENT[action], {
                 participant_name: document.application.participant.fullName,
                 email: document.application.participant.user.email,
-                program_name: document.application.program.name,
+                program_name: program.name,
                 document_name: document.name,
                 application_id: document.application.id,
                 document_id: document.id,
                 outcome: REVIEW_ACTION_STATUS[action],
                 note,
+                // Without it the notification service falls back to FRONTEND_URL
+                // (a non-brand domain) for the "View Your Documents" link.
+                brand: buildNotificationBrandBlock(program.brand, program),
             });
         } catch (error) {
             this.logger.error(
