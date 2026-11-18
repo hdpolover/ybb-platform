@@ -92,6 +92,7 @@ if (typeof document !== 'undefined') {
 
   const badge = (card) => {
     const b = el('div', 'badge', initials(card.name));
+    b.setAttribute('aria-hidden', 'true');
     b.style.setProperty('background', card.color || 'var(--gray-badge)');
     b.style.setProperty('color', card.color ? textOn(card.color) : '#ffffff');
     return b;

@@ -23,6 +23,19 @@ server {
     proxy_ssl_server_name on;
     proxy_set_header Host $proxy_host;
     proxy_set_header Accept application/json;
+    proxy_set_header Cookie "";
+    proxy_hide_header Set-Cookie;
+    proxy_hide_header Access-Control-Allow-Credentials;
+    proxy_hide_header Access-Control-Expose-Headers;
+    proxy_hide_header X-RateLimit-Limit-Long;
+    proxy_hide_header X-RateLimit-Limit-Medium;
+    proxy_hide_header X-RateLimit-Limit-Short;
+    proxy_hide_header X-RateLimit-Remaining-Long;
+    proxy_hide_header X-RateLimit-Remaining-Medium;
+    proxy_hide_header X-RateLimit-Remaining-Short;
+    proxy_hide_header X-RateLimit-Reset-Long;
+    proxy_hide_header X-RateLimit-Reset-Medium;
+    proxy_hide_header X-RateLimit-Reset-Short;
     proxy_cache brands;
     proxy_cache_valid 200 5m;
     proxy_cache_use_stale error timeout updating http_502 http_503 http_504;
@@ -38,8 +51,10 @@ server {
   }
 
   # The path is the input, so every unknown path serves the app.
+  # `expires`, not add_header: any add_header in a location drops the
+  # server-level security headers above.
   location / {
-    add_header Cache-Control "no-cache" always;
+    expires -1;
     try_files $uri /index.html;
   }
 }
