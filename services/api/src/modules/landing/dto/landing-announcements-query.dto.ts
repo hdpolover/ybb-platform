@@ -30,7 +30,7 @@ export class ListAnnouncementsQueryDto {
   @Max(MAX_ANNOUNCEMENTS_LIMIT)
   limit?: number = DEFAULT_ANNOUNCEMENTS_LIMIT;
 
-  @ApiPropertyOptional({ description: 'Search term matched against title/content' })
+  @ApiPropertyOptional({ description: 'Search text; every word must match title, content, category or program name (case-insensitive). Brand abbreviations like JYS match every program of that brand.' })
   @IsOptional()
   @IsString()
   @MaxLength(200)
