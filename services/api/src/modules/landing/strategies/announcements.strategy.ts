@@ -8,6 +8,13 @@ import { LandingSnapshotService } from '../services/landing-snapshot.service';
 import { buildRichTextPreview } from '@shared/utils/rich-text';
 import { isUuid } from '@shared/utils/url-slug';
 import {
+  BrandRef,
+  buildProgramSearchClauses,
+  buildSystemSearchClauses,
+  looksLikeAbbreviation,
+  tokenizeSearch,
+} from './announcement-search.util';
+import {
   DEFAULT_ANNOUNCEMENTS_LIMIT,
   MAX_ANNOUNCEMENTS_LIMIT,
   ListAnnouncementsQueryDto,
@@ -333,6 +340,8 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
     // isVisibleToUsers (NOT isActive) so past programs — which stop accepting applications
     // and therefore have isActive=false — still surface their news.
     const programWhere = this.publicProgramWhere(category);
+    const searchTerms = tokenizeSearch(filters.search);
+    const searchBrands = await this.loadBrandsForSearch(searchTerms);
 
     const programAnnouncementWhere: Prisma.ProgramAnnouncementWhereInput = {
       ...this.publicProgramAnnouncementWhere(category, now),
@@ -340,14 +349,9 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
       program: filters.programId ? { ...programWhere, id: filters.programId } : programWhere,
       ...(filters.category ? { category: { equals: filters.category, mode: 'insensitive' } } : {}),
       ...(filters.tag ? { tags: { hasSome: [filters.tag] } } : {}),
-      ...(filters.search
-        ? {
-          OR: [
-            { title: { contains: filters.search, mode: 'insensitive' } },
-            { content: { contains: filters.search, mode: 'insensitive' } },
-          ],
-        }
-        : {}),
+      // Every word must match somewhere (AND), so "winner JYS 2026" finds a post
+      // that says "Japan Youth Summit 2026 ... Award Winners" without the exact phrase.
+      ...(searchTerms.length ? { AND: buildProgramSearchClauses(searchTerms, searchBrands) } : {}),
     };
 
     const systemAnnouncementWhere: Prisma.SystemAnnouncementWhereInput = {
@@ -357,14 +361,7 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
         { OR: [{ brandId: category?.id ?? undefined }, { brandId: null }] },
         ...(filters.programId ? [{ programId: filters.programId }] : []),
         ...(range ? [{ publishedAt: { gte: range.gte, lt: range.lt } }] : []),
-        ...(filters.search
-          ? [{
-            OR: [
-              { title: { contains: filters.search, mode: Prisma.QueryMode.insensitive } },
-              { content: { contains: filters.search, mode: Prisma.QueryMode.insensitive } },
-            ],
-          }]
-          : []),
+        ...buildSystemSearchClauses(searchTerms, searchBrands),
       ],
     };
 
@@ -517,6 +514,13 @@ export class AnnouncementsStrategy implements ILandingPageStrategy {
       ],
     };
     return result;
+  }
+
+  // Brand abbreviations (JYS, MEYS...) are derived from brand names, so the (tiny)
+  // brand table is read only when a term could be one.
+  private async loadBrandsForSearch(terms: string[]): Promise<BrandRef[]> {
+    if (!terms.some(looksLikeAbbreviation)) return [];
+    return this.prisma.brand.findMany({ select: { id: true, name: true } });
   }
 
   private extractSystemTags(meta: Record<string, unknown>): string[] {

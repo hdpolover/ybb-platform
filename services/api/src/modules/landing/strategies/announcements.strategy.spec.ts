@@ -14,6 +14,9 @@ describe('AnnouncementsStrategy', () => {
     program: {
       findMany: jest.fn(),
     },
+    brand: {
+      findMany: jest.fn(),
+    },
   };
 
   const mockCacheService = {
@@ -31,6 +34,7 @@ describe('AnnouncementsStrategy', () => {
     mockCacheService.set.mockResolvedValue(undefined);
     mockPrisma.programAnnouncement.count.mockResolvedValue(0);
     mockPrisma.program.findMany.mockResolvedValue([]);
+    mockPrisma.brand.findMany.mockResolvedValue([]);
   });
 
   it('merges public program announcements into the landing announcements feed', async () => {
@@ -257,25 +261,45 @@ describe('AnnouncementsStrategy', () => {
       );
     });
 
-    it('applies a search filter across title/content', async () => {
+    it('ANDs each search word across title/content/category/program name', async () => {
       const strategy = new AnnouncementsStrategy(
         mockPrisma as never,
         mockCacheService as never,
         mockLandingSnapshotService as never,
       );
 
-      await strategy.getAnnouncements({ id: 'brand-1' } as never, { search: 'orientation' } as never);
+      await strategy.getAnnouncements({ id: 'brand-1' } as never, { search: 'Orientation  details' } as never);
 
+      expect(mockPrisma.brand.findMany).not.toHaveBeenCalled();
       expect(mockPrisma.programAnnouncement.count).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            OR: [
-              { title: { contains: 'orientation', mode: 'insensitive' } },
-              { content: { contains: 'orientation', mode: 'insensitive' } },
-            ],
+            AND: ['orientation', 'details'].map((term) => ({
+              OR: [
+                { title: { contains: term, mode: 'insensitive' } },
+                { content: { contains: term, mode: 'insensitive' } },
+                { category: { contains: term, mode: 'insensitive' } },
+                { program: { name: { contains: term, mode: 'insensitive' } } },
+              ],
+            })),
           }),
         }),
       );
+    });
+
+    it('maps a brand abbreviation in the search to that brand\'s programs', async () => {
+      const strategy = new AnnouncementsStrategy(
+        mockPrisma as never,
+        mockCacheService as never,
+        mockLandingSnapshotService as never,
+      );
+      mockPrisma.brand.findMany.mockResolvedValue([{ id: 'jys-brand', name: 'Japan Youth Summit' }]);
+
+      await strategy.getAnnouncements({ id: 'jys-brand' } as never, { search: 'winner JYS 2026' } as never);
+
+      const where = mockPrisma.programAnnouncement.count.mock.calls[0][0].where;
+      expect(where.AND).toHaveLength(3);
+      expect(where.AND[1].OR).toContainEqual({ program: { brandId: { in: ['jys-brand'] } } });
     });
 
     it('applies a year filter as a publishDate range', async () => {
