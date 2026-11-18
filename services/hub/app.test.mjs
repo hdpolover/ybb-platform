@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
-const { normalizeWebsiteUrl, buildTargetUrl, hasRealLogo, toCards, describePath } =
+const { normalizeWebsiteUrl, buildTargetUrl, hasRealLogo, toCards, describePath, initials, logoWidth } =
   createRequire(import.meta.url)('./app.js');
 
 const loc = (pathname, search = '', hash = '') => ({ pathname, search, hash });
@@ -20,11 +20,15 @@ test('root path links to the brand root, hash is kept', () => {
   assert.equal(buildTargetUrl('https://a.com', loc('/p', '', '#top')), 'https://a.com/p#top');
 });
 
-test('pathname //evil.com cannot change the target host', () => {
-  for (const p of ['//evil.com', '///evil.com/x', '/\\evil.com']) {
-    const u = new URL(buildTargetUrl('https://istanbulyouthsummit.com', loc(p, '?a=b')));
-    assert.equal(u.host, 'istanbulyouthsummit.com', p);
-    assert.equal(u.search, '?a=b');
+test('no pathname, query or hash can change the target host or scheme', () => {
+  const paths = ['//evil.com', '///evil.com/x', '/\\evil.com', '\\\\evil.com', '/@evil.com', '/%2F%2Fevil.com',
+    'evil.com', 'https://evil.com', '/https://evil.com', '/..//evil.com', '/\t//evil.com', ''];
+  for (const p of paths) {
+    for (const [search, hash] of [['?a=b', ''], ['?next=//evil.com', '#//evil.com'], ['?@evil.com', '#@evil.com']]) {
+      const u = new URL(buildTargetUrl('https://istanbulyouthsummit.com', loc(p, search, hash)));
+      assert.equal(u.origin, 'https://istanbulyouthsummit.com', JSON.stringify([p, search, hash]));
+      assert.equal(u.search, search);
+    }
   }
 });
 
@@ -36,13 +40,16 @@ test('prepends https:// to a scheme-less websiteUrl', () => {
   assert.equal(normalizeWebsiteUrl('koreayouthsummit.com'), 'https://koreayouthsummit.com');
 });
 
-test('strips trailing slash and keeps explicit scheme', () => {
+test('strips path and trailing slash, upgrades http to https', () => {
   assert.equal(normalizeWebsiteUrl('https://a.com/'), 'https://a.com');
-  assert.equal(normalizeWebsiteUrl('http://a.com'), 'http://a.com');
+  assert.equal(normalizeWebsiteUrl('https://a.com/en/home'), 'https://a.com');
+  assert.equal(normalizeWebsiteUrl('http://a.com'), 'https://a.com');
+  assert.equal(normalizeWebsiteUrl(' WWW.A.COM '), 'https://www.a.com');
 });
 
 test('rejects empty, null and non-http websiteUrl values', () => {
-  for (const v of [null, undefined, '', '   ', 'javascript:alert(1)', 'ftp://a.com']) {
+  for (const v of [null, undefined, '', '   ', 'javascript:alert(1)', 'ftp://a.com', 'data:text/html,x',
+    'https://user:pw@a.com', 'localhost', 'not a url', 42]) {
     assert.equal(normalizeWebsiteUrl(v), null, String(v));
   }
 });
@@ -74,7 +81,35 @@ test('placeholder, missing or invalid logo gives a text card', () => {
 
 test('describePath maps known portal paths, generic otherwise, null at root', () => {
   assert.equal(describePath('/'), null);
-  assert.equal(describePath('/dashboard/documents'), 'your documents');
-  assert.equal(describePath('/dashboard/documents/'), 'your documents');
-  assert.equal(describePath('/something/else'), 'where you left off');
+  assert.equal(describePath('/dashboard/documents'), 'open your documents');
+  assert.equal(describePath('/dashboard/documents/'), 'open your documents');
+  assert.equal(describePath('/login'), 'sign in');
+  assert.equal(describePath('/something/else'), 'continue where you left off');
+});
+
+test('cards carry a display host and only 3- or 6-digit hex colours', () => {
+  const base = { id: '1', name: 'A', isActive: true, logoUrl: null };
+  const [a] = toCards([{ ...base, websiteUrl: 'https://www.a.com/x', primaryColor: '#FA0000' }]);
+  assert.equal(a.host, 'a.com');
+  assert.equal(a.color, '#FA0000');
+  for (const c of ['#FA000080', 'red', 'url(x)', '#12', null]) {
+    assert.equal(toCards([{ ...base, websiteUrl: 'a.com', primaryColor: c }])[0].color, null, String(c));
+  }
+});
+
+test('initials give the programme abbreviation', () => {
+  assert.equal(initials('Vietnam Youth Summit'), 'VYS');
+  assert.equal(initials('  world youth   fest '), 'WYF');
+  assert.equal(initials(''), '?');
+});
+
+test('logoWidth gives wide and square logos the same area inside the stage', () => {
+  const area = (r) => { const w = logoWidth(r) / 100; return w * (w * 4) / (3 * r); };
+  assert.ok(Math.abs(area(1) - area(2.5)) < 0.01);
+  assert.ok(logoWidth(2.5) > logoWidth(1));
+  for (const r of [0.2, 0.9, 1, 2.2, 10]) {
+    const w = logoWidth(r) / 100;
+    assert.ok(w <= 0.84 && (w * 4) / (3 * r) <= 0.7001, String(r));
+  }
+  for (const r of [0, NaN, Infinity, -1]) assert.equal(logoWidth(r), 50);
 });

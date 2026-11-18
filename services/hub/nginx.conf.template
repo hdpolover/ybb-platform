@@ -6,27 +6,48 @@ server {
   server_name _;
   root /usr/share/nginx/html;
   index index.html;
+  server_tokens off;
 
+  gzip on;
+  gzip_proxied any;
+  gzip_types application/json application/javascript text/css;
+
+  # Every add_header in a location drops these, so locations use `expires` only.
   add_header X-Content-Type-Options nosniff always;
   add_header X-Frame-Options DENY always;
   add_header Referrer-Policy strict-origin-when-cross-origin always;
-  add_header Content-Security-Policy "default-src 'self'; img-src 'self' https: data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
+  add_header Strict-Transport-Security "max-age=31536000" always;
+  add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+  add_header Content-Security-Policy "default-src 'self'; img-src 'self' https: data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" always;
 
   location = /healthz {
+    access_log off;
     default_type text/plain;
     return 200 'ok';
   }
 
-  # Same-origin proxy: the API sends no CORS headers.
+  # Same-origin proxy: the API sends no CORS headers. Nothing from the client
+  # (headers, body, query) reaches upstream, and one cache entry serves everyone.
   location = /api/brands {
+    limit_except GET { deny all; }
+    set $args "";
     proxy_pass ${HUB_BRANDS_UPSTREAM};
     proxy_ssl_server_name on;
+    proxy_pass_request_headers off;
+    proxy_pass_request_body off;
     proxy_set_header Host $proxy_host;
     proxy_set_header Accept application/json;
-    proxy_set_header Cookie "";
+    proxy_set_header Content-Length "";
+
+    proxy_ignore_headers Vary Set-Cookie Cache-Control Expires X-Accel-Redirect X-Accel-Expires X-Accel-Limit-Rate X-Accel-Buffering X-Accel-Charset;
     proxy_hide_header Set-Cookie;
+    proxy_hide_header Vary;
+    proxy_hide_header X-Powered-By;
     proxy_hide_header Access-Control-Allow-Credentials;
     proxy_hide_header Access-Control-Expose-Headers;
+    proxy_hide_header X-RateLimit-Limit;
+    proxy_hide_header X-RateLimit-Remaining;
+    proxy_hide_header X-RateLimit-Reset;
     proxy_hide_header X-RateLimit-Limit-Long;
     proxy_hide_header X-RateLimit-Limit-Medium;
     proxy_hide_header X-RateLimit-Limit-Short;
@@ -36,23 +57,32 @@ server {
     proxy_hide_header X-RateLimit-Reset-Long;
     proxy_hide_header X-RateLimit-Reset-Medium;
     proxy_hide_header X-RateLimit-Reset-Short;
+    # Cloudflare edge headers describe api.ybbhub.com, not this host (Alt-Svc would advertise h3 here).
+    proxy_hide_header Alt-Svc;
+    proxy_hide_header NEL;
+    proxy_hide_header Report-To;
+    proxy_hide_header CF-RAY;
+    proxy_hide_header CF-Cache-Status;
+
     proxy_cache brands;
+    proxy_cache_key brands;
     proxy_cache_valid 200 5m;
-    proxy_cache_use_stale error timeout updating http_502 http_503 http_504;
+    proxy_cache_use_stale error timeout updating http_429 http_500 http_502 http_503 http_504;
+    proxy_cache_background_update on;
     proxy_cache_lock on;
     proxy_connect_timeout 5s;
     proxy_read_timeout 10s;
     expires 60s;
   }
 
+  # Revalidate (ETag) instead of caching: there is no build step to fingerprint
+  # filenames, and new HTML with stale JS/CSS would break after a deploy.
   location ~* \.(js|css)$ {
-    expires 5m;
+    expires -1;
     try_files $uri =404;
   }
 
   # The path is the input, so every unknown path serves the app.
-  # `expires`, not add_header: any add_header in a location drops the
-  # server-level security headers above.
   location / {
     expires -1;
     try_files $uri /index.html;
