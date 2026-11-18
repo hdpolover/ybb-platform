@@ -126,3 +126,22 @@ describe("EditProgramSpecificsModal FF results date", () => {
     );
   });
 });
+
+describe("EditProgramSpecificsModal application deadline", () => {
+  it("warns but still saves a deadline before registration closes (H-2)", async () => {
+    const onSubmit = renderModal({ ...VALUES, applicationDeadline: "2027-04-08" });
+
+    expect(screen.getByText(/before registration closes\. This can be saved/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ applicationDeadline: "2027-04-08" })),
+    );
+  });
+
+  it("shows no warning when the deadline is after registration closes", () => {
+    renderModal(VALUES);
+
+    expect(screen.queryByText(/before registration closes/i)).not.toBeInTheDocument();
+  });
+});

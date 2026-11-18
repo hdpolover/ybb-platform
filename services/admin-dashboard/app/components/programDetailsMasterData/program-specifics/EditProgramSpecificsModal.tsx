@@ -94,17 +94,19 @@ export function EditProgramSpecificsModal({
     formValues.registrationCloseDate < formValues.registrationOpenDate;
 
   // applicationDeadline is a date-only value ("YYYY-MM-DD"); compare against
-  // the date portion of the registration window bounds. registrationCloseDate
-  // gates CREATING an application; applicationDeadline gates SUBMITTING it. A
-  // deadline earlier than either bound means someone could register (or even
-  // be blocked from registering) and never be able to submit, which is what
-  // the server now rejects (see program-deadline-order.validator.ts in the API).
-  const applicationDeadlineOutsideWindow =
+  // the date portion of the registration window bounds. A deadline before the
+  // open date can never be met, so the API rejects it. A deadline before the
+  // close date (e.g. H-2) is a legitimate choice, so it only warns: people who
+  // register in the gap can create an application but cannot submit it.
+  const deadlineBeforeOpen =
     formValues.applicationDeadline !== "" &&
-    ((formValues.registrationOpenDate !== "" &&
-      formValues.applicationDeadline < formValues.registrationOpenDate.slice(0, 10)) ||
-      (formValues.registrationCloseDate !== "" &&
-        formValues.applicationDeadline < formValues.registrationCloseDate.slice(0, 10)));
+    formValues.registrationOpenDate !== "" &&
+    formValues.applicationDeadline < formValues.registrationOpenDate.slice(0, 10);
+  const deadlineBeforeClose =
+    !deadlineBeforeOpen &&
+    formValues.applicationDeadline !== "" &&
+    formValues.registrationCloseDate !== "" &&
+    formValues.applicationDeadline < formValues.registrationCloseDate.slice(0, 10);
 
   const handleSubmit = async () => {
     if (registrationWindowInvalid) {
@@ -366,10 +368,15 @@ export function EditProgramSpecificsModal({
               Required. Drives submission reminders, and is separate from the registration window above.
             </p>
           </div>
-          {applicationDeadlineOutsideWindow && !registrationWindowInvalid && (
+          {deadlineBeforeOpen && !registrationWindowInvalid && (
+            <div className="md:col-span-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              The application deadline is before registration opens, so no one could ever submit. This will not save.
+            </div>
+          )}
+          {deadlineBeforeClose && !registrationWindowInvalid && (
             <div className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              The application deadline is earlier than the registration window above. Anyone who registers after
-              this deadline (or before registration opens) will never be able to submit their application.
+              The application deadline is before registration closes. This can be saved. Anyone who registers
+              after the deadline can still create an application but will not be able to submit it.
             </div>
           )}
         </div>

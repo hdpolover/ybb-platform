@@ -169,15 +169,15 @@ describe('UpdateProgramHandler', () => {
         });
         programRepository.findById.mockResolvedValue(program as any);
 
-        // Only applicationDeadline is touched, moved earlier than the existing registrationCloseDate.
+        // Only applicationDeadline is touched, moved earlier than the existing registrationOpenDate.
         const command = new UpdateProgramCommand(
             'prog-1',
-            { applicationDeadline: '2026-12-02T00:00:00.000Z' },
+            { applicationDeadline: '2026-11-20T00:00:00.000Z' },
             'user-1',
         );
 
         await expect(handler.execute(command)).rejects.toThrow(
-            /Application Deadline.*cannot be earlier than.*Registration Closes/s,
+            /Application Deadline.*cannot be earlier than.*Registration Opens/s,
         );
         expect(programRepository.update).not.toHaveBeenCalled();
     });
@@ -198,6 +198,37 @@ describe('UpdateProgramHandler', () => {
         );
 
         await expect(handler.execute(command)).resolves.toBeDefined();
+    });
+
+    it('saves the FF announcement date together with a deadline 2 days before registration closes (CYS H-2)', async () => {
+        const program = makeProgram({
+            registrationOpenDate: new Date('2026-11-20T16:59:00Z'),
+            registrationCloseDate: new Date('2027-06-28T16:59:00Z'),
+            applicationDeadline: new Date('2027-06-29T00:00:00Z'),
+        });
+        programRepository.findById.mockResolvedValue(program as any);
+        programRepository.update.mockImplementation((_id, data) => Promise.resolve({ ...program, ...data } as any));
+
+        // The modal always sends all three dates plus the FF date in one PUT.
+        const command = new UpdateProgramCommand(
+            'prog-1',
+            {
+                registrationOpenDate: '2026-11-20T16:59:00.000Z',
+                registrationCloseDate: '2027-06-28T16:59:00.000Z',
+                applicationDeadline: '2027-06-26',
+                fundingResultsAnnouncedAt: '2027-02-01T03:00:00.000Z',
+            },
+            'user-1',
+        );
+        await handler.execute(command);
+
+        expect(programRepository.update).toHaveBeenCalledWith(
+            'prog-1',
+            expect.objectContaining({
+                applicationDeadline: new Date('2027-06-26'),
+                fundingResultsAnnouncedAt: new Date('2027-02-01T03:00:00.000Z'),
+            }),
+        );
     });
 
     describe('status/isActive drift guard (MEYS 7th incident)', () => {

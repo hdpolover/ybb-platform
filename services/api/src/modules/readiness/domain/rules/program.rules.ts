@@ -3,7 +3,7 @@ import { isUsableImageUrl } from '../placeholder-url.util';
 
 const filled = (v: string | null): boolean => !!v && v.trim().length > 0;
 
-// Mirrors assertProgramDeadlineOrder (program-deadline-order.validator.ts:27-70)
+// Mirrors assertProgramDeadlineOrder (program-deadline-order.validator.ts)
 // as a boolean. Each comparison is skipped when either operand is null, exactly
 // as the validator does.
 function deadlinesOrdered(p: {
@@ -14,7 +14,6 @@ function deadlinesOrdered(p: {
   const { registrationOpenDate: open, registrationCloseDate: close, applicationDeadline: deadline } = p;
   if (close && open && close.getTime() < open.getTime()) return false;
   if (deadline && open && deadline.getTime() < open.getTime()) return false;
-  if (deadline && close && deadline.getTime() < close.getTime()) return false;
   return true;
 }
 
