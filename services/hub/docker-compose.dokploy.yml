@@ -1,0 +1,16 @@
+# services/hub/docker-compose.dokploy.yml
+services:
+  program-hub:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: ybb-prod-program-hub
+    restart: always
+    environment:
+      HUB_BRANDS_UPSTREAM: ${HUB_BRANDS_UPSTREAM:-https://api.ybbhub.com/v1/brands}
+    networks:
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true

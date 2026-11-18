@@ -1,0 +1,142 @@
+/* services/hub/styles.css */
+@font-face { font-family: "Poppins"; font-style: normal; font-weight: 600; font-display: swap; src: url("/fonts/poppins-latin-600.woff2") format("woff2"); }
+@font-face { font-family: "Poppins"; font-style: normal; font-weight: 700; font-display: swap; src: url("/fonts/poppins-latin-700.woff2") format("woff2"); }
+/* YBB parent palette (youthbreaktheboundaries.com): navy #131f49, green #00a859 / #309b65, charcoal #373435.
+   --accent is a darker green where it is text on light surfaces (#00a859 is only 3:1 on white). */
+:root {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --ink: #373435;
+  --ink-muted: #5f6368;
+  --edge: #dfe2ea;
+  --accent: #007a47;
+  --accent-strong: #00693d;
+  --focus: #007a47;
+  --hero: #131f49;
+  --hero-ink: #ffffff;
+  --hero-muted: #c3c9de;
+  --stage: #ffffff;
+  --stage-ink: #373435;
+  --neutral-brand: #9aa0ad;
+  --heading: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --shadow: 0 1px 2px rgb(19 31 73 / .06), 0 8px 24px -12px rgb(19 31 73 / .2);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1030;
+    --surface: #141b3d;
+    --ink: #eef0f6;
+    --ink-muted: #a9b0c8;
+    --edge: #263058;
+    --accent: #2fc27b;
+    --accent-strong: #00693d;
+    --focus: #3ddc97;
+    --neutral-brand: #6b7390;
+    --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 10px 28px -14px rgb(0 0 0 / .7);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Hero: the one place YBB itself speaks. Deep ink in both themes, red glow, faint dot grid. */
+.hero {
+  position: relative; overflow: hidden; color: var(--hero-ink);
+  background:
+    radial-gradient(110% 85% at 100% 0%, rgb(0 168 89 / .38), transparent 55%),
+    radial-gradient(90% 80% at 0% 100%, rgb(64 92 186 / .45), transparent 60%),
+    var(--hero);
+  padding: max(28px, env(safe-area-inset-top)) 20px 76px;
+}
+.hero::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: radial-gradient(rgb(255 255 255 / .09) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+  mask-image: linear-gradient(to bottom, #000, transparent 85%);
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent 85%);
+}
+.hero-inner { position: relative; max-width: 960px; margin: 0 auto; }
+.lockup { display: flex; align-items: center; gap: 12px; margin: 0 0 32px; font-family: var(--heading); font-size: .95rem; font-weight: 600; line-height: 1.25; }
+.mark { display: block; flex: none; width: 68px; height: 56px; }
+h1 { margin: 0 0 12px; max-width: 15ch; font-family: var(--heading); font-size: clamp(1.95rem, 8.2vw, 3.2rem); font-weight: 700; line-height: 1.1; letter-spacing: -.02em; text-wrap: balance; }
+.sub { margin: 0; max-width: 36ch; color: var(--hero-muted); font-size: 1.05rem; }
+
+/* Cards rise into the hero for a layered first screen. */
+.wrap { flex: 1; position: relative; width: 100%; max-width: 1000px; margin: -48px auto 0; padding: 0 16px 16px; }
+.grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
+@media (min-width: 640px) { .grid { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } }
+
+.card {
+  --brand: var(--neutral-brand);
+  display: flex; flex-direction: column; height: 100%;
+  border: 1px solid var(--edge); border-radius: 16px; overflow: hidden;
+  background: var(--surface); color: inherit; text-decoration: none; box-shadow: var(--shadow);
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.card:hover { border-color: var(--brand); transform: translateY(-3px); }
+.card:active { transform: scale(.98); }
+.card:focus-visible, .foot a:focus-visible, .link:focus-visible, .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+
+/* Stage: a fixed 4:3 light surface (logos are dark-on-transparent), faintly tinted
+   with the brand colour and underlined by it. JS sizes each logo to equal area. */
+.stage {
+  position: relative; display: grid; place-items: center; aspect-ratio: 4 / 3;
+  background: var(--stage);
+  background: color-mix(in srgb, var(--brand) 9%, var(--stage));
+  box-shadow: inset 0 -3px 0 var(--brand);
+}
+.stage img { display: block; width: 50%; height: auto; max-height: 70%; object-fit: contain; opacity: 0; transition: opacity .25s ease; }
+.stage img.is-ready { opacity: 1; }
+.monogram {
+  display: grid; place-items: center; width: 46%; aspect-ratio: 1; border-radius: 50%;
+  border: 2px solid var(--brand); outline: 1px solid var(--brand); outline-offset: 4px;
+  color: var(--stage-ink); font-size: clamp(1.2rem, 5.5vw, 1.7rem); font-weight: 800; letter-spacing: -.02em;
+}
+
+.meta { display: grid; grid-template-columns: 1fr auto; align-content: start; column-gap: 8px; align-items: center; padding: 12px 12px 14px; flex: 1; }
+.name { grid-column: 1; font-family: var(--heading); font-weight: 600; font-size: .95rem; line-height: 1.3; overflow-wrap: anywhere; }
+.host { grid-column: 1 / span 2; margin-top: 4px; color: var(--ink-muted); font-size: .78rem; line-height: 1.3; overflow-wrap: anywhere; }
+/* Arrow: says "this goes somewhere" before it is touched. */
+.meta::after {
+  content: ""; grid-column: 2; grid-row: 1; width: 8px; height: 8px; margin-right: 4px;
+  border-top: 2px solid var(--ink-muted); border-right: 2px solid var(--ink-muted);
+  transform: rotate(45deg); transition: transform .18s ease, border-color .18s ease;
+}
+.card:hover .meta::after { border-color: var(--accent); transform: translateX(3px) rotate(45deg); }
+
+.skeleton {
+  aspect-ratio: 4 / 4.3; border-radius: 16px; background: var(--surface); border: 1px solid var(--edge);
+  box-shadow: var(--shadow); animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+  .card, .meta::after, .stage img { transition: none; }
+  .card:hover, .card:active { transform: none; }
+  .card:hover .meta::after { transform: rotate(45deg); }
+}
+
+.notice { padding: 20px; border: 1px solid var(--edge); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.notice p { margin: 0 0 4px; color: var(--ink-muted); }
+.notice .notice-title { color: var(--ink); font-weight: 700; font-size: 1.05rem; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 16px; }
+.btn {
+  min-height: 44px; padding: 0 22px; border: 0; border-radius: 10px;
+  background: var(--accent-strong); color: #ffffff; font: inherit; font-weight: 700; cursor: pointer;
+}
+.btn:hover { filter: brightness(1.08); }
+.link { color: var(--accent); font-weight: 600; }
+.hint { margin: 24px 0 0; color: var(--ink-muted); font-size: .9rem; text-align: center; text-wrap: balance; }
+.foot { padding: 12px 16px max(28px, env(safe-area-inset-bottom)); text-align: center; font-size: .85rem; }
+.foot a { color: var(--ink-muted); }
