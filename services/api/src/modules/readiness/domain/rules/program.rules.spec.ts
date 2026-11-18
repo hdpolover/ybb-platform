@@ -59,11 +59,18 @@ describe('PROGRAM_RULES', () => {
         applicationDeadline: null,
       }))).toBe(false);
     });
-    it('fails when the application deadline precedes registration close', () => {
+    it('fails when the application deadline precedes registration open', () => {
       expect(r.evaluate(ctx({
-        registrationCloseDate: new Date('2026-06-01'),
-        applicationDeadline: new Date('2026-05-01'),
+        registrationOpenDate: new Date('2026-03-01'),
+        applicationDeadline: new Date('2026-02-01'),
       }))).toBe(false);
+    });
+    it('passes when the application deadline is before registration close (H-2 is allowed)', () => {
+      expect(r.evaluate(ctx({
+        registrationOpenDate: new Date('2026-01-01'),
+        registrationCloseDate: new Date('2026-06-01'),
+        applicationDeadline: new Date('2026-05-30'),
+      }))).toBe(true);
     });
     it('skips a comparison when either operand is null, matching the validator', () => {
       expect(r.evaluate(ctx({ registrationOpenDate: null, registrationCloseDate: null, applicationDeadline: null }))).toBe(true);

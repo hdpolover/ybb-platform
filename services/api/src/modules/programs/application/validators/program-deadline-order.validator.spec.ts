@@ -73,41 +73,14 @@ describe('program-deadline-order.validator', () => {
         });
     });
 
-    describe('rule (c): applicationDeadline >= registrationCloseDate', () => {
-        it('rejects applicationDeadline earlier than registrationCloseDate, with the consequence and fix location', () => {
+    describe('applicationDeadline vs registrationCloseDate', () => {
+        it('allows a deadline before registration closes (H-2 is a valid business choice)', () => {
             expect(() =>
                 assertProgramDeadlineOrder({
-                    registrationCloseDate: new Date('2026-12-05T16:59:00.000Z'),
-                    applicationDeadline: new Date('2026-08-31T00:00:00.000Z'),
+                    registrationOpenDate: new Date('2026-11-20T16:59:00.000Z'),
+                    registrationCloseDate: new Date('2027-06-28T16:59:00.000Z'),
+                    applicationDeadline: new Date('2027-06-26T00:00:00.000Z'),
                 }),
-            ).toThrow(
-                'Application Deadline (31 Aug 2026) cannot be earlier than Registration Closes (5 Dec 2026), ' +
-                    'because anyone who registers after 31 Aug 2026 would never be able to submit. ' +
-                    'Change Registration Closes in Program Details, Program Specifics.',
-            );
-        });
-
-        it('accepts applicationDeadline on or after registrationCloseDate', () => {
-            expect(() =>
-                assertProgramDeadlineOrder({
-                    registrationCloseDate: new Date('2026-12-05T00:00:00Z'),
-                    applicationDeadline: new Date('2026-12-05T00:00:00Z'),
-                }),
-            ).not.toThrow();
-            expect(() =>
-                assertProgramDeadlineOrder({
-                    registrationCloseDate: new Date('2026-12-05T00:00:00Z'),
-                    applicationDeadline: new Date('2026-12-06T00:00:00Z'),
-                }),
-            ).not.toThrow();
-        });
-
-        it('skips the check when either value is null', () => {
-            expect(() =>
-                assertProgramDeadlineOrder({ registrationCloseDate: null, applicationDeadline: new Date() }),
-            ).not.toThrow();
-            expect(() =>
-                assertProgramDeadlineOrder({ registrationCloseDate: new Date(), applicationDeadline: undefined }),
             ).not.toThrow();
         });
     });
