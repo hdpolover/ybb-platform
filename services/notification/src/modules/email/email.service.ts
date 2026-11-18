@@ -1581,8 +1581,11 @@ export class EmailService {
       brandId: data.brandId,
       programId: data.programId,
     };
-    const fallbackSubject = data.brand?.name
-      ? `Your Invitation Letter Is Ready - ${data.brand.name}`
+    // Programme first: a participant registered in two editions of one brand
+    // otherwise gets a subject that does not say which letter is ready.
+    const subjectSuffix = data.program || data.brand?.name;
+    const fallbackSubject = subjectSuffix
+      ? `Your Invitation Letter Is Ready - ${subjectSuffix}`
       : 'Your Invitation Letter Is Ready';
     const { subject, html } = await this.resolveEmailContent({
       type: 'loa_ready',

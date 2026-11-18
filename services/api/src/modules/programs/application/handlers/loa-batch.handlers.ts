@@ -277,17 +277,6 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
       return;
     }
 
-    // In-app notifications are written directly here rather than by
-    // services/notification: that service has no database access at all
-    // (no Prisma dependency in its package.json) — it only sends email.
-    await this.createInAppNotifications(batch, recipients);
-
-    // Record the intended recipients BEFORE publishing, so "who was supposed
-    // to get this letter?" is answerable even if the publish below fails, the
-    // broker is down, or services/notification never reports back. The
-    // outcomes are filled in later by LoaSendResultsController.
-    await this.recordPendingSends(batch, recipients);
-
     const program = await this.prisma.program.findUnique({
       where: { id: batch.programId },
       select: {
@@ -295,6 +284,17 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
         brand: { select: { name: true, websiteUrl: true } },
       },
     });
+
+    // In-app notifications are written directly here rather than by
+    // services/notification: that service has no database access at all
+    // (no Prisma dependency in its package.json) — it only sends email.
+    await this.createInAppNotifications(batch, program?.name ?? null, recipients);
+
+    // Record the intended recipients BEFORE publishing, so "who was supposed
+    // to get this letter?" is answerable even if the publish below fails, the
+    // broker is down, or services/notification never reports back. The
+    // outcomes are filled in later by LoaSendResultsController.
+    await this.recordPendingSends(batch, recipients);
 
     const payload: LoaBatchReleasedPayload = {
       batchId: batch.id,
@@ -362,6 +362,7 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
    */
   private async createInAppNotifications(
     batch: { id: string; name: string },
+    programName: string | null,
     recipients: LoaBatchReleasedRecipient[],
   ): Promise<void> {
     const documentsUrl = this.buildDocumentsUrl();
@@ -370,7 +371,10 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
       userId: recipient.userId,
       type: 'loa_available',
       title: 'Invitation Letter Ready',
-      message: `Your Invitation Letter for "${batch.name}" is ready. Log in to download it.`,
+      // Name the programme, not the batch: batch names are bare ordinals
+      // ("1", "2") and a participant in two editions of one brand cannot tell
+      // which one the letter belongs to.
+      message: `Your Invitation Letter for ${programName ?? `"${batch.name}"`} is ready. Log in to download it.`,
       actionUrl: documentsUrl,
       relatedEntityType: 'loa_release_batch',
       relatedEntityId: batch.id,
