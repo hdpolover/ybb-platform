@@ -397,9 +397,11 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
 
   // The portal opens the participant's most-engaged edition by default, which for
   // someone in two editions of a brand may not be the one the letter is for.
+  // Relative on purpose: the portal is served on each brand's own domain and
+  // renders actionUrl as a plain href. The API has no FRONTEND_URL, so the old
+  // absolute form stored http://localhost:3000 on every LOA notification.
   private buildDocumentsUrl(programId: string): string {
-    const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
-    return `${baseUrl}/dashboard/documents?programId=${encodeURIComponent(programId)}`;
+    return `/dashboard/documents?programId=${encodeURIComponent(programId)}`;
   }
 }
 

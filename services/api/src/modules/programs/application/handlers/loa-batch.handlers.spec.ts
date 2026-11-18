@@ -359,7 +359,7 @@ describe('ReleaseLoaBatchHandler', () => {
           // Programme name, not the bare batch ordinal.
           message: expect.stringContaining('YBB Summit 2026'),
           // Pins the edition so a participant in two editions opens the right one.
-          actionUrl: expect.stringMatching(/\/dashboard\/documents\?programId=prog-1$/),
+          actionUrl: '/dashboard/documents?programId=prog-1',
           relatedEntityType: 'loa_release_batch',
           relatedEntityId: 'batch-1',
         }),
