@@ -361,11 +361,11 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
    * the blast radius of the all-or-nothing behaviour above to one chunk.
    */
   private async createInAppNotifications(
-    batch: { id: string; name: string },
+    batch: { id: string; name: string; programId: string },
     programName: string | null,
     recipients: LoaBatchReleasedRecipient[],
   ): Promise<void> {
-    const documentsUrl = this.buildDocumentsUrl();
+    const documentsUrl = this.buildDocumentsUrl(batch.programId);
 
     const rows = recipients.map((recipient) => ({
       userId: recipient.userId,
@@ -395,9 +395,11 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
     }
   }
 
-  private buildDocumentsUrl(): string {
+  // The portal opens the participant's most-engaged edition by default, which for
+  // someone in two editions of a brand may not be the one the letter is for.
+  private buildDocumentsUrl(programId: string): string {
     const baseUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
-    return `${baseUrl}/dashboard/documents`;
+    return `${baseUrl}/dashboard/documents?programId=${encodeURIComponent(programId)}`;
   }
 }
 

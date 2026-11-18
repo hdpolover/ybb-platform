@@ -1576,7 +1576,7 @@ export class EmailService {
     const templateData = {
       name: data.name,
       program: data.program,
-      documentsUrl: this.resolveDocumentsUrl(data.brand),
+      documentsUrl: this.resolveDocumentsUrl(data.brand, data.programId),
       brand: data.brand,
       brandId: data.brandId,
       programId: data.programId,
@@ -1638,8 +1638,11 @@ export class EmailService {
     return 'http://localhost:3001';
   }
 
-  private resolveDocumentsUrl(brand?: any): string {
-    return `${this.resolvePortalBaseUrl(brand, 'resolveDocumentsUrl')}/dashboard/documents`;
+  // programId pins the edition the link is about: the portal otherwise opens
+  // the participant's most-engaged edition, which may be a sibling edition.
+  private resolveDocumentsUrl(brand?: any, programId?: string): string {
+    const url = `${this.resolvePortalBaseUrl(brand, 'resolveDocumentsUrl')}/dashboard/documents`;
+    return programId ? `${url}?programId=${encodeURIComponent(programId)}` : url;
   }
 
   async sendAmbassadorWelcomeEmail(

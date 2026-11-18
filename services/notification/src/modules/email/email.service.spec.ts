@@ -47,6 +47,20 @@ describe('EmailService fallback subjects', () => {
       expect(sendRawEmail.mock.calls[1][1]).toBe('Your Invitation Letter Is Ready - YBB');
       expect(sendRawEmail.mock.calls[2][1]).toBe('Your Invitation Letter Is Ready');
     });
+
+    it('links the CTA to the documents page of the program the letter is for', async () => {
+      const brand = { name: 'YBB', websiteUrl: 'https://portal.example.com' };
+      await service.sendLoaReadyEmail('j@example.com', { name: 'Jane', brand, programId: 'prog 7' });
+      await service.sendLoaReadyEmail('j@example.com', { name: 'Jane', brand });
+
+      // Handlebars HTML-escapes "=" as &#x3D;; mail clients decode it back.
+      expect(sendRawEmail.mock.calls[0][2]).toContain(
+        'href="https://portal.example.com/dashboard/documents?programId&#x3D;prog%207"',
+      );
+      expect(sendRawEmail.mock.calls[1][2]).toContain(
+        'href="https://portal.example.com/dashboard/documents"',
+      );
+    });
   });
 
   describe('sendApplicationSubmittedEmail', () => {
