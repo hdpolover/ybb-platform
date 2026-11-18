@@ -31,6 +31,24 @@ describe('EmailService fallback subjects', () => {
       .mockResolvedValue(undefined as never);
   });
 
+  describe('sendLoaReadyEmail', () => {
+    it('names the program in the subject, falling back to brand, then bare', async () => {
+      await service.sendLoaReadyEmail('j@example.com', {
+        name: 'Jane',
+        program: 'Middle East Youth Summit 6th',
+        brand: { name: 'YBB' },
+      });
+      await service.sendLoaReadyEmail('j@example.com', { name: 'Jane', brand: { name: 'YBB' } });
+      await service.sendLoaReadyEmail('j@example.com', { name: 'Jane' });
+
+      expect(sendRawEmail.mock.calls[0][1]).toBe(
+        'Your Invitation Letter Is Ready - Middle East Youth Summit 6th',
+      );
+      expect(sendRawEmail.mock.calls[1][1]).toBe('Your Invitation Letter Is Ready - YBB');
+      expect(sendRawEmail.mock.calls[2][1]).toBe('Your Invitation Letter Is Ready');
+    });
+  });
+
   describe('sendApplicationSubmittedEmail', () => {
     const base = {
       name: 'Jane',

@@ -356,6 +356,8 @@ describe('ReleaseLoaBatchHandler', () => {
         expect.objectContaining({
           userId: 'user-1',
           type: 'loa_available',
+          // Programme name, not the bare batch ordinal.
+          message: expect.stringContaining('YBB Summit 2026'),
           relatedEntityType: 'loa_release_batch',
           relatedEntityId: 'batch-1',
         }),
