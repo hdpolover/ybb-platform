@@ -1,31 +1,37 @@
 /* services/hub/styles.css */
+@font-face { font-family: "Poppins"; font-style: normal; font-weight: 600; font-display: swap; src: url("/fonts/poppins-latin-600.woff2") format("woff2"); }
+@font-face { font-family: "Poppins"; font-style: normal; font-weight: 700; font-display: swap; src: url("/fonts/poppins-latin-700.woff2") format("woff2"); }
+/* YBB parent palette (youthbreaktheboundaries.com): navy #131f49, green #00a859 / #309b65, charcoal #373435.
+   --accent is a darker green where it is text on light surfaces (#00a859 is only 3:1 on white). */
 :root {
-  --bg: #f3f4f7;
+  --bg: #f4f5f8;
   --surface: #ffffff;
-  --ink: #14171f;
-  --ink-muted: #5b6270;
-  --edge: #dfe2e8;
-  --accent: #e62c4f;
-  --focus: #1d4ed8;
-  --hero: #11131c;
+  --ink: #373435;
+  --ink-muted: #5f6368;
+  --edge: #dfe2ea;
+  --accent: #007a47;
+  --accent-strong: #00693d;
+  --focus: #007a47;
+  --hero: #131f49;
   --hero-ink: #ffffff;
-  --hero-muted: #b7bccb;
+  --hero-muted: #c3c9de;
   --stage: #ffffff;
-  --stage-ink: #14171f;
+  --stage-ink: #373435;
   --neutral-brand: #9aa0ad;
-  --shadow: 0 1px 2px rgb(20 23 31 / .06), 0 8px 24px -12px rgb(20 23 31 / .18);
+  --heading: "Poppins", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --shadow: 0 1px 2px rgb(19 31 73 / .06), 0 8px 24px -12px rgb(19 31 73 / .2);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0d0f15;
-    --surface: #171a23;
-    --ink: #eef0f4;
-    --ink-muted: #a2a9b6;
-    --edge: #272c38;
-    --accent: #ff5d7a;
-    --focus: #7aa2ff;
-    --hero: #11131c;
-    --neutral-brand: #6b7280;
+    --bg: #0b1030;
+    --surface: #141b3d;
+    --ink: #eef0f6;
+    --ink-muted: #a9b0c8;
+    --edge: #263058;
+    --accent: #2fc27b;
+    --accent-strong: #00693d;
+    --focus: #3ddc97;
+    --neutral-brand: #6b7390;
     --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 10px 28px -14px rgb(0 0 0 / .7);
   }
 }
@@ -47,8 +53,8 @@ body {
 .hero {
   position: relative; overflow: hidden; color: var(--hero-ink);
   background:
-    radial-gradient(120% 90% at 100% 0%, rgb(230 44 79 / .55), transparent 55%),
-    radial-gradient(80% 70% at 0% 100%, rgb(91 76 255 / .22), transparent 60%),
+    radial-gradient(110% 85% at 100% 0%, rgb(0 168 89 / .38), transparent 55%),
+    radial-gradient(90% 80% at 0% 100%, rgb(64 92 186 / .45), transparent 60%),
     var(--hero);
   padding: max(28px, env(safe-area-inset-top)) 20px 76px;
 }
@@ -60,13 +66,9 @@ body {
   -webkit-mask-image: linear-gradient(to bottom, #000, transparent 85%);
 }
 .hero-inner { position: relative; max-width: 960px; margin: 0 auto; }
-.lockup { display: flex; align-items: center; gap: 10px; margin: 0 0 36px; font-size: .875rem; font-weight: 600; letter-spacing: .01em; }
-.mark {
-  display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px;
-  background: #e62c4f; color: #ffffff; font-size: .7rem; font-weight: 800; letter-spacing: .04em;
-  box-shadow: 0 6px 16px -6px rgb(230 44 79 / .8);
-}
-h1 { margin: 0 0 10px; max-width: 14ch; font-size: clamp(2.1rem, 9vw, 3.4rem); font-weight: 800; line-height: 1.04; letter-spacing: -.03em; text-wrap: balance; }
+.lockup { display: flex; align-items: center; gap: 12px; margin: 0 0 32px; font-family: var(--heading); font-size: .95rem; font-weight: 600; line-height: 1.25; }
+.mark { display: block; flex: none; width: 68px; height: 56px; }
+h1 { margin: 0 0 12px; max-width: 15ch; font-family: var(--heading); font-size: clamp(1.95rem, 8.2vw, 3.2rem); font-weight: 700; line-height: 1.1; letter-spacing: -.02em; text-wrap: balance; }
 .sub { margin: 0; max-width: 36ch; color: var(--hero-muted); font-size: 1.05rem; }
 
 /* Cards rise into the hero for a layered first screen. */
@@ -103,7 +105,7 @@ h1 { margin: 0 0 10px; max-width: 14ch; font-size: clamp(2.1rem, 9vw, 3.4rem); f
 }
 
 .meta { display: grid; grid-template-columns: 1fr auto; align-content: start; column-gap: 8px; align-items: center; padding: 12px 12px 14px; flex: 1; }
-.name { grid-column: 1; font-weight: 700; font-size: .975rem; line-height: 1.25; overflow-wrap: anywhere; }
+.name { grid-column: 1; font-family: var(--heading); font-weight: 600; font-size: .95rem; line-height: 1.3; overflow-wrap: anywhere; }
 .host { grid-column: 1 / span 2; margin-top: 4px; color: var(--ink-muted); font-size: .78rem; line-height: 1.3; overflow-wrap: anywhere; }
 /* Arrow: says "this goes somewhere" before it is touched. */
 .meta::after {
@@ -111,7 +113,7 @@ h1 { margin: 0 0 10px; max-width: 14ch; font-size: clamp(2.1rem, 9vw, 3.4rem); f
   border-top: 2px solid var(--ink-muted); border-right: 2px solid var(--ink-muted);
   transform: rotate(45deg); transition: transform .18s ease, border-color .18s ease;
 }
-.card:hover .meta::after { border-color: var(--ink); transform: translateX(3px) rotate(45deg); }
+.card:hover .meta::after { border-color: var(--accent); transform: translateX(3px) rotate(45deg); }
 
 .skeleton {
   aspect-ratio: 4 / 4.3; border-radius: 16px; background: var(--surface); border: 1px solid var(--edge);
@@ -131,7 +133,7 @@ h1 { margin: 0 0 10px; max-width: 14ch; font-size: clamp(2.1rem, 9vw, 3.4rem); f
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 16px; }
 .btn {
   min-height: 44px; padding: 0 22px; border: 0; border-radius: 10px;
-  background: #e62c4f; color: #ffffff; font: inherit; font-weight: 700; cursor: pointer;
+  background: var(--accent-strong); color: #ffffff; font: inherit; font-weight: 700; cursor: pointer;
 }
 .btn:hover { filter: brightness(1.08); }
 .link { color: var(--accent); font-weight: 600; }
