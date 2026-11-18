@@ -14,3 +14,10 @@ services:
 networks:
   dokploy-network:
     external: true
+  # Dokploy attaches the service to `default` when it injects domain labels.
+  # The VPS has used up Docker's predefined bridge pools, so pin a subnet
+  # outside them (siblings use 10.220/10.221; swarm overlays grow up from 10.0).
+  default:
+    ipam:
+      config:
+        - subnet: 10.222.0.0/24
