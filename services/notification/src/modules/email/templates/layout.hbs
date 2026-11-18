@@ -53,18 +53,29 @@
         }
 
         /* Elements */
+        /* Solid background-color, never a gradient: Gmail's app dark mode
+           inverts background-color and text color together but leaves
+           background-image alone, so a gradient header stayed light while
+           the brand name turned near-white and vanished. */
         .header {
-            padding: 32px 40px 24px;
+            padding: 28px 32px 22px;
             text-align: center;
             border-bottom: 1px solid #f3f4f6;
-            background: linear-gradient(180deg, {{theme.primaryMuted}} 0%, #ffffff 80%);
+            background-color: #ffffff;
         }
-        
+
+        /* Logo sits on a white tile painted with background-image, which no
+           client's dark mode inverts: several brand logos carry dark lettering
+           that would disappear on a dark header. On light it is invisible. */
         .brand-logo {
-            max-height: 52px;
+            max-height: 56px;
             width: auto;
             display: block;
             margin: 0;
+            padding: 6px;
+            border-radius: 12px;
+            background-color: #ffffff;
+            background-image: linear-gradient(#ffffff, #ffffff);
         }
 
         .brand-lockup {
@@ -73,17 +84,17 @@
 
         .brand-lockup-logo {
             vertical-align: middle;
-            padding-right: 16px;
+            padding-right: 12px;
         }
 
         .brand-lockup-name {
             vertical-align: middle;
             text-align: left;
             color: #111827;
-            font-size: 28px;
-            font-weight: 800;
-            letter-spacing: -0.02em;
-            line-height: 1.1;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            line-height: 1.2;
         }
         
         .brand-text {
@@ -182,7 +193,7 @@
             .wrapper { padding-top: 0; padding-bottom: 0; background-color: #ffffff; }
             .main-container { border: none; box-shadow: none; border-radius: 0; border-top: none; }
             .header { padding: 24px 20px 20px; border-bottom: none; }
-            .brand-lockup-name { font-size: 20px; }
+            .brand-lockup-name { font-size: 18px; }
             .brand-logo { max-height: 44px; }
             .content { padding: 0 20px 40px; }
             .footer { padding: 20px; border-top: 1px solid #f3f4f6; }
@@ -195,7 +206,7 @@
         @media (prefers-color-scheme: dark) {
             .brand-lockup-name { color: #f9fafb !important; }
             .brand-text { color: #f9fafb !important; }
-            .header { background: #111827 !important; }
+            .header { background-color: #111827 !important; border-bottom-color: #1f2937 !important; }
         }
     </style>
 </head>
@@ -204,12 +215,12 @@
         <!-- Main Card -->
         <div class="main-container">
             <!-- Header -->
-            <div class="header">
+            <div class="header" style="background-color: #ffffff;">
                 {{#if brand.logoUrl}}
                     <table role="presentation" class="brand-lockup" cellpadding="0" cellspacing="0" border="0" align="center">
                         <tr>
                             <td class="brand-lockup-logo">
-                                <img src="{{brand.logoUrl}}" alt="{{#if brand.name}}{{brand.name}}{{else}}Logo{{/if}}" class="brand-logo">
+                                <img src="{{brand.logoUrl}}" alt="{{#if brand.name}}{{brand.name}}{{else}}Logo{{/if}}" class="brand-logo" style="background-color: #ffffff; background-image: linear-gradient(#ffffff, #ffffff); border-radius: 12px; padding: 6px;">
                             </td>
                             {{#if brand.name}}
                             <td class="brand-lockup-name">{{brand.name}}</td>

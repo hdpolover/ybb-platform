@@ -6,6 +6,7 @@ import { IUserRepository } from '@core/interfaces/repositories/user.repository.i
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { ConflictException } from '@nestjs/common';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 
 jest.mock('bcrypt', () => ({
@@ -27,6 +28,20 @@ describe('CreateUserHandler', () => {
         emitSafe: jest.fn().mockResolvedValue(true),
     };
 
+    const brandRow = {
+        id: 'brand-1',
+        name: 'Istanbul Youth Summit',
+        primaryColor: '#886B02',
+        logoUrl: null,
+        websiteUrl: 'https://istanbulyouthsummit.com',
+        socialMediaLinks: null,
+        settings: null,
+    };
+
+    const mockPrisma = {
+        brand: { findUnique: jest.fn() },
+    };
+
     const mockCacheService = {
         invalidateByPattern: jest.fn().mockResolvedValue(undefined),
     };
@@ -38,6 +53,7 @@ describe('CreateUserHandler', () => {
                 { provide: IUserRepository, useValue: mockRepository },
                 { provide: RabbitMQProducerService, useValue: mockRabbitMQ },
                 { provide: CacheService, useValue: mockCacheService },
+                { provide: PrismaService, useValue: mockPrisma },
             ],
         }).compile();
 
@@ -46,6 +62,7 @@ describe('CreateUserHandler', () => {
         rabbitmq = module.get<RabbitMQProducerService>(RabbitMQProducerService);
 
         jest.clearAllMocks();
+        mockPrisma.brand.findUnique.mockResolvedValue(brandRow);
     });
 
     it('should create user and emit event', async () => {
@@ -61,8 +78,30 @@ describe('CreateUserHandler', () => {
         expect(mockRabbitMQ.emitSafe).toHaveBeenCalledWith('user.registered', {
             email: 'test@example.com',
             name: 'User',
+            brand: expect.objectContaining({
+                name: 'Istanbul Youth Summit',
+                websiteUrl: 'https://istanbulyouthsummit.com',
+            }),
+        });
+        expect(mockPrisma.brand.findUnique).toHaveBeenCalledWith({
+            where: { id: 'brand-1' },
+            include: { settings: true },
         });
         expect(result.id).toBe('user-1');
+    });
+
+    it('still creates the user and emits an unbranded event when the brand lookup fails', async () => {
+        const command = new CreateUserCommand('brand-1', 'test@example.com', 'password');
+        mockRepository.exists.mockResolvedValue(false);
+        mockRepository.create.mockImplementation((u) => Promise.resolve({ ...u, id: 'user-1' }));
+        mockPrisma.brand.findUnique.mockRejectedValueOnce(new Error('db down'));
+
+        await expect(handler.execute(command)).resolves.toMatchObject({ id: 'user-1' });
+        expect(mockRabbitMQ.emitSafe).toHaveBeenCalledWith('user.registered', {
+            email: 'test@example.com',
+            name: 'User',
+            brand: null,
+        });
     });
 
     it('should throw ConflictException if user exists', async () => {

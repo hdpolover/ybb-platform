@@ -1613,10 +1613,19 @@ export class EmailService {
   // config bug, not a normal path, so it's logged loudly instead of
   // silently shipping a broken link to a real inbox.
   private resolvePortalBaseUrl(brand: any, callerLabel: string): string {
-    const baseUrl =
-      this.toAbsoluteHttpsUrl(brand?.websiteUrl) ??
-      this.toAbsoluteHttpsUrl(this.configService.get('FRONTEND_URL'));
-    if (baseUrl) return baseUrl;
+    const brandUrl = this.toAbsoluteHttpsUrl(brand?.websiteUrl);
+    if (brandUrl) return brandUrl;
+
+    // Participants only have accounts on their brand's portal, so a
+    // FRONTEND_URL link is a best-effort guess; the publisher should have
+    // sent the brand. Logged so the gap is findable.
+    const fallbackUrl = this.toAbsoluteHttpsUrl(this.configService.get('FRONTEND_URL'));
+    if (fallbackUrl) {
+      this.logger.warn(
+        `[${callerLabel}] event carried no brand.websiteUrl; linking to FRONTEND_URL fallback ${fallbackUrl}`,
+      );
+      return fallbackUrl;
+    }
 
     if (this.configService.get('NODE_ENV') === 'production') {
       this.logger.error(
