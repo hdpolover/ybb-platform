@@ -1,4 +1,4 @@
-import { Injectable, Inject, ConflictException } from '@nestjs/common';
+import { Injectable, Inject, ConflictException, Logger } from '@nestjs/common';
 import { CreateUserCommand } from '../create-user.command';
 import { UserResponseDto } from '@modules/users/presentation/dto/user-response.dto';
 import { IUserRepository } from '@core/interfaces/repositories/user.repository.interface';
@@ -6,15 +6,20 @@ import { User } from '@core/entities/user.entity';
 import { RabbitMQProducerService } from '../../../../../shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { CacheService } from '../../../../../shared/infrastructure/cache/cache.service';
 import { CACHE_KEYS } from '../../../../../shared/constants/cache-keys';
+import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { buildNotificationBrandBlock } from '@modules/applications/infrastructure/services/notification-brand-block.util';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class CreateUserHandler {
+  private readonly logger = new Logger(CreateUserHandler.name);
+
   constructor(
     @Inject(IUserRepository)
     private readonly userRepository: IUserRepository,
     private readonly rabbitmqProducer: RabbitMQProducerService,
     private readonly cacheService: CacheService,
+    private readonly prisma: PrismaService,
   ) { }
 
   async execute(command: CreateUserCommand): Promise<UserResponseDto> {
@@ -47,9 +52,20 @@ export class CreateUserHandler {
     // user creation (not the self-service registration flow that M86/M131
     // was about) — the admin already knows the account exists from this
     // API's own response, so a lost welcome email is not a dead end.
+    // Without the brand the welcome email's login link falls back to the
+    // notification service's FRONTEND_URL instead of this brand's portal.
+    const brand = await this.prisma.brand
+      .findUnique({ where: { id: command.brandId }, include: { settings: true } })
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `[create-user] brand ${command.brandId} lookup failed, welcome email goes unbranded: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return null;
+      });
     void this.rabbitmqProducer.emitSafe('user.registered', {
       email: createdUser.email,
       name: 'User',
+      brand: buildNotificationBrandBlock(brand, null),
     });
 
     // Invalidate user list cache for this brand
