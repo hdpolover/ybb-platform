@@ -53,7 +53,7 @@ services:
       # entirely absent here before, so those links silently fell back to
       # http://localhost:3001 in every production email. NEEDS CONFIRMATION:
       # placeholder value below, confirm the real prod portal origin before relying on it.
-      FRONTEND_URL: ${FRONTEND_URL:-https://ybbfoundation.com}
+      FRONTEND_URL: ${FRONTEND_URL:-https://programs.youthbreaktheboundaries.com}
       # Readiness regression digests are rendered and sent from this service, so both
       # of these must be present HERE, not only on the API. OPS_ALERT_EMAILS was set on
       # the API only, which left the digest with zero recipients and no error.
