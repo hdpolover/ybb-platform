@@ -21,15 +21,24 @@ export type AdminTargetAction = 'update' | 'reset-password' | 'delete' | 'restor
 export type AdminTargetChanges = {
   roleId?: string | null;
   isActive?: boolean;
+  brandIds?: string[];
+  programIds?: string[];
 };
+
+/** True when `next` is absent (field not sent) or names exactly the current ids. */
+function sameIds(next: string[] | undefined, current: string[]): boolean {
+  if (next === undefined) return true;
+  const wanted = new Set(next);
+  return wanted.size === new Set(current).size && current.every((id) => wanted.has(id));
+}
 
 // Schema default for admins.access_level; POST /admins has no way to set it.
 const NEW_ADMIN_ACCESS_LEVEL = 1;
 
 const ACCESS_INCLUDE = {
   role: { select: { name: true, permissions: true } },
-  adminBrands: { select: { permissions: true } },
-  adminPrograms: { select: { permissions: true } },
+  adminBrands: { select: { brandId: true, permissions: true } },
+  adminPrograms: { select: { programId: true, permissions: true } },
 } satisfies Prisma.AdminInclude;
 
 type AdminAccessSnapshot = {
@@ -133,6 +142,13 @@ export class AdminAccessControlService {
       }
       if (changes.isActive !== undefined && changes.isActive !== target.user.isActive) {
         throw new ForbiddenException('You cannot change your own account status.');
+      }
+      // The dashboard resends the current assignments on a profile save; only a change is refused.
+      if (
+        !sameIds(changes.brandIds, target.adminBrands.map((assignment) => assignment.brandId)) ||
+        !sameIds(changes.programIds, target.adminPrograms.map((assignment) => assignment.programId))
+      ) {
+        throw new ForbiddenException('You cannot change your own brand or program assignments.');
       }
       if (action === 'update') return;
     }

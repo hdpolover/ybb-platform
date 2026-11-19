@@ -13,6 +13,8 @@ import { CreateSignatureDto } from './dto/signature.dto';
 const BASE = { canManageAdmins: false, canAssignRoles: false, customPermissions: [], role: { name: 'admin', permissions: [] } };
 const BRAND_ADMIN = { ...BASE, accessLevel: 3, adminBrands: [{ brandId: 'brand-a', permissions: [] }], adminPrograms: [] };
 const ASSIGNED_ADMIN = { ...BASE, accessLevel: 1, adminBrands: [], adminPrograms: [{ programId: 'prog-a', permissions: [] }] };
+// brand_scope over brand-x only, plus an explicit extra grant on prog-a (brand-a).
+const BRAND_ADMIN_WITH_EXTRA = { ...BASE, accessLevel: 3, adminBrands: [{ brandId: 'brand-x', permissions: [] }], adminPrograms: [{ programId: 'prog-a', permissions: [] }] };
 const PLATFORM_ADMIN = { ...BASE, accessLevel: 10, role: { name: 'super admin', permissions: ['*'] }, adminBrands: [], adminPrograms: [] };
 
 describe('SignatureAdminController brand scope', () => {
@@ -49,6 +51,7 @@ describe('SignatureAdminController brand scope', () => {
   describe.each([
     ['brand-scoped', BRAND_ADMIN],
     ['assigned', ASSIGNED_ADMIN],
+    ['brand-scoped with an extra program grant', BRAND_ADMIN_WITH_EXTRA],
   ])('%s admin', (_label, admin) => {
     beforeEach(() => as(admin));
 
@@ -74,6 +77,12 @@ describe('SignatureAdminController brand scope', () => {
       expect(queryBus.execute).toHaveBeenCalledTimes(1);
       expect(commandBus.execute).toHaveBeenCalledTimes(3);
     });
+  });
+
+  it('brand-scoped admin in its own brand never needs the program lookup', async () => {
+    as(BRAND_ADMIN);
+    await controller.list('brand-a', req());
+    expect(readPrisma.program.count).not.toHaveBeenCalled();
   });
 
   it('platform admin passes on any brand and leaves not-found to the handler', async () => {

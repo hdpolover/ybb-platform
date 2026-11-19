@@ -102,7 +102,7 @@ export function AwardSheet({ open, programId, item, nextOrder, onClose, onSaved 
               <Field label="Order">
                 <input required type="number" step={1} value={form.order} onChange={(e) => set("order", e.target.value)} className={inputCls} />
               </Field>
-              <Field label="Color (not shown on the landing page yet)">
+              <Field label="Color">
                 <div className="flex items-center gap-2">
                   <span
                     aria-hidden
@@ -113,7 +113,7 @@ export function AwardSheet({ open, programId, item, nextOrder, onClose, onSaved 
                 </div>
               </Field>
             </div>
-            <Field label="Icon URL (not shown on the landing page yet)">
+            <Field label="Icon URL">
               <input type="url" maxLength={500} value={form.iconUrl} onChange={(e) => set("iconUrl", e.target.value)} placeholder="https://…" className={inputCls} />
             </Field>
             <Field label="Badge URL (not shown on the landing page yet)">

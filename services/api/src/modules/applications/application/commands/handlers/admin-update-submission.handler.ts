@@ -118,15 +118,15 @@ export class AdminUpdateSubmissionHandler {
     }
 
     // nickName
+    // Form templates name this field `nick_name` or `nickname`; both sync to the column.
     let nextNickName = existing.nickName ?? undefined;
+    const patchedNick = command.personalData?.['nick_name'] ?? command.personalData?.['nickname'];
     if (participantPatch.nickName !== undefined) {
       nextNickName = participantPatch.nickName;
       nextPersonalData['nick_name'] = participantPatch.nickName;
-    } else if (
-      command.personalData &&
-      typeof command.personalData['nick_name'] === 'string'
-    ) {
-      nextNickName = command.personalData['nick_name'];
+      if ('nickname' in nextPersonalData) nextPersonalData['nickname'] = participantPatch.nickName;
+    } else if (typeof patchedNick === 'string') {
+      nextNickName = patchedNick;
     }
 
     // displayName

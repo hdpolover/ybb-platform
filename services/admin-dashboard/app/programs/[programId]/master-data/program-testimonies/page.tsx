@@ -50,7 +50,7 @@ export default function ProgramTestimoniesPage() {
   const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
   const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
 
-  const program = accessiblePrograms.find((p) => p.programId === params.programId);
+  const program = accessiblePrograms.find((p) => p.programId === resolvedProgramId);
   const programName = program?.programName ?? "Selected Program";
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";

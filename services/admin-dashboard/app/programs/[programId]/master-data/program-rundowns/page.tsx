@@ -44,7 +44,7 @@ export default function ProgramRundownsPage() {
   const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
   const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
 
-  const programName = accessiblePrograms.find((p) => p.programId === params.programId)?.programName ?? "Selected Program";
+  const programName = accessiblePrograms.find((p) => p.programId === resolvedProgramId)?.programName ?? "Selected Program";
 
   const fetch = useCallback(async () => {
     if (!resolvedProgramId) return;
