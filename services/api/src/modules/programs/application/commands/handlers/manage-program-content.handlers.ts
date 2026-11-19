@@ -43,7 +43,7 @@ import {
 import { PROGRAM_LANDING_CONTENT_KEYS, isProgramLandingContentKey } from '../../copy/program-landing-content.constants';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { assertProgramContentAccess, CONTENT_WRITE_PERMISSIONS } from '../../utils/program-content-access.util';
-import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
+import { assertBrandPermission, assertProgramPermission } from '@shared/guards/admin-permission.guard';
 import { resolveRevenueAccessScope } from '@modules/stats/revenue/utils/revenue-access.util';
 import { assertBrandAccess, orNotFound } from '@shared/guards/admin-scope.guard';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
@@ -105,6 +105,18 @@ async function assertProgramOrBrandContentAccess(
     if (scope.kind !== 'platform') {
         throw new ForbiddenException('You do not have access to this testimonial.');
     }
+}
+
+// The permission half of assertProgramOrBrandContentAccess, run after its scope
+// check: a brand-level row (no program) needs the content set on that brand.
+async function assertProgramOrBrandContentPermission(
+    prismaRead: PrismaReadService,
+    actor: CurrentUserData,
+    programId: string | null,
+    brandId: string | null,
+): Promise<void> {
+    if (programId) return assertProgramPermission(prismaRead, actor, programId, CONTENT_WRITE_PERMISSIONS.content);
+    if (brandId) return assertBrandPermission(prismaRead, actor, brandId, CONTENT_WRITE_PERMISSIONS.content);
 }
 
 /**
@@ -876,6 +888,7 @@ export class CreateProgramTestimonialHandler implements ICommandHandler<CreatePr
         } else if (brandId) {
             const scope = await resolveRevenueAccessScope(this.prismaRead, command.actor);
             assertBrandAccess(scope, brandId);
+            await assertBrandPermission(this.prismaRead, command.actor, brandId, CONTENT_WRITE_PERMISSIONS.content);
         } else {
             const scope = await resolveRevenueAccessScope(this.prismaRead, command.actor);
             if (scope.kind !== 'platform') {
@@ -913,7 +926,7 @@ export class UpdateProgramTestimonialHandler implements ICommandHandler<UpdatePr
             () => assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId),
             () => new NotFoundException('Testimonial not found'),
         );
-        if (existing.programId) await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.content);
+        await assertProgramOrBrandContentPermission(this.prismaRead, command.actor, existing.programId, existing.brandId);
 
         const result = await this.repository.updateTestimonial(command.id, command.dto);
         try {
@@ -945,7 +958,7 @@ export class DeleteProgramTestimonialHandler implements ICommandHandler<DeletePr
             () => assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId),
             () => new NotFoundException('Testimonial not found'),
         );
-        if (existing.programId) await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.content);
+        await assertProgramOrBrandContentPermission(this.prismaRead, command.actor, existing.programId, existing.brandId);
 
         const testimonial = await this.prisma.programTestimonial.findUnique({
             where: { id: command.id },
@@ -1057,6 +1070,7 @@ export class CreateProgramTeamHandler implements ICommandHandler<CreateProgramTe
         } else if (brandId) {
             const scope = await resolveRevenueAccessScope(this.prismaRead, command.actor);
             assertBrandAccess(scope, brandId);
+            await assertBrandPermission(this.prismaRead, command.actor, brandId, CONTENT_WRITE_PERMISSIONS.content);
         } else {
             const scope = await resolveRevenueAccessScope(this.prismaRead, command.actor);
             if (scope.kind !== 'platform') {
@@ -1120,7 +1134,7 @@ export class UpdateProgramTeamHandler implements ICommandHandler<UpdateProgramTe
             () => assertProgramOrBrandContentAccess(this.prismaRead, command.actor, teamMember.programId, teamMember.brandId),
             () => new NotFoundException('Team member not found'),
         );
-        if (teamMember.programId) await assertProgramPermission(this.prismaRead, command.actor, teamMember.programId, CONTENT_WRITE_PERMISSIONS.content);
+        await assertProgramOrBrandContentPermission(this.prismaRead, command.actor, teamMember.programId, teamMember.brandId);
 
         let photoUrl = command.dto.photoUrl;
 
@@ -1169,7 +1183,7 @@ export class DeleteProgramTeamHandler implements ICommandHandler<DeleteProgramTe
             () => assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId),
             () => new NotFoundException('Team member not found'),
         );
-        if (existing.programId) await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.content);
+        await assertProgramOrBrandContentPermission(this.prismaRead, command.actor, existing.programId, existing.brandId);
 
         return this.repository.deleteTeam(command.id);
     }

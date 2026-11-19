@@ -26,8 +26,13 @@ import {
     CreateProgramSpeakerHandler,
     CreateProgramTestimonialHandler,
     CreateProgramTimelineHandler,
+    CreateProgramTeamHandler,
     DeleteProgramFaqHandler,
+    DeleteProgramTeamHandler,
+    DeleteProgramTestimonialHandler,
     UpdateProgramScheduleHandler,
+    UpdateProgramTeamHandler,
+    UpdateProgramTestimonialHandler,
 } from './manage-program-content.handlers';
 import {
     CreateDocumentTemplateCommand,
@@ -41,8 +46,13 @@ import {
     CreateProgramSpeakerCommand,
     CreateProgramTestimonialCommand,
     CreateProgramTimelineCommand,
+    CreateProgramTeamCommand,
     DeleteProgramFaqCommand,
+    DeleteProgramTeamCommand,
+    DeleteProgramTestimonialCommand,
     UpdateProgramScheduleCommand,
+    UpdateProgramTeamCommand,
+    UpdateProgramTestimonialCommand,
 } from '../program-content.commands';
 
 const PROGRAM_ID = 'prog-1';
@@ -83,6 +93,20 @@ const inScopeAdmin = (permissions: string[]) => ({
 });
 const PLATFORM_ACCESS_ADMIN = { ...inScopeAdmin(['platform_access']), adminPrograms: [] };
 
+// Testimonials and team members can belong to a brand with no program: those
+// branches only checked brand scope, so any brand admin could write them.
+const BRAND_ID = 'brand-1';
+const brandAdmin = (permissions: string[]) => ({ ...inScopeAdmin(permissions), accessLevel: 3, adminBrands: [{ brandId: BRAND_ID, permissions: [] }], adminPrograms: [] });
+const brandDto = { brandId: BRAND_ID } as never;
+const brandCases: Array<[string, Case[2], () => unknown]> = [
+    ['CreateProgramTestimonialHandler', CreateProgramTestimonialHandler, () => new CreateProgramTestimonialCommand(brandDto, 'user-1', actor)],
+    ['UpdateProgramTestimonialHandler', UpdateProgramTestimonialHandler, () => new UpdateProgramTestimonialCommand('row-1', {} as never, 'user-1', actor)],
+    ['DeleteProgramTestimonialHandler', DeleteProgramTestimonialHandler, () => new DeleteProgramTestimonialCommand('row-1', 'user-1', actor)],
+    ['CreateProgramTeamHandler', CreateProgramTeamHandler, () => new CreateProgramTeamCommand(brandDto, 'user-1', actor)],
+    ['UpdateProgramTeamHandler', UpdateProgramTeamHandler, () => new UpdateProgramTeamCommand('row-1', {} as never, 'user-1', actor)],
+    ['DeleteProgramTeamHandler', DeleteProgramTeamHandler, () => new DeleteProgramTeamCommand('row-1', 'user-1', actor)],
+];
+
 describe('content handlers refuse a missing write permission before any write', () => {
     const repo: Record<string, jest.Mock> = {};
     const storage = { uploadFile: jest.fn() };
@@ -92,11 +116,12 @@ describe('content handlers refuse a missing write permission before any write', 
         program: { findUnique: jest.fn().mockResolvedValue({ id: PROGRAM_ID, brandId: 'brand-1', name: 'P', deletedAt: null }) },
     };
 
-    // Reads resolve the row to PROGRAM_ID; anything else is a write and records the call.
+    // Reads resolve the row to PROGRAM_ID (or `row`); anything else is a write and records the call.
+    let row: Record<string, unknown> = { id: 'row-1', programId: PROGRAM_ID };
     const repository = new Proxy(repo, {
         get(target, key) {
             if (typeof key !== 'string' || key === 'then') return undefined;
-            target[key] ??= jest.fn().mockResolvedValue({ id: 'row-1', programId: PROGRAM_ID });
+            target[key] ??= jest.fn().mockImplementation(async () => row);
             return target[key];
         },
     });
@@ -124,6 +149,7 @@ describe('content handlers refuse a missing write permission before any write', 
 
     beforeEach(() => {
         for (const key of Object.keys(repo)) delete repo[key];
+        row = { id: 'row-1', programId: PROGRAM_ID };
         jest.clearAllMocks();
     });
 
@@ -146,5 +172,27 @@ describe('content handlers refuse a missing write permission before any write', 
             const outcome = await handler.execute(command()).catch((error: unknown) => error);
             expect(outcome).not.toBeInstanceOf(ForbiddenException);
         }
+    });
+
+    describe('brand-level testimonials and team members (no program)', () => {
+        beforeEach(() => {
+            row = { id: 'row-1', programId: null, brandId: BRAND_ID };
+        });
+
+        it.each(brandCases)('%s: a brand admin without the content set gets 403, nothing written', async (_name, HandlerCtor, command) => {
+            prismaRead.admin.findUnique.mockResolvedValue(brandAdmin(['applications:write', 'announcements:write']));
+            const handler = await build(HandlerCtor);
+            await expect(handler.execute(command())).rejects.toBeInstanceOf(ForbiddenException);
+            expect(writesMade()).toEqual([]);
+        });
+
+        it.each(brandCases)('%s: content:write on the brand and the platform tier pass the check', async (_name, HandlerCtor, command) => {
+            for (const admin of [brandAdmin(['content:write']), PLATFORM_ACCESS_ADMIN]) {
+                prismaRead.admin.findUnique.mockResolvedValue(admin);
+                const handler = await build(HandlerCtor);
+                const outcome = await handler.execute(command()).catch((error: unknown) => error);
+                expect(outcome).not.toBeInstanceOf(ForbiddenException);
+            }
+        });
     });
 });
