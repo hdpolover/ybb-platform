@@ -17,6 +17,7 @@ import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { Public } from '@shared/decorators/public.decorator';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import { FileServiceClient } from '../infrastructure/clients/file-service.client';
 import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
 
@@ -32,6 +33,10 @@ function errMsg(error: unknown): string {
  * Documents Controller
  *
  * Handles document generation (certificates, reports, PDFs) and proxies to File Service.
+ *
+ * The generators render whatever the body says and carry no tenant id to scope
+ * by, so a scoped admin could mint a certificate/receipt for any brand. No
+ * dashboard screen calls them, hence platform-only rather than scoped.
  */
 @ApiTags('Documents')
 @Controller('documents')
@@ -44,8 +49,9 @@ export class DocumentsController {
   ) {}
 
   @Post('export/participants')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Export participant report to Excel' })
   @ApiResponse({ status: 200, description: 'Excel file generated successfully' })
@@ -75,8 +81,9 @@ export class DocumentsController {
   }
 
   @Post('export/payments')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Export payment report to Excel' })
   @ApiResponse({ status: 200, description: 'Excel file generated successfully' })
@@ -110,8 +117,9 @@ export class DocumentsController {
   }
 
   @Post('export/custom')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Export custom report to Excel' })
   @ApiResponse({ status: 200, description: 'Excel file generated successfully' })
@@ -138,8 +146,9 @@ export class DocumentsController {
   }
 
   @Post('generate/receipt')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate payment receipt PDF' })
   @ApiResponse({ status: 200, description: 'PDF generated successfully' })
@@ -181,8 +190,9 @@ export class DocumentsController {
   }
 
   @Post('generate/offer-letter')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate offer letter PDF' })
   @ApiResponse({ status: 200, description: 'PDF generated successfully' })
@@ -218,8 +228,9 @@ export class DocumentsController {
   }
 
   @Post('generate/certificate')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Generate certificate (completion or participation)' })
   @ApiResponse({ status: 200, description: 'Certificate generated successfully' })

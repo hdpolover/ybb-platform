@@ -16,6 +16,7 @@ import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import { ParticipantReminderService } from '../application/services/participant-reminder.service';
 import {
   CreateParticipantReminderDto,
@@ -36,8 +37,9 @@ export class ParticipantRemindersController {
   constructor(private readonly reminderService: ParticipantReminderService) {}
 
   @Get(':programId/reminders/audience')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Preview who would receive a reminder for the given audience: count plus a capped list',
@@ -60,8 +62,9 @@ export class ParticipantRemindersController {
    * it renders the tokens and returns text, and writes nothing.
    */
   @Post(':programId/reminders/preview')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Render a draft subject/body against the first real recipient (sends nothing)',
@@ -74,8 +77,9 @@ export class ParticipantRemindersController {
   }
 
   @Get(':programId/reminders')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List participant reminders for a program, paginated and filterable' })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -98,8 +102,9 @@ export class ParticipantRemindersController {
   }
 
   @Get(':programId/reminders/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'One reminder plus its per-recipient delivery log',
@@ -109,8 +114,9 @@ export class ParticipantRemindersController {
   }
 
   @Post(':programId/reminders')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Create a reminder — a draft, or scheduled when scheduledAt is given',
@@ -124,8 +130,9 @@ export class ParticipantRemindersController {
   }
 
   @Put(':programId/reminders/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Edit a draft or still-scheduled reminder, or (re)set its send time',
@@ -139,8 +146,9 @@ export class ParticipantRemindersController {
   }
 
   @Post(':programId/reminders/:id/cancel')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Cancel a scheduled reminder before it sends (409 once it is sending)',
