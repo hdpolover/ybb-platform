@@ -141,6 +141,12 @@ describe('AdminAccessControlService rank rule', () => {
       );
     });
 
+    it('cannot grant any wildcard it does not hold (roles.*)', async () => {
+      await expect(
+        service.assertCanWriteRole(actingAs('admin'), null, { name: 'Ops', permissions: ['roles.*'] }),
+      ).rejects.toThrow('You cannot grant permissions you do not hold: roles.*.');
+    });
+
     it('may still create roles with functional permissions it does not hold itself', async () => {
       await expect(
         service.assertCanWriteRole(actingAs('admin'), null, { name: 'Reviewer', permissions: ['review:read', 'documents:read'] }),

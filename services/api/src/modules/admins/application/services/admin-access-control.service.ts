@@ -215,7 +215,9 @@ export class AdminAccessControlService {
     const held = this.permissionSet(actor);
     const missing = normalizePermissions(role?.permissions)
       .map((permission) => permission.trim().toLowerCase())
-      .filter((permission) => PRIVILEGED_PERMISSIONS.includes(permission) && !held.has(permission));
+      // Any wildcard counts as privileged too: matching is exact today, but a
+      // future prefix matcher must not turn a granted "roles.*" into a bypass.
+      .filter((permission) => (PRIVILEGED_PERMISSIONS.includes(permission) || permission.endsWith('*')) && !held.has(permission));
     if (missing.length > 0) {
       throw new ForbiddenException(`You cannot grant permissions you do not hold: ${missing.join(', ')}.`);
     }
