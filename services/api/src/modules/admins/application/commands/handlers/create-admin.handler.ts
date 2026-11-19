@@ -51,16 +51,17 @@ export class CreateAdminHandler {
             throw new BadRequestException('One or more selected programs were not found.');
         }
 
-        const resolvedBrandIds = Array.from(
-            new Set([...(command.brandIds ?? []), ...programs.map((program) => program.brandId)]),
-        );
+        // Brand rows come only from the brandIds sent: a program assignment must not
+        // become a brand grant (that is brand_scope over the whole brand).
+        const resolvedBrandIds = Array.from(new Set(command.brandIds ?? []));
 
         // 2. Hash Password
         const passwordHash = await bcrypt.hash(command.password, 10);
 
         // 3. Resolve Brand (Admins need a primary brand for the User record, usually system default or first brand)
         // For now, we'll pick the first active brand if brandIds provided, or default
-        let primaryBrandId = resolvedBrandIds[0];
+        // The user's home brand, not a grant: a program-only admin lives in their program's brand.
+        let primaryBrandId = resolvedBrandIds[0] ?? programs[0]?.brandId;
 
         if (!primaryBrandId) {
             const defaultBrand = await this.prisma.brand.findFirst({ select: { id: true } });

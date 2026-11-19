@@ -176,6 +176,18 @@ describe('AdminAccessControlService rank rule', () => {
   });
 
   describe('self', () => {
+    it('cannot change own brand or program assignments, but may resend them unchanged', async () => {
+      await expect(
+        service.assertCanManageAdmin(actingAs('admin'), ADMINS.admin.id, 'update', { brandIds: ['brand-x'] }),
+      ).rejects.toThrow('You cannot change your own brand or program assignments.');
+      await expect(
+        service.assertCanManageAdmin(actingAs('admin'), ADMINS.admin.id, 'update', { programIds: ['program-x'] }),
+      ).rejects.toThrow('You cannot change your own brand or program assignments.');
+      await expect(
+        service.assertCanManageAdmin(actingAs('admin'), ADMINS.admin.id, 'update', { brandIds: [], programIds: [] }),
+      ).resolves.toBeUndefined();
+    });
+
     it('cannot change own role (the only way to raise own rank through this API)', async () => {
       await expect(
         service.assertCanManageAdmin(actingAs('admin'), ADMINS.admin.id, 'update', { roleId: ROLES.superAdmin.id }),
