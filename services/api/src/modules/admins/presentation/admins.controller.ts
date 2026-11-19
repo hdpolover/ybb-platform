@@ -121,6 +121,8 @@ export class AdminsController {
         await this.adminAccessControl.assertCanManageAdmin(currentUser, id, 'update', {
             roleId: dto.roleId,
             isActive: dto.isActive,
+            brandIds: dto.brandIds,
+            programIds: dto.programIds,
         });
         const adminId = currentUser.adminId;
         if (!adminId) throw new UnauthorizedException('Admin access required');
