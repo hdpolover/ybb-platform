@@ -78,9 +78,9 @@ export class AdminPasswordService {
   }
 
   /**
-   * Self-service reset request. Never throws on a miss and does the same awaited work either way
-   * (one lookup, one security-log write); the mail goes out in the background so a hit is not
-   * slower than a miss.
+   * Self-service reset request. Never throws on a miss. The only awaited work is the lookup; the
+   * security-log write (2 rows on a hit, 1 on a miss) and the mail both run in the background, so
+   * nothing awaited differs between hit and miss.
    */
   async requestReset(email: string, ipAddress: string, userAgent: string): Promise<void> {
     const user = await this.prisma.user.findFirst({
@@ -101,8 +101,10 @@ export class AdminPasswordService {
     });
 
     // Same trail as the participant forgot-password, on hit AND miss: it is what makes an
-    // enumeration sweep visible.
-    await this.authLogging.logForgotPasswordRequest(email, ipAddress, userAgent, user?.id ?? null);
+    // enumeration sweep visible. Not awaited: a hit writes more rows than a miss.
+    void this.authLogging
+      .logForgotPasswordRequest(email, ipAddress, userAgent, user?.id ?? null)
+      .catch((err: unknown) => this.logger.warn(`Admin forgot-password audit log failed: ${String(err)}`));
 
     if (!user?.admin) return;
     // An anonymous request must not clobber a live token (a 72h invite would be replaced by a 1h

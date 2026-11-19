@@ -20,7 +20,7 @@ describe('AdminPasswordService', () => {
     $transaction: jest.fn().mockResolvedValue([]),
   };
   const links = { issue: jest.fn().mockResolvedValue(undefined) };
-  const authLogging = { logPasswordChange: jest.fn(), logFailedLogin: jest.fn(), logForgotPasswordRequest: jest.fn() };
+  const authLogging = { logPasswordChange: jest.fn(), logFailedLogin: jest.fn(), logForgotPasswordRequest: jest.fn().mockResolvedValue(undefined) };
   const service = new AdminPasswordService(prisma as never, links as never, authLogging as never);
 
   beforeAll(async () => {
@@ -28,6 +28,7 @@ describe('AdminPasswordService', () => {
   });
   beforeEach(() => {
     jest.clearAllMocks();
+    authLogging.logForgotPasswordRequest.mockResolvedValue(undefined);
     prisma.user.findFirst.mockResolvedValue({ id: 'u1', passwordHash: hash, lockedUntil: null });
   });
 
@@ -105,6 +106,22 @@ describe('AdminPasswordService', () => {
       await expect(service.requestReset('nobody@x.co', '1.1.1.1', 'ua')).resolves.toBeUndefined();
       expect(links.issue).not.toHaveBeenCalled();
       expect(authLogging.logForgotPasswordRequest).toHaveBeenCalledWith('nobody@x.co', '1.1.1.1', 'ua', null);
+    });
+
+    it('does not wait for the audit log: both paths resolve even if the write never settles', async () => {
+      authLogging.logForgotPasswordRequest.mockReturnValue(new Promise(() => undefined));
+      prisma.user.findFirst.mockResolvedValueOnce(null);
+      await expect(service.requestReset('nobody@x.co', '1.1.1.1', 'ua')).resolves.toBeUndefined();
+      prisma.user.findFirst.mockResolvedValueOnce(adminUser);
+      await expect(service.requestReset('a@b.co', '1.1.1.1', 'ua')).resolves.toBeUndefined();
+      expect(authLogging.logForgotPasswordRequest).toHaveBeenCalledTimes(2);
+    });
+
+    it('swallows a failing audit write', async () => {
+      authLogging.logForgotPasswordRequest.mockRejectedValueOnce(new Error('db down'));
+      prisma.user.findFirst.mockResolvedValue(adminUser);
+      await expect(service.requestReset('a@b.co', '1.1.1.1', 'ua')).resolves.toBeUndefined();
+      await flush();
     });
 
     it('logs the request with the user id on a hit', async () => {
