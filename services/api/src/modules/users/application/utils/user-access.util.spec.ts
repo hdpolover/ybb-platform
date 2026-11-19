@@ -128,6 +128,16 @@ describe('resolveUsersBrandFilter', () => {
 
         await expect(resolveUsersBrandFilter(prisma, actor, 'brand-1')).rejects.toThrow(ForbiddenException);
     });
+
+    // brand_scope + an explicit programme grant in another brand: the grant
+    // reaches that programme's brand, exactly as it does for 'assigned'.
+    it('lets a brand admin act on the brand of a programme they were individually assigned', async () => {
+        const admin = { ...brandAdmin(['brand-1']), adminPrograms: [{ programId: 'program-x', permissions: [] }] };
+        const prisma = makePrisma(admin, ['brand-x']);
+
+        await expect(resolveUsersBrandFilter(prisma, actor, 'brand-x')).resolves.toBe('brand-x');
+        await expect(resolveUsersBrandFilter(prisma, actor, 'brand-other')).rejects.toThrow(ForbiddenException);
+    });
 });
 
 describe('assertCanChangeUserStatus', () => {
