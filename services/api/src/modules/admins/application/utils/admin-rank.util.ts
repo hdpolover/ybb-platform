@@ -67,13 +67,9 @@ export function isSuperAdminTier(admin: RankedAdmin): boolean {
   return (
     admin.accessLevel >= SUPER_ADMIN_ACCESS_LEVEL ||
     isSuperAdminRole(admin.role) ||
-    // Program assignments carry a copy of the role's permissions and the permission
-    // guards read them, so a '*' there is as powerful as on the role. Brand rows are
-    // not counted: below platform tier they grant nothing (owner policy 2026-11-19).
-    hasSuperPermission([
-      admin.customPermissions,
-      ...(admin.adminPrograms ?? []).map((assignment) => assignment.permissions),
-    ])
+    // Role and custom permissions only: assignment rows (program or brand) scope
+    // access inside one program and never raise the tier (owner policy 2026-11-19).
+    hasSuperPermission([admin.customPermissions])
   );
 }
 

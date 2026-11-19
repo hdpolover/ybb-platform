@@ -149,7 +149,7 @@ export default function UsersPage({
   params: Promise<{ programId: string }>;
 }) {
   const { programId } = use(params);
-  const { accessiblePrograms, adminProfile } = useAuth();
+  const { accessiblePrograms, adminProfile, accessConfig } = useAuth();
 
   const program = useMemo(
     () =>
@@ -231,10 +231,13 @@ export default function UsersPage({
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
               Refresh
             </Button>
-            <Button size="sm" onClick={() => setCreateOpen(true)} disabled={!brandId}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Create User
-            </Button>
+            {/* POST /users is platform-only on the API; assigned admins would only get a 403. */}
+            {accessConfig.canAccessPlatform && (
+              <Button size="sm" onClick={() => setCreateOpen(true)} disabled={!brandId}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Create User
+              </Button>
+            )}
           </div>
         }
       />

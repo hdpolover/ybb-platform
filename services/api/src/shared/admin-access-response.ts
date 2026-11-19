@@ -113,11 +113,17 @@ export function normalizePermissions(value: unknown): string[] {
   return value.filter((permission): permission is string => typeof permission === 'string');
 }
 
+/**
+ * The admin-level permissions: role and custom only. Program assignment rows
+ * (admin_programs.permissions) are deliberately NOT here: they scope what the
+ * admin may do inside one program (assertProgramPermission reads them itself)
+ * and must never decide platform or super status, even if a row carries
+ * platform_access. Every platform/rank decision goes through this set.
+ */
 function buildPermissionSet(admin: AdminAccessLike): Set<string> {
   const values = [
     ...normalizePermissions(admin.role?.permissions),
     ...normalizePermissions(admin.customPermissions),
-    ...admin.adminPrograms.flatMap((assignment) => normalizePermissions(assignment.permissions)),
   ].map((permission) => permission.toLowerCase());
 
   return new Set(values);
