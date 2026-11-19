@@ -5,9 +5,10 @@
 // to them. The service already binds :id to :programId, so scoping the param
 // covers the child routes too. Drives the REAL AdminScopeGuard against the real
 // route metadata.
-import { ExecutionContext, NotFoundException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
+import { AdminPermissionGuard } from '@shared/guards/admin-permission.guard';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ParticipantRemindersController } from './participant-reminders.controller';
 
@@ -64,5 +65,54 @@ describe('ParticipantRemindersController scope enforcement (real AdminScopeGuard
   it.each(routes)('%s: platform admin passes on any program', async (_n, handler) => {
     prismaRead.admin.findUnique.mockResolvedValue(PLATFORM_ADMIN);
     await expect(guard.canActivate(contextFor(handler, { programId: 'prog-b', id: 'r-1' }))).resolves.toBe(true);
+  });
+});
+
+describe('ParticipantRemindersController writes need participants:write or program:write', () => {
+  const prismaRead = { admin: { findUnique: jest.fn() }, program: { findUnique: jest.fn() } };
+  const guard = new AdminPermissionGuard(new Reflector(), prismaRead as unknown as PrismaReadService);
+  const p = ParticipantRemindersController.prototype;
+  const writes: Array<[string, (...args: never[]) => unknown]> = [
+    ['POST create', p.create],
+    ['PUT :id', p.update],
+    ['POST :id/cancel', p.cancel],
+  ];
+  const reads: Array<[string, (...args: never[]) => unknown]> = [
+    ['GET audience', p.getAudience],
+    ['POST preview', p.previewMessage],
+    ['GET list', p.list],
+    ['GET :id', p.get],
+  ];
+  const withRole = (permissions: string[]) => ({ ...ASSIGNED_ADMIN, role: { name: 'Scoped', permissions } });
+  const context = (handler: (...args: never[]) => unknown) =>
+    ({
+      getHandler: () => handler,
+      getClass: () => ParticipantRemindersController,
+      switchToHttp: () => ({ getRequest: () => ({ user: { adminId: 'admin-1' }, params: { programId: 'prog-a', id: 'r-1' } }) }),
+    }) as unknown as ExecutionContext;
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it.each(writes)('%s: 403 for an in-scope admin with announcements:write only', async (_n, handler) => {
+    prismaRead.admin.findUnique.mockResolvedValue(withRole(['announcements:write', 'payments:read']));
+    await expect(guard.canActivate(context(handler))).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it.each(writes)('%s: passes with participants:write (Digital Marketing) or program:write', async (_n, handler) => {
+    for (const permission of ['participants:write', 'program:write']) {
+      prismaRead.admin.findUnique.mockResolvedValue(withRole([permission]));
+      await expect(guard.canActivate(context(handler))).resolves.toBe(true);
+    }
+  });
+
+  it.each(writes)('%s: platform admin passes', async (_n, handler) => {
+    prismaRead.admin.findUnique.mockResolvedValue(PLATFORM_ADMIN);
+    await expect(guard.canActivate(context(handler))).resolves.toBe(true);
+  });
+
+  it.each(reads)('%s: stays open (no permission required)', async (_n, handler) => {
+    prismaRead.admin.findUnique.mockResolvedValue(withRole([]));
+    await expect(guard.canActivate(context(handler))).resolves.toBe(true);
+    expect(prismaRead.admin.findUnique).not.toHaveBeenCalled();
   });
 });

@@ -20,6 +20,12 @@ import {
   getRequestAdminScope,
   orNotFound,
 } from '@shared/guards/admin-scope.guard';
+import {
+  AdminPermissionGuard,
+  RequiresProgramPermission,
+  assertProgramPermission,
+} from '@shared/guards/admin-permission.guard';
+import { CONTENT_WRITE_PERMISSIONS } from '../application/utils/program-content-access.util';
 
 @ApiTags('Programs')
 @Controller('programs/:programId/participation-info')
@@ -31,9 +37,10 @@ export class ProgramParticipationController {
   ) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'programId')
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.programConfig])
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Upsert participation info for a category' })
   @ApiResponse({ status: 201, type: ParticipationInfoResponseDto })
@@ -88,6 +95,9 @@ export class ProgramParticipationController {
     if (!row) throw notFound();
     const scope = await getRequestAdminScope(this.readPrisma, req);
     await orNotFound(() => assertProgramAccess(this.readPrisma, scope, row.programId), notFound);
+    if (scope.kind !== 'platform') {
+      await assertProgramPermission(this.readPrisma, req.user, row.programId, CONTENT_WRITE_PERMISSIONS.programConfig);
+    }
 
     return this.commandBus.execute(new DeleteParticipationInfoCommand(programId, id));
   }
