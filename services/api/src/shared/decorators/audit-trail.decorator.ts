@@ -33,6 +33,15 @@ export interface AuditTrailMetadata {
      * All other entity types will snapshot the full entity row.
      */
     selectFields?: Record<string, boolean>;
+
+    /**
+     * Request-body keys to record under `afterState.request`. The interceptor
+     * otherwise logs only the response, so a route whose response omits what the
+     * admin asked for (e.g. approve vs reject) would lose it. Allowlist only:
+     * never name a field that can carry a secret. Values still pass through the
+     * key-based redaction in DataChangeLogService.
+     */
+    bodyFields?: string[];
 }
 
 /**

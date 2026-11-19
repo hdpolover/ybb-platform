@@ -7,7 +7,9 @@ const MAX_DEPTH = 4;
 const MAX_ARRAY_ITEMS = 20;
 const MAX_OBJECT_KEYS = 40;
 const MAX_STRING_LENGTH = 500;
-const REDACTED_KEY_PATTERN = /(password|token|secret|authorization|cookie|api[-_]?key)/i;
+// private/server keys and credential blobs are not covered by the shorter names (gateway configs carry them).
+const REDACTED_KEY_PATTERN =
+    /(password|token|secret|authorization|cookie|api[-_]?key|private[-_]?key|server[-_]?key|credential|passphrase)/i;
 
 export interface CreateDataChangeLogDto {
     entityType: string;

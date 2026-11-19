@@ -167,3 +167,28 @@ describe('AuditTrailInterceptor before-state select (N-2026-09-09-D)', () => {
         });
     });
 });
+
+describe('AuditTrailInterceptor bodyFields', () => {
+    async function run(body: Record<string, unknown>, bodyFields: string[]) {
+        const request = { params: { id: 'i1' }, body, method: 'POST', route: { path: '/mock' }, url: '/mock', headers: {}, user: { adminId: 'a1' } };
+        const context = { getHandler: () => function mockHandler() { /* noop */ }, switchToHttp: () => ({ getRequest: () => request }) } as any;
+        const reflector = { get: jest.fn().mockReturnValue({ entityType: 'ApplicationInvoice', action: ChangeType.status_change, bodyFields }) };
+        const logWithDiff = jest.fn().mockResolvedValue(undefined);
+        const prisma = { applicationInvoice: { findUnique: jest.fn().mockResolvedValue({ id: 'i1', status: 'processing' }) } };
+        const interceptor = new AuditTrailInterceptor(reflector as any, prisma as any, { logWithDiff } as any);
+        const result$ = await interceptor.intercept(context, { handle: () => of({ id: 'i1', status: 'paid' }) } as any);
+        await new Promise<void>((resolve) => result$.subscribe({ complete: () => setTimeout(resolve, 0) }));
+        return logWithDiff.mock.calls[0][0];
+    }
+
+    it('records only the allowlisted request fields next to the response state', async () => {
+        const logged = await run(
+            { action: 'reject', reason: 'blurry proof', supportSecret: 'hunter2', password: 'x', token: 'y' },
+            ['action', 'reason'],
+        );
+
+        expect(logged.actorId).toBe('a1');
+        expect(logged.afterState).toMatchObject({ id: 'i1', status: 'paid', request: { action: 'reject', reason: 'blurry proof' } });
+        expect(JSON.stringify(logged)).not.toMatch(/hunter2|password|token/);
+    });
+});

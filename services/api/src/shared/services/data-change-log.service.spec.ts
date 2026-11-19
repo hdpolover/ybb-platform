@@ -126,4 +126,41 @@ describe('DataChangeLogService', () => {
         const beforeState = call.data.beforeState as Record<string, unknown>;
         expect(beforeState.amount).toBe('99.50');
     });
+
+    it('redacts secrets and credential blobs in before/after states, however deep', async () => {
+        await service.log({
+            entityType: 'AuthProvider',
+            entityId: 'p1',
+            action: ChangeType.update,
+            beforeState: { clientId: 'abc', clientSecret: 'old-secret' },
+            afterState: {
+                supportSecret: 'hunter2',
+                secretHash: '$2b$10$hash',
+                tokenHash: 'deadbeef',
+                config: {
+                    server_key: 'SB-Mid-server-xyz',
+                    privateKey: '-----BEGIN KEY-----',
+                    credentials: { anything: 'nested' },
+                    passphrase: 'pp',
+                    publicLabel: 'kept',
+                },
+            },
+        });
+
+        const data = mockPrismaService.dataChangeLog.create.mock.calls.at(-1)[0].data;
+        expect(data.beforeState).toEqual({ clientId: 'abc', clientSecret: '[Redacted]' });
+        expect(data.afterState).toEqual({
+            supportSecret: '[Redacted]',
+            secretHash: '[Redacted]',
+            tokenHash: '[Redacted]',
+            config: {
+                server_key: '[Redacted]',
+                privateKey: '[Redacted]',
+                credentials: '[Redacted]',
+                passphrase: '[Redacted]',
+                publicLabel: 'kept',
+            },
+        });
+        expect(JSON.stringify(data)).not.toMatch(/hunter2|old-secret|SB-Mid|BEGIN KEY|nested/);
+    });
 });
