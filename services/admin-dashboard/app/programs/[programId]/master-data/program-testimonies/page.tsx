@@ -31,11 +31,15 @@ import {
 } from "@/src/shared/api-client";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 export default function ProgramTestimoniesPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms, adminProfile } = useAuth();
   const resolvedProgramId = useResolvedProgramId(params.programId);
+  // content:read views; the API refuses writes without the content set.
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.content);
   const [items, setItems] = useState<ProgramTestimonial[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,28 +136,32 @@ export default function ProgramTestimoniesPage() {
               <ArrowPathIcon className="h-3.5 w-3.5" />
               Refresh
             </button>
-            <button
-              type="button"
-              onClick={() => setCopyFromProgramOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from program</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setCopyFromTemplateOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from template</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"
-            >
-              <PlusIcon className="h-3.5 w-3.5" />
-              Add Testimonial
-            </button>
+            {canWrite && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setCopyFromProgramOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                >
+                  <span>Copy from program</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCopyFromTemplateOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                >
+                  <span>Copy from template</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(true)}
+                  className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"
+                >
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Add Testimonial
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -264,22 +272,24 @@ export default function ProgramTestimoniesPage() {
                     <div className="line-clamp-2 max-w-xs text-zinc-600">{t.testimonial}</div>
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setEditTarget(t)}
-                        className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"
-                      >
-                        <PencilSquareIcon className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget(t)}
-                        className="rounded-md border border-red-100 p-1 text-red-400 hover:bg-red-50"
-                      >
-                        <TrashIcon className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    {canWrite && (
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditTarget(t)}
+                          className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"
+                        >
+                          <PencilSquareIcon className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(t)}
+                          className="rounded-md border border-red-100 p-1 text-red-400 hover:bg-red-50"
+                        >
+                          <TrashIcon className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

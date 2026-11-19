@@ -21,10 +21,12 @@ export type PeriodRow = {
 export function PaymentPeriodsTable({
   data,
   tierId,
+  canWrite,
   onRefresh,
 }: {
   data: PeriodRow[];
   tierId: string;
+  canWrite: boolean;
   onRefresh?: () => void;
 }) {
   const baseRows = data.filter((row) => row.base);
@@ -41,7 +43,7 @@ export function PaymentPeriodsTable({
             <p className="text-sm text-zinc-500">List of active schedules for this payment.</p>
           </div>
         </div>
-        <AddPeriodAction tierId={tierId} onSaved={onRefresh} periods={data} />
+        {canWrite && <AddPeriodAction tierId={tierId} onSaved={onRefresh} periods={data} />}
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 bg-white">
@@ -99,8 +101,12 @@ export function PaymentPeriodsTable({
                       </td>
                       <td className="px-6 py-4 align-top text-right">
                         <div className="inline-flex items-center justify-end gap-2">
-                          <EditPeriodAction period={baseRow} onSaved={onRefresh} periods={data} />
-                          <DeletePeriodAction id={baseRow.id} onDeleted={onRefresh} />
+                          {canWrite && (
+                            <>
+                              <EditPeriodAction period={baseRow} onSaved={onRefresh} periods={data} />
+                              <DeletePeriodAction id={baseRow.id} onDeleted={onRefresh} />
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -143,8 +149,12 @@ export function PaymentPeriodsTable({
                         </td>
                         <td className="px-6 py-4 align-top text-right">
                           <div className="inline-flex items-center justify-end gap-2">
-                            <EditPeriodAction period={child} onSaved={onRefresh} periods={data} />
-                            <DeletePeriodAction id={child.id} onDeleted={onRefresh} />
+                            {canWrite && (
+                              <>
+                                <EditPeriodAction period={child} onSaved={onRefresh} periods={data} />
+                                <DeletePeriodAction id={child.id} onDeleted={onRefresh} />
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>

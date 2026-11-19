@@ -15,6 +15,8 @@ import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 import { ProgramAwardsTable } from "@/app/components/programAwardsMasterData/ProgramAwardsTable";
 import { AwardSheet } from "@/app/components/programAwardsMasterData/AwardSheet";
 import { filterAwards, nextAwardOrder } from "@/app/components/programAwardsMasterData/award-form";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 const errorMessage = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
@@ -22,6 +24,8 @@ export default function ProgramAwardsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
   const programId = useResolvedProgramId(params.programId);
+  // content:read views; the API refuses writes without the content set (awards controller has no check yet, so this mirrors the menu rule).
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.content);
   const [awards, setAwards] = useState<ProgramAward[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +98,7 @@ export default function ProgramAwardsPage() {
           </div>
           <div className="flex gap-2">
             <button type="button" onClick={load} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
-            <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"><PlusIcon className="h-3.5 w-3.5" />Add Award</button>
+            {canWrite && <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"><PlusIcon className="h-3.5 w-3.5" />Add Award</button>}
           </div>
         </div>
 
@@ -115,8 +119,8 @@ export default function ProgramAwardsPage() {
           <EmptyState
             icon={Trophy}
             title="No awards yet"
-            description="Add the awards this program presents so they appear on the landing page."
-            action={{ label: "Add Award", onClick: () => setShowCreate(true) }}
+            description={canWrite ? "Add the awards this program presents so they appear on the landing page." : "No awards have been added to this program yet."}
+            action={canWrite ? { label: "Add Award", onClick: () => setShowCreate(true) } : undefined}
           />
         )}
 
@@ -128,6 +132,7 @@ export default function ProgramAwardsPage() {
           <ProgramAwardsTable
             awards={visibleAwards}
             togglingId={togglingId}
+            canWrite={canWrite}
             onEdit={setEditTarget}
             onDelete={setDeleteTarget}
             onToggleActive={handleToggleActive}

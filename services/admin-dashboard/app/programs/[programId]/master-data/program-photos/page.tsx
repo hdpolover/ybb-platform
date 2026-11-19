@@ -21,11 +21,15 @@ import {
 import { MediaLibraryPicker } from "@/app/components/submissionsMasterData/form-fields/MediaLibraryPicker";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 export default function ProgramPhotosPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms, adminProfile } = useAuth();
   const resolvedProgramId = useResolvedProgramId(params.programId);
+  // gallery read views; the API refuses gallery writes without the gallery set.
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.gallery);
   const program = accessiblePrograms.find((p) => p.programId === resolvedProgramId);
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";
@@ -74,23 +78,27 @@ export default function ProgramPhotosPage() {
             <button type="button" onClick={fetchItems} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50">
               <ArrowPathIcon className="h-3.5 w-3.5" />Refresh
             </button>
-            <button
-              type="button"
-              onClick={() => setCopyFromProgramOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from program</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setCopyFromTemplateOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from template</span>
-            </button>
-            <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600">
-              <PlusIcon className="h-3.5 w-3.5" />Upload Photo
-            </button>
+            {canWrite && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setCopyFromProgramOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                >
+                  <span>Copy from program</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCopyFromTemplateOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                >
+                  <span>Copy from template</span>
+                </button>
+                <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600">
+                  <PlusIcon className="h-3.5 w-3.5" />Upload Photo
+                </button>
+              </>
+            )}
           </div>
         </div>
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
@@ -101,10 +109,12 @@ export default function ProgramPhotosPage() {
               <PhotoIcon className="h-5 w-5" />
             </div>
             <p className="text-xs font-semibold text-zinc-700">No photos yet</p>
-            <p className="mt-1 text-[11px] text-zinc-500">Upload the first photo for this program.</p>
-            <button type="button" onClick={() => setShowCreate(true)} className="mt-4 inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600">
-              <PlusIcon className="h-3.5 w-3.5" />Upload Photo
-            </button>
+            <p className="mt-1 text-[11px] text-zinc-500">{canWrite ? "Upload the first photo for this program." : "No photos have been added to this program yet."}</p>
+            {canWrite && (
+              <button type="button" onClick={() => setShowCreate(true)} className="mt-4 inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600">
+                <PlusIcon className="h-3.5 w-3.5" />Upload Photo
+              </button>
+            )}
           </div>
         )}
         {!loading && items.length > 0 && (
@@ -112,26 +122,28 @@ export default function ProgramPhotosPage() {
             {items.map((item) => (
               <div key={item.id} className="group relative flex flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
                 <div className="relative h-32 w-full overflow-hidden bg-zinc-100">
-                  <img src={item.imageUrl} alt={item.title ?? ""} className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                  <img src={item.imageUrl} alt={item.title ?? ""} className={`h-full w-full object-cover transition-transform ${canWrite ? "group-hover:scale-105" : ""}`} />
                   {/* Action overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center gap-1.5 bg-black/0 opacity-0 transition-all group-hover:bg-black/40 group-hover:opacity-100">
-                    <button
-                      type="button"
-                      onClick={() => setEditTarget(item)}
-                      className="flex h-7 w-7 items-center justify-center rounded-md bg-white/90 text-zinc-700 shadow transition hover:bg-white"
-                      title="Edit photo"
-                    >
-                      <PencilSquareIcon className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(item)}
-                      className="flex h-7 w-7 items-center justify-center rounded-md bg-red-500 text-white shadow transition hover:bg-red-600"
-                      title="Delete photo"
-                    >
-                      <TrashIcon className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  {canWrite && (
+                    <div className="absolute inset-0 flex items-center justify-center gap-1.5 bg-black/0 opacity-0 transition-all group-hover:bg-black/40 group-hover:opacity-100">
+                      <button
+                        type="button"
+                        onClick={() => setEditTarget(item)}
+                        className="flex h-7 w-7 items-center justify-center rounded-md bg-white/90 text-zinc-700 shadow transition hover:bg-white"
+                        title="Edit photo"
+                      >
+                        <PencilSquareIcon className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(item)}
+                        className="flex h-7 w-7 items-center justify-center rounded-md bg-red-500 text-white shadow transition hover:bg-red-600"
+                        title="Delete photo"
+                      >
+                        <TrashIcon className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
                 {(item.title || item.year) && (
                   <div className="px-2.5 py-2">

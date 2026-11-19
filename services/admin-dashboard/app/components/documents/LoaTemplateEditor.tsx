@@ -519,10 +519,12 @@ function PreviewPane({ label, loading, error, pdfUrl, onRegenerate, warning }: P
 
 interface LoaTemplateEditorProps {
   programId: string;
+  /** Edit / save / publish. Defaults to true; the page passes the admin's real access. */
+  canWrite?: boolean;
   onTemplateChange?: (template: DocumentTemplate | null) => void;
 }
 
-export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEditorProps) {
+export function LoaTemplateEditor({ programId, canWrite = true, onTemplateChange }: LoaTemplateEditorProps) {
   const resolvedProgramId = useResolvedProgramId(programId);
   const { accessiblePrograms, adminProfile } = useAuth();
   const program = accessiblePrograms.find(
@@ -604,6 +606,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
 
   const editor = useEditor({
     immediatelyRender: false,
+    editable: canWrite,
     extensions: [
       ...editorExtensions,
       Placeholder.configure({ placeholder: "Write your Invitation Letter body here. Click placeholders on the right to insert them…" }),
@@ -613,6 +616,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
 
   const footerEditor = useEditor({
     immediatelyRender: false,
+    editable: canWrite,
     extensions: [
       ...editorExtensions,
       Placeholder.configure({ placeholder: "Footer content — use {{signature}} to insert the signature image…" }),
@@ -934,30 +938,34 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
             {previewMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             {previewMode ? "Edit" : "Preview"}
           </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => {
-              if (template?.isActive) {
-                setUnpublishConfirmOpen(true);
-              } else {
-                save(false);
-              }
-            }}
-            className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            Save Draft
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => save(true)}
-            className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Publish
-          </button>
+          {canWrite && (
+            <>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => {
+                  if (template?.isActive) {
+                    setUnpublishConfirmOpen(true);
+                  } else {
+                    save(false);
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                Save Draft
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => save(true)}
+                className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Publish
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -967,6 +975,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
         <input
           className={inputCls}
           value={templateName}
+          readOnly={!canWrite}
           onChange={(e) => setTemplateName(e.target.value)}
           placeholder="Invitation Letter"
         />
@@ -1052,7 +1061,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
               </div>
             </div>
           ) : (
-            <>
+            <fieldset disabled={!canWrite} className="contents">
               {/* Header — structured letterhead only; see sidebar "Letterhead Details" */}
               <div>
                 <label className={labelCls}>Header</label>
@@ -1166,12 +1175,12 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
                   placeholder="Footer content — use {{signature}} to insert the signature image…"
                 />
               </div>
-            </>
+            </fieldset>
           )}
         </div>
 
         {/* Right: sidebar (40%) */}
-        <div className="flex w-[40%] flex-col gap-4 overflow-y-auto">
+        <fieldset disabled={!canWrite} className="flex w-[40%] min-w-0 flex-col gap-4 overflow-y-auto border-0 p-0">
           {/* Placeholders */}
           <div className="rounded-lg border border-zinc-200 bg-white p-4">
             <h3 className="mb-1 text-xs font-semibold text-zinc-800">Placeholder Tokens</h3>
@@ -1445,7 +1454,7 @@ export function LoaTemplateEditor({ programId, onTemplateChange }: LoaTemplateEd
               </div>
             )}
           </div>
-        </div>
+        </fieldset>
       </div>
 
       {/* Signature create/edit modal */}

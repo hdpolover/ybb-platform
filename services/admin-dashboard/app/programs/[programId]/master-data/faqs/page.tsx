@@ -24,6 +24,8 @@ import {
 } from "@/src/ui/sheet";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 const FAQ_CATEGORIES: { value: string; label: string }[] = [
   { value: "general", label: "General" },
@@ -39,6 +41,8 @@ export default function ProgramFaqsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
   const resolvedProgramId = useResolvedProgramId(params.programId);
+  // content:read views; the API refuses writes without the content set.
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.content);
   const [faqs, setFaqs] = useState<ProgramFaq[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,21 +118,25 @@ export default function ProgramFaqsPage() {
           <p className="text-[11px] text-zinc-500">Showing {filteredFaqs.length} of {faqs.length} FAQ(s)</p>
           <div className="flex gap-2">
             <button type="button" onClick={load} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
-            <button
-              type="button"
-              onClick={() => setCopyFromProgramOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from program</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setCopyFromTemplateOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from template</span>
-            </button>
-            <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"><PlusIcon className="h-3.5 w-3.5" />Add FAQ</button>
+            {canWrite && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setCopyFromProgramOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                >
+                  <span>Copy from program</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCopyFromTemplateOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                >
+                  <span>Copy from template</span>
+                </button>
+                <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"><PlusIcon className="h-3.5 w-3.5" />Add FAQ</button>
+              </>
+            )}
           </div>
         </div>
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
@@ -205,10 +213,10 @@ export default function ProgramFaqsPage() {
                     }
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    {canWrite && <div className="flex items-center justify-end gap-1">
                       <button type="button" onClick={() => setEditTarget(f)} className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"><PencilSquareIcon className="h-3.5 w-3.5" /></button>
                       <button type="button" onClick={() => setDeleteTarget(f)} className="rounded-md border border-red-100 p-1 text-red-400 hover:bg-red-50"><TrashIcon className="h-3.5 w-3.5" /></button>
-                    </div>
+                    </div>}
                   </td>
                 </tr>
               ))}

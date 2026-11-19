@@ -11,11 +11,15 @@ import {
 import { listProgramTestimonials } from "@/src/shared/api-client";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 export default function VideoTestimonialsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
   const resolvedProgramId = useResolvedProgramId(params.programId);
+  // content:read views; the API refuses writes without the content set.
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.content);
   const [items, setItems] = useState<VideoTestimonyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,20 +83,24 @@ export default function VideoTestimonialsPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setCopyFromProgramOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from program</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setCopyFromTemplateOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from template</span>
-            </button>
+            {canWrite && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setCopyFromProgramOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                >
+                  <span>Copy from program</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCopyFromTemplateOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                >
+                  <span>Copy from template</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -106,6 +114,7 @@ export default function VideoTestimonialsPage() {
           loading={loading}
           programId={resolvedProgramId}
           brandId={brandId}
+          canWrite={canWrite}
           search={search}
           onSearchChange={setSearch}
           onRefresh={load}

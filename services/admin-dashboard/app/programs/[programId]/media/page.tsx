@@ -19,6 +19,8 @@ import { CheckCircleIcon } from "@heroicons/react/24/solid";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import {
   listProgramMedia,
   deleteProgramMediaFile,
@@ -76,7 +78,7 @@ function MediaCard({
   file: MediaFile;
   selected: boolean;
   onSelect: (file: MediaFile) => void;
-  onDelete: (file: MediaFile) => void;
+  onDelete?: (file: MediaFile) => void;
 }) {
   const url = getFileUrl(file);
   return (
@@ -108,14 +110,16 @@ function MediaCard({
             <CheckCircleIcon className="h-8 w-8 text-blue-600" />
           </div>
         )}
-        <button
-          type="button"
-          className="absolute right-1.5 top-1.5 hidden rounded-md bg-red-50 p-1 text-red-600 shadow transition hover:bg-red-100 group-hover:flex"
-          onClick={(e) => { e.stopPropagation(); onDelete(file); }}
-          aria-label={`Delete ${file.original_filename}`}
-        >
-          <TrashIcon className="h-3.5 w-3.5" />
-        </button>
+        {onDelete && (
+          <button
+            type="button"
+            className="absolute right-1.5 top-1.5 hidden rounded-md bg-red-50 p-1 text-red-600 shadow transition hover:bg-red-100 group-hover:flex"
+            onClick={(e) => { e.stopPropagation(); onDelete(file); }}
+            aria-label={`Delete ${file.original_filename}`}
+          >
+            <TrashIcon className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Info */}
@@ -140,7 +144,7 @@ function MediaDetailPanel({
 }: {
   file: MediaFile;
   onClose: () => void;
-  onDelete: (file: MediaFile) => void;
+  onDelete?: (file: MediaFile) => void;
 }) {
   const url = getFileUrl(file);
   const [copied, setCopied] = useState(false);
@@ -220,14 +224,16 @@ function MediaDetailPanel({
               </a>
             </>
           )}
-          <button
-            type="button"
-            onClick={() => onDelete(file)}
-            className="flex w-full items-center justify-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-medium text-red-700 hover:bg-red-100"
-          >
-            <TrashIcon className="h-3.5 w-3.5" />
-            Delete File
-          </button>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(file)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[11px] font-medium text-red-700 hover:bg-red-100"
+            >
+              <TrashIcon className="h-3.5 w-3.5" />
+              Delete File
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -593,6 +599,8 @@ function DeleteModal({
 export default function MediaLibraryPage() {
   const params = useParams<{ programId: string }>();
   const resolvedProgramId = useResolvedProgramId(params.programId);
+  // media:write / content:write / program:write; the API refuses upload and delete otherwise.
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.media);
   const { accessiblePrograms, adminProfile } = useAuth();
 
   const program = accessiblePrograms.find(
@@ -738,14 +746,16 @@ export default function MediaLibraryPage() {
               Refresh
             </button>
 
-            <button
-              type="button"
-              onClick={() => setShowUpload(true)}
-              className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"
-            >
-              <CloudArrowUpIcon className="h-3.5 w-3.5" />
-              Upload
-            </button>
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => setShowUpload(true)}
+                className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"
+              >
+                <CloudArrowUpIcon className="h-3.5 w-3.5" />
+                Upload
+              </button>
+            )}
           </div>
         </div>
 
@@ -768,7 +778,7 @@ export default function MediaLibraryPage() {
               <PhotoIcon className="mb-2 h-10 w-10 text-zinc-300" />
               <p className="text-sm font-semibold text-zinc-500">No media found</p>
               <p className="text-xs text-zinc-400">
-                {search ? "Try a different search term." : "Upload your first file using the Upload button."}
+                {search ? "Try a different search term." : canWrite ? "Upload your first file using the Upload button." : "Files uploaded to this program will appear here."}
               </p>
             </div>
           ) : viewMode === "grid" ? (
@@ -779,7 +789,7 @@ export default function MediaLibraryPage() {
                   file={file}
                   selected={selectedFile?.id === file.id}
                   onSelect={setSelectedFile}
-                  onDelete={setDeleteTarget}
+                  onDelete={canWrite ? setDeleteTarget : undefined}
                 />
               ))}
             </div>
@@ -822,13 +832,15 @@ export default function MediaLibraryPage() {
                       </td>
                       <td className="px-3 py-2 text-zinc-400">{formatDate(file.uploaded_at)}</td>
                       <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setDeleteTarget(file); }}
-                          className="rounded-md border border-red-100 bg-red-50 p-1 text-red-600 hover:bg-red-100"
-                        >
-                          <TrashIcon className="h-3.5 w-3.5" />
-                        </button>
+                        {canWrite && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(file); }}
+                            className="rounded-md border border-red-100 bg-red-50 p-1 text-red-600 hover:bg-red-100"
+                          >
+                            <TrashIcon className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -866,14 +878,14 @@ export default function MediaLibraryPage() {
           <MediaDetailPanel
             file={selectedFile}
             onClose={() => setSelectedFile(null)}
-            onDelete={setDeleteTarget}
+            onDelete={canWrite ? setDeleteTarget : undefined}
           />
         )}
       </div>
 
       {/* Upload Sheet */}
       <UploadSheet
-        open={showUpload}
+        open={showUpload && canWrite}
         programId={resolvedProgramId}
         brandId={brandId}
         userId={userId}

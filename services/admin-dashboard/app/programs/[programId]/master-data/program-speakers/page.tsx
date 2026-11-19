@@ -23,6 +23,8 @@ import {
 } from "@/src/shared/api-client";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
@@ -241,6 +243,8 @@ export default function ProgramSpeakersPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
   const resolvedProgramId = useResolvedProgramId(params.programId);
+  // content:read views; the API refuses writes without the content set.
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.content);
   const [speakers, setSpeakers] = useState<ProgramSpeaker[]>([]);
   const [loading, setLoading] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -397,28 +401,32 @@ export default function ProgramSpeakersPage() {
               <ArrowPathIcon className="h-4 w-4" />
               Refresh
             </button>
-            <button
-              type="button"
-              onClick={() => setCopyFromProgramOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from program</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setCopyFromTemplateOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from template</span>
-            </button>
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex items-center gap-1.5 rounded-md bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
-            >
-              <PlusIcon className="h-4 w-4" />
-              Add Speaker
-            </button>
+            {canWrite && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setCopyFromProgramOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                >
+                  <span>Copy from program</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCopyFromTemplateOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                >
+                  <span>Copy from template</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
+                >
+                  <PlusIcon className="h-4 w-4" />
+                  Add Speaker
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -522,23 +530,25 @@ export default function ProgramSpeakersPage() {
                       </td>
                       <td className="px-6 py-4 align-middle text-zinc-600">{s.order}</td>
                       <td className="px-6 py-4 align-middle text-right">
-                        <div className="inline-flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openEdit(s)}
-                            className="flex h-8 w-8 items-center justify-center rounded-md bg-amber-50 text-amber-600 transition hover:bg-amber-100 hover:text-amber-700"
-                          >
-                            <PencilSquareIcon className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void handleDelete(s)}
-                            disabled={deletingId === s.id}
-                            className="flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition hover:bg-rose-100 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                          </button>
-                        </div>
+                        {canWrite && (
+                          <div className="inline-flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => openEdit(s)}
+                              className="flex h-8 w-8 items-center justify-center rounded-md bg-amber-50 text-amber-600 transition hover:bg-amber-100 hover:text-amber-700"
+                            >
+                              <PencilSquareIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDelete(s)}
+                              disabled={deletingId === s.id}
+                              className="flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition hover:bg-rose-100 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))
