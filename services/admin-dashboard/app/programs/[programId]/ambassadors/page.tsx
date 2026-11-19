@@ -7,6 +7,8 @@ import { useQueryStates, parseAsString, parseAsInteger, parseAsStringEnum } from
 import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Eye, FileSpreadsheet, Mail, Pencil, RefreshCw, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import {
   activateAmbassador,
   createAmbassador,
@@ -88,6 +90,8 @@ export default function AmbassadorsPage() {
     );
     return match?.programId ?? params.programId;
   }, [accessiblePrograms, params.programId]);
+  // participants:write / program:write; the API refuses ambassador writes otherwise.
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.ambassadors);
 
   const [items, setItems] = useState<Ambassador[]>([]);
   const [meta, setMeta] = useState({ total: 0, page: 1, limit: 20, lastPage: 1 });
@@ -314,10 +318,12 @@ export default function AmbassadorsPage() {
                 Monthly Recap
               </Link>
             </Button>
-            <Button size="sm" onClick={openCreate}>
-              <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-              Add Ambassador
-            </Button>
+            {canWrite && (
+              <Button size="sm" onClick={openCreate}>
+                <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                Add Ambassador
+              </Button>
+            )}
           </div>
         }
       />
@@ -538,16 +544,23 @@ export default function AmbassadorsPage() {
                     {ambassador.institution ?? "—"}
                   </TableCell>
                   <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => void handleToggleActive(ambassador)}
-                      className="rounded-full"
-                    >
+                    {canWrite ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleToggleActive(ambassador)}
+                        className="rounded-full"
+                      >
+                        <StatusBadge
+                          status={ambassador.isActive ? "active" : "inactive"}
+                          context="generic"
+                        />
+                      </button>
+                    ) : (
                       <StatusBadge
                         status={ambassador.isActive ? "active" : "inactive"}
                         context="generic"
                       />
-                    </button>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <RowActions
@@ -558,25 +571,29 @@ export default function AmbassadorsPage() {
                           href: `/programs/${params.programId}/ambassadors/${ambassador.id}`,
                         },
                       ]}
-                      menu={[
-                        {
-                          label: "Edit",
-                          icon: Pencil,
-                          onClick: () => openEdit(ambassador),
-                        },
-                        {
-                          label: resendingId === ambassador.id ? "Sending…" : "Resend credentials",
-                          icon: Mail,
-                          disabled: resendingId === ambassador.id,
-                          onClick: () => void handleResendCredentials(ambassador),
-                        },
-                        {
-                          label: "Delete",
-                          icon: Trash2,
-                          destructive: true,
-                          onClick: () => setDeleteTarget(ambassador),
-                        },
-                      ]}
+                      menu={
+                        canWrite
+                          ? [
+                              {
+                                label: "Edit",
+                                icon: Pencil,
+                                onClick: () => openEdit(ambassador),
+                              },
+                              {
+                                label: resendingId === ambassador.id ? "Sending…" : "Resend credentials",
+                                icon: Mail,
+                                disabled: resendingId === ambassador.id,
+                                onClick: () => void handleResendCredentials(ambassador),
+                              },
+                              {
+                                label: "Delete",
+                                icon: Trash2,
+                                destructive: true,
+                                onClick: () => setDeleteTarget(ambassador),
+                              },
+                            ]
+                          : []
+                      }
                     />
                   </TableCell>
                 </TableRow>

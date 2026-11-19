@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
+import { AdminPermissionGuard } from '@shared/guards/admin-permission.guard';
 
 describe('PartnershipsAdminController', () => {
   let controller: PartnershipsAdminController;
@@ -32,8 +33,10 @@ describe('PartnershipsAdminController', () => {
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
       .useValue({ canActivate: () => true })
-      // Scope is covered over HTTP in partnerships-admin-scope.controller.spec.ts.
+      // Scope and permission are covered over HTTP in partnerships-admin-scope.controller.spec.ts.
       .overrideGuard(AdminScopeGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(AdminPermissionGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

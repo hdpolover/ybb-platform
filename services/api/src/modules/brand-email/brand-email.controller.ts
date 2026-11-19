@@ -8,6 +8,7 @@ import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
+import { AdminPermissionGuard, RequiresProgramPermission } from '@shared/guards/admin-permission.guard';
 import { BrandEmailService, BrandEmailThemeResponse, DraftCampaignResponse } from './brand-email.service';
 import { BrandEmailThemeDto } from './dto/brand-email-theme.dto';
 
@@ -51,8 +52,11 @@ export class BrandEmailController {
         return this.service.resync(id);
     }
 
+    // Method-level, so it runs after the class AdminScopeGuard: out of scope 404s first.
     @Post('programs/:id/email-campaigns')
+    @UseGuards(AdminPermissionGuard)
     @ScopedBy('program', 'id')
+    @RequiresProgramPermission(['program:write'], 'id')
     @AuditTrail({ entityType: 'Program', action: ChangeType.create })
     @ApiOperation({ summary: 'Create a draft Listmonk campaign for the program (brand template, program list, brand From)' })
     createDraftCampaign(@Param('id', ParseUUIDPipe) id: string): Promise<DraftCampaignResponse> {

@@ -15,6 +15,8 @@ import {
   type PartnershipEnquiryDetail,
 } from "@/src/shared/api-client";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import { formatDateTime } from "@/lib/utils";
 import { PageHeader } from "@/src/admin/page-header";
 import { EmptyState } from "@/src/admin/empty-state";
@@ -77,6 +79,8 @@ const partnershipsFilterParsers = {
 export default function ProgramPartnershipsPage() {
   const params = useParams<{ programId: string }>();
   const resolvedProgramId = useResolvedProgramId(params.programId);
+  // partnerships:read views; the API refuses status/notes/delete without the partners set.
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.partners);
 
   const [filters, setFilters] = useQueryStates(partnershipsFilterParsers);
   const { search: searchQuery, status: statusFilter, type: typeFilter, page, enquiry: selectedId } = filters;
@@ -422,15 +426,17 @@ export default function ProgramPartnershipsPage() {
                     <h2 className="text-base font-semibold text-zinc-900">{detail.fullName}</h2>
                     <p className="text-xs text-zinc-500">{detail.email}</p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-red-600 hover:bg-red-50 hover:text-red-700"
-                    onClick={() => setDeleteTarget(detail)}
-                  >
-                    <Trash2 className="mr-1 h-3.5 w-3.5" />
-                    Delete
-                  </Button>
+                  {canWrite && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                      onClick={() => setDeleteTarget(detail)}
+                    >
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      Delete
+                    </Button>
+                  )}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                   <Badge variant="secondary">{toTitleCase(detail.partnershipType)}</Badge>
@@ -473,48 +479,67 @@ export default function ProgramPartnershipsPage() {
                   </p>
                 </div>
 
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-zinc-500" htmlFor="enquiry-status">
-                    Status
-                  </label>
-                  <FilterSelect
-                    id="enquiry-status"
-                    value={statusDraft}
-                    onChange={(e) => setStatusDraft(e.target.value)}
+                {canWrite ? (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-zinc-500" htmlFor="enquiry-status">
+                        Status
+                      </label>
+                      <FilterSelect
+                        id="enquiry-status"
+                        value={statusDraft}
+                        onChange={(e) => setStatusDraft(e.target.value)}
+                      >
+                        {STATUS_OPTIONS.map((status) => (
+                          <option key={status} value={status}>
+                            {toTitleCase(status)}
+                          </option>
+                        ))}
+                      </FilterSelect>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-zinc-500" htmlFor="enquiry-notes">
+                        Internal notes
+                      </label>
+                      <textarea
+                        id="enquiry-notes"
+                        value={notesDraft}
+                        onChange={(e) => setNotesDraft(e.target.value)}
+                        rows={4}
+                        placeholder="Not visible to the submitter — for admin coordination only."
+                        className={TEXTAREA_CLS}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-[11px] font-medium text-zinc-500">Status</p>
+                      <p className="text-zinc-800">{toTitleCase(detail.status)}</p>
+                    </div>
+                    {detail.notes ? (
+                      <div className="col-span-2">
+                        <p className="text-[11px] font-medium text-zinc-500">Internal notes</p>
+                        <p className="whitespace-pre-wrap text-zinc-800">{detail.notes}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
+              {canWrite && (
+                <div className="flex-shrink-0 border-t border-zinc-200 p-4">
+                  <Button
+                    onClick={() => void handleSaveDetail()}
+                    disabled={!detailDirty}
+                    loading={savingDetail}
+                    className="w-full"
                   >
-                    {STATUS_OPTIONS.map((status) => (
-                      <option key={status} value={status}>
-                        {toTitleCase(status)}
-                      </option>
-                    ))}
-                  </FilterSelect>
+                    Save changes
+                  </Button>
                 </div>
-
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-zinc-500" htmlFor="enquiry-notes">
-                    Internal notes
-                  </label>
-                  <textarea
-                    id="enquiry-notes"
-                    value={notesDraft}
-                    onChange={(e) => setNotesDraft(e.target.value)}
-                    rows={4}
-                    placeholder="Not visible to the submitter — for admin coordination only."
-                    className={TEXTAREA_CLS}
-                  />
-                </div>
-              </div>
-
-              <div className="flex-shrink-0 border-t border-zinc-200 p-4">
-                <Button
-                  onClick={() => void handleSaveDetail()}
-                  disabled={!detailDirty}
-                  loading={savingDetail}
-                  className="w-full"
-                >
-                  Save changes
-                </Button>
-              </div>
+              )}
             </div>
           ) : null}
         </div>

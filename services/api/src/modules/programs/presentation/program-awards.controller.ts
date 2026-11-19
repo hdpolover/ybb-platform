@@ -19,6 +19,8 @@ import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
+import { AdminPermissionGuard, RequiresProgramPermission } from '@shared/guards/admin-permission.guard';
+import { CONTENT_WRITE_PERMISSIONS } from '../application/utils/program-content-access.util';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
 // Awards render on the landing only (home + program landing); no portal read
@@ -40,7 +42,7 @@ import {
 
 @ApiTags('Program Awards')
 @Controller('admin/programs/:programId/awards')
-@UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 // Every route carries the program id in the URL and the handlers only ever
 // write to that id, so the route-param scope check covers the whole controller.
@@ -61,6 +63,7 @@ export class ProgramAwardsController {
   }
 
   @Post()
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.content])
   @AuditTrail({ entityType: 'ProgramAward', action: ChangeType.create })
   @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
   @ApiOperation({ summary: 'Create a program award' })
@@ -72,6 +75,7 @@ export class ProgramAwardsController {
   }
 
   @Patch(':awardId')
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.content])
   @AuditTrail({ entityType: 'ProgramAward', action: ChangeType.update, idParam: 'awardId' })
   @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
   @ApiOperation({ summary: 'Update a program award' })
@@ -85,6 +89,7 @@ export class ProgramAwardsController {
 
   @Delete(':awardId')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.content])
   @AuditTrail({ entityType: 'ProgramAward', action: ChangeType.delete, idParam: 'awardId' })
   @CacheInvalidate(PROGRAM_PUBLIC_CONTENT_PATTERNS)
   @ApiOperation({ summary: 'Soft-delete a program award' })

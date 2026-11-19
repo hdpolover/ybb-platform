@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { BadRequestException, NotFoundException, ValidationPipe } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { ADMIN_SCOPE_KEY, AdminScopeGuard } from '@shared/guards/admin-scope.guard';
+import { ADMIN_PERMISSION_KEY, AdminPermissionGuard } from '@shared/guards/admin-permission.guard';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { LandingCacheInvalidationService } from '../../brands/application/services/landing-cache-invalidation.service';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
@@ -76,14 +77,20 @@ describe('ProgramAwardsController', () => {
       .overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard).useValue({ canActivate: () => true })
       .overrideGuard(AdminScopeGuard).useValue({ canActivate: () => true })
+      .overrideGuard(AdminPermissionGuard).useValue({ canActivate: () => true })
       .compile();
     controller = module.get(ProgramAwardsController);
     invalidate.mockClear();
   });
 
   it('applies AdminScopeGuard scoped to the programId route param on every route', () => {
-    expect(Reflect.getMetadata(GUARDS_METADATA, ProgramAwardsController)).toEqual([JwtAuthGuard, RolesGuard, AdminScopeGuard]);
+    expect(Reflect.getMetadata(GUARDS_METADATA, ProgramAwardsController)).toEqual([JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard]);
     expect(Reflect.getMetadata(ADMIN_SCOPE_KEY, ProgramAwardsController)).toEqual({ target: 'program', paramName: 'programId' });
+    // Writes need content:write or program:write; the list stays open.
+    for (const write of [controller.create, controller.update, controller.remove]) {
+      expect(Reflect.getMetadata(ADMIN_PERMISSION_KEY, write)).toEqual({ anyOf: ['content:write', 'program:write'], paramName: 'programId' });
+    }
+    expect(Reflect.getMetadata(ADMIN_PERMISSION_KEY, controller.list)).toBeUndefined();
   });
 
   it('lists only this program\'s non-deleted awards, ordered', async () => {

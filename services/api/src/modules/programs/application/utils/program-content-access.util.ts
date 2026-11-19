@@ -2,6 +2,24 @@ import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.ser
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { assertProgramAccess } from '@modules/stats/revenue/utils/revenue-access.util';
 import { resolveRevenueAccessScope } from '@modules/stats/revenue/utils/revenue-access.util';
+import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
+
+// Write-level twins of the dashboard menu rules for each content page
+// (services/admin-dashboard/lib/admin-access.ts menuPermissionRules, mirrored
+// in programWritePermissions there). Keep the two in step.
+export const CONTENT_WRITE_PERMISSIONS = {
+  programConfig: ['program:write'],
+  content: ['content:write', 'program:write'],
+  gallery: ['media:write', 'content:write', 'program:write'],
+  partners: ['partnerships:write', 'content:write', 'program:write'],
+  // LOA templates, batches, signatures and resources are official documents,
+  // not content: a content writer does not release or sign them.
+  documents: ['documents:write', 'program:write'],
+  pricing: ['payments:write', 'program:write'],
+  // Form fields, essays, categories and subthemes are program configuration:
+  // reviewers (applications:write) work the submissions, they do not reshape the form.
+  submissionForm: ['program:write'],
+} as const satisfies Record<string, readonly string[]>;
 
 /**
  * Refuse a program-content write the caller's scope does not cover.
@@ -25,12 +43,19 @@ import { resolveRevenueAccessScope } from '@modules/stats/revenue/utils/revenue-
  *   versa: authorising one id while acting on another passes the check and
  *   still writes to the wrong tenant, and leaves a clean audit entry saying it
  *   was fine.
+ * @param requiredPermissions write permissions (any one) the caller must also
+ *   hold on this program. Checked after the scope check, so an out-of-scope
+ *   program still answers as before rather than with a 403.
  */
 export async function assertProgramContentAccess(
   prismaRead: PrismaReadService,
   actor: CurrentUserData,
   programId: string,
+  requiredPermissions?: readonly string[],
 ): Promise<void> {
   const scope = await resolveRevenueAccessScope(prismaRead, actor);
   await assertProgramAccess(prismaRead, scope, programId);
+  if (requiredPermissions && scope.kind !== 'platform') {
+    await assertProgramPermission(prismaRead, actor, programId, requiredPermissions);
+  }
 }

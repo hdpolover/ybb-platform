@@ -26,6 +26,8 @@ import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.de
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
 import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitmq-producer.service';
 import { resolveActiveProgramContact } from '@shared/utils/resolve-active-program-contact';
 
@@ -92,6 +94,9 @@ type SupportTicketAttachmentResponse = {
   uploadedAt?: string;
 };
 
+// Mirrors programWritePermissions.support in admin-dashboard/lib/admin-access.ts.
+const SUPPORT_WRITE_PERMISSIONS = ['support:write'];
+
 @ApiTags('Support')
 @Controller('admin/programs/:programId/support-tickets')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -101,7 +106,15 @@ export class AdminSupportTicketsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmqProducer: RabbitMQProducerService,
+    private readonly prismaRead: PrismaReadService,
   ) {}
+
+  // Replying, changing status and deleting are support work: being assigned to
+  // the program (assertProgramAdminAccess) is not enough. Platform tier passes.
+  private async assertSupportWrite(user: CurrentUserData, programId: string): Promise<void> {
+    if (this.isSuperAdmin(user)) return;
+    await assertProgramPermission(this.prismaRead, user, programId, SUPPORT_WRITE_PERMISSIONS);
+  }
 
   private isJsonObject(value: Prisma.JsonValue): value is Prisma.JsonObject {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -415,6 +428,7 @@ export class AdminSupportTicketsController {
     @Body() dto: AdminReplySupportTicketDto,
   ) {
     const { adminId, adminName } = await this.assertProgramAdminAccess(user, programId);
+    await this.assertSupportWrite(user, programId);
     const participantIdsInProgram = await this.getProgramParticipantIds(programId);
     const scopeWhere = this.buildProgramScopeWhere(programId, participantIdsInProgram);
 
@@ -515,6 +529,7 @@ export class AdminSupportTicketsController {
     @Body() dto: AdminUpdateSupportTicketDto,
   ) {
     const { adminId } = await this.assertProgramAdminAccess(user, programId);
+    await this.assertSupportWrite(user, programId);
     const participantIdsInProgram = await this.getProgramParticipantIds(programId);
     const scopeWhere = this.buildProgramScopeWhere(programId, participantIdsInProgram);
 
@@ -653,6 +668,7 @@ export class AdminSupportTicketsController {
     @Param('id') id: string,
   ): Promise<void> {
     await this.assertProgramAdminAccess(user, programId);
+    await this.assertSupportWrite(user, programId);
     const participantIdsInProgram = await this.getProgramParticipantIds(programId);
     const scopeWhere = this.buildProgramScopeWhere(programId, participantIdsInProgram);
 

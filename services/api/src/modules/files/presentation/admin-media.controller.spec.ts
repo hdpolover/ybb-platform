@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AdminMediaController } from './admin-media.controller';
 import { FileServiceClient } from '../infrastructure/clients/file-service.client';
 import { StorageService } from '../application/storage.service';
@@ -339,5 +339,41 @@ describe('AdminMediaController — uploadMedia / deleteMedia brand+identity deri
             controller.deleteMedia(PROGRAM_ID, FILE_ID, foreignBrandAdmin),
         ).rejects.toBeInstanceOf(NotFoundException);
         expect(mockFileServiceClient.deleteMediaFile).not.toHaveBeenCalled();
+    });
+
+    describe('write permission (media:write / content:write / program:write)', () => {
+        // In scope for prog-1 through a program grant; only the role permissions vary.
+        const inScopeWith = (permissions: string[]) =>
+            mockAdmin({ role: { name: 'Scoped', permissions }, adminPrograms: [{ programId: PROGRAM_ID, permissions: [] }] });
+        const scopedUser: CurrentUserData = { ...platformAdminUser, adminId: 'admin-2' };
+
+        it('403 without a media write permission, before any storage or file-service call', async () => {
+            mockPrismaRead.admin.findUnique.mockResolvedValue(inScopeWith(['media:read', 'applications:write']));
+
+            await expect(controller.uploadMedia(PROGRAM_ID, file, scopedUser, 'banner', 'gallery')).rejects.toBeInstanceOf(ForbiddenException);
+            await expect(controller.deleteMedia(PROGRAM_ID, FILE_ID, scopedUser)).rejects.toBeInstanceOf(ForbiddenException);
+            // The 403 also comes before the file-id shape check.
+            await expect(controller.deleteMedia(PROGRAM_ID, 'not-a-uuid', scopedUser)).rejects.toBeInstanceOf(ForbiddenException);
+            expect(mockStorageService.uploadFile).not.toHaveBeenCalled();
+            expect(mockFileServiceClient.deleteMediaFile).not.toHaveBeenCalled();
+        });
+
+        it.each(['media:write', 'content:write', 'program:write'])('passes with %s', async (permission) => {
+            mockPrismaRead.admin.findUnique.mockResolvedValue(inScopeWith([permission]));
+
+            await controller.uploadMedia(PROGRAM_ID, file, scopedUser, 'banner', 'gallery');
+            await controller.deleteMedia(PROGRAM_ID, FILE_ID, scopedUser);
+            expect(mockStorageService.uploadFile).toHaveBeenCalledTimes(1);
+            expect(mockFileServiceClient.deleteMediaFile).toHaveBeenCalledTimes(1);
+        });
+
+        it('a platform_access admin passes without any media permission', async () => {
+            mockPrismaRead.admin.findUnique.mockResolvedValue(mockAdmin({ role: { name: 'Admin', permissions: ['platform_access'] } }));
+
+            await controller.uploadMedia(PROGRAM_ID, file, platformAdminUser, 'banner', 'gallery');
+            await controller.deleteMedia(PROGRAM_ID, FILE_ID, platformAdminUser);
+            expect(mockStorageService.uploadFile).toHaveBeenCalledTimes(1);
+            expect(mockFileServiceClient.deleteMediaFile).toHaveBeenCalledTimes(1);
+        });
     });
 });

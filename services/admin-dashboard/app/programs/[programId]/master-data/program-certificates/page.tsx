@@ -3,6 +3,8 @@
 import { use } from "react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { ProgramCertificatesTable, type ProgramCertificate } from "@/app/components/programCertificatesMasterData/ProgramCertificatesTable";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 // --- LOCAL MOCK DATA ---
 const MOCK_CERTIFICATES: ProgramCertificate[] = [
@@ -42,6 +44,8 @@ export default function ProgramCertificatesPage({
   const resolvedParams = use(params);
   const resolvedSearchParams = use(searchParams);
   const { accessiblePrograms } = useAuth();
+  // documents:read views; the API refuses template writes without the documents set.
+  const canWrite = useProgramWriteAccess(resolvedParams.programId, programWritePermissions.documents);
 
   const programName =
     accessiblePrograms.find((program) => program.programId === resolvedParams.programId)?.programName ??
@@ -78,7 +82,7 @@ export default function ProgramCertificatesPage({
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <ProgramCertificatesTable data={filteredData} currentSearch={searchQuery} />
+        <ProgramCertificatesTable data={filteredData} currentSearch={searchQuery} canWrite={canWrite} />
       </section>
     </main>
   );

@@ -43,19 +43,32 @@ const noop = { execute: jest.fn() };
  * An admin assigned to ONE programme, and an application belonging to a
  * DIFFERENT one. That divergence is the entire finding.
  */
-function buildReadPrisma(opts: { adminProgramId: string; applicationProgramId: string | null }) {
+// Default grant: every write permission the admin routes ask for, so the scope
+// cases below test scope alone. The permission cases pass their own.
+const ALL_WRITE_PERMISSIONS = ['applications:write', 'review:write', 'payments:write'];
+
+function buildReadPrisma(opts: {
+  adminProgramId: string;
+  applicationProgramId: string | null;
+  permissions?: string[];
+  accessLevel?: number;
+}) {
   return {
     admin: {
       findUnique: jest.fn().mockResolvedValue({
         id: 'admin-1',
-        accessLevel: 1,
+        accessLevel: opts.accessLevel ?? 1,
         canManageAdmins: false,
         canAssignRoles: false,
         customPermissions: null,
         role: null,
         // No brand grant: this is the program-scoped ('assigned') persona.
         adminBrands: [],
-        adminPrograms: [{ programId: opts.adminProgramId, program: { id: opts.adminProgramId, brandId: 'brand-1' } }],
+        adminPrograms: [{
+          programId: opts.adminProgramId,
+          permissions: opts.permissions ?? ALL_WRITE_PERMISSIONS,
+          program: { id: opts.adminProgramId, brandId: 'brand-1' },
+        }],
       }),
     },
     participantApplication: {
@@ -300,6 +313,78 @@ describe('admin application routes are scoped to the application\'s programme', 
 
     const res = await send(app.getHttpServer());
     expect(res.status).toBeLessThan(300);
+    expect(target.execute).toHaveBeenCalled();
+  });
+});
+
+// Role permissions inside the admin's own programme. Scope (404) is above;
+// this is "may they do THIS" (403), checked before the handler runs.
+describe('admin application write routes require a write permission', () => {
+  const writeRoutes: Array<{
+    name: string;
+    handler: unknown;
+    anyOf: string[];
+    send: (server: Parameters<typeof request>[0]) => request.Test;
+  }> = [
+    { name: 'PUT /applications/:id', handler: UpdateApplicationHandler, anyOf: ['applications:write'], send: (s) => request(s).put('/applications/app-1').send({}) },
+    { name: 'POST /applications/:id/switch-category', handler: SwitchApplicationCategoryHandler, anyOf: ['review:write', 'applications:write'], send: (s) => request(s).post('/applications/app-1/switch-category').send({ targetCategory: 'self_funded' }) },
+    { name: 'POST /applications/:id/submit', handler: SubmitApplicationHandler, anyOf: ['applications:write', 'payments:write'], send: (s) => request(s).post('/applications/app-1/submit').send({ participantId: 'p-1' }) },
+    { name: 'PATCH /applications/:id/submission-data', handler: AdminUpdateSubmissionHandler, anyOf: ['applications:write'], send: (s) => request(s).patch('/applications/app-1/submission-data').send({ reason: 'typo' }) },
+    { name: 'POST /applications/:id/payment-intent', handler: CreateRegistrationPaymentIntentHandler, anyOf: ['applications:write', 'payments:write'], send: (s) => request(s).post('/applications/app-1/payment-intent').send({ userId: 'p-1' }) },
+    { name: 'PUT /applications/:id/review', handler: UpsertApplicationReviewHandler, anyOf: ['review:write', 'applications:write'], send: (s) => request(s).put('/applications/app-1/review?stage=application').send({ status: 'draft', items: [] }) },
+    { name: 'POST /applications/:id/review', handler: ReviewApplicationHandler, anyOf: ['review:write', 'applications:write'], send: (s) => request(s).post('/applications/app-1/review').send({ status: 'accepted' }) },
+    { name: 'POST /applications/:id/withdraw', handler: WithdrawApplicationHandler, anyOf: ['applications:write'], send: (s) => request(s).post('/applications/app-1/withdraw') },
+  ];
+
+  let app: INestApplication;
+
+  afterEach(async () => {
+    if (app) await app.close();
+  });
+
+  async function run(route: (typeof writeRoutes)[number], opts: { permissions: string[]; accessLevel?: number }) {
+    const target = { execute: jest.fn().mockResolvedValue({ id: 'app-1' }) };
+    app = await bootstrap(
+      buildReadPrisma({ adminProgramId: 'program-A', applicationProgramId: 'program-A', ...opts }),
+      target,
+      noop,
+      [[route.handler, target]],
+    );
+    const res = await route.send(app.getHttpServer());
+    return { res, target };
+  }
+
+  it.each(writeRoutes)('$name: 403 for an in-scope admin with read permissions only, handler never runs', async (route) => {
+    const { res, target } = await run(route, { permissions: ['applications:read', 'review:read', 'payments:read', 'participants:write'] });
+    expect(res.status).toBe(403);
+    expect(target.execute).not.toHaveBeenCalled();
+  });
+
+  const routePermissionPairs = writeRoutes.flatMap((route) =>
+    route.anyOf.map((permission) => ({ name: route.name, permission, route })),
+  );
+
+  it.each(routePermissionPairs)('$name: passes for an in-scope admin holding $permission', async ({ route, permission }) => {
+    const { res, target } = await run(route, { permissions: [permission] });
+    expect(res.status).toBeLessThan(300);
+    expect(target.execute).toHaveBeenCalled();
+  });
+
+  it.each(writeRoutes)('$name: a platform-tier admin without the permission passes', async (route) => {
+    const { res, target } = await run(route, { permissions: [], accessLevel: 5 });
+    expect(res.status).toBeLessThan(300);
+    expect(target.execute).toHaveBeenCalled();
+  });
+
+  it('read routes stay open to an in-scope admin without write permissions', async () => {
+    const target = { execute: jest.fn().mockResolvedValue({ id: 'app-1' }) };
+    app = await bootstrap(
+      buildReadPrisma({ adminProgramId: 'program-A', applicationProgramId: 'program-A', permissions: [] }),
+      { execute: jest.fn() },
+      noop,
+      [[GetApplicationHandler, target]],
+    );
+    await request(app.getHttpServer()).get('/applications/app-1').expect(200);
     expect(target.execute).toHaveBeenCalled();
   });
 });

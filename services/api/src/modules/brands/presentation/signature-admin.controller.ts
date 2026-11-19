@@ -9,7 +9,9 @@ import { UserRole } from '@core/entities/user.entity';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
-import { AdminScope, assertBrandAccess, getRequestAdminScope, orNotFound } from '@shared/guards/admin-scope.guard';
+import { AdminScope, getRequestAdminScope, orNotFound } from '@shared/guards/admin-scope.guard';
+import { assertBrandPermission } from '@shared/guards/admin-permission.guard';
+import { CONTENT_WRITE_PERMISSIONS } from '@modules/programs/application/utils/program-content-access.util';
 import { ListSignaturesQuery } from '../application/queries/list-signatures.query';
 import { CreateSignatureCommand } from '../application/commands/create-signature.command';
 import { UpdateSignatureCommand } from '../application/commands/update-signature.command';
@@ -17,6 +19,9 @@ import { DeleteSignatureCommand } from '../application/commands/delete-signature
 import { CreateSignatureDto, UpdateSignatureDto, SignatureResponseDto } from './dto/signature.dto';
 
 type ScopedRequest = { user?: { adminId?: string }; adminScope?: AdminScope };
+
+// Signatures feed the LOA template, so writes need the same set as the LOA editor.
+const SIGNATURE_WRITE_PERMISSIONS = CONTENT_WRITE_PERMISSIONS.documents;
 
 @ApiTags('Signatures')
 @Controller('admin/signatures')
@@ -46,7 +51,11 @@ export class SignatureAdminController {
     @ApiOperation({ summary: 'Create a brand signature' })
     @ApiResponse({ status: 201, description: 'Signature created', type: SignatureResponseDto })
     async create(@Body() dto: CreateSignatureDto, @Req() req: ScopedRequest): Promise<SignatureResponseDto> {
-        await this.assertSignatureBrandAccess(await getRequestAdminScope(this.readPrisma, req), dto.brandId);
+        const scope = await getRequestAdminScope(this.readPrisma, req);
+        await this.assertSignatureBrandAccess(scope, dto.brandId);
+        if (scope.kind !== 'platform') {
+            await assertBrandPermission(this.readPrisma, req.user, dto.brandId, SIGNATURE_WRITE_PERMISSIONS);
+        }
         return this.commandBus.execute(new CreateSignatureCommand(dto));
     }
 
@@ -75,7 +84,7 @@ export class SignatureAdminController {
         return this.commandBus.execute(new DeleteSignatureCommand(id));
     }
 
-    /** Out-of-scope answers exactly like a missing signature (404). */
+    /** Write check. Out-of-scope answers exactly like a missing signature (404); in scope without the permission, 403. */
     private async assertCanAccessSignature(req: ScopedRequest, signatureId: string): Promise<void> {
         const scope = await getRequestAdminScope(this.readPrisma, req);
         if (scope.kind === 'platform') return;
@@ -89,6 +98,7 @@ export class SignatureAdminController {
         if (!signature) throw notFound();
 
         await orNotFound(() => this.assertSignatureBrandAccess(scope, signature.brandId), notFound);
+        await assertBrandPermission(this.readPrisma, req.user, signature.brandId, SIGNATURE_WRITE_PERMISSIONS);
     }
 
     /**

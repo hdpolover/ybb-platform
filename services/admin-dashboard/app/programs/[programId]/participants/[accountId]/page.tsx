@@ -11,6 +11,8 @@ import { ProfileHeader, type ProfileHeaderData } from "@/app/components/particip
 import { ParticipantProfileTabs, type ParticipantRemoteTabsContext } from "@/app/components/participants/ParticipantProfileTabs";
 import { editHistoryQueryKey } from "@/app/components/participants/tabs/EditHistoryTab";
 import { EditSubmissionDrawer } from "@/app/components/participants/EditSubmissionDrawer";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import type { PersonalDetails } from "@/app/components/participants/tabs/PersonalDetailsTab";
 import type { ProfessionalProfile } from "@/app/components/participants/tabs/ProfessionalProfileTab";
 import type { EntryInformation } from "@/app/components/participants/tabs/EntryInformationTab";
@@ -151,6 +153,8 @@ function mapToParticipantData(app: Application): ParticipantData {
 export default function ParticipantDetailPage() {
   const params = useParams<{ programId: string; accountId: string }>();
   const { programId: programIdParam, accountId } = params;
+  // participants:write (Digital Marketing) is not enough: the API wants applications:write.
+  const canEditSubmission = useProgramWriteAccess(programIdParam, programWritePermissions.applicationEdit);
   const { accessiblePrograms, accessConfig } = useAuth();
   const queryClient = useQueryClient();
 
@@ -352,7 +356,7 @@ export default function ParticipantDetailPage() {
           <ParticipantNavBar programParam={programIdParam} accountId={accountId} />
         </div>
         <div className="flex items-center gap-2.5">
-          {accessConfig.canAccessPrograms && rawApplication ? (
+          {accessConfig.canAccessPrograms && canEditSubmission && rawApplication ? (
             <Button
               variant="outline"
               size="sm"

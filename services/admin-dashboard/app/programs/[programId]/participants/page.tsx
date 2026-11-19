@@ -27,6 +27,8 @@ import { PAYMENT_BADGE, STATUS_BADGE, STATUS_LABEL } from "@/lib/application-bad
 import { getFfResultsHiddenNotice } from "@/lib/ff-results-notice";
 import { saveParticipantNav } from "@/lib/participant-nav";
 import { FfResultBadge, FfResultBulkAction } from "@/app/components/participants/FfResult";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 const regionNames = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
 function formatCountry(raw: string | null | undefined): string {
@@ -131,6 +133,8 @@ export default function ParticipantsPage() {
   }, [accessiblePrograms, params.programId]);
   const resolvedProgramId = resolvedProgram?.programId ?? params.programId;
   const resolvedBrandId = resolvedProgram?.brandId ?? "";
+  // The FF result bulk action (and the row selection that feeds it) needs review:write or applications:write.
+  const canDecideFunding = useProgramWriteAccess(params.programId, programWritePermissions.fundingDecision);
 
   const [items, setItems] = useState<Application[]>([]);
   const [total, setTotal] = useState(0);
@@ -635,27 +639,31 @@ export default function ParticipantsPage() {
             <p className="text-sm text-amber-800">{ffNotice}</p>
           </div>
         )}
-        <FfResultBulkAction
-          programId={resolvedProgramId}
-          selectedIds={[...selectedIds]}
-          onDone={() => void fetchParticipants()}
-        />
+        {canDecideFunding && (
+          <FfResultBulkAction
+            programId={resolvedProgramId}
+            selectedIds={[...selectedIds]}
+            onDone={() => void fetchParticipants()}
+          />
+        )}
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
 
         <div className="overflow-hidden rounded-md border border-zinc-200">
           <table className="min-w-full text-left text-[11px]">
             <thead className="bg-zinc-50 text-zinc-600">
               <tr>
-                <th className="w-8 px-3 py-2">
-                  <input
-                    type="checkbox"
-                    aria-label="Select all Fully Funded participants on this page"
-                    checked={allSelected}
-                    disabled={selectableIds.length === 0}
-                    onChange={() => setSelectedIds(allSelected ? new Set() : new Set(selectableIds))}
-                    className="h-3.5 w-3.5 rounded border-zinc-300"
-                  />
-                </th>
+                {canDecideFunding && (
+                  <th className="w-8 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all Fully Funded participants on this page"
+                      checked={allSelected}
+                      disabled={selectableIds.length === 0}
+                      onChange={() => setSelectedIds(allSelected ? new Set() : new Set(selectableIds))}
+                      className="h-3.5 w-3.5 rounded border-zinc-300"
+                    />
+                  </th>
+                )}
                 <th className="px-3 py-2 font-semibold">Participant</th>
                 <th className="px-3 py-2 font-semibold">Country</th>
                 <th className="px-3 py-2 font-semibold">Status</th>
@@ -670,12 +678,12 @@ export default function ParticipantsPage() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-zinc-400">Loading…</td>
+                  <td colSpan={canDecideFunding ? 10 : 9} className="px-3 py-6 text-center text-zinc-400">Loading…</td>
                 </tr>
               )}
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-2">
+                  <td colSpan={canDecideFunding ? 10 : 9} className="px-3 py-2">
                     <EmptyState
                       title="No participants found"
                       description="Try adjusting the search, status, payment, country, or date filters."
@@ -689,17 +697,19 @@ export default function ParticipantsPage() {
                   key={app.id}
                   className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}
                 >
-                  <td className="px-3 py-2">
-                    {app.applicationCategory === "fully_funded" && (
-                      <input
-                        type="checkbox"
-                        aria-label={`Select ${app.participant?.fullName ?? "participant"}`}
-                        checked={selectedIds.has(app.id)}
-                        onChange={() => toggleRow(app.id)}
-                        className="h-3.5 w-3.5 rounded border-zinc-300"
-                      />
-                    )}
-                  </td>
+                  {canDecideFunding && (
+                    <td className="px-3 py-2">
+                      {app.applicationCategory === "fully_funded" && (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${app.participant?.fullName ?? "participant"}`}
+                          checked={selectedIds.has(app.id)}
+                          onChange={() => toggleRow(app.id)}
+                          className="h-3.5 w-3.5 rounded border-zinc-300"
+                        />
+                      )}
+                    </td>
+                  )}
                   <td className="px-3 py-2">
                     <p className="font-medium text-zinc-900">{app.participant?.fullName ?? "—"}</p>
                     <p className="text-zinc-400">{app.participant?.email ?? ""}</p>

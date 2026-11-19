@@ -19,6 +19,8 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
+import { AdminPermissionGuard, RequiresProgramPermission } from '@shared/guards/admin-permission.guard';
+import { CONTENT_WRITE_PERMISSIONS } from '@modules/programs/application/utils/program-content-access.util';
 import { ChangeType } from '@prisma/client';
 
 type UpdatePartnershipEnquiryStatusDto = {
@@ -32,7 +34,9 @@ type UpdatePartnershipEnquiryDto = {
 
 @ApiTags('Partnerships')
 @Controller('admin/programs/:programId/partnership-enquiries')
-@UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+// AdminPermissionGuard after AdminScopeGuard: out-of-scope stays 404, then
+// writes need the partners set; reads carry no @RequiresProgramPermission.
+@UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 // Every route carries :programId and every query below pins rows to it, so the
 // programme check alone scopes the child enquiry ids too.
@@ -146,6 +150,7 @@ export class PartnershipsAdminController {
    * everything else here answers 404.
    */
   @Patch(':id')
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.partners])
   @ApiOperation({ summary: 'Admin: update partnership enquiry status and/or internal notes' })
   @ApiResponse({ status: 200, description: 'Updated partnership enquiry' })
   @ApiResponse({ status: 404, description: 'Not found for this program, or soft-deleted' })
@@ -189,6 +194,7 @@ export class PartnershipsAdminController {
   }
 
   @Delete(':id')
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.partners])
   @ApiOperation({ summary: 'Admin: soft-delete a partnership enquiry' })
   @ApiResponse({ status: 200, description: 'Enquiry soft-deleted' })
   @ApiResponse({ status: 404, description: 'Not found for this program, or already deleted' })

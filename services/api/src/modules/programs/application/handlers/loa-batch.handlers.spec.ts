@@ -42,14 +42,14 @@ const platformAdmin = {
   adminBrands: [],
   adminPrograms: [],
 };
-const assignedAdminFor = (programIds: string[]) => ({
+const assignedAdminFor = (programIds: string[], permissions: string[] = []) => ({
   accessLevel: 1,
   canManageAdmins: false,
   canAssignRoles: false,
   customPermissions: [],
   role: { name: 'reviewer', permissions: [] },
   adminBrands: [],
-  adminPrograms: programIds.map((programId) => ({ programId, permissions: [] })),
+  adminPrograms: programIds.map((programId) => ({ programId, permissions })),
 });
 const actor = { userId: 'admin-1', email: 'a@b.c', brandId: 'brand-x', adminId: 'adm-1' } as any;
 
@@ -148,8 +148,20 @@ describe('CreateLoaBatchHandler', () => {
     expect(mockRepo.create).not.toHaveBeenCalled();
   });
 
-  it('lets an in-scope programme-assigned admin create a batch', async () => {
-    mockReadPrisma.admin.findUnique.mockResolvedValue(assignedAdminFor(['prog-1']));
+  it('refuses an in-scope admin without a documents/content/program write permission with 403', async () => {
+    mockReadPrisma.admin.findUnique.mockResolvedValue(assignedAdminFor(['prog-1'], ['documents:read']));
+    const { CreateLoaBatchCommand } = await import('../commands/loa-batch.commands');
+    await expect(
+      handler.execute(
+        new CreateLoaBatchCommand('prog-1', 'Wave 1', new Date('2026-01-01'), new Date('2026-03-31'), 'admin-1', actor),
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(mockRepo.findOverlapping).not.toHaveBeenCalled();
+    expect(mockRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('lets an in-scope programme-assigned admin with documents:write create a batch', async () => {
+    mockReadPrisma.admin.findUnique.mockResolvedValue(assignedAdminFor(['prog-1'], ['documents:write']));
     mockRepo.findOverlapping.mockResolvedValue([]);
     mockRepo.create.mockResolvedValue({ ...mockBatch });
     const { CreateLoaBatchCommand } = await import('../commands/loa-batch.commands');

@@ -39,6 +39,8 @@ import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS } from '../../../shared/constants/cache-patterns';
 import { AdminScopeGuard, ScopedBy, assertBrandAccess, getRequestAdminScope } from '@shared/guards/admin-scope.guard';
+import { AdminPermissionGuard, RequiresProgramPermission } from '@shared/guards/admin-permission.guard';
+import { CONTENT_WRITE_PERMISSIONS } from '../application/utils/program-content-access.util';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ChangeType } from '@prisma/client';
 import { UpdateProgramPaymentInfoDto, UpdateProgramPartnersCanvaUrlDto } from './dto/create-update-program-content.dto';
@@ -205,9 +207,10 @@ export class ProgramsController {
   }
 
   @Put(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.programConfig], 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update program (Admin only)' })
   @ApiResponse({ status: 200, description: 'Program updated successfully' })
@@ -237,9 +240,10 @@ export class ProgramsController {
   }
 
   @Put(':id/payment-info')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.pricing], 'id')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update program payment-info HTML',
@@ -263,9 +267,10 @@ export class ProgramsController {
   }
 
   @Put(':id/contact')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.programConfig], 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Replace program contact information' })
   @ApiResponse({ status: 200, description: 'Contact info updated successfully' })
@@ -280,9 +285,10 @@ export class ProgramsController {
   }
 
   @Put(':id/partners-canva-url')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.programConfig], 'id')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Update the Partners-page Canva embed URL for this program',
@@ -301,9 +307,10 @@ export class ProgramsController {
   }
 
   @Put(':id/landing-content')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.programConfig], 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update program-owned landing page content (partial merge)' })
   @CacheInvalidate(PROGRAM_CONTENT_PATTERNS)
@@ -349,9 +356,10 @@ export class ProgramsController {
   }
 
   @Post(':id/branding')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.programConfig], 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update program branding (logo, banner, thumbnail)' })
   @ApiConsumes('multipart/form-data')
@@ -383,7 +391,9 @@ export class ProgramsController {
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ScopedBy('program', 'id')
+  // Deleting a whole program/edition is destructive and cross-cutting (applications,
+  // invoices, LOAs): platform admins only, never a program-scoped program:write role.
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete program (Admin only)' })
   @ApiResponse({ status: 200, description: 'Program deleted successfully' })
@@ -404,9 +414,10 @@ export class ProgramsController {
   }
 
   @Post(':id/publish')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.programConfig], 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Publish a program, subject to readiness blockers' })
   @ApiResponse({ status: 200, description: 'Program published successfully' })
@@ -419,9 +430,10 @@ export class ProgramsController {
   }
 
   @Post(':id/unpublish')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
+  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.programConfig], 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Unpublish a program. Never gated by readiness.' })
   @ApiResponse({ status: 200, description: 'Program unpublished successfully' })

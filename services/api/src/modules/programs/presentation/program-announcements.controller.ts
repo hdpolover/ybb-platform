@@ -23,6 +23,11 @@ import {
   getRequestAdminScope,
   orNotFound,
 } from '@shared/guards/admin-scope.guard';
+import {
+  AdminPermissionGuard,
+  RequiresProgramPermission,
+  assertProgramPermission,
+} from '@shared/guards/admin-permission.guard';
 // imports unified PROGRAM_CONTENT_PATTERNS — broader than the previous local list, which was a subset
 import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
 
@@ -53,6 +58,11 @@ interface AuthenticatedRequest extends ExpressRequest {
   user: { id: string; userId: string; adminId?: string };
 }
 
+// Write-level twins of the dashboard's "announcements" menu rule
+// (services/admin-dashboard/lib/admin-access.ts): announcements:read alone
+// (Digital Marketing) may open the page but not change what participants see.
+const ANNOUNCEMENT_WRITE_PERMISSIONS = ['announcements:write', 'content:write', 'program:write'];
+
 @ApiTags('Program Announcements')
 @Controller('programs')
 export class ProgramAnnouncementsController {
@@ -69,7 +79,11 @@ export class ProgramAnnouncementsController {
    * Announcement-keyed routes carry no programme id, so the owning programme is
    * read back from the row. Missing and out-of-scope raise the same 404.
    */
-  private async assertAnnouncementScope(req: AuthenticatedRequest, itemId: string): Promise<void> {
+  private async assertAnnouncementScope(
+    req: AuthenticatedRequest,
+    itemId: string,
+    requiredPermissions?: readonly string[],
+  ): Promise<void> {
     const notFound = () => new NotFoundException(`Announcement ${itemId} not found`);
     const row = await this.readPrisma.programAnnouncement.findUnique({
       where: { id: itemId },
@@ -78,6 +92,9 @@ export class ProgramAnnouncementsController {
     if (!row) throw notFound();
     const scope = await getRequestAdminScope(this.readPrisma, req);
     await orNotFound(() => assertProgramAccess(this.readPrisma, scope, row.programId), notFound);
+    if (requiredPermissions && scope.kind !== 'platform') {
+      await assertProgramPermission(this.readPrisma, req.user, row.programId, requiredPermissions);
+    }
   }
 
   /** Admin (draft/scheduled/restricted) view only for a programme in the caller's scope. */
@@ -142,9 +159,10 @@ export class ProgramAnnouncementsController {
   }
 
   @Post(':id/announcements')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
+  @RequiresProgramPermission(ANNOUNCEMENT_WRITE_PERMISSIONS, 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create program announcement' })
   @ApiResponse({ status: 201, type: ProgramAnnouncementResponseDto })
@@ -173,7 +191,7 @@ export class ProgramAnnouncementsController {
     @Body() dto: UpdateProgramAnnouncementDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    await this.assertAnnouncementScope(req, itemId);
+    await this.assertAnnouncementScope(req, itemId, ANNOUNCEMENT_WRITE_PERMISSIONS);
     return this.updateHandler.execute(
       new UpdateProgramAnnouncementCommand(itemId, dto, req.user.id),
     );
@@ -190,7 +208,7 @@ export class ProgramAnnouncementsController {
     @Param('itemId') itemId: string,
     @Request() req: AuthenticatedRequest,
   ) {
-    await this.assertAnnouncementScope(req, itemId);
+    await this.assertAnnouncementScope(req, itemId, ANNOUNCEMENT_WRITE_PERMISSIONS);
     return this.deleteHandler.execute(
       new DeleteProgramAnnouncementCommand(itemId, req.user.id),
     );

@@ -127,6 +127,40 @@ const menuPermissionRules: Record<string, string[]> = {
   "menu-management": ["roles.manage", "admin.manage"],
 };
 
+// Write permissions the API enforces inside a program the admin can reach
+// (services/api: program-announcements, payment-admin and applications
+// controllers). Keep the two in step, or a control here offers an action the
+// API answers with 403.
+export const programWritePermissions = {
+  announcements: ["announcements:write", "content:write", "program:write"],
+  payments: ["payments:write"],
+  // Receipt resend and payment-help mail are support replies; program:write runs the programme.
+  resendReceipt: ["payments:write", "support:write", "program:write"],
+  // notify-payment-issue: support staff send payment help without payments:write.
+  paymentHelp: ["payments:write", "support:write", "program:write"],
+  // Support ticket reply, status change and delete (admin-support-tickets.controller.ts).
+  support: ["support:write"],
+  // Per-program payment method overlay (payment-admin controller).
+  programPaymentConfig: ["payments:write", "program:write"],
+  fundingDecision: ["review:write", "applications:write"],
+  reminders: ["participants:write", "program:write"],
+  applicationEdit: ["applications:write"],
+  applicationSubmit: ["applications:write", "payments:write"],
+  // program-content-access.util.ts CONTENT_WRITE_PERMISSIONS, admin-media and
+  // ambassador-access.util.ts.
+  programConfig: ["program:write"],
+  content: ["content:write", "program:write"],
+  gallery: ["media:write", "content:write", "program:write"],
+  partners: ["partnerships:write", "content:write", "program:write"],
+  // LOA templates, batches, signatures and resources are official documents, not content.
+  documents: ["documents:write", "program:write"],
+  pricing: ["payments:write", "program:write"],
+  // Form fields, essays, categories and subthemes are program configuration.
+  submissionForm: ["program:write"],
+  media: ["media:write", "content:write", "program:write"],
+  ambassadors: ["participants:write", "program:write"],
+} as const satisfies Record<string, readonly string[]>;
+
 export function getRequiredPermissionsForMenuItem(itemId: string): string[] {
   return menuPermissionRules[itemId] ?? [];
 }
@@ -160,7 +194,7 @@ export function buildPermissionSet(profile: AdminProfile | null, programId?: str
 
 export function hasRequiredPermissions(
   permissionSet: Set<string>,
-  requiredPermissions: string[],
+  requiredPermissions: readonly string[],
 ): boolean {
   if (requiredPermissions.length === 0) {
     return true;

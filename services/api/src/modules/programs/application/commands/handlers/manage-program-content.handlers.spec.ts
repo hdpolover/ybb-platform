@@ -2148,7 +2148,7 @@ describe('ManageProgramContentHandlers', () => {
                 }),
             },
         });
-        // 'brand_scope' - granted brand-x only. Used by Team's brand-only branch.
+        // 'brand_scope' - granted brand-x only, with content:write there. Used by Team's brand-only branch.
         const brandScope = (grantedBrandId: string) => ({
             admin: {
                 findUnique: jest.fn().mockResolvedValue({
@@ -2157,7 +2157,7 @@ describe('ManageProgramContentHandlers', () => {
                     canAssignRoles: false,
                     customPermissions: [],
                     role: { name: 'brand_admin', permissions: [] },
-                    adminBrands: [{ brandId: grantedBrandId, permissions: [] }],
+                    adminBrands: [{ brandId: grantedBrandId, permissions: ['content:write'] }],
                     adminPrograms: [],
                 }),
             },

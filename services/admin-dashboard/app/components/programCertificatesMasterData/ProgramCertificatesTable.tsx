@@ -23,9 +23,11 @@ export type ProgramCertificate = {
 export function ProgramCertificatesTable({
   data,
   currentSearch,
+  canWrite,
 }: {
   data: ProgramCertificate[];
   currentSearch: string;
+  canWrite: boolean;
 }) {
   return (
     <div className="space-y-5">
@@ -34,7 +36,7 @@ export function ProgramCertificatesTable({
           <label className="mb-1.5 block text-xs font-medium text-zinc-500">Search Certificates</label>
           <div className="flex w-full gap-4">
             <CertificateSearch initialSearch={currentSearch} />
-            <AddCertificateAction />
+            {canWrite && <AddCertificateAction />}
           </div>
         </div>
       </div>
@@ -111,8 +113,12 @@ export function ProgramCertificatesTable({
                   <td className="px-6 py-4 align-middle text-right">
                     <div className="inline-flex items-center justify-end gap-2">
                       <ViewCertificateAction certificate={certificate} />
-                      <EditCertificateAction certificate={certificate} />
-                      <DeleteCertificateAction id={certificate.id} />
+                      {canWrite && (
+                        <>
+                          <EditCertificateAction certificate={certificate} />
+                          <DeleteCertificateAction id={certificate.id} />
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

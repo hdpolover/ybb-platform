@@ -34,6 +34,8 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { isPrivateCategoryKey } from '@shared/utils/private-file-key';
 import { resolveRevenueAccessScope, assertProgramAccess } from '@modules/stats/revenue/utils/revenue-access.util';
+import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
+import { CONTENT_WRITE_PERMISSIONS } from '@modules/programs/application/utils/program-content-access.util';
 import { multerLimits } from '@common/constants';
 
 /**
@@ -77,6 +79,65 @@ const ADMIN_UPLOAD_BUCKETS: readonly string[] = [
   'programs/banners',
   'programs/logos',
   'programs/thumbnails',
+];
+
+/**
+ * What an admin must hold to upload into a program. Both the asset_type and the
+ * bucket (where the file actually lands) are checked, each against its own
+ * table, so pairing a weak asset_type with a media-library or other public
+ * bucket gains nothing. asset_type maps to the set of the route that then
+ * stores the file's URL; anything unmapped, ambiguous ('image' is used by the
+ * media library, the form editor and the LOA editor) or missing needs at least
+ * one program write permission, so a read-only role cannot upload into a
+ * program by picking an unlisted type.
+ */
+const ANNOUNCEMENT_UPLOAD_PERMISSIONS = ['announcements:write', 'content:write', 'program:write']; // program-announcements.controller.ts
+const ADMIN_UPLOAD_PERMISSIONS_BY_ASSET_TYPE: Readonly<Record<string, readonly string[]>> = {
+  'announcement-image': ANNOUNCEMENT_UPLOAD_PERMISSIONS,
+  'announcement-attachment': ANNOUNCEMENT_UPLOAD_PERMISSIONS,
+  'payment-method-instruction-image': ['payments:write', 'program:write'], // PROGRAM_PAYMENT_CONFIG_PERMISSIONS
+  'support-attachment': ['support:write'],
+  gallery: CONTENT_WRITE_PERMISSIONS.gallery,
+  document: CONTENT_WRITE_PERMISSIONS.gallery,
+  logo: CONTENT_WRITE_PERMISSIONS.gallery,
+  banner: CONTENT_WRITE_PERMISSIONS.gallery,
+  certificate: CONTENT_WRITE_PERMISSIONS.gallery,
+  other: CONTENT_WRITE_PERMISSIONS.gallery,
+  resource: CONTENT_WRITE_PERMISSIONS.documents,
+  'document-template': CONTENT_WRITE_PERMISSIONS.documents,
+};
+const MEDIA_UPLOAD_PERMISSIONS = CONTENT_WRITE_PERMISSIONS.gallery; // admin-media.controller.ts MEDIA_WRITE_PERMISSIONS
+const PAYMENT_CONFIG_UPLOAD_PERMISSIONS = ['payments:write', 'program:write'];
+// Every public bucket defaults to the media set (the media library lists them,
+// and they are world readable); the media page also uses its category as the
+// bucket. Only the private buckets (avatars, documents) and unknown names fall
+// through to the any-write floor; the asset_type check still applies there.
+const ADMIN_UPLOAD_PERMISSIONS_BY_BUCKET: Readonly<Record<string, readonly string[]>> = {
+  ...Object.fromEntries(
+    ADMIN_UPLOAD_BUCKETS.filter((bucket) => !(PARTICIPANT_UPLOAD_BUCKETS as readonly string[]).includes(bucket)).map(
+      (bucket) => [bucket, MEDIA_UPLOAD_PERMISSIONS],
+    ),
+  ),
+  ...Object.fromEntries(['image', 'document', 'logo', 'banner', 'certificate', 'other'].map((bucket) => [bucket, MEDIA_UPLOAD_PERMISSIONS])),
+  announcements: ANNOUNCEMENT_UPLOAD_PERMISSIONS,
+  partners: CONTENT_WRITE_PERMISSIONS.partners,
+  sponsors: CONTENT_WRITE_PERMISSIONS.partners,
+  speakers: CONTENT_WRITE_PERMISSIONS.content,
+  faq: CONTENT_WRITE_PERMISSIONS.content,
+  payment_icons: PAYMENT_CONFIG_UPLOAD_PERMISSIONS,
+  'payment-methods': PAYMENT_CONFIG_UPLOAD_PERMISSIONS,
+  payment_methods: PAYMENT_CONFIG_UPLOAD_PERMISSIONS,
+  resources: CONTENT_WRITE_PERMISSIONS.documents,
+};
+const ANY_PROGRAM_WRITE_PERMISSIONS: readonly string[] = [
+  ...new Set([
+    ...Object.values(CONTENT_WRITE_PERMISSIONS).flat(),
+    ...Object.values(ADMIN_UPLOAD_PERMISSIONS_BY_ASSET_TYPE).flat(),
+    ...Object.values(ADMIN_UPLOAD_PERMISSIONS_BY_BUCKET).flat(),
+    'participants:write',
+    'applications:write',
+    'review:write',
+  ]),
 ];
 
 @ApiTags('files')
@@ -136,6 +197,23 @@ export class FilesController {
     const scope = await resolveRevenueAccessScope(this.prismaRead, user);
     await assertProgramAccess(this.prismaRead, scope, programId);
     return program.brandId;
+  }
+
+  // Participants (no adminId) and uploads not filed against a program are untouched.
+  // `bucket` is what each route actually sends on (its own default applied).
+  private async assertAdminUploadPermission(
+    user: CurrentUserData,
+    programId: string | undefined,
+    assetType: string | undefined,
+    bucket: string,
+  ): Promise<void> {
+    if (!user.adminId || !programId) return;
+    const forAssetType = (assetType && ADMIN_UPLOAD_PERMISSIONS_BY_ASSET_TYPE[assetType]) || ANY_PROGRAM_WRITE_PERMISSIONS;
+    const forBucket = ADMIN_UPLOAD_PERMISSIONS_BY_BUCKET[bucket] ?? ANY_PROGRAM_WRITE_PERMISSIONS;
+    await assertProgramPermission(this.prismaRead, user, programId, forBucket);
+    if (forAssetType !== forBucket) {
+      await assertProgramPermission(this.prismaRead, user, programId, forAssetType);
+    }
   }
 
   private isSelfDownloadProxyUrl(url: string, fileId: string): boolean {
@@ -423,6 +501,7 @@ export class FilesController {
       // which validates the programme and enforces cross-brand admin scope
       // instead of trusting the token's brand for someone else's programme.
       const brandId = await this.resolveUploadBrandId(programId, user);
+      await this.assertAdminUploadPermission(user, programId, undefined, bucket);
 
       this.logger.log(
         `Uploading file: ${file.originalname} for user ${userId}, brand ${brandId}`,
@@ -536,10 +615,12 @@ export class FilesController {
   ): Promise<CreateUploadUrlResponse> {
     // Return raw data; the global TransformInterceptor wraps it as
     // `{ statusCode, message, data }`. Wrapping here would double-envelope.
+    const brandId = await this.resolveUploadBrandId(dto.program_id, user);
+    await this.assertAdminUploadPermission(user, dto.program_id, dto.asset_type, dto.bucket ?? 'documents');
     const scopedRequest: CreateUploadUrlRequest = {
       ...dto,
       user_id: user.userId,
-      brand_id: await this.resolveUploadBrandId(dto.program_id, user),
+      brand_id: brandId,
     };
     this.logger.log(`Requesting upload URL for ${scopedRequest.filename} (brand ${scopedRequest.brand_id})`);
     const data = await this.fileServiceClient.createUploadUrl(scopedRequest);
@@ -566,6 +647,8 @@ export class FilesController {
     this.logger.log(`Marking file ready: ${fileId} (brand ${user.brandId}, user ${user.userId})`);
     const parsed = actualSize ? Number(actualSize) : NaN;
     const size = !isNaN(parsed) ? parsed : undefined;
+    // No permission check here: a file only reaches READY through a row the same
+    // caller reserved via upload-url, which is where the program permission is checked.
     // SECURITY: ownership is not verifiable in this API layer because the file service
     // does not return owner fields in its response. The caller's userId and brandId are
     // forwarded to the file service; the file service MUST verify that the file was
@@ -592,6 +675,8 @@ export class FilesController {
     try {
       this.logger.log(`Generating presigned upload URL for: ${dto.filename} (user ${user.userId}, brand ${user.brandId})`);
 
+      const uploadBrandId = await this.resolveUploadBrandId(dto.program_id, user);
+      await this.assertAdminUploadPermission(user, dto.program_id, undefined, dto.bucket || 'uploads');
       const result = await this.fileGrpcClient.getPresignedUploadUrl({
           filename: dto.filename,
           content_type: dto.content_type,
@@ -600,7 +685,7 @@ export class FilesController {
           // never taken from the caller and never blindly forced to the JWT's home
           // brand — a program-scoped upload must be stamped with the PROGRAM's brand.
           user_id: user.userId,
-          brand_id: await this.resolveUploadBrandId(dto.program_id, user),
+          brand_id: uploadBrandId,
           bucket: dto.bucket || 'uploads',
           program_id: dto.program_id,
           participant_id: dto.participant_id,

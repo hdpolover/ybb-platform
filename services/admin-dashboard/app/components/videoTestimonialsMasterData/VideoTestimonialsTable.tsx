@@ -39,6 +39,7 @@ export function VideoTestimonialsTable({
   loading,
   programId,
   brandId,
+  canWrite,
   search,
   onSearchChange,
   onRefresh,
@@ -47,6 +48,7 @@ export function VideoTestimonialsTable({
   loading: boolean;
   programId: string;
   brandId: string;
+  canWrite: boolean;
   search: string;
   onSearchChange: (v: string) => void;
   onRefresh: () => void;
@@ -61,7 +63,7 @@ export function VideoTestimonialsTable({
             Manage video testimonials embedded on the program landing pages.
           </p>
         </div>
-        <AddVideoAction programId={programId} brandId={brandId} onSuccess={onRefresh} />
+        {canWrite && <AddVideoAction programId={programId} brandId={brandId} onSuccess={onRefresh} />}
       </div>
 
       {/* Search */}
@@ -146,8 +148,12 @@ export function VideoTestimonialsTable({
                     <td className="px-6 py-4 align-top text-right">
                       <div className="inline-flex items-center justify-end gap-2">
                         <ViewVideoAction row={row} />
-                        <EditVideoAction row={row} onSuccess={onRefresh} />
-                        <DeleteVideoAction id={row.id} onSuccess={onRefresh} />
+                        {canWrite && (
+                          <>
+                            <EditVideoAction row={row} onSuccess={onRefresh} />
+                            <DeleteVideoAction id={row.id} onSuccess={onRefresh} />
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

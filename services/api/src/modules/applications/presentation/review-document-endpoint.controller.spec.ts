@@ -77,8 +77,23 @@ describe('POST /applications/:applicationId/documents/:documentId/review', () =>
   // readPrisma.participantApplication.findUnique's canned response for the
   // application id under test.
   let applicationProgramId: string | null;
+  // The permission check (assertProgramPermission) reads the admin row itself.
+  let adminPermissions: string[];
 
   const mockReadPrisma = {
+    admin: {
+      findUnique: jest.fn(() =>
+        Promise.resolve({
+          accessLevel: 1,
+          canManageAdmins: false,
+          canAssignRoles: false,
+          customPermissions: [],
+          role: { name: 'Reviewer', permissions: adminPermissions },
+          adminBrands: [],
+          adminPrograms: [],
+        }),
+      ),
+    },
     participantApplication: {
       findUnique: jest.fn(() => Promise.resolve(applicationProgramId ? { programId: applicationProgramId } : null)),
     },
@@ -129,6 +144,7 @@ describe('POST /applications/:applicationId/documents/:documentId/review', () =>
     currentUser = { userId: 'user-1', adminId: 'admin-1', role: [UserRole.ADMIN] };
     adminScope = { kind: 'platform', allowedBrandIds: null, allowedProgramIds: null };
     applicationProgramId = 'program-1';
+    adminPermissions = ['review:write'];
   });
 
   it('dispatches to ReviewDocumentHandler with the JWT-derived admin id, never a body-supplied one', async () => {
@@ -187,6 +203,18 @@ describe('POST /applications/:applicationId/documents/:documentId/review', () =>
       .expect(200);
 
     expect(mockReviewDocumentHandler.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('403s an in-scope admin without review:write or applications:write, before the handler runs', async () => {
+    adminScope = { kind: 'assigned', allowedBrandIds: [], allowedProgramIds: ['program-1'] };
+    adminPermissions = ['applications:read', 'documents:read'];
+
+    await request(app.getHttpServer())
+      .post('/applications/app-1/documents/doc-1/review')
+      .send({ action: 'approve' })
+      .expect(403);
+
+    expect(mockReviewDocumentHandler.execute).not.toHaveBeenCalled();
   });
 
   it('400s when action is reject with no note (DTO-level requirement is enforced in the handler, but a missing action still fails validation)', async () => {

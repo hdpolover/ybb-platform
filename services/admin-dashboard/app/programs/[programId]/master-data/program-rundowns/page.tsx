@@ -7,6 +7,8 @@ import { PlusIcon, PencilSquareIcon, TrashIcon, ArrowPathIcon } from "@heroicons
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import {
   listProgramSchedules,
   createProgramSchedule,
@@ -29,6 +31,8 @@ export default function ProgramRundownsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
   const resolvedProgramId = useResolvedProgramId(params.programId);
+  // program:read views; the API refuses schedule writes without program:write.
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.programConfig);
   const [items, setItems] = useState<ProgramSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -128,21 +132,25 @@ export default function ProgramRundownsPage() {
           </p>
           <div className="flex gap-2">
             <button type="button" onClick={fetch} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50"><ArrowPathIcon className="h-3.5 w-3.5" />Refresh</button>
-            <button
-              type="button"
-              onClick={() => setCopyFromProgramOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from program</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setCopyFromTemplateOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            >
-              <span>Copy from template</span>
-            </button>
-            <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"><PlusIcon className="h-3.5 w-3.5" />Add Session</button>
+            {canWrite && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setCopyFromProgramOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                >
+                  <span>Copy from program</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCopyFromTemplateOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+                >
+                  <span>Copy from template</span>
+                </button>
+                <button type="button" onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"><PlusIcon className="h-3.5 w-3.5" />Add Session</button>
+              </>
+            )}
           </div>
         </div>
         {error && <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
@@ -247,10 +255,10 @@ export default function ProgramRundownsPage() {
                   <td className="px-3 py-2 text-zinc-600">{s.startTime ? s.startTime + (s.endTime ? " – " + s.endTime : "") : "—"}</td>
                   <td className="px-3 py-2 text-zinc-600">{s.location ?? "—"}</td>
                   <td className="px-3 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    {canWrite && <div className="flex items-center justify-end gap-1">
                       <button type="button" onClick={() => setEditTarget(s)} className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"><PencilSquareIcon className="h-3.5 w-3.5" /></button>
                       <button type="button" onClick={() => setDeleteTarget(s)} className="rounded-md border border-red-100 p-1 text-red-400 hover:bg-red-50"><TrashIcon className="h-3.5 w-3.5" /></button>
-                    </div>
+                    </div>}
                   </td>
                 </tr>
               ))}

@@ -2,7 +2,8 @@
 //
 // /admin/signatures carried only @Roles, so any admin could list, create, edit
 // or delete any brand's LOA signatures by brandId/id. Each route now checks the
-// brand server-side before the bus is touched.
+// brand server-side before the bus is touched, and the writes also need the
+// documents permission set (documents:write / program:write; content:write is not enough).
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -10,12 +11,14 @@ import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.ser
 import { SignatureAdminController } from './signature-admin.controller';
 import { CreateSignatureDto } from './dto/signature.dto';
 
-const BASE = { canManageAdmins: false, canAssignRoles: false, customPermissions: [], role: { name: 'admin', permissions: [] } };
+const BASE = { canManageAdmins: false, canAssignRoles: false, customPermissions: [], role: { name: 'admin', permissions: ['documents:write'] } };
 const BRAND_ADMIN = { ...BASE, accessLevel: 3, adminBrands: [{ brandId: 'brand-a', permissions: [] }], adminPrograms: [] };
 const ASSIGNED_ADMIN = { ...BASE, accessLevel: 1, adminBrands: [], adminPrograms: [{ programId: 'prog-a', permissions: [] }] };
 // brand_scope over brand-x only, plus an explicit extra grant on prog-a (brand-a).
 const BRAND_ADMIN_WITH_EXTRA = { ...BASE, accessLevel: 3, adminBrands: [{ brandId: 'brand-x', permissions: [] }], adminPrograms: [{ programId: 'prog-a', permissions: [] }] };
 const PLATFORM_ADMIN = { ...BASE, accessLevel: 10, role: { name: 'super admin', permissions: ['*'] }, adminBrands: [], adminPrograms: [] };
+// Prod "Admin" role: platform tier through platform_access, none of the documents set.
+const PLATFORM_ACCESS_ADMIN = { ...BASE, accessLevel: 1, role: { name: 'Admin', permissions: ['platform_access'] }, adminBrands: [], adminPrograms: [] };
 
 describe('SignatureAdminController brand scope', () => {
   const queryBus = { execute: jest.fn().mockResolvedValue([]) };
@@ -27,6 +30,9 @@ describe('SignatureAdminController brand scope', () => {
     program: {
       count: jest.fn(({ where }: { where: { id: { in: string[] }; brandId: string } }) =>
         Promise.resolve(where.id.in.includes('prog-a') && where.brandId === 'brand-a' ? 1 : 0),
+      ),
+      findMany: jest.fn(({ where }: { where: { id: { in: string[] }; brandId: string } }) =>
+        Promise.resolve(where.id.in.includes('prog-a') && where.brandId === 'brand-a' ? [{ id: 'prog-a' }] : []),
       ),
     },
   };
@@ -79,14 +85,48 @@ describe('SignatureAdminController brand scope', () => {
     });
   });
 
+  describe.each([
+    ['brand-scoped', BRAND_ADMIN],
+    ['assigned', ASSIGNED_ADMIN],
+    ['brand-scoped with an extra program grant', BRAND_ADMIN_WITH_EXTRA],
+  ])('%s admin without a documents write permission (Reviewer)', (_label, admin) => {
+    beforeEach(() => as({ ...admin, role: { name: 'Reviewer', permissions: ['applications:write', 'review:write'] } }));
+
+    it('in its own brand: list passes, create/update/delete 403, bus never reached for writes', async () => {
+      await controller.list('brand-a', req());
+      await expect(controller.create(dto('brand-a'), req())).rejects.toThrow(ForbiddenException);
+      await expect(controller.update('sig-a', {}, req())).rejects.toThrow(ForbiddenException);
+      await expect(controller.remove('sig-a', req())).rejects.toThrow(ForbiddenException);
+      expect(queryBus.execute).toHaveBeenCalledTimes(1);
+      expect(commandBus.execute).not.toHaveBeenCalled();
+    });
+
+    it("another brand's signature still 404s (scope before permission)", async () => {
+      await expect(controller.update('sig-b', {}, req())).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  it('a grant of program:write on the program in that brand is enough', async () => {
+    as({ ...ASSIGNED_ADMIN, role: { name: 'Scoped', permissions: [] }, adminPrograms: [{ programId: 'prog-a', permissions: ['program:write'] }] });
+    await controller.create(dto('brand-a'), req());
+    await controller.update('sig-a', {}, req());
+    expect(commandBus.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('content:write alone cannot edit signatures (LOA documents are not content)', async () => {
+    as({ ...ASSIGNED_ADMIN, role: { name: 'News Writer', permissions: ['content:write'] } });
+    await expect(controller.update('sig-a', {}, req())).rejects.toThrow(ForbiddenException);
+    expect(commandBus.execute).not.toHaveBeenCalled();
+  });
+
   it('brand-scoped admin in its own brand never needs the program lookup', async () => {
     as(BRAND_ADMIN);
     await controller.list('brand-a', req());
     expect(readPrisma.program.count).not.toHaveBeenCalled();
   });
 
-  it('platform admin passes on any brand and leaves not-found to the handler', async () => {
-    as(PLATFORM_ADMIN);
+  it.each([['super admin', PLATFORM_ADMIN], ['platform_access', PLATFORM_ACCESS_ADMIN]])('%s passes on any brand and leaves not-found to the handler', async (_label, admin) => {
+    as(admin);
     await controller.list('brand-b', req());
     await controller.create(dto('brand-b'), req());
     await controller.update('sig-b', {}, req());

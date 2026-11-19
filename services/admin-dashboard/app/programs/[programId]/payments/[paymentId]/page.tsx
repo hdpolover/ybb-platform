@@ -30,6 +30,8 @@ import { formatDate, formatDateTime } from "@/lib/utils";
 import { resolveAttemptDisplayStatus, resolveAttemptRowDisplayStatus } from "@/lib/payment-attempt-status";
 import { NotifyParticipantButton } from "@/app/components/payments/details/NotifyParticipantButton";
 import { SendReceiptEmailButton } from "@/app/components/payments/details/SendReceiptEmailButton";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 const STATUS_CLASS: Record<string, string> = {
   paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -108,6 +110,12 @@ export default function PaymentDetailPage({
   params: Promise<{ programId: string; paymentId: string }>;
 }) {
   const { programId, paymentId } = use(params);
+  // payments:read (Digital Marketing, Program Admin) views; the API refuses
+  // verify/status without payments:write.
+  const canWritePayments = useProgramWriteAccess(programId, programWritePermissions.payments);
+  const canResendReceipt = useProgramWriteAccess(programId, programWritePermissions.resendReceipt);
+  const canSendPaymentHelp = useProgramWriteAccess(programId, programWritePermissions.paymentHelp);
+  const canSubmitApplication = useProgramWriteAccess(programId, programWritePermissions.applicationSubmit);
 
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -150,7 +158,6 @@ export default function PaymentDetailPage({
   const paymentMethodValue = formatPaymentMethod(invoice?.paymentMethod ?? null);
   const proofUrl = extractProofUrl(txn) ?? attempts.map((attempt) => extractProofUrl(attempt)).find(Boolean) ?? null;
   const isManualTransfer = isManualTransferPayment(invoice?.paymentMethod ?? null, txn);
-  const showPaymentControls = Boolean(invoice);
   // Gate the payment-help email on genuine payment problems: failed/processing
   // invoices always qualify; a cancelled invoice only qualifies when the
   // follow-up status marks it as an issue-driven cancellation, not a
@@ -161,6 +168,12 @@ export default function PaymentDetailPage({
         invoice.status === "processing" ||
         (invoice.status === "cancelled" && invoice.followUpStatus === "payment_cancelled_issue")),
   );
+  // Only render the card when it will hold a control this role may use.
+  const showPaymentControls =
+    Boolean(invoice) &&
+    (canWritePayments ||
+      (canResendReceipt && invoice?.status === "paid") ||
+      (canSendPaymentHelp && isProblemInvoice));
   const looksLikeInvoiceId =
     /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
       paymentId,
@@ -641,7 +654,7 @@ export default function PaymentDetailPage({
             </div>
 
             <div className="space-y-4 xl:col-span-4">
-            {invoice.status === "paid" && invoice.application.status === "draft" && (
+            {canSubmitApplication && invoice.status === "paid" && invoice.application.status === "draft" && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Application</CardTitle>
@@ -683,189 +696,195 @@ export default function PaymentDetailPage({
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">
-                    {isManualTransfer ? "Manual Transfer Review" : "Payment Controls"}
+                    {!canWritePayments ? "Participant Emails" : isManualTransfer ? "Manual Transfer Review" : "Payment Controls"}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <p className="text-xs text-zinc-500">
-                    {isManualTransfer
-                      ? "Update invoice status after checking transfer proof."
-                      : needsReview
-                        ? "This gateway transaction is waiting for admin review. You can verify it here or apply a manual override."
-                        : "Use these controls when you need to sync or override the invoice status."}
-                  </p>
-                  {isProblemInvoice && invoice && (
+                  {canWritePayments && (
+                    <p className="text-xs text-zinc-500">
+                      {isManualTransfer
+                        ? "Update invoice status after checking transfer proof."
+                        : needsReview
+                          ? "This gateway transaction is waiting for admin review. You can verify it here or apply a manual override."
+                          : "Use these controls when you need to sync or override the invoice status."}
+                    </p>
+                  )}
+                  {canSendPaymentHelp && isProblemInvoice && invoice && (
                     <NotifyParticipantButton
                       email={invoice.participant.email ?? "the participant"}
                       invoiceId={invoice.id}
                     />
                   )}
-                  {invoice && invoice.status === "paid" && (
+                  {canResendReceipt && invoice && invoice.status === "paid" && (
                     <SendReceiptEmailButton
                       email={invoice.participant.email ?? "the participant"}
                       invoiceId={invoice.id}
                     />
                   )}
-                  {needsReview && invoice?.externalTransactionId ? (
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={manualSaving || !invoice}
-                        onClick={async () => {
-                          if (!invoice) return;
-                          setManualSaving(true);
-                          setToast(null);
-                          try {
-                            await verifyInvoice(invoice.id, "approve", manualReason || undefined);
-                            setToast({ text: "Gateway payment approved.", ok: true });
-                            await fetchInvoice();
-                          } catch (err) {
-                            setToast({ text: err instanceof Error ? err.message : "Failed to approve payment", ok: false });
-                          } finally {
-                            setManualSaving(false);
-                          }
+                  {canWritePayments && (
+                    <>
+                    {needsReview && invoice?.externalTransactionId ? (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={manualSaving || !invoice}
+                          onClick={async () => {
+                            if (!invoice) return;
+                            setManualSaving(true);
+                            setToast(null);
+                            try {
+                              await verifyInvoice(invoice.id, "approve", manualReason || undefined);
+                              setToast({ text: "Gateway payment approved.", ok: true });
+                              await fetchInvoice();
+                            } catch (err) {
+                              setToast({ text: err instanceof Error ? err.message : "Failed to approve payment", ok: false });
+                            } finally {
+                              setManualSaving(false);
+                            }
+                          }}
+                        >
+                          {manualSaving ? (
+                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                          )}
+                          Approve Payment
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={manualSaving || !invoice}
+                          onClick={async () => {
+                            if (!invoice) return;
+                            setManualSaving(true);
+                            setToast(null);
+                            try {
+                              await verifyInvoice(invoice.id, "reject", manualReason || undefined);
+                              setToast({ text: "Gateway payment rejected.", ok: true });
+                              await fetchInvoice();
+                            } catch (err) {
+                              setToast({ text: err instanceof Error ? err.message : "Failed to reject payment", ok: false });
+                            } finally {
+                              setManualSaving(false);
+                            }
+                          }}
+                        >
+                          {manualSaving ? (
+                            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                          )}
+                          Reject Payment
+                        </Button>
+                      </div>
+                    ) : null}
+                    <div>
+                      <label className="text-xs font-medium text-zinc-600 mb-1 block">
+                        Status
+                      </label>
+                      <select
+                        value={manualStatus}
+                        onChange={(e) => {
+                          setManualStatus(e.target.value as InvoiceStatus);
+                          // The pending confirmation belongs to the previous selection;
+                          // a new status has to be re-checked by the API from scratch.
+                          setOverridePrompt(null);
                         }}
+                        className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        {manualSaving ? (
-                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <ShieldCheck className="mr-2 h-3.5 w-3.5" />
-                        )}
-                        Approve Payment
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={manualSaving || !invoice}
-                        onClick={async () => {
-                          if (!invoice) return;
-                          setManualSaving(true);
-                          setToast(null);
-                          try {
-                            await verifyInvoice(invoice.id, "reject", manualReason || undefined);
-                            setToast({ text: "Gateway payment rejected.", ok: true });
-                            await fetchInvoice();
-                          } catch (err) {
-                            setToast({ text: err instanceof Error ? err.message : "Failed to reject payment", ok: false });
-                          } finally {
-                            setManualSaving(false);
-                          }
-                        }}
+                        <option value="processing">Processing</option>
+                        <option value="paid">Paid</option>
+                        <option value="failed">Failed</option>
+                        <option value="unpaid">Unpaid</option>
+                        <option value="cancelled">Cancelled</option>
+                        <option value="refunded">Refunded</option>
+                      </select>
+                    </div>
+                    {overridePrompt && (
+                      <div
+                        role="alert"
+                        className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
                       >
-                        {manualSaving ? (
-                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <ShieldCheck className="mr-2 h-3.5 w-3.5" />
-                        )}
-                        Reject Payment
-                      </Button>
-                    </div>
-                  ) : null}
-                  <div>
-                    <label className="text-xs font-medium text-zinc-600 mb-1 block">
-                      Status
-                    </label>
-                    <select
-                      value={manualStatus}
-                      onChange={(e) => {
-                        setManualStatus(e.target.value as InvoiceStatus);
-                        // The pending confirmation belongs to the previous selection;
-                        // a new status has to be re-checked by the API from scratch.
-                        setOverridePrompt(null);
-                      }}
-                      className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="processing">Processing</option>
-                      <option value="paid">Paid</option>
-                      <option value="failed">Failed</option>
-                      <option value="unpaid">Unpaid</option>
-                      <option value="cancelled">Cancelled</option>
-                      <option value="refunded">Refunded</option>
-                    </select>
-                  </div>
-                  {overridePrompt && (
-                    <div
-                      role="alert"
-                      className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900"
-                    >
-                      <p className="font-medium mb-1">Confirmation needed</p>
-                      <p>{overridePrompt}</p>
-                      <p className="mt-1">
-                        Write why below, then choose Confirm and apply. This is recorded against
-                        your account.
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <label className="text-xs font-medium text-zinc-600 mb-1 block">
-                      {overridePrompt ? "Justification (required)" : "Reason (optional)"}
-                    </label>
-                    <textarea
-                      className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                      rows={3}
-                      placeholder={
-                        overridePrompt
-                          ? "e.g. Bank transfer confirmed against the account statement on 14 Jul."
-                          : "Why this status change?"
-                      }
-                      value={manualReason}
-                      onChange={(e) => setManualReason(e.target.value)}
-                    />
-                  </div>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="w-full"
-                    disabled={manualSaving || !invoice || (!!overridePrompt && !manualReason.trim())}
-                    onClick={async () => {
-                      if (!invoice) return;
-                      setManualSaving(true);
-                      setToast(null);
-                      try {
-                        await updateProgramInvoiceStatus(
-                          invoice.id,
-                          manualStatus,
-                          manualReason || undefined,
-                          overridePrompt ? { overrideReason: manualReason.trim() } : undefined,
-                        );
-                        setOverridePrompt(null);
-                        setToast({ text: "Invoice status updated.", ok: true });
-                        await fetchInvoice();
-                      } catch (err) {
-                        // The API asks for a deliberate confirmation instead of failing
-                        // outright — surface its explanation and require a justification.
-                        if (err instanceof ApiError && err.errorCode === "MANUAL_OVERRIDE_REQUIRED") {
-                          setOverridePrompt(err.message);
-                        } else if (err instanceof ApiError && err.errorCode === "INVOICE_STATUS_CHANGED") {
-                          // Something settled this invoice between the page load and
-                          // this click (a payment webhook, or another admin). The API
-                          // refused rather than overwriting it, so reload to show what
-                          // it actually is now instead of leaving a stale form on screen.
-                          setToast({ text: err.message, ok: false });
-                          await fetchInvoice();
-                        } else {
-                          setToast({
-                            text: err instanceof Error ? err.message : "Couldn't update the status. Please try again.",
-                            ok: false,
-                          });
-                        }
-                      } finally {
-                        setManualSaving(false);
-                      }
-                    }}
-                  >
-                    {manualSaving ? (
-                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                        <p className="font-medium mb-1">Confirmation needed</p>
+                        <p>{overridePrompt}</p>
+                        <p className="mt-1">
+                          Write why below, then choose Confirm and apply. This is recorded against
+                          your account.
+                        </p>
+                      </div>
                     )}
-                    {overridePrompt ? "Confirm and apply" : "Apply Status"}
-                  </Button>
-                  {needsReview && (
-                    <p className="text-[11px] text-zinc-500">
-                      Transaction is awaiting review in gateway flow.
-                    </p>
+                    <div>
+                      <label className="text-xs font-medium text-zinc-600 mb-1 block">
+                        {overridePrompt ? "Justification (required)" : "Reason (optional)"}
+                      </label>
+                      <textarea
+                        className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                        rows={3}
+                        placeholder={
+                          overridePrompt
+                            ? "e.g. Bank transfer confirmed against the account statement on 14 Jul."
+                            : "Why this status change?"
+                        }
+                        value={manualReason}
+                        onChange={(e) => setManualReason(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="w-full"
+                      disabled={manualSaving || !invoice || (!!overridePrompt && !manualReason.trim())}
+                      onClick={async () => {
+                        if (!invoice) return;
+                        setManualSaving(true);
+                        setToast(null);
+                        try {
+                          await updateProgramInvoiceStatus(
+                            invoice.id,
+                            manualStatus,
+                            manualReason || undefined,
+                            overridePrompt ? { overrideReason: manualReason.trim() } : undefined,
+                          );
+                          setOverridePrompt(null);
+                          setToast({ text: "Invoice status updated.", ok: true });
+                          await fetchInvoice();
+                        } catch (err) {
+                          // The API asks for a deliberate confirmation instead of failing
+                          // outright — surface its explanation and require a justification.
+                          if (err instanceof ApiError && err.errorCode === "MANUAL_OVERRIDE_REQUIRED") {
+                            setOverridePrompt(err.message);
+                          } else if (err instanceof ApiError && err.errorCode === "INVOICE_STATUS_CHANGED") {
+                            // Something settled this invoice between the page load and
+                            // this click (a payment webhook, or another admin). The API
+                            // refused rather than overwriting it, so reload to show what
+                            // it actually is now instead of leaving a stale form on screen.
+                            setToast({ text: err.message, ok: false });
+                            await fetchInvoice();
+                          } else {
+                            setToast({
+                              text: err instanceof Error ? err.message : "Couldn't update the status. Please try again.",
+                              ok: false,
+                            });
+                          }
+                        } finally {
+                          setManualSaving(false);
+                        }
+                      }}
+                    >
+                      {manualSaving ? (
+                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <ShieldCheck className="mr-2 h-3.5 w-3.5" />
+                      )}
+                      {overridePrompt ? "Confirm and apply" : "Apply Status"}
+                    </Button>
+                    {needsReview && (
+                      <p className="text-[11px] text-zinc-500">
+                        Transaction is awaiting review in gateway flow.
+                      </p>
+                    )}
+                    </>
                   )}
                 </CardContent>
               </Card>

@@ -9,6 +9,8 @@ import {
   type ExchangeRate,
   type ExchangeRateHistoryItem,
 } from "@/src/shared/api-client";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 function normalizeDisplayValue(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -53,6 +55,8 @@ function formatDateTime(value: unknown): string {
 }
 
 export function ExchangeRateTab({ programId }: { programId: string }) {
+  // PUT exchange-rate takes the pricing set.
+  const canEdit = useProgramWriteAccess(programId, programWritePermissions.pricing);
   const [current, setCurrent] = useState<ExchangeRate | null>(null);
   const [history, setHistory] = useState<ExchangeRateHistoryItem[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
@@ -153,7 +157,7 @@ export function ExchangeRateTab({ programId }: { programId: string }) {
             </div>
           </div>
 
-          {!isEditing && (
+          {!isEditing && canEdit && (
               <button
                 onClick={() => {
                   setNewRate(current?.usdInIdr != null ? String(current.usdInIdr) : "");

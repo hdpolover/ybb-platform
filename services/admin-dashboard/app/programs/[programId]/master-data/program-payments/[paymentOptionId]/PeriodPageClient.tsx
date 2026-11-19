@@ -9,6 +9,8 @@ import { getPricingTierById } from "@/app/platform/api";
 import type { ValidityPeriod, PricingTier } from "@/app/platform/api";
 import { parseApiDate } from "@/lib/utils";
 import { formatInBusinessTz } from "@/lib/datetime";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 function parseDateLike(value: string | null | undefined): Date | null {
   const parsed = parseApiDate(value);
@@ -73,12 +75,16 @@ function tierToDetail(tier: PricingTier): PaymentTierDetail {
 }
 
 export function PeriodPageClient({
+  programId,
   programName,
   tierId,
 }: {
+  programId: string;
   programName: string;
   tierId: string;
 }) {
+  // payments:read views; the API refuses tier and period writes without the pricing set.
+  const canWrite = useProgramWriteAccess(programId, programWritePermissions.pricing);
   const [tierDetail, setTierDetail] = useState<PaymentTierDetail | undefined>(undefined);
   const [periods, setPeriods] = useState<PeriodRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +116,7 @@ export function PeriodPageClient({
           Loading periods…
         </div>
       ) : (
-        <PaymentPeriodsTable data={periods} tierId={tierId} onRefresh={load} />
+        <PaymentPeriodsTable data={periods} tierId={tierId} canWrite={canWrite} onRefresh={load} />
       )}
     </div>
   );

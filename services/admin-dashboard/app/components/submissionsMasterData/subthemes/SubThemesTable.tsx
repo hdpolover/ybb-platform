@@ -11,6 +11,8 @@ import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { AddSubThemeAction, EditSubThemeAction, DeleteSubThemeAction } from "./SubThemeActions";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 export interface SubThemeRow {
   id: string;
@@ -32,6 +34,8 @@ type ApiSubtheme = {
 
 export function SubThemesTable({ programId }: { programId: string }) {
   const resolvedProgramId = useResolvedProgramId(programId);
+  // submission form read views; the API refuses writes without the submissionForm set.
+  const canWrite = useProgramWriteAccess(programId, programWritePermissions.submissionForm);
   const [rows, setRows] = useState<SubThemeRow[]>([]);
   const [status, setStatus] = useState<"loading" | "idle">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -86,21 +90,25 @@ export function SubThemesTable({ programId }: { programId: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setCopyFromProgramOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-          >
-            <span>Copy from program</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setCopyFromTemplateOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-          >
-            <span>Copy from template</span>
-          </button>
-          <AddSubThemeAction programId={resolvedProgramId} onChanged={loadSubthemes} />
+          {canWrite && (
+            <>
+              <button
+                type="button"
+                onClick={() => setCopyFromProgramOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              >
+                <span>Copy from program</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCopyFromTemplateOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              >
+                <span>Copy from template</span>
+              </button>
+              <AddSubThemeAction programId={resolvedProgramId} onChanged={loadSubthemes} />
+            </>
+          )}
         </div>
       </div>
 
@@ -151,10 +159,12 @@ export function SubThemesTable({ programId }: { programId: string }) {
                       </span>
                     </td>
                     <td className="px-6 py-4 align-top text-right">
-                      <div className="inline-flex items-center justify-end gap-2">
-                        <EditSubThemeAction subTheme={row} onChanged={loadSubthemes} />
-                        <DeleteSubThemeAction subTheme={row} onChanged={loadSubthemes} />
-                      </div>
+                      {canWrite && (
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <EditSubThemeAction subTheme={row} onChanged={loadSubthemes} />
+                          <DeleteSubThemeAction subTheme={row} onChanged={loadSubthemes} />
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))

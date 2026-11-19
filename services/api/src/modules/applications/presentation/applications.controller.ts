@@ -32,6 +32,7 @@ import {
   getRequestAdminScope,
   orNotFound,
 } from '@shared/guards/admin-scope.guard';
+import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType, PaymentStatus, ScoringStage } from '@prisma/client';
 
@@ -100,6 +101,14 @@ import { ApplicationResponseDto, ApplicationListResponseDto } from '../applicati
 import { RegistrationFeeMismatchListResponseDto } from '../application/dto/registration-fee-mismatch-response.dto';
 import { ApplicationReviewResponseDto } from '../application/dto/application-review-response.dto';
 import { ApplicationCategory, ApplicationStatus, ScoreStatus } from '@core/entities/participant-application.entity';
+
+// Write-level twins of the dashboard's submissions/scoring menu rules
+// (services/admin-dashboard/lib/admin-access.ts). Reviewers act through
+// review:write; Program Admins through applications:write.
+const APPLICATION_WRITE_PERMISSIONS = ['applications:write'];
+const REVIEW_WRITE_PERMISSIONS = ['review:write', 'applications:write'];
+// Admin submit / payment intent are also offered on the payments page.
+const APPLICATION_PAYMENT_WRITE_PERMISSIONS = ['applications:write', 'payments:write'];
 
 /**
  * Applications Controller
@@ -213,6 +222,7 @@ export class ApplicationsController {
   private async assertCanReviewApplication(
     req: { user?: { adminId?: string } },
     applicationId: string,
+    requiredPermissions?: readonly string[],
   ): Promise<void> {
     const scope = await getRequestAdminScope(this.readPrisma, req);
     if (scope.kind === 'platform') {
@@ -234,6 +244,17 @@ export class ApplicationsController {
       () => assertProgramAccess(this.readPrisma, scope, application.programId),
       notFound,
     );
+
+    // In scope but missing the permission: 403, after the 404 above so ids
+    // still cannot be probed across brands.
+    if (requiredPermissions) {
+      await assertProgramPermission(
+        this.readPrisma,
+        req.user,
+        application.programId,
+        requiredPermissions,
+      );
+    }
   }
 
   private async resolveScopedFilters(
@@ -736,7 +757,7 @@ export class ApplicationsController {
     @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Updating application ${id}`);
-    await this.assertCanReviewApplication(req, id);
+    await this.assertCanReviewApplication(req, id, APPLICATION_WRITE_PERMISSIONS);
 
     const command = new UpdateApplicationCommand(id, dto);
     return this.updateApplicationHandler.execute(command);
@@ -764,7 +785,7 @@ export class ApplicationsController {
     this.logger.log(`Switching category for application ${id} to ${dto.targetCategory}`);
     // Participants (no adminId) keep the handler's ownership check; admins are scoped.
     if (user.adminId) {
-      await this.assertCanReviewApplication(req, id);
+      await this.assertCanReviewApplication(req, id, REVIEW_WRITE_PERMISSIONS);
     }
 
     // user.adminId is only set for admin principals, so participants keep the
@@ -804,7 +825,7 @@ export class ApplicationsController {
     @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Submitting application ${id}`);
-    await this.assertCanReviewApplication(req, id);
+    await this.assertCanReviewApplication(req, id, APPLICATION_PAYMENT_WRITE_PERMISSIONS);
 
     const command = new SubmitApplicationCommand(id, participantId);
     return this.submitApplicationHandler.execute(command);
@@ -857,7 +878,7 @@ export class ApplicationsController {
     @CurrentUser() user: CurrentUserData,
     @Req() req: { user?: { adminId?: string } },
   ): Promise<{ success: boolean; applicationId: string; editHistoryId: string }> {
-    await this.assertCanReviewApplication(req, id);
+    await this.assertCanReviewApplication(req, id, APPLICATION_WRITE_PERMISSIONS);
     this.logger.log(
       `Admin ${user.userId} editing submission data for application ${id}: ${dto.reason}`,
     );
@@ -912,7 +933,7 @@ export class ApplicationsController {
     @Req() req: { user?: { adminId?: string } },
   ) {
     this.logger.log(`Creating payment intent for application ${id}`);
-    await this.assertCanReviewApplication(req, id);
+    await this.assertCanReviewApplication(req, id, APPLICATION_PAYMENT_WRITE_PERMISSIONS);
     const command = new CreateRegistrationPaymentIntentCommand(id, userId);
     return this.createRegistrationPaymentIntentHandler.execute(command);
   }
@@ -965,7 +986,7 @@ export class ApplicationsController {
     @CurrentUser() user: CurrentUserData,
     @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationReviewResponseDto> {
-    await this.assertCanReviewApplication(req, applicationId);
+    await this.assertCanReviewApplication(req, applicationId, REVIEW_WRITE_PERMISSIONS);
     // actingAdminId/actingAdminRole MUST come from the authenticated JWT
     // principal, never from the request body or a query param. Same
     // attribution-forgery rule Task 6 applied to createdById.
@@ -1015,7 +1036,7 @@ export class ApplicationsController {
     @CurrentUser() user: CurrentUserData,
     @Req() req: { user?: { adminId?: string } },
   ) {
-    await this.assertCanReviewApplication(req, applicationId);
+    await this.assertCanReviewApplication(req, applicationId, REVIEW_WRITE_PERMISSIONS);
 
     const command = new ReviewDocumentCommand(
       applicationId,
@@ -1064,7 +1085,7 @@ export class ApplicationsController {
     // orNotFound collapses "no such application" and "not yours" into the same
     // 404, so the status code cannot be used to probe which application ids
     // exist in another brand. Same rule N23 applied to programme ids.
-    await this.assertCanReviewApplication(req, id);
+    await this.assertCanReviewApplication(req, id, REVIEW_WRITE_PERMISSIONS);
 
     // reviewerId MUST come from the authenticated JWT principal, never from
     // the request body, same attribution-forgery rule Task 6/8b applied to
@@ -1112,7 +1133,7 @@ export class ApplicationsController {
     @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Withdrawing application ${id}`);
-    await this.assertCanReviewApplication(req, id);
+    await this.assertCanReviewApplication(req, id, APPLICATION_WRITE_PERMISSIONS);
 
     // The actor comes from the JWT, never the body. withdrawn_by is a real FK to
     // users(id) and status_history.changedBy is the audit trail for this action -

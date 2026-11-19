@@ -17,6 +17,7 @@ import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
+import { AdminPermissionGuard, RequiresProgramPermission } from '@shared/guards/admin-permission.guard';
 import { ParticipantReminderService } from '../application/services/participant-reminder.service';
 import {
   CreateParticipantReminderDto,
@@ -31,6 +32,11 @@ import {
  * "send now" endpoint — the whole point of the feature is that a human picked
  * the moment and could still change their mind.
  */
+// Writes only (create, edit, cancel): list, preview and audience stay readable.
+// Mirrored by programWritePermissions.reminders in
+// services/admin-dashboard/lib/admin-access.ts; keep the two in step.
+const REMINDER_WRITE_PERMISSIONS = ['participants:write', 'program:write'];
+
 @ApiTags('Participant Reminders')
 @Controller('programs')
 export class ParticipantRemindersController {
@@ -114,9 +120,10 @@ export class ParticipantRemindersController {
   }
 
   @Post(':programId/reminders')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'programId')
+  @RequiresProgramPermission(REMINDER_WRITE_PERMISSIONS)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Create a reminder — a draft, or scheduled when scheduledAt is given',
@@ -130,9 +137,10 @@ export class ParticipantRemindersController {
   }
 
   @Put(':programId/reminders/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'programId')
+  @RequiresProgramPermission(REMINDER_WRITE_PERMISSIONS)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Edit a draft or still-scheduled reminder, or (re)set its send time',
@@ -146,9 +154,10 @@ export class ParticipantRemindersController {
   }
 
   @Post(':programId/reminders/:id/cancel')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'programId')
+  @RequiresProgramPermission(REMINDER_WRITE_PERMISSIONS)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Cancel a scheduled reminder before it sends (409 once it is sending)',

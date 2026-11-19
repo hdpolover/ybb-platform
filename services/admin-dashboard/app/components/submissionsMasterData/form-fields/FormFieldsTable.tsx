@@ -22,6 +22,8 @@ import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-progra
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import type { HelpAssetRow } from "./HelpAssetsRepeater";
 import { CategoryScopeBadge } from "@/app/components/submissionsMasterData/CategoryScopeBadge";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 export interface ApplicationFormFieldRow {
   id: string;
@@ -159,6 +161,8 @@ function formatOptions(options?: unknown): string {
 
 export function FormFieldsTable({ programId }: { programId: string }) {
   const resolvedProgramId = useResolvedProgramId(programId);
+  // submission form read views; the API refuses writes without the submissionForm set.
+  const canWrite = useProgramWriteAccess(programId, programWritePermissions.submissionForm);
   const [fields, setFields] = useState<ApplicationFormFieldRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -273,28 +277,32 @@ export function FormFieldsTable({ programId }: { programId: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setCopyFromProgramOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-          >
-            <span>Copy from program</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setCopyTemplateOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-          >
-            <span>Copy from template</span>
-          </button>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600"
-          >
-            <PlusIcon className="h-4 w-4" />
-            <span>Add Field</span>
-          </button>
+          {canWrite && (
+            <>
+              <button
+                type="button"
+                onClick={() => setCopyFromProgramOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              >
+                <span>Copy from program</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCopyTemplateOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              >
+                <span>Copy from template</span>
+              </button>
+              <button
+                type="button"
+                onClick={openCreate}
+                className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600"
+              >
+                <PlusIcon className="h-4 w-4" />
+                <span>Add Field</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -381,25 +389,27 @@ export function FormFieldsTable({ programId }: { programId: string }) {
                       </span>
                     </td>
                     <td className="px-6 py-4 align-top text-right">
-                      <div className="inline-flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(row)}
-                          className="flex h-8 w-8 items-center justify-center rounded-md bg-amber-50 text-amber-600 transition hover:bg-amber-100 hover:text-amber-700"
-                          title="Edit field"
-                        >
-                          <PencilSquareIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDelete(row)}
-                          disabled={deletingId === row.id}
-                          className="flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition hover:bg-rose-100 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-                          title="Delete field"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </div>
+                      {canWrite && (
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(row)}
+                            className="flex h-8 w-8 items-center justify-center rounded-md bg-amber-50 text-amber-600 transition hover:bg-amber-100 hover:text-amber-700"
+                            title="Edit field"
+                          >
+                            <PencilSquareIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDelete(row)}
+                            disabled={deletingId === row.id}
+                            className="flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition hover:bg-rose-100 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            title="Delete field"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))

@@ -2,6 +2,7 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CopyInput, CopyMode, CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier, TemplatePayload } from '../program-copier.interface';
+import { CONTENT_WRITE_PERMISSIONS } from '../../utils/program-content-access.util';
 import { parseTemplateItems } from '../template-payload.schemas';
 
 // `description` (unlike `benefits`/`requirements`, which are plain
@@ -70,6 +71,7 @@ export class PaymentsCopier implements ProgramCopier {
   readonly key = 'payments';
   readonly label = 'Payment Options';
   readonly supportsAppend = true;
+  readonly requiredPermissions = CONTENT_WRITE_PERMISSIONS.pricing;
 
   constructor(private readonly prisma: PrismaService) {}
 

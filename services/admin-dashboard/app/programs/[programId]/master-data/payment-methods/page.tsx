@@ -7,6 +7,8 @@ import { ArrowPathIcon, ExclamationTriangleIcon, PencilSquareIcon, CloudArrowUpI
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import {
   listProgramPaymentMethods,
   bulkUpsertProgramPaymentMethods,
@@ -105,6 +107,8 @@ export default function PaymentMethodsPage() {
   const { accessiblePrograms, adminProfile, accessConfig } = useAuth();
   // The shared master feeds every program; the API restricts writes to platform admins.
   const canEditShared = accessConfig.canAccessPlatform;
+  // payments:read opens this page; the per-program overlay save needs payments:write or program:write.
+  const canConfigure = useProgramWriteAccess(params.programId, programWritePermissions.programPaymentConfig);
   const program = accessiblePrograms.find(
     (p) => p.programId === params.programId || p.programSlug === params.programId,
   );
@@ -274,14 +278,16 @@ export default function PaymentMethodsPage() {
                 <PlusIcon className="h-3.5 w-3.5" />Add Shared Method
               </button>
             )}
-            <button
-              type="button"
-              onClick={handleSaveAll}
-              disabled={saving || loading || methods.length === 0}
-              className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
-            >
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
+            {canConfigure && (
+              <button
+                type="button"
+                onClick={handleSaveAll}
+                disabled={saving || loading || methods.length === 0}
+                className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
+              >
+                {saving ? "Saving…" : "Save Changes"}
+              </button>
+            )}
           </div>
         </div>
 
@@ -332,6 +338,7 @@ export default function PaymentMethodsPage() {
                 activeGatewayNames={activeGatewayNames}
                 onUploadImage={(file) => uploadPaymentMethodInstructionImage({ programId, brandId, userId, file })}
                 editSharedLoading={editSharedLoadingId === m.id}
+                readOnly={!canConfigure}
                 onChange={(patch) => updateDraft(m.id, patch)}
                 onFieldChange={(field, patch) => updateFieldDraft(m.id, field, patch)}
                 onEditShared={canEditShared ? () => openEditShared(m.id) : undefined}
@@ -383,6 +390,7 @@ function MethodRow({
   activeGatewayNames,
   onUploadImage,
   editSharedLoading,
+  readOnly,
   onChange,
   onFieldChange,
   onEditShared,
@@ -393,6 +401,7 @@ function MethodRow({
   activeGatewayNames: Set<string>;
   onUploadImage: (file: File) => Promise<string>;
   editSharedLoading: boolean;
+  readOnly: boolean;
   onChange: (patch: Partial<MethodDraft>) => void;
   onFieldChange: (field: "description" | "instructions" | "adminInstructions", patch: Partial<FieldDraft>) => void;
   /** Omitted for non-platform admins: the shared master is platform-only. */
@@ -457,7 +466,7 @@ function MethodRow({
         </div>
         <div className="flex items-center gap-4">
           <label className="flex items-center gap-2 text-[11px] font-medium text-zinc-700">
-            <input type="checkbox" checked={draft.isEnabled} onChange={(e) => onChange({ isEnabled: e.target.checked })} className="h-3.5 w-3.5" />
+            <input type="checkbox" checked={draft.isEnabled} disabled={readOnly} onChange={(e) => onChange({ isEnabled: e.target.checked })} className="h-3.5 w-3.5" />
             Enabled for this program
           </label>
           <label className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-700">
@@ -465,8 +474,9 @@ function MethodRow({
             <input
               type="number"
               value={draft.sortOrder}
+              disabled={readOnly}
               onChange={(e) => onChange({ sortOrder: e.target.value })}
-              className="w-16 rounded-md border border-zinc-200 px-2 py-1 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-16 rounded-md border border-zinc-200 px-2 py-1 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-zinc-50 disabled:text-zinc-500"
             />
           </label>
         </div>
@@ -479,6 +489,7 @@ function MethodRow({
             label="Description"
             field={draft.description}
             wasOverridden={method.has_description_override}
+            readOnly={readOnly}
             onChange={(patch) => onFieldChange("description", patch)}
             renderInput={(value, onValueChange) => (
               <textarea rows={2} value={value} onChange={(e) => onValueChange(e.target.value)} className={inputCls} />
@@ -489,6 +500,7 @@ function MethodRow({
             field={draft.instructions}
             risky={sharesGlobalInstructions(method, draft)}
             wasOverridden={method.has_instructions_override}
+            readOnly={readOnly}
             onChange={(patch) => onFieldChange("instructions", patch)}
             renderInput={(value, onValueChange) => (
               <RichTextEditor
@@ -504,6 +516,7 @@ function MethodRow({
             label="Admin Instructions"
             field={draft.adminInstructions}
             wasOverridden={method.has_admin_instructions_override}
+            readOnly={readOnly}
             onChange={(patch) => onFieldChange("adminInstructions", patch)}
             renderInput={(value, onValueChange) => (
               <textarea rows={2} value={value} onChange={(e) => onValueChange(e.target.value)} placeholder="Internal — shown only to admins" className={inputCls} />
@@ -559,6 +572,7 @@ function OverrideField({
   label,
   field,
   wasOverridden,
+  readOnly,
   onChange,
   renderInput,
 }: {
@@ -567,6 +581,7 @@ function OverrideField({
   label: string;
   field: FieldDraft;
   wasOverridden: boolean;
+  readOnly: boolean;
   onChange: (patch: Partial<FieldDraft>) => void;
   renderInput: (value: string, onValueChange: (value: string) => void) => React.ReactNode;
 }) {
@@ -581,7 +596,7 @@ function OverrideField({
             </span>
           )}
         </div>
-        {field.override ? (
+        {field.override && !readOnly ? (
           <button
             type="button"
             onClick={() => onChange({ override: false })}
@@ -591,7 +606,11 @@ function OverrideField({
           </button>
         ) : null}
       </div>
-      {field.override ? (
+      {field.override && readOnly ? (
+        <p className="whitespace-pre-line rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-[11px] text-zinc-600">
+          {stripHtml(field.value) || "(empty)"}
+        </p>
+      ) : field.override ? (
         renderInput(field.value, (value) => onChange({ value }))
       ) : wasOverridden ? (
         <p className="rounded-md border border-dashed border-amber-200 bg-amber-50/50 px-3 py-2 text-[11px] text-amber-700">
@@ -624,6 +643,7 @@ function OverrideField({
           ) : (
             <p className="mt-1 text-[11px] italic text-zinc-400">(empty)</p>
           )}
+          {!readOnly && (
           <button
             type="button"
             onClick={() => onChange({ override: true })}
@@ -635,6 +655,7 @@ function OverrideField({
           >
             Customize for this program
           </button>
+          )}
         </div>
       )}
     </div>

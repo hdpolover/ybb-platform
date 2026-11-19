@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ChangeType } from '@prisma/client';
 import { AUDIT_TRAIL_KEY, AuditTrailMetadata } from '@shared/decorators/audit-trail.decorator';
@@ -346,6 +346,95 @@ describe('ProgramApplicationConfigController', () => {
 
             await expect(controller.deleteFormField('field-1', newReq())).rejects.toThrow(NotFoundException);
             expect(mockExecute.execute).not.toHaveBeenCalled();
+        });
+    });
+
+    // Same sets as the matching create routes (CONTENT_WRITE_PERMISSIONS).
+    describe('row-keyed writes need a role permission on the owning program', () => {
+        const req = () => ({ user: { id: 'user-1', userId: 'user-1', adminId: 'admin-1' } }) as any;
+        const assignedWith = (permissions: string[]) => ({
+            accessLevel: 1,
+            canManageAdmins: false,
+            canAssignRoles: false,
+            customPermissions: [],
+            role: { name: 'Reviewer', permissions },
+            adminBrands: [],
+            adminPrograms: [{ programId: 'prog-mine', permissions: [] }],
+        });
+        const PLATFORM_ACCESS_ADMIN = { ...assignedWith(['platform_access']), adminPrograms: [] };
+
+        const pricing: Array<[string, () => Promise<unknown>]> = [
+            ['PUT pricing-tiers/:itemId', () => controller.updatePricingTier('row-1', {} as any, req())],
+            ['DELETE pricing-tiers/:itemId', () => controller.deletePricingTier('row-1', req())],
+            ['POST pricing-tiers/:tierId/periods', () => controller.addValidityPeriod('row-1', {} as any, req())],
+            ['PUT validity-periods/:periodId', () => controller.updateValidityPeriod('row-1', {} as any, req())],
+            ['DELETE validity-periods/:periodId', () => controller.deleteValidityPeriod('row-1', req())],
+        ];
+        const submissionForm: Array<[string, () => Promise<unknown>]> = [
+            ['PUT requirements/:itemId', () => controller.updateRequirement('row-1', {} as any, req())],
+            ['DELETE requirements/:itemId', () => controller.deleteRequirement('row-1', req())],
+            ['PUT essays/:itemId', () => controller.updateEssay('row-1', {} as any, req())],
+            ['DELETE essays/:itemId', () => controller.deleteEssay('row-1', req())],
+            ['PUT participation-categories/:itemId', () => controller.updateParticipationCategory('row-1', {} as any, req())],
+            ['DELETE participation-categories/:itemId', () => controller.deleteParticipationCategory('row-1', req())],
+            ['PUT subthemes/:itemId', () => controller.updateSubtheme('row-1', {} as any, req())],
+            ['DELETE subthemes/:itemId', () => controller.deleteSubtheme('row-1', req())],
+            ['PUT form-fields/:itemId', () => controller.updateFormField('row-1', {} as any, req())],
+            ['DELETE form-fields/:itemId', () => controller.deleteFormField('row-1', req())],
+        ];
+
+        function rowsIn(programId: string) {
+            const row = { programId };
+            mockReadPrisma.programPricingTier.findUnique.mockResolvedValue(row);
+            mockReadPrisma.pricingTierValidityPeriod.findUnique.mockResolvedValue({ pricingTier: row });
+            mockReadPrisma.programRequirement.findUnique.mockResolvedValue(row);
+            mockReadPrisma.programEssay.findUnique.mockResolvedValue(row);
+            mockReadPrisma.programParticipationCategory.findUnique.mockResolvedValue(row);
+            mockReadPrisma.programSubtheme.findUnique.mockResolvedValue(row);
+            mockReadPrisma.applicationFormField.findUnique.mockResolvedValue(row);
+            mockReadPrisma.program.findUnique.mockResolvedValue({ id: programId, brandId: 'brand-1', name: 'P', deletedAt: null });
+        }
+
+        beforeEach(() => {
+            mockExecute.execute.mockResolvedValue('reached');
+        });
+
+        it.each([...pricing, ...submissionForm])('%s: 403 for an in-scope admin without a write permission, handler never runs', async (_name, call) => {
+            rowsIn('prog-mine');
+            mockReadPrisma.admin.findUnique.mockResolvedValue(assignedWith(['applications:read', 'review:write']));
+            await expect(call()).rejects.toBeInstanceOf(ForbiddenException);
+            expect(mockExecute.execute).not.toHaveBeenCalled();
+        });
+
+        it.each([...pricing, ...submissionForm])('%s: still 404 (not 403) out of scope', async (_name, call) => {
+            rowsIn('prog-theirs');
+            mockReadPrisma.admin.findUnique.mockResolvedValue(assignedWith([]));
+            await expect(call()).rejects.toBeInstanceOf(NotFoundException);
+        });
+
+        it.each(pricing)('%s: passes with payments:write', async (_name, call) => {
+            rowsIn('prog-mine');
+            mockReadPrisma.admin.findUnique.mockResolvedValue(assignedWith(['payments:write']));
+            await expect(call()).resolves.toBe('reached');
+        });
+
+        it.each(submissionForm)('%s: 403 for a Reviewer with applications:write, handler never runs', async (_name, call) => {
+            rowsIn('prog-mine');
+            mockReadPrisma.admin.findUnique.mockResolvedValue(assignedWith(['applications:write']));
+            await expect(call()).rejects.toBeInstanceOf(ForbiddenException);
+            expect(mockExecute.execute).not.toHaveBeenCalled();
+        });
+
+        it.each(submissionForm)('%s: passes with program:write', async (_name, call) => {
+            rowsIn('prog-mine');
+            mockReadPrisma.admin.findUnique.mockResolvedValue(assignedWith(['program:write']));
+            await expect(call()).resolves.toBe('reached');
+        });
+
+        it.each([...pricing, ...submissionForm])('%s: a platform_access admin without the permission passes', async (_name, call) => {
+            rowsIn('prog-theirs');
+            mockReadPrisma.admin.findUnique.mockResolvedValue(PLATFORM_ACCESS_ADMIN);
+            await expect(call()).resolves.toBe('reached');
         });
     });
 

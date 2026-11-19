@@ -15,6 +15,9 @@ import {
   readJsonData,
 } from "@/app/components/submissionsMasterData/api";
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
+import { sanitizeHtml } from "@/lib/sanitize-html";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 type ProgramPreviewSettings = {
   id: string;
@@ -39,6 +42,8 @@ function normalizeRichText(value: string): string | undefined {
 }
 
 export function PreviewSettingsTab({ programId }: { programId: string }) {
+  // Saves through PUT programs/:id, which the API gates with the programConfig set.
+  const canWrite = useProgramWriteAccess(programId, programWritePermissions.programConfig);
   const [termsAndConditions, setTermsAndConditions] = useState("");
   const [checklistItems, setChecklistItems] = useState<string[]>([]);
   const [newItem, setNewItem] = useState("");
@@ -158,14 +163,18 @@ export function PreviewSettingsTab({ programId }: { programId: string }) {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={isSaving || isLoading}
-          className="inline-flex items-center gap-2 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isSaving ? "Saving..." : "Save Preview"}
-        </button>
+        {canWrite && (
+          <>
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={isSaving || isLoading}
+              className="inline-flex items-center gap-2 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSaving ? "Saving..." : "Save Preview"}
+            </button>
+          </>
+        )}
       </div>
 
       {errorMessage ? (
@@ -195,6 +204,11 @@ export function PreviewSettingsTab({ programId }: { programId: string }) {
             <div className="rounded-md border border-zinc-200 bg-zinc-50 px-4 py-10 text-center text-sm text-zinc-500">
               Loading preview settings...
             </div>
+          ) : !canWrite ? (
+            <div
+              className="prose prose-sm max-w-none text-zinc-700"
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(termsAndConditions) }}
+            />
           ) : (
             <RichTextEditor
               content={termsAndConditions}
@@ -224,7 +238,7 @@ export function PreviewSettingsTab({ programId }: { programId: string }) {
             <div className="space-y-2">
               {checklistItems.length === 0 ? (
                 <p className="rounded-lg border border-dashed border-zinc-300 px-3 py-4 text-center text-xs text-zinc-400">
-                  No checklist items yet. Add one below.
+                  {canWrite ? "No checklist items yet. Add one below." : "No checklist items yet."}
                 </p>
               ) : (
                 <ul className="space-y-1.5">
@@ -234,39 +248,43 @@ export function PreviewSettingsTab({ programId }: { programId: string }) {
                       className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700"
                     >
                       <span className="flex-1">{item}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeItem(index)}
-                        className="mt-0.5 shrink-0 text-zinc-400 transition hover:text-red-500"
-                        aria-label="Remove item"
-                      >
-                        <TrashIcon className="h-3.5 w-3.5" />
-                      </button>
+                      {canWrite && (
+                        <button
+                          type="button"
+                          onClick={() => removeItem(index)}
+                          className="mt-0.5 shrink-0 text-zinc-400 transition hover:text-red-500"
+                          aria-label="Remove item"
+                        >
+                          <TrashIcon className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
               )}
 
-              <div className="flex gap-2">
-                <input
-                  ref={newItemRef}
-                  type="text"
-                  value={newItem}
-                  onChange={e => setNewItem(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
-                  placeholder="Add a checklist item..."
-                  className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-                <button
-                  type="button"
-                  onClick={addItem}
-                  disabled={!newItem.trim()}
-                  className="inline-flex items-center gap-1 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <PlusIcon className="h-4 w-4" />
-                  Add
-                </button>
-              </div>
+              {canWrite && (
+                <div className="flex gap-2">
+                  <input
+                    ref={newItemRef}
+                    type="text"
+                    value={newItem}
+                    onChange={e => setNewItem(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
+                    placeholder="Add a checklist item..."
+                    className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={addItem}
+                    disabled={!newItem.trim()}
+                    className="inline-flex items-center gap-1 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    Add
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

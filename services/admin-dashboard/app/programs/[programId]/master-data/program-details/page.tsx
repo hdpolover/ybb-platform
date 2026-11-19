@@ -3,6 +3,8 @@
 import { use, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import { HeaderSection } from "@/app/components/programDetailsMasterData/HeaderSection";
 import { TabNavigation } from "@/app/components/programDetailsMasterData/TabNavigation";
 import { EditSpecificsAction } from "@/app/components/programDetailsMasterData/program-specifics/EditSpecificsAction";
@@ -269,6 +271,8 @@ export default function ProgramDetailsPage({
 
   const programId = resolvedParams.programId;
   const resolvedProgramId = useResolvedProgramId(programId);
+  // PUT programs/:id, branding, publish/unpublish and copy all need program:write.
+  const canWrite = useProgramWriteAccess(programId, programWritePermissions.programConfig);
   const fallbackProgramName =
     accessiblePrograms.find(
       (program) => program.programId === programId || program.programSlug === programId,
@@ -538,7 +542,7 @@ export default function ProgramDetailsPage({
         <div className="mb-4 flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <TabNavigation activeTab={activeTab} />
 
-          {activeTab === "general" && generalFormValues ? (
+          {!canWrite ? null : activeTab === "general" && generalFormValues ? (
             <EditGeneralAction
               programId={programId}
               brandId={programDetail?.brand?.id ?? ""}
