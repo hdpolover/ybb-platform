@@ -10,12 +10,23 @@ import {
   PencilSquareIcon,
   TrashIcon,
   XMarkIcon,
+  EnvelopeIcon,
 } from "@heroicons/react/24/outline";
+import { toast } from "sonner";
+import { useAuth } from "../../contexts/AuthContext";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/src/ui/tabs";
+import { AccessRequestsPanel } from "../../components/settings/adminManagement/AccessRequestsPanel";
+import {
+  SendPasswordLinkDialog,
+  type PasswordLinkTarget,
+} from "../../components/settings/adminManagement/SendPasswordLinkDialog";
+import { canSendPasswordLink } from "@/lib/access-requests";
 import {
   listAdmins,
   createAdmin,
   updateAdmin,
   deleteAdmin,
+  getPendingAccessRequestCount,
   type Admin,
   type CreateAdminInput,
 } from "../../../src/shared/api-client";
@@ -225,6 +236,10 @@ function EditAdminModal({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AdminsPage() {
+  const { adminProfile, accessConfig } = useAuth();
+  const [pendingCount, setPendingCount] = useState(0);
+  const [linkTarget, setLinkTarget] = useState<PasswordLinkTarget | null>(null);
+  const canManageAdmins = accessConfig.canManageAdmins;
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -256,6 +271,19 @@ export default function AdminsPage() {
     fetchAdmins();
   }, [fetchAdmins]);
 
+  const refreshPendingCount = useCallback(async () => {
+    if (!canManageAdmins) return;
+    try {
+      setPendingCount((await getPendingAccessRequestCount()).count);
+    } catch {
+      // The badge is a hint; the Access requests tab reports its own load errors.
+    }
+  }, [canManageAdmins]);
+
+  useEffect(() => {
+    void refreshPendingCount();
+  }, [refreshPendingCount]);
+
   async function handleDelete() {
     if (!deleteTarget) return;
     setDeleteLoading(true);
@@ -264,7 +292,7 @@ export default function AdminsPage() {
       setDeleteTarget(null);
       fetchAdmins();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Delete failed");
+      toast.error(err instanceof Error ? err.message : "Delete failed");
     } finally {
       setDeleteLoading(false);
     }
@@ -282,6 +310,24 @@ export default function AdminsPage() {
         </p>
       </div>
 
+      <Tabs defaultValue="admins" className="space-y-4">
+        {canManageAdmins && (
+          <TabsList>
+            <TabsTrigger value="admins">Administrators</TabsTrigger>
+            <TabsTrigger value="requests" className="gap-1.5">
+              Access requests
+              {pendingCount > 0 && (
+                <span
+                  aria-label={`${pendingCount} pending`}
+                  className="inline-flex min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[10px] font-semibold text-white"
+                >
+                  {pendingCount}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        )}
+      <TabsContent value="admins" className="mt-0 space-y-4">
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">
         <StatCard icon={<ShieldCheckIcon className="h-5 w-5 text-blue-600" />} bg="bg-blue-100" label="Total Admins" value={total} sub="Across all levels" />
@@ -391,6 +437,17 @@ export default function AdminsPage() {
                         >
                           <PencilSquareIcon className="h-3.5 w-3.5" />
                         </button>
+                        {canSendPasswordLink(accessConfig, adminProfile?.id, admin.id) && (
+                          <button
+                            type="button"
+                            onClick={() => setLinkTarget({ id: admin.id, fullName: admin.fullName })}
+                            className="rounded-md border border-zinc-200 bg-white p-1 text-zinc-500 shadow-sm hover:bg-zinc-50 hover:text-zinc-700"
+                            title="Send password link"
+                            aria-label={`Send password link to ${admin.fullName}`}
+                          >
+                            <EnvelopeIcon className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => setDeleteTarget(admin)}
@@ -430,6 +487,13 @@ export default function AdminsPage() {
           </div>
         )}
       </section>
+      </TabsContent>
+      {canManageAdmins && (
+        <TabsContent value="requests" className="mt-0">
+          <AccessRequestsPanel onChanged={() => void refreshPendingCount()} />
+        </TabsContent>
+      )}
+      </Tabs>
 
       {/* Modals */}
       {showCreate && (
@@ -442,6 +506,7 @@ export default function AdminsPage() {
           onUpdated={fetchAdmins}
         />
       )}
+      <SendPasswordLinkDialog target={linkTarget} onClose={() => setLinkTarget(null)} />
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
           <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">

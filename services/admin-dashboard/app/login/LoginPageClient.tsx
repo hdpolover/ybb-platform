@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -126,6 +127,13 @@ export default function LoginPageClient({ redirectMessage }: LoginPageClientProp
                     {isLoading ? "Signing In..." : "Sign In"}
                   </button>
                 </form>
+
+                <p className="mt-4 text-center text-xs text-zinc-500">
+                  Need an account?{" "}
+                  <Link href="/request-access" className="font-medium text-blue-600 underline-offset-2 hover:underline">
+                    Request access
+                  </Link>
+                </p>
 
                 <p className="mt-4 text-center text-[11px] text-zinc-400">
                   © 2025 Youth Break the Boundaries - Hilmi Farrel Firjatullah.
