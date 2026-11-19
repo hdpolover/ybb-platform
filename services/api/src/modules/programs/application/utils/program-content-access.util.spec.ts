@@ -1,5 +1,5 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { assertProgramContentAccess } from './program-content-access.util';
+import { assertProgramContentAccess, CONTENT_WRITE_PERMISSIONS } from './program-content-access.util';
 
 // Fixtures copied deliberately from users/application/utils/user-access.util.spec.ts
 // rather than reinvented. That spec shipped with fixtures for the platform and
@@ -24,12 +24,12 @@ const brandAdmin = (brandIds: string[]) => ({
     adminBrands: brandIds.map((brandId) => ({ brandId, permissions: [] })),
     adminPrograms: [],
 });
-const assignedAdmin = (programIds: string[]) => ({
+const assignedAdmin = (programIds: string[], permissions: string[] = []) => ({
     accessLevel: 1,
     canManageAdmins: false,
     canAssignRoles: false,
     customPermissions: [],
-    role: { name: 'reviewer', permissions: [] },
+    role: { name: 'reviewer', permissions },
     adminBrands: [],
     adminPrograms: programIds.map((programId) => ({ programId, permissions: [] })),
 });
@@ -108,5 +108,31 @@ describe('assertProgramContentAccess', () => {
                 'prog-1',
             ),
         ).rejects.toThrow(NotFoundException);
+    });
+});
+
+describe('assertProgramContentAccess with write permissions', () => {
+    const check = (admin: unknown, perms: readonly string[]) =>
+        assertProgramContentAccess(makePrisma(admin), actor, 'prog-1', perms);
+
+    it('passes an in-scope admin holding one of the permissions', async () => {
+        await expect(check(assignedAdmin(['prog-1'], ['content:write']), CONTENT_WRITE_PERMISSIONS.content)).resolves.toBeUndefined();
+    });
+
+    // Prod Reviewer (applications/review only) reaching a content page by id.
+    it('refuses an in-scope admin without them with 403', async () => {
+        await expect(
+            check(assignedAdmin(['prog-1'], ['applications:write', 'review:write']), CONTENT_WRITE_PERMISSIONS.content),
+        ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('keeps the scope refusal ahead of the permission check', async () => {
+        await expect(
+            check(assignedAdmin(['prog-other'], ['content:write']), CONTENT_WRITE_PERMISSIONS.content),
+        ).rejects.toThrow(NotFoundException);
+    });
+
+    it('passes a platform admin', async () => {
+        await expect(check(platformAdmin, CONTENT_WRITE_PERMISSIONS.programConfig)).resolves.toBeUndefined();
     });
 });

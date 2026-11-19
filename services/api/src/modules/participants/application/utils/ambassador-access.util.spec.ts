@@ -1,5 +1,6 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import {
+    AMBASSADOR_WRITE_PERMISSIONS,
     resolveAmbassadorProgramScope,
     assertAmbassadorAccess,
     assertAmbassadorCreateAccess,
@@ -20,9 +21,9 @@ const brandAdmin = (brandIds: string[]) => ({
     adminBrands: brandIds.map((brandId) => ({ brandId, permissions: [] })),
     adminPrograms: [],
 });
-const assignedAdmin = (programIds: string[]) => ({
+const assignedAdmin = (programIds: string[], permissions: string[] = []) => ({
     accessLevel: 1, canManageAdmins: false, canAssignRoles: false, customPermissions: [],
-    role: { name: 'reviewer', permissions: [] },
+    role: { name: 'reviewer', permissions },
     adminBrands: [],
     adminPrograms: programIds.map((programId) => ({ programId, permissions: [] })),
 });
@@ -122,10 +123,20 @@ describe('assertAmbassadorAccess', () => {
 });
 
 describe('assertAmbassadorCreateAccess', () => {
-    it('lets a program-scoped admin create in a programme they hold', async () => {
+    it('lets a program-scoped admin with participants:write create in a programme they hold', async () => {
         await expect(
-            assertAmbassadorCreateAccess(makePrisma(assignedAdmin(['prog-1'])), actor, 'prog-1'),
+            assertAmbassadorCreateAccess(makePrisma(assignedAdmin(['prog-1'], ['participants:write'])), actor, 'prog-1'),
         ).resolves.toBeUndefined();
+    });
+
+    it('refuses an in-scope admin without a write permission with 403', async () => {
+        await expect(
+            assertAmbassadorCreateAccess(makePrisma(assignedAdmin(['prog-1'], ['participants:read'])), actor, 'prog-1'),
+        ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('lets a platform admin create without any program grant', async () => {
+        await expect(assertAmbassadorCreateAccess(makePrisma(platformAdmin), actor, 'prog-1')).resolves.toBeUndefined();
     });
 
     // This route mints and emails login credentials, so an unchecked programme
@@ -140,5 +151,26 @@ describe('assertAmbassadorCreateAccess', () => {
         await expect(
             assertAmbassadorCreateAccess(makePrisma(assignedAdmin([])), actor, 'prog-1'),
         ).rejects.toThrow(NotFoundException);
+    });
+});
+
+describe('assertAmbassadorAccess with write permissions', () => {
+    const check = (admin: unknown, ambassador: unknown = { programId: 'prog-1' }) =>
+        assertAmbassadorAccess(makePrisma(admin, { ambassador }), actor, 'amb-1', AMBASSADOR_WRITE_PERMISSIONS);
+
+    it('passes an in-scope admin holding participants:write', async () => {
+        await expect(check(assignedAdmin(['prog-1'], ['participants:write']))).resolves.toBeUndefined();
+    });
+
+    it('refuses an in-scope admin without it with 403', async () => {
+        await expect(check(assignedAdmin(['prog-1'], ['applications:write']))).rejects.toThrow(ForbiddenException);
+    });
+
+    it('keeps the 404 for an out-of-scope ambassador', async () => {
+        await expect(check(assignedAdmin(['prog-other'], ['participants:write']))).rejects.toThrow(NotFoundException);
+    });
+
+    it('passes a platform admin', async () => {
+        await expect(check(platformAdmin)).resolves.toBeUndefined();
     });
 });

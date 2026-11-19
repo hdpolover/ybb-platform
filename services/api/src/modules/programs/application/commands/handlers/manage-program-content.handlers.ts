@@ -42,7 +42,8 @@ import {
 } from '../program-content.commands';
 import { PROGRAM_LANDING_CONTENT_KEYS, isProgramLandingContentKey } from '../../copy/program-landing-content.constants';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
-import { assertProgramContentAccess } from '../../utils/program-content-access.util';
+import { assertProgramContentAccess, CONTENT_WRITE_PERMISSIONS } from '../../utils/program-content-access.util';
+import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
 import { resolveRevenueAccessScope } from '@modules/stats/revenue/utils/revenue-access.util';
 import { assertBrandAccess, orNotFound } from '@shared/guards/admin-scope.guard';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
@@ -417,7 +418,7 @@ export class CreateProgramTimelineHandler implements ICommandHandler<CreateProgr
         // also carries a program id, but the handler ignores it - see
         // addGallery in program-content.controller.ts for why the route param
         // is not a valid substitute.
-        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.programConfig);
 
         const dto = {
             ...command.dto,
@@ -453,6 +454,7 @@ export class UpdateProgramTimelineHandler implements ICommandHandler<UpdateProgr
             () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
             () => new NotFoundException('Timeline item not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.programConfig);
 
         const dto = {
             ...command.dto,
@@ -487,6 +489,7 @@ export class DeleteProgramTimelineHandler implements ICommandHandler<DeleteProgr
             () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
             () => new NotFoundException('Timeline item not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.programConfig);
 
         const result = await this.repository.deleteTimeline(command.id);
         await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
@@ -506,7 +509,7 @@ export class CreateProgramScheduleHandler implements ICommandHandler<CreateProgr
     async execute(command: CreateProgramScheduleCommand) {
         // Asserted on dto.programId - the id createSchedule writes - see
         // addTimeline's note above.
-        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.programConfig);
 
         const result = await this.repository.createSchedule(command.dto);
         await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
@@ -534,6 +537,7 @@ export class UpdateProgramScheduleHandler implements ICommandHandler<UpdateProgr
             () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
             () => new NotFoundException('Schedule item not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.programConfig);
 
         const result = await this.repository.updateSchedule(command.id, command.dto);
         if (result.programId) {
@@ -563,6 +567,7 @@ export class DeleteProgramScheduleHandler implements ICommandHandler<DeleteProgr
             () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
             () => new NotFoundException('Schedule item not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.programConfig);
 
         const result = await this.repository.deleteSchedule(command.id);
         if (existing.programId) {
@@ -584,7 +589,7 @@ export class CreateProgramSpeakerHandler implements ICommandHandler<CreateProgra
     async execute(command: CreateProgramSpeakerCommand) {
         // Asserted on dto.programId - the id createSpeaker writes - see
         // addTimeline's note above.
-        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.content);
 
         let photoUrl = command.dto.photoUrl;
 
@@ -637,6 +642,7 @@ export class UpdateProgramSpeakerHandler implements ICommandHandler<UpdateProgra
             () => assertProgramContentAccess(this.prismaRead, command.actor, speaker.programId),
             () => new NotFoundException('Speaker not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, speaker.programId, CONTENT_WRITE_PERMISSIONS.content);
 
         let photoUrl = command.dto.photoUrl;
 
@@ -682,6 +688,7 @@ export class DeleteProgramSpeakerHandler implements ICommandHandler<DeleteProgra
             () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
             () => new NotFoundException('Speaker not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.content);
 
         return this.repository.deleteSpeaker(command.id);
     }
@@ -702,7 +709,7 @@ export class CreateProgramGalleryHandler implements ICommandHandler<CreateProgra
         // The route also carries a program id, but the handler ignores it, so
         // checking the route param would authorise a different program than the
         // one the row lands on.
-        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.gallery);
 
         let imageUrl = command.dto.imageUrl;
 
@@ -774,6 +781,7 @@ export class UpdateProgramGalleryHandler implements ICommandHandler<UpdateProgra
             () => assertProgramContentAccess(this.prismaRead, command.actor, programId),
             () => new NotFoundException('Gallery item not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, programId, CONTENT_WRITE_PERMISSIONS.gallery);
 
         if (command.image) {
             const program = await this.prisma.program.findUnique({ where: { id: galleryItem.programId } });
@@ -830,6 +838,7 @@ export class DeleteProgramGalleryHandler implements ICommandHandler<DeleteProgra
             () => assertProgramContentAccess(this.prismaRead, command.actor, programId),
             () => new NotFoundException('Gallery item not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, programId, CONTENT_WRITE_PERMISSIONS.gallery);
 
         const result = await this.repository.deleteGallery(command.id);
         // Fire-and-forget (audit M214) — see CreateProgramGalleryHandler above.
@@ -863,7 +872,7 @@ export class CreateProgramTestimonialHandler implements ICommandHandler<CreatePr
         // case there IS no program in play, so a brand-level grant is the
         // correct (and only meaningful) thing to require.
         if (dto.programId) {
-            await assertProgramContentAccess(this.prismaRead, command.actor, dto.programId);
+            await assertProgramContentAccess(this.prismaRead, command.actor, dto.programId, CONTENT_WRITE_PERMISSIONS.content);
         } else if (brandId) {
             const scope = await resolveRevenueAccessScope(this.prismaRead, command.actor);
             assertBrandAccess(scope, brandId);
@@ -904,6 +913,7 @@ export class UpdateProgramTestimonialHandler implements ICommandHandler<UpdatePr
             () => assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId),
             () => new NotFoundException('Testimonial not found'),
         );
+        if (existing.programId) await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.content);
 
         const result = await this.repository.updateTestimonial(command.id, command.dto);
         try {
@@ -935,6 +945,7 @@ export class DeleteProgramTestimonialHandler implements ICommandHandler<DeletePr
             () => assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId),
             () => new NotFoundException('Testimonial not found'),
         );
+        if (existing.programId) await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.content);
 
         const testimonial = await this.prisma.programTestimonial.findUnique({
             where: { id: command.id },
@@ -959,7 +970,7 @@ export class CreateProgramFaqHandler implements ICommandHandler<CreateProgramFaq
         // Asserted on dto.programId because that is the id createFaq writes -
         // see addGallery's note in the controller for why the route param is
         // not used instead.
-        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.content);
 
         const result = await this.repository.createFaq(command.dto);
         await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
@@ -988,6 +999,7 @@ export class UpdateProgramFaqHandler implements ICommandHandler<UpdateProgramFaq
             () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
             () => new NotFoundException('FAQ not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.content);
 
         const result = await this.repository.updateFaq(command.id, command.dto);
         await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
@@ -1013,6 +1025,7 @@ export class DeleteProgramFaqHandler implements ICommandHandler<DeleteProgramFaq
             () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
             () => new NotFoundException('FAQ not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.content);
 
         const result = await this.repository.deleteFaq(command.id);
         await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
@@ -1040,7 +1053,7 @@ export class CreateProgramTeamHandler implements ICommandHandler<CreateProgramTe
         // assertBrandAccess for the program case (see
         // program-content-access.util.ts for why).
         if (command.dto.programId) {
-            await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+            await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.content);
         } else if (brandId) {
             const scope = await resolveRevenueAccessScope(this.prismaRead, command.actor);
             assertBrandAccess(scope, brandId);
@@ -1107,6 +1120,7 @@ export class UpdateProgramTeamHandler implements ICommandHandler<UpdateProgramTe
             () => assertProgramOrBrandContentAccess(this.prismaRead, command.actor, teamMember.programId, teamMember.brandId),
             () => new NotFoundException('Team member not found'),
         );
+        if (teamMember.programId) await assertProgramPermission(this.prismaRead, command.actor, teamMember.programId, CONTENT_WRITE_PERMISSIONS.content);
 
         let photoUrl = command.dto.photoUrl;
 
@@ -1155,6 +1169,7 @@ export class DeleteProgramTeamHandler implements ICommandHandler<DeleteProgramTe
             () => assertProgramOrBrandContentAccess(this.prismaRead, command.actor, existing.programId, existing.brandId),
             () => new NotFoundException('Team member not found'),
         );
+        if (existing.programId) await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.content);
 
         return this.repository.deleteTeam(command.id);
     }
@@ -1173,7 +1188,7 @@ export class CreateProgramPartnerHandler implements ICommandHandler<CreateProgra
     async execute(command: CreateProgramPartnerCommand) {
          // Asserted on dto.programId - the id createPartner writes - see
          // addTimeline's note above.
-         await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+         await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.partners);
 
          let logoUrl = command.dto.logoUrl;
 
@@ -1234,6 +1249,7 @@ export class UpdateProgramPartnerHandler implements ICommandHandler<UpdateProgra
             () => assertProgramContentAccess(this.prismaRead, command.actor, partner.programId),
             () => new NotFoundException('Partner not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, partner.programId, CONTENT_WRITE_PERMISSIONS.partners);
 
         let logoUrl = command.dto.logoUrl;
 
@@ -1288,6 +1304,7 @@ export class DeleteProgramPartnerHandler implements ICommandHandler<DeleteProgra
             () => assertProgramContentAccess(this.prismaRead, command.actor, existing.programId),
             () => new NotFoundException('Partner not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, existing.programId, CONTENT_WRITE_PERMISSIONS.partners);
 
         const result = await this.repository.deletePartner(command.id);
         await invalidateLandingCacheByProgramId(existing.programId, this.prisma, this.landingCacheInvalidation);
@@ -1309,7 +1326,7 @@ export class CreateProgramResourceHandler implements ICommandHandler<CreateProgr
     async execute(command: CreateProgramResourceCommand) {
         // Asserted on dto.programId - the id createResource writes - before any
         // upload happens, same reasoning as addGallery in the controller.
-        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.documents);
 
         const sourceType = command.dto.sourceType ?? 'upload';
         let fileUrl = command.dto.fileUrl;
@@ -1390,6 +1407,7 @@ export class UpdateProgramResourceHandler implements ICommandHandler<UpdateProgr
             () => assertProgramContentAccess(this.prismaRead, command.actor, resourceProgramId),
             () => new NotFoundException('Resource not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, resourceProgramId, CONTENT_WRITE_PERMISSIONS.documents);
 
         const sourceType = command.dto.sourceType ?? resource.sourceType ?? 'upload';
         let fileUrl = command.dto.fileUrl;
@@ -1478,6 +1496,7 @@ export class DeleteProgramResourceHandler implements ICommandHandler<DeleteProgr
                 () => assertProgramContentAccess(this.prismaRead, command.actor, resourceProgramId),
                 () => new NotFoundException('Resource not found'),
             );
+            await assertProgramPermission(this.prismaRead, command.actor, resourceProgramId, CONTENT_WRITE_PERMISSIONS.documents);
         }
 
         const result = await this.repository.deleteResource(command.id);
@@ -1504,7 +1523,7 @@ export class CreateProgramPricingTierHandler implements ICommandHandler<CreatePr
         // also carries a program id, but the handler ignores it - see
         // addGallery in program-content.controller.ts for why the route param
         // is not a valid substitute.
-        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.pricing);
 
         // Validation: Ensure uniqueness of active registration fee tier per category
         if (command.dto.feeType === 'registration_fee' && command.dto.allowedCategories && command.dto.allowedCategories.length > 0) {
@@ -1842,7 +1861,7 @@ export class CreateProgramRequirementHandler implements ICommandHandler<CreatePr
     async execute(command: CreateProgramRequirementCommand) {
         // Asserted on dto.programId - the id this handler writes - see
         // addTimeline's note above.
-        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.submissionForm);
 
         const result = await this.repository.createRequirement(command.dto as Partial<ProgramRequirement>);
         await invalidateRequirementCaches(command.dto.programId, this.prisma, this.cacheService);
@@ -1893,7 +1912,7 @@ export class CreateProgramEssayHandler implements ICommandHandler<CreateProgramE
     async execute(command: CreateProgramEssayCommand) {
         // Asserted on dto.programId - the id this handler writes - see
         // addTimeline's note above.
-        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.submissionForm);
 
         const result = await this.repository.createEssay({
             ...command.dto,
@@ -1977,7 +1996,7 @@ export class CreateProgramParticipationCategoryHandler implements ICommandHandle
     async execute(command: CreateProgramParticipationCategoryCommand) {
         // Asserted on dto.programId - the id this handler writes - see
         // addTimeline's note above.
-        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.submissionForm);
 
         return this.repository.createParticipationCategory(command.dto);
     }
@@ -2009,7 +2028,7 @@ export class CreateProgramSubthemeHandler implements ICommandHandler<CreateProgr
     async execute(command: CreateProgramSubthemeCommand) {
         // Asserted on dto.programId - the id this handler writes - see
         // addTimeline's note above.
-        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.submissionForm);
 
         const result = await this.repository.createSubtheme(command.dto);
         await invalidateLandingCacheByProgramId(command.dto.programId, this.prisma, this.landingCacheInvalidation);
@@ -2068,7 +2087,7 @@ export class CreateDocumentTemplateHandler implements ICommandHandler<CreateDocu
         // param before building the command (dto.programId = programId), so the
         // two never diverge here, but the assert still belongs on the id the
         // handler actually writes, per the gallery pattern.
-        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId);
+        await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.documents);
 
         const sourceType = command.dto.sourceType ?? 'upload';
         let templateUrl = command.dto.templateUrl;
@@ -2159,6 +2178,7 @@ export class UpdateDocumentTemplateHandler implements ICommandHandler<UpdateDocu
             () => assertProgramContentAccess(this.prismaRead, command.actor, template.programId),
             () => new NotFoundException('Document template not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, template.programId, CONTENT_WRITE_PERMISSIONS.documents);
 
         const sourceType = command.dto.sourceType ?? template.sourceType ?? 'upload';
         let templateUrl = command.dto.templateUrl;
@@ -2250,6 +2270,7 @@ export class DeleteDocumentTemplateHandler implements ICommandHandler<DeleteDocu
             () => assertProgramContentAccess(this.prismaRead, command.actor, template.programId),
             () => new NotFoundException('Document template not found'),
         );
+        await assertProgramPermission(this.prismaRead, command.actor, template.programId, CONTENT_WRITE_PERMISSIONS.documents);
 
         await this.repository.deleteDocumentTemplate(command.id);
         await invalidateLandingCacheByProgramId(template.programId, this.prisma, this.landingCacheInvalidation);

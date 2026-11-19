@@ -137,6 +137,17 @@ export const programWritePermissions = {
   resendReceipt: ["payments:write", "support:write"],
   applicationEdit: ["applications:write"],
   applicationSubmit: ["applications:write", "payments:write"],
+  // program-content-access.util.ts CONTENT_WRITE_PERMISSIONS, admin-media and
+  // ambassador-access.util.ts.
+  programConfig: ["program:write"],
+  content: ["content:write", "program:write"],
+  gallery: ["media:write", "content:write", "program:write"],
+  partners: ["partnerships:write", "content:write", "program:write"],
+  documents: ["documents:write", "content:write", "program:write"],
+  pricing: ["payments:write", "program:write"],
+  submissionForm: ["program:write", "applications:write"],
+  media: ["media:write", "content:write", "program:write"],
+  ambassadors: ["participants:write", "program:write"],
 } as const satisfies Record<string, readonly string[]>;
 
 export function getRequiredPermissionsForMenuItem(itemId: string): string[] {

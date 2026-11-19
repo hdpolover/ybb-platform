@@ -45,7 +45,7 @@ import {
 } from './dto/ambassador.dto';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
-import { assertAmbassadorAccess, assertAmbassadorCreateAccess, resolveAmbassadorProgramScope } from '../application/utils/ambassador-access.util';
+import { AMBASSADOR_WRITE_PERMISSIONS, assertAmbassadorAccess, assertAmbassadorCreateAccess, resolveAmbassadorProgramScope } from '../application/utils/ambassador-access.util';
 import { buildWibDateRangeFilter, parseWibFilterDate, startOfWibMonth, addWibMonths, endOfWibDay, wibMonthKey } from '@shared/utils/wib-time';
 
 // Maps the recap's `stage` query param to the ambassador_referrals column that
@@ -667,7 +667,7 @@ export class AmbassadorAdminController {
   @Post(':id/resend-credentials')
   @ApiOperation({ summary: 'Resend ambassador credentials email (Admin)' })
   async resendCredentials(@Param('id') id: string, @CurrentUser() actor: CurrentUserData) {
-    await assertAmbassadorAccess(this.prismaRead, actor, id);
+    await assertAmbassadorAccess(this.prismaRead, actor, id, AMBASSADOR_WRITE_PERMISSIONS);
     const ambassador = await this.prisma.ambassador.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -729,7 +729,7 @@ export class AmbassadorAdminController {
     @Body() body: UpdateAmbassadorAdminDto,
     @CurrentUser() actor: CurrentUserData,
   ) {
-    await assertAmbassadorAccess(this.prismaRead, actor, id);
+    await assertAmbassadorAccess(this.prismaRead, actor, id, AMBASSADOR_WRITE_PERMISSIONS);
     this.assertValidGender(body.gender);
 
     const ambassador = await this.prisma.ambassador.findUnique({ where: { id } });
@@ -752,7 +752,7 @@ export class AmbassadorAdminController {
   @AuditTrail({ entityType: 'Ambassador', action: ChangeType.update })
   @ApiOperation({ summary: 'Activate an ambassador' })
   async activate(@Param('id') id: string, @CurrentUser() actor: CurrentUserData) {
-    await assertAmbassadorAccess(this.prismaRead, actor, id);
+    await assertAmbassadorAccess(this.prismaRead, actor, id, AMBASSADOR_WRITE_PERMISSIONS);
     return this.commandBus.execute(new UpdateAmbassadorStatusCommand(id, true));
   }
 
@@ -760,7 +760,7 @@ export class AmbassadorAdminController {
   @AuditTrail({ entityType: 'Ambassador', action: ChangeType.update })
   @ApiOperation({ summary: 'Deactivate an ambassador' })
   async deactivate(@Param('id') id: string, @CurrentUser() actor: CurrentUserData) {
-    await assertAmbassadorAccess(this.prismaRead, actor, id);
+    await assertAmbassadorAccess(this.prismaRead, actor, id, AMBASSADOR_WRITE_PERMISSIONS);
     return this.commandBus.execute(new UpdateAmbassadorStatusCommand(id, false));
   }
 
@@ -780,7 +780,7 @@ export class AmbassadorAdminController {
   @AuditTrail({ entityType: 'Ambassador', action: ChangeType.delete })
   @ApiOperation({ summary: 'Soft-delete an ambassador (Admin)' })
   async remove(@Param('id') id: string, @Req() req: any, @CurrentUser() actor: CurrentUserData) {
-    await assertAmbassadorAccess(this.prismaRead, actor, id);
+    await assertAmbassadorAccess(this.prismaRead, actor, id, AMBASSADOR_WRITE_PERMISSIONS);
     const deletedBy: string = req.user?.id ?? req.user?.sub;
     return this.commandBus.execute(new DeleteAmbassadorCommand(id, deletedBy));
   }

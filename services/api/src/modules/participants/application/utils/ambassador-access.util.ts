@@ -2,6 +2,11 @@ import { NotFoundException } from '@nestjs/common';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { resolveRevenueAccessScope, assertProgramAccess } from '@modules/stats/revenue/utils/revenue-access.util';
+import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
+
+// Write-level twin of the dashboard's "ambassadors" menu rule
+// (services/admin-dashboard/lib/admin-access.ts programWritePermissions.ambassadors).
+export const AMBASSADOR_WRITE_PERMISSIONS = ['participants:write', 'program:write'];
 
 /**
  * The programmes whose ambassadors this admin may see and act on.
@@ -56,6 +61,7 @@ export async function assertAmbassadorAccess(
   prismaRead: PrismaReadService,
   actor: CurrentUserData,
   ambassadorId: string,
+  requiredPermissions?: readonly string[],
 ): Promise<void> {
   const allowedProgramIds = await resolveAmbassadorProgramScope(prismaRead, actor);
   if (allowedProgramIds === null) return;
@@ -67,6 +73,10 @@ export async function assertAmbassadorAccess(
 
   if (!ambassador?.programId || !allowedProgramIds.includes(ambassador.programId)) {
     throw new NotFoundException('Ambassador not found');
+  }
+  // After the 404, so ids still cannot be probed across brands.
+  if (requiredPermissions) {
+    await assertProgramPermission(prismaRead, actor, ambassador.programId, requiredPermissions);
   }
 }
 
@@ -84,4 +94,7 @@ export async function assertAmbassadorCreateAccess(
 ): Promise<void> {
   const scope = await resolveRevenueAccessScope(prismaRead, actor);
   await assertProgramAccess(prismaRead, scope, programId);
+  if (scope.kind !== 'platform') {
+    await assertProgramPermission(prismaRead, actor, programId, AMBASSADOR_WRITE_PERMISSIONS);
+  }
 }

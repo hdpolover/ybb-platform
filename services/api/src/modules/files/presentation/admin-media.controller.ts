@@ -37,6 +37,11 @@ import { PrivateFileUrlResolver, PRIVATE_FILE_UNAVAILABLE } from '../application
 import { isPrivateCategoryKey } from '@shared/utils/private-file-key';
 import { mapWithConcurrency } from '@shared/utils/map-with-concurrency';
 import { multerLimits } from '@common/constants';
+import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
+
+// Write-level twin of the dashboard's "media-library" menu rule
+// (services/admin-dashboard/lib/admin-access.ts programWritePermissions.media).
+const MEDIA_WRITE_PERMISSIONS = ['media:write', 'content:write', 'program:write'];
 
 /**
  * Admin Media Library Controller
@@ -176,15 +181,15 @@ export class AdminMediaController {
   ) {
     if (!file) throw new BadRequestException('No file provided');
     this.logger.log(`Uploading media for program ${programId}: ${file.originalname}`);
+    // Identity and brand are server-derived, never read off the request body.
+    // Both `brand_id` and `user_id` used to be taken from the body, so an
+    // authenticated admin could attribute an upload to any brand and any user.
+    // brand comes from the program (the same rule the upload-url flow uses);
+    // user comes from the JWT.
+    const scope = await resolveRevenueAccessScope(this.prismaRead, user);
+    const program = await assertProgramAccess(this.prismaRead, scope, programId);
+    await assertProgramPermission(this.prismaRead, user, programId, MEDIA_WRITE_PERMISSIONS);
     try {
-      // Identity and brand are server-derived, never read off the request body.
-      // Both `brand_id` and `user_id` used to be taken from the body, so an
-      // authenticated admin could attribute an upload to any brand and any user.
-      // brand comes from the program (the same rule the upload-url flow uses);
-      // user comes from the JWT.
-      const scope = await resolveRevenueAccessScope(this.prismaRead, user);
-      const program = await assertProgramAccess(this.prismaRead, scope, programId);
-
       const uploadResult = await this.storageService.uploadFile(
         file,
         user.userId,
@@ -224,6 +229,7 @@ export class AdminMediaController {
     // delete another brand's file by naming its brand.
     const scope = await resolveRevenueAccessScope(this.prismaRead, user);
     const program = await assertProgramAccess(this.prismaRead, scope, programId);
+    await assertProgramPermission(this.prismaRead, user, programId, MEDIA_WRITE_PERMISSIONS);
     // Validated after the scope check and immediately before the value is used,
     // so an unauthorised caller still gets the same 404 it always did rather
     // than a 400 that tells them their id was well-formed.

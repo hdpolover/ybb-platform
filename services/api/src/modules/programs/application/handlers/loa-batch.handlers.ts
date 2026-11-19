@@ -31,7 +31,7 @@ import {
   LoaSendSearchResultDto,
 } from '../dto/loa-batch.dto';
 import { Prisma } from '@prisma/client';
-import { assertProgramContentAccess } from '../../application/utils/program-content-access.util';
+import { assertProgramContentAccess, CONTENT_WRITE_PERMISSIONS } from '../../application/utils/program-content-access.util';
 
 // ─── Program id/slug resolution ────────────────────────────────────────────────
 // The admin dashboard's route param is frequently a program SLUG, not a UUID
@@ -144,7 +144,7 @@ export class CreateLoaBatchHandler implements ICommandHandler<CreateLoaBatchComm
     if (!programId) {
       throw new NotFoundException(`Program ${command.programId} not found`);
     }
-    await assertProgramContentAccess(this.prismaRead, command.actor, programId);
+    await assertProgramContentAccess(this.prismaRead, command.actor, programId, CONTENT_WRITE_PERMISSIONS.documents);
 
     const paymentFrom = startOfWibDay(command.paymentFrom);
     const paymentTo = endOfWibDay(command.paymentTo);
@@ -179,7 +179,7 @@ export class UpdateLoaBatchHandler implements ICommandHandler<UpdateLoaBatchComm
     if (!programId) {
       throw new NotFoundException('Batch not found');
     }
-    await assertProgramContentAccess(this.prismaRead, command.actor, programId);
+    await assertProgramContentAccess(this.prismaRead, command.actor, programId, CONTENT_WRITE_PERMISSIONS.documents);
 
     const paymentFrom = command.paymentFrom ? startOfWibDay(command.paymentFrom) : undefined;
     const paymentTo = command.paymentTo ? endOfWibDay(command.paymentTo) : undefined;
@@ -226,7 +226,7 @@ export class ReleaseLoaBatchHandler implements ICommandHandler<ReleaseLoaBatchCo
     if (!programId) {
       throw new NotFoundException('Batch not found');
     }
-    await assertProgramContentAccess(this.prismaRead, command.actor, programId);
+    await assertProgramContentAccess(this.prismaRead, command.actor, programId, CONTENT_WRITE_PERMISSIONS.documents);
 
     const existing = await this.batchRepo.findById(command.batchId);
     if (!existing || existing.programId !== programId) {
@@ -418,7 +418,7 @@ export class UnreleaseLoaBatchHandler implements ICommandHandler<UnreleaseLoaBat
     if (!programId) {
       throw new NotFoundException('Batch not found');
     }
-    await assertProgramContentAccess(this.prismaRead, command.actor, programId);
+    await assertProgramContentAccess(this.prismaRead, command.actor, programId, CONTENT_WRITE_PERMISSIONS.documents);
 
     const batch = await this.batchRepo.findById(command.batchId);
     if (!batch || batch.programId !== programId) {
@@ -441,7 +441,7 @@ export class DeleteLoaBatchHandler implements ICommandHandler<DeleteLoaBatchComm
     if (!programId) {
       throw new NotFoundException('Batch not found');
     }
-    await assertProgramContentAccess(this.prismaRead, command.actor, programId);
+    await assertProgramContentAccess(this.prismaRead, command.actor, programId, CONTENT_WRITE_PERMISSIONS.documents);
 
     const batch = await this.batchRepo.findById(command.batchId);
     if (!batch || batch.programId !== programId) {
