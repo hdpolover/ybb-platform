@@ -24,11 +24,16 @@ import { normalizePermissions } from '@shared/admin-access-response';
 import { CreateAdminRoleDto } from './dto/create-admin-role.dto';
 import { UpdateAdminRoleDto } from './dto/update-admin-role.dto';
 import { AdminAccessControlService } from '../application/services/admin-access-control.service';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 
 @ApiTags('admin-roles')
 @Controller('admin-roles')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+// Roles are global. assertCanAssignRoles also admits 'roles.manage', which the
+// scope classifier does not count as platform, so a brand admin holding it could
+// rewrite every brand's roles, their own included. Platform only.
+@ScopedBy('platform')
 @ApiBearerAuth()
 export class AdminRolesController {
   constructor(

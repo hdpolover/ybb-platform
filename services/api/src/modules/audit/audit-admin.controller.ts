@@ -24,11 +24,15 @@ import { ListAuditLogsDto } from './dto/list-audit-logs.dto';
 import { AuditCleanupService } from './audit-cleanup.service';
 import { Prisma, ChangeType, ChangedByType, RiskLevel } from '@prisma/client';
 import { endOfWibDay, parseWibFilterDate } from '@shared/utils/wib-time';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 
 @ApiTags('audit')
 @Controller('admin/audit-logs')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+// The platform audit log holds every brand's before/after PII diffs and rows have
+// no brand column to filter on, so every route here is platform only.
+@ScopedBy('platform')
 @ApiBearerAuth()
 export class AuditAdminController {
     private readonly logger = new Logger(AuditAdminController.name);

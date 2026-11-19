@@ -6,6 +6,7 @@ import { ExcelService } from '../../shared/infrastructure/excel/excel.service';
 import { AuditCleanupService } from './audit-cleanup.service';
 import { JwtAuthGuard } from '../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/infrastructure/guards/roles.guard';
+import { AdminScopeGuard } from '../../shared/guards/admin-scope.guard';
 import { CurrentUserData } from '../../shared/decorators/current-user.decorator';
 import { ListAuditLogsDto } from './dto/list-audit-logs.dto';
 
@@ -65,6 +66,8 @@ describe('AuditAdminController – cursor pagination', () => {
             .overrideGuard(JwtAuthGuard)
             .useValue({ canActivate: () => true })
             .overrideGuard(RolesGuard)
+            .useValue({ canActivate: () => true })
+            .overrideGuard(AdminScopeGuard)
             .useValue({ canActivate: () => true })
             .compile();
 

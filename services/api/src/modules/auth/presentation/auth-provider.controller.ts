@@ -13,12 +13,15 @@ import { JwtAuthGuard } from '../infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../infrastructure/guards/roles.guard';
 import { Roles } from '../application/decorators/roles.decorator';
 import { UserRole } from '../../../core/entities/user.entity';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 
 @ApiTags('Auth')
 @Controller('auth/providers')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
 @ApiBearerAuth()
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+// Login providers (and their OAuth client secrets) are platform-wide config.
+@ScopedBy('platform')
 export class AuthProviderController {
   constructor(
     private readonly createHandler: CreateAuthProviderHandler,
