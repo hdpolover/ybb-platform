@@ -45,6 +45,11 @@ describe('POST /admin-access-requests (public)', () => {
     expect([a.status, a.body]).toEqual([b.status, b.body]);
   });
 
+  it('opts into Turnstile enforcement regardless of AUTH_TURNSTILE_ENFORCE', () => {
+    expect(Reflect.getMetadata('turnstile:enforced', AdminAccessRequestsPublicController.prototype.submit)).toBe(true);
+    expect(Reflect.getMetadata('turnstile:enforced', AdminAccessRequestsPublicController.prototype.getOptions)).toBeUndefined();
+  });
+
   it('accepts the optional turnstileToken body field', async () => {
     const res = await request(app.getHttpServer()).post('/admin-access-requests').send({ ...valid, turnstileToken: 'tok' });
     expect(res.status).toBe(202);

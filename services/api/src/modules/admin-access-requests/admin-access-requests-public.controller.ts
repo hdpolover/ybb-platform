@@ -6,7 +6,7 @@ import { Request } from 'express';
 import { Public } from '@shared/decorators/public.decorator';
 import { ClientIp } from '@shared/decorators/client-ip.decorator';
 import { clientIpTracker } from '@shared/infrastructure/throttler/user-aware-throttler.guard';
-import { TurnstileGuard } from '../auth/infrastructure/guards/turnstile.guard';
+import { TurnstileEnforced, TurnstileGuard } from '../auth/infrastructure/guards/turnstile.guard';
 import { AdminAccessRequestsService } from './admin-access-requests.service';
 import { CreateAccessRequestDto } from './dto/create-access-request.dto';
 
@@ -30,6 +30,7 @@ export class AdminAccessRequestsPublicController {
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
   @UseGuards(TurnstileGuard)
+  @TurnstileEnforced()
   // Per client IP, named explicitly: the default tracker is user-aware and this route is anonymous.
   @Throttle({ default: { limit: SUBMITS_PER_HOUR, ttl: ONE_HOUR, getTracker: clientIpTracker } })
   @ApiOperation({ summary: 'Request admin dashboard access (always 202: no account enumeration)' })
