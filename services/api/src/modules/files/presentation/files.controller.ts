@@ -129,7 +129,7 @@ const ADMIN_UPLOAD_PERMISSIONS_BY_BUCKET: Readonly<Record<string, readonly strin
       (bucket) => [bucket, MEDIA_UPLOAD_PERMISSIONS],
     ),
   ),
-  ...Object.fromEntries([...MEDIA_CATEGORY_BUCKETS, 'thumbnail'].map((bucket) => [bucket, MEDIA_UPLOAD_PERMISSIONS])),
+  ...Object.fromEntries(MEDIA_CATEGORY_BUCKETS.map((bucket) => [bucket, MEDIA_UPLOAD_PERMISSIONS])),
   announcements: ANNOUNCEMENT_UPLOAD_PERMISSIONS,
   partners: CONTENT_WRITE_PERMISSIONS.partners,
   sponsors: CONTENT_WRITE_PERMISSIONS.partners,

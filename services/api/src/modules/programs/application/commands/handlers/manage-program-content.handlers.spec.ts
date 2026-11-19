@@ -1012,6 +1012,30 @@ describe('ManageProgramContentHandlers', () => {
                 expect(repo.createTestimonial).not.toHaveBeenCalled();
             });
 
+            it('CreateProgramTestimonialHandler files a program-scoped row on the program brand, not a client-sent brandId', async () => {
+                prismaRead = {
+                    ...outOfScope(),
+                    admin: {
+                        findUnique: jest.fn().mockResolvedValue({
+                            accessLevel: 1, canManageAdmins: false, canAssignRoles: false, customPermissions: [],
+                            role: { name: 'news writer', permissions: ['content:write'] },
+                            adminBrands: [],
+                            adminPrograms: [{ programId: 'prog-1', permissions: ['content:write'] }],
+                        }),
+                    },
+                } as never;
+                repo.createTestimonial = jest.fn().mockResolvedValue({ id: 't-1' });
+                const handler = await build(CreateProgramTestimonialHandler);
+
+                await handler.execute(new CreateProgramTestimonialCommand(
+                    { programId: 'prog-1', brandId: 'someone-elses-brand', name: 'Alum', testimonial: 'Great' } as never,
+                    'user-1',
+                    actor,
+                ));
+
+                expect(repo.createTestimonial).toHaveBeenCalledWith(expect.objectContaining({ programId: 'prog-1', brandId: 'brand-x' }));
+            });
+
             it('UpdateProgramTestimonialHandler refuses, resolving the programme from the target row', async () => {
                 prismaRead = outOfScope();
                 repo.findTestimonialById = jest.fn().mockResolvedValue({ id: 'test-1', programId: 'prog-1', brandId: null });

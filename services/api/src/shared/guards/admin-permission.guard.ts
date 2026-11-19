@@ -107,7 +107,7 @@ function findPermissionAdmin(prisma: PrismaReadService, adminId: string) {
       canAssignRoles: true,
       customPermissions: true,
       role: { select: { name: true, permissions: true } },
-      adminPrograms: { select: { programId: true, permissions: true } },
+      adminPrograms: { where: { removedAt: null }, select: { programId: true, permissions: true } },
     },
   });
 }

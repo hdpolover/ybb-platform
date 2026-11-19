@@ -226,12 +226,8 @@ export class LoginHandler {
     const roles: string[] = [];
     if (user.admin) {
       roles.push('admin');
-      const brandRole = user.admin.adminBrands.find(
-        (apc) => apc.brandId === user.brandId,
-      );
-      if (brandRole && brandRole.roleInBrand) {
-        roles.push(brandRole.roleInBrand);
-      }
+      // Brand rows grant nothing below platform tier (owner policy 2026-11-19), so a
+      // brand's roleInBrand is no longer added to the token roles.
     }
 
     // Session id is minted BEFORE the token so the access token can carry it

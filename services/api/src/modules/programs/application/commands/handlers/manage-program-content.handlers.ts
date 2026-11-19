@@ -868,11 +868,8 @@ export class CreateProgramTestimonialHandler implements ICommandHandler<CreatePr
         private readonly prismaRead: PrismaReadService,
     ) {}
     async execute(command: CreateProgramTestimonialCommand) {
-        const { brandId, ...rest } = command.dto;
-        const dto = {
-            ...rest,
-            brandId: brandId,
-        };
+        const { brandId: requestedBrandId, ...rest } = command.dto;
+        let brandId = requestedBrandId;
 
         // Testimonials can be program-scoped (dto.programId) or a general
         // brand testimonial with no program at all (dto.brandId only, see
@@ -883,8 +880,11 @@ export class CreateProgramTestimonialHandler implements ICommandHandler<CreatePr
         // which would lock out every program-scoped admin. For the brand-only
         // case there IS no program in play, so a brand-level grant is the
         // correct (and only meaningful) thing to require.
-        if (dto.programId) {
-            await assertProgramContentAccess(this.prismaRead, command.actor, dto.programId, CONTENT_WRITE_PERMISSIONS.content);
+        if (rest.programId) {
+            // A program-scoped row lives on its program's brand; a client-sent brandId
+            // must not publish it onto another brand's landing page.
+            const program = await assertProgramContentAccess(this.prismaRead, command.actor, rest.programId, CONTENT_WRITE_PERMISSIONS.content);
+            brandId = program.brandId;
         } else if (brandId) {
             const scope = await resolveRevenueAccessScope(this.prismaRead, command.actor);
             assertBrandAccess(scope, brandId);
@@ -896,6 +896,7 @@ export class CreateProgramTestimonialHandler implements ICommandHandler<CreatePr
             }
         }
 
+        const dto = { ...rest, brandId };
         const result = await this.repository.createTestimonial(dto);
         if (brandId) await invalidateLandingCacheByBrandId(brandId, this.landingCacheInvalidation);
         return result;
@@ -1057,7 +1058,8 @@ export class CreateProgramTeamHandler implements ICommandHandler<CreateProgramTe
     ) {}
     async execute(command: CreateProgramTeamCommand) {
         let photoUrl = command.dto.photoUrl;
-        const { brandId, ...restDto } = command.dto;
+        const { brandId: requestedBrandId, ...restDto } = command.dto;
+        let brandId = requestedBrandId;
 
         // Team members can be program-scoped (dto.programId) or a general
         // brand team member with no program at all (dto.brandId only, see
@@ -1066,7 +1068,9 @@ export class CreateProgramTeamHandler implements ICommandHandler<CreateProgramTe
         // assertBrandAccess for the program case (see
         // program-content-access.util.ts for why).
         if (command.dto.programId) {
-            await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.content);
+            // Program-scoped rows live on the program's brand, whatever brandId was sent.
+            const program = await assertProgramContentAccess(this.prismaRead, command.actor, command.dto.programId, CONTENT_WRITE_PERMISSIONS.content);
+            brandId = program.brandId;
         } else if (brandId) {
             const scope = await resolveRevenueAccessScope(this.prismaRead, command.actor);
             assertBrandAccess(scope, brandId);
