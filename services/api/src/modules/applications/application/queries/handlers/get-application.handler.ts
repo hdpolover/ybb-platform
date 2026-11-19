@@ -81,6 +81,7 @@ export class GetApplicationHandler {
     // task ever throws past its own catch.
     const tasks: Promise<void>[] = [
       this.attachPaymentStatus(application, dto),
+      this.attachFeeStatuses(application, dto),
       this.attachFormStepsAndSubmissionForm(application, dto),
     ];
     if (query.includeRelations) {
@@ -192,6 +193,24 @@ export class GetApplicationHandler {
       }
     } catch (e) {
       console.error('Failed to fetch participant for application', e);
+    }
+  }
+
+  // The list endpoint enriches these two columns separately; the entity and
+  // mapper don't carry them, so the detail view read them back as undefined.
+  private async attachFeeStatuses(
+    application: ParticipantApplication,
+    dto: ApplicationResponseDto,
+  ): Promise<void> {
+    try {
+      const row = await this.prisma.participantApplication.findUnique({
+        where: { id: application.id },
+        select: { registrationPaymentStatus: true, programPaymentStatus: true },
+      });
+      dto.registrationPaymentStatus = row?.registrationPaymentStatus ?? undefined;
+      dto.programPaymentStatus = row?.programPaymentStatus ?? undefined;
+    } catch (e) {
+      console.error(`Failed to load fee statuses for app ${application.id}`, e);
     }
   }
 

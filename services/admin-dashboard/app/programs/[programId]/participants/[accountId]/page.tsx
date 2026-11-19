@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -77,7 +77,8 @@ function mapToParticipantData(app: Application): ParticipantData {
   // phoneNumber / emergencyContactPhone already carry the country code.
   const phone = clean(p?.phoneNumber);
   // Raw option value ("instagram") -> the form's option label when the form defines one.
-  const knowledgeSource = getFieldDisplayValue(sections, "knowledge_source") ?? clean(p?.knowledgeSource);
+  const knowledgeSource =
+    getFieldDisplayValue(sections, "knowledge_source") ?? getFieldDisplayValue(sections, "referral_source") ?? clean(p?.knowledgeSource);
   const location = [p?.originCity, formatCountry(p?.originCountry)].filter(Boolean).join(", ") || "—";
 
   const experiences: { role: string; company: string }[] = (() => {
@@ -251,14 +252,20 @@ export default function ParticipantDetailPage() {
     return () => { cancelled = true; };
   }, [programId, accountId]);
 
+  const currentAccountId = useRef(accountId);
+  useEffect(() => { currentAccountId.current = accountId; }, [accountId]);
+
   async function handleEditSaved() {
     // Reload participant data after a successful submission edit.
     if (!programId || !accountId) return;
+    const savedFor = accountId;
     try {
       const list = await listApplications({ programId, participantId: accountId, limit: 1 });
       const apps = list.data;
       if (!apps.length) return;
       const full = await getApplication(apps[0].id);
+      // Prev/next keeps this page mounted; drop the reload if the admin moved on meanwhile.
+      if (currentAccountId.current !== savedFor) return;
       setParticipant(mapToParticipantData(full));
       setRawApplication(full);
       // Refetches the Edit History tab if it is open; if it was loaded earlier, marks it stale for the next open.

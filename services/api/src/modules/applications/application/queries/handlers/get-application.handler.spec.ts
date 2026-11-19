@@ -15,6 +15,7 @@ describe('GetApplicationHandler birthdate resolution', () => {
   let applicationRepository: { findById: jest.Mock };
   let prisma: {
     participant: { findUnique: jest.Mock };
+    participantApplication: { findUnique: jest.Mock };
     programEssay: { findMany: jest.Mock };
     applicationFormField: { findMany: jest.Mock };
   };
@@ -35,6 +36,7 @@ describe('GetApplicationHandler birthdate resolution', () => {
     applicationRepository = { findById: jest.fn() };
     prisma = {
       participant: { findUnique: jest.fn() },
+      participantApplication: { findUnique: jest.fn().mockResolvedValue(null) },
       programEssay: { findMany: jest.fn().mockResolvedValue([]) },
       applicationFormField: { findMany: jest.fn().mockResolvedValue([]) },
     };
@@ -108,6 +110,20 @@ describe('GetApplicationHandler birthdate resolution', () => {
     const dto = await handler.execute(new GetApplicationQuery('app-1', true));
 
     expect(dto.participant?.birthdate).toBeNull();
+  });
+
+  it('returns the registration and program fee statuses the list endpoint shows', async () => {
+    applicationRepository.findById.mockResolvedValue(buildApplication({}));
+    prisma.participant.findUnique.mockResolvedValue(null);
+    prisma.participantApplication.findUnique.mockResolvedValue({
+      registrationPaymentStatus: 'paid',
+      programPaymentStatus: 'unpaid',
+    });
+
+    const dto = await handler.execute(new GetApplicationQuery('app-1', true));
+
+    expect(dto.registrationPaymentStatus).toBe('paid');
+    expect(dto.programPaymentStatus).toBe('unpaid');
   });
 
   describe('participant contact fields across form templates', () => {

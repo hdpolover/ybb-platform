@@ -25,6 +25,9 @@ export function SubmittedFormTab({ data }: { data: SubmittedForm }) {
 
   return (
     <div className="space-y-10">
+      <p className="text-xs text-zinc-500">
+        Every field of the program form with its current value, including admin edits. The Edit History tab shows what changed.
+      </p>
       {data.sections.map((section) => (
         <section key={section.section}>
           <h3 className="mb-6 text-base font-semibold text-zinc-900">{section.label}</h3>

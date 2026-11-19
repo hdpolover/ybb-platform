@@ -211,7 +211,9 @@ export class PaymentAdminController {
                 minAmount,
                 maxAmount,
             },
-            obsoleteInvoiceIds,
+            // One applicant's history must keep an invoice superseded by a
+            // category switch: an admin override keeps the paid one on purpose.
+            applicationId ? [] : obsoleteInvoiceIds,
         );
 
         const allowedSortBy: Record<string, Prisma.ApplicationInvoiceOrderByWithRelationInput> = {
