@@ -79,4 +79,9 @@ describe("canSendPasswordLink", () => {
   it("is hidden on the actor's own row", () => {
     expect(canSendPasswordLink({ canManageAdmins: true }, "me", "me")).toBe(false);
   });
+
+  it("is hidden for inactive admins (the API answers 409)", () => {
+    expect(canSendPasswordLink({ canManageAdmins: true }, "me", "other", false)).toBe(false);
+    expect(canSendPasswordLink({ canManageAdmins: true }, "me", "other", true)).toBe(true);
+  });
 });

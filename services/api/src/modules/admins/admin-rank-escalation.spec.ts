@@ -8,6 +8,7 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AdminAccessControlService, AdminTargetAction } from './application/services/admin-access-control.service';
+import { AdminInviteService } from './application/services/admin-invite.service';
 import { AdminsController } from './presentation/admins.controller';
 import { AdminRolesController } from './presentation/admin-roles.controller';
 import { CreateAdminDto } from './presentation/dto/create-admin.dto';
@@ -89,7 +90,7 @@ function buildRankPrisma() {
       ),
       update: jest.fn().mockResolvedValue({}),
     },
-    user: { update: jest.fn().mockResolvedValue({}) },
+    user: { update: jest.fn().mockResolvedValue({}), findFirst: jest.fn().mockResolvedValue(null), findMany: jest.fn().mockResolvedValue([]) },
   };
 
   return { prisma, asService: prisma as unknown as PrismaService };
@@ -502,6 +503,7 @@ describe('admin controllers enforce the rank rule before writing', () => {
       access,
       built.asService,
       links as never,
+      new AdminInviteService(built.asService, access, handlers.create as never, links as never),
     );
     roles = new AdminRolesController(built.asService, access);
   });
@@ -529,6 +531,15 @@ describe('admin controllers enforce the rank rule before writing', () => {
     const dto = { email: 'new@test.local', fullName: 'New', password: 'hunter2hunter2', roleId: ROLES.superAdmin.id };
     await expect(admins.create(dto as CreateAdminDto, asAdmin)).rejects.toBeInstanceOf(ForbiddenException);
     expect(handlers.create.execute).not.toHaveBeenCalled();
+  });
+
+  it('Admin cannot invite an admin with the Super Admin role or a role carrying "*"', async () => {
+    for (const role of [ROLES.superAdmin, ROLES.wildcard]) {
+      const dto = { email: 'new@test.local', fullName: 'New', roleId: role.id, programIds: [] };
+      await expect(admins.invite(dto, asAdmin)).rejects.toBeInstanceOf(ForbiddenException);
+    }
+    expect(handlers.create.execute).not.toHaveBeenCalled();
+    expect(links.issue).not.toHaveBeenCalled();
   });
 
   it('Admin cannot send a password link to a Super Admin', async () => {

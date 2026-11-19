@@ -2,6 +2,7 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AdminAccessRequestsService } from './admin-access-requests.service';
+import { AdminInviteService } from '../admins/application/services/admin-invite.service';
 
 const PROGRAM_A = '11111111-1111-4111-8111-111111111111';
 const PROGRAM_B = '22222222-2222-4222-8222-222222222222';
@@ -33,7 +34,8 @@ function build() {
   };
   const createAdmin = { execute: jest.fn().mockResolvedValue({ id: 'new-admin', userId: 'new-user' }) };
   const links = { issue: jest.fn().mockResolvedValue(undefined) };
-  const service = new AdminAccessRequestsService(prisma as never, access as never, createAdmin as never, links as never);
+  const invites = new AdminInviteService(prisma as never, access as never, createAdmin as never, links as never);
+  const service = new AdminAccessRequestsService(prisma as never, access as never, invites);
   return { prisma, access, createAdmin, links, service };
 }
 
@@ -278,9 +280,8 @@ describe('AdminAccessRequestsService.approve', () => {
   });
 
   it('M4: reverts the claim to pending and rethrows when creating the admin fails', async () => {
-    const { prisma, service, links } = ready();
+    const { prisma, service, links, createAdmin } = ready();
     const failure = new ConflictException('User with this email already exists.');
-    const { createAdmin } = { createAdmin: (service as unknown as { createAdmin: { execute: jest.Mock } }).createAdmin };
     createAdmin.execute.mockRejectedValue(failure);
 
     await expect(service.approve(actor, REQUEST_ID, dto)).rejects.toBe(failure);

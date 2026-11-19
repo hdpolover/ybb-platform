@@ -366,15 +366,6 @@ export type Admin = {
   updatedAt: string;
 };
 
-export type CreateAdminInput = {
-  email: string;
-  fullName: string;
-  password: string;
-  roleId?: string;
-  brandIds?: string[];
-  programIds?: string[];
-};
-
 export type UpdateAdminInput = {
   fullName?: string;
   roleId?: string;
@@ -898,13 +889,6 @@ export function getAdmin(id: string): Promise<Admin> {
   return request<Admin>(`/admins/${id}`);
 }
 
-export function createAdmin(input: CreateAdminInput): Promise<Admin> {
-  return request<Admin>("/admins", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
 export function updateAdmin(id: string, input: UpdateAdminInput): Promise<Admin> {
   return request<Admin>(`/admins/${id}`, {
     method: "PATCH",
@@ -1039,6 +1023,19 @@ export function rejectAccessRequest(id: string, reason?: string): Promise<unknow
     method: "POST",
     body: JSON.stringify(reason ? { reason } : {}),
   });
+}
+
+export type InviteAdminInput = { fullName: string; email: string; roleId: string; programIds: string[] };
+export type InviteAdminResult = ApproveAccessRequestResult;
+export type InviteCheckResult = { existingAdminId: string | null; participantBrands: string[] };
+
+/** Creates the admin with no password and emails a single-use set-password link. */
+export function inviteAdmin(input: InviteAdminInput): Promise<InviteAdminResult> {
+  return request<InviteAdminResult>("/admins/invite", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function checkAdminInvite(email: string): Promise<InviteCheckResult> {
+  return request<InviteCheckResult>(`/admins/invite-check?${new URLSearchParams({ email })}`);
 }
 
 export function sendAdminPasswordLink(id: string): Promise<{ ok: true; adminId: string }> {

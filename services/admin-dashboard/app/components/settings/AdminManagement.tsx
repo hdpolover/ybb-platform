@@ -14,12 +14,12 @@ import {
   SendPasswordLinkDialog,
   type PasswordLinkTarget,
 } from "@/app/components/settings/adminManagement/SendPasswordLinkDialog";
+import { InviteAdminDialog } from "@/app/components/settings/adminManagement/InviteAdminDialog";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { EnglishInput } from "@/src/ui/english-input";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
-  createAdmin,
   deleteAdmin,
   getAdmin,
   listAdminRoles,
@@ -28,7 +28,6 @@ import {
   updateAdmin,
   type Admin,
   type AdminRole as ApiAdminRole,
-  type CreateAdminInput,
   type UpdateAdminInput,
 } from "@/src/shared/api-client";
 
@@ -54,7 +53,6 @@ export type AdminManagementProps = {
 type AdminFormState = {
   fullName: string;
   email: string;
-  password: string;
   roleId: string;
   isActive: boolean;
   programIds: string[];
@@ -63,7 +61,6 @@ type AdminFormState = {
 const defaultFormState: AdminFormState = {
   fullName: "",
   email: "",
-  password: "",
   roleId: "",
   isActive: true,
   programIds: [],
@@ -106,6 +103,7 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
   const [statusFilter, setStatusFilter] = useState<"all" | AdminStatus>("all");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [selectedAdmin, setSelectedAdmin] = useState<Admin | null>(null);
   const [form, setForm] = useState<AdminFormState>(defaultFormState);
@@ -122,6 +120,16 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
       accessiblePrograms.map((program) => ({
         id: program.programId,
         name: program.programName,
+      })),
+    [accessiblePrograms],
+  );
+
+  const invitePrograms = useMemo(
+    () =>
+      accessiblePrograms.map((program) => ({
+        id: program.programId,
+        name: program.programName,
+        brandName: program.brandName,
       })),
     [accessiblePrograms],
   );
@@ -177,17 +185,6 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
   const superAdmins = filteredAdmins.filter((admin) => admin.role?.name === "Super Admin").length;
   const recentLogins = filteredAdmins.filter((admin) => Boolean(admin.lastLoginAt)).length;
 
-  const openCreateDrawer = () => {
-    setSelectedAdmin(null);
-    setForm({
-      ...defaultFormState,
-      roleId: roles[0]?.id ?? "",
-      programIds: resolvedProgramId ? [resolvedProgramId] : [],
-    });
-    setFormError(null);
-    setDrawerOpen(true);
-  };
-
   const openEditDrawer = async (admin: Admin) => {
     setSaving(true);
     setFormError(null);
@@ -197,7 +194,6 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
       setForm({
         fullName: detail.fullName,
         email: detail.user.email,
-        password: "",
         roleId: detail.roleId ?? "",
         isActive: detail.user.isActive,
         programIds: detail.programs?.map((program) => program.programId) ?? [resolvedProgramId],
@@ -233,30 +229,16 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
         throw new Error("Assign at least one program.");
       }
 
-      if (selectedAdmin) {
-        const payload: UpdateAdminInput = {
-          fullName: form.fullName.trim(),
-          roleId: form.roleId,
-          isActive: form.isActive,
-          programIds: form.programIds,
-        };
-        await updateAdmin(selectedAdmin.id, payload);
-        toast.success("Administrator updated.");
-      } else {
-        if (form.password.trim().length < 8) {
-          throw new Error("Password must be at least 8 characters.");
-        }
-
-        const payload: CreateAdminInput = {
-          fullName: form.fullName.trim(),
-          email: form.email.trim(),
-          password: form.password,
-          roleId: form.roleId,
-          programIds: form.programIds,
-        };
-        await createAdmin(payload);
-        toast.success("Administrator created.");
-      }
+      // Creating goes through InviteAdminDialog; this drawer only edits.
+      if (!selectedAdmin) return;
+      const payload: UpdateAdminInput = {
+        fullName: form.fullName.trim(),
+        roleId: form.roleId,
+        isActive: form.isActive,
+        programIds: form.programIds,
+      };
+      await updateAdmin(selectedAdmin.id, payload);
+      toast.success("Administrator updated.");
 
       setDrawerOpen(false);
       setSelectedAdmin(null);
@@ -322,7 +304,7 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
           </div>
           <h1 className="text-base font-semibold text-zinc-900 md:text-lg">Administrator Management</h1>
           <p className="text-xs text-zinc-500 md:text-sm">
-            Create real program admins, assign roles, reset passwords, and control which programs they can access.
+            Invite program admins by email, assign roles, reset passwords, and control which programs they can access.
           </p>
           <p className="text-[11px] text-zinc-400 md:text-xs">
             Currently viewing administrators for: <span className="font-medium">{programName}</span>
@@ -348,10 +330,10 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-600 md:text-sm"
-            onClick={openCreateDrawer}
+            onClick={() => setInviteOpen(true)}
           >
             <PlusIcon className="h-4 w-4" />
-            <span>Add Administrator</span>
+            <span>Invite Administrator</span>
           </button>
         </div>
 
@@ -478,7 +460,7 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
                             }}
                             tone="purple"
                           />
-                          {canSendPasswordLink(accessConfig, adminProfile?.id, source.id) ? (
+                          {canSendPasswordLink(accessConfig, adminProfile?.id, source.id, source.user.isActive) ? (
                             <ActionButton
                               label="Send link"
                               onClick={() => setLinkTarget({ id: source.id, fullName: source.fullName })}
@@ -505,12 +487,8 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
           setForm(defaultFormState);
           setFormError(null);
         }}
-        title={selectedAdmin ? "Edit administrator" : "Add administrator"}
-        description={
-          selectedAdmin
-            ? "Update this admin's role, program assignments, and access status."
-            : "Create a real admin account with a password and assign it to one or more programs."
-        }
+        title="Edit administrator"
+        description="Update this admin's role, program assignments, and access status."
         error={formError}
         locked={saving}
         footer={
@@ -528,7 +506,7 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
               onClick={() => void handleSubmit()}
               disabled={saving}
             >
-              {saving ? "Saving..." : selectedAdmin ? "Save changes" : "Create administrator"}
+              {saving ? "Saving..." : "Save changes"}
             </button>
           </>
         }
@@ -554,18 +532,6 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
               className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-zinc-50"
             />
           </div>
-          {!selectedAdmin ? (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700">Password</label>
-              <input
-                type="password"
-                value={form.password}
-                onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                placeholder="Minimum 8 characters"
-                className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
-          ) : null}
           <div>
             <label className="mb-1 block text-sm font-medium text-zinc-700">Role</label>
             <select
@@ -711,6 +677,15 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
         </div>
       </DrawerShell>
       <SendPasswordLinkDialog target={linkTarget} onClose={() => setLinkTarget(null)} />
+      {inviteOpen ? (
+        <InviteAdminDialog
+          roles={roles}
+          programs={invitePrograms}
+          initialProgramIds={resolvedProgramId ? [resolvedProgramId] : []}
+          onClose={() => setInviteOpen(false)}
+          onInvited={() => void loadData()}
+        />
+      ) : null}
     </main>
   );
 }

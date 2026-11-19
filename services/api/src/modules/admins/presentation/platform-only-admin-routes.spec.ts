@@ -23,6 +23,7 @@ import { HttpExceptionFilter } from '@shared/filters/http-exception.filter';
 import { AdminRolesController } from './admin-roles.controller';
 import { AdminsController } from './admins.controller';
 import { AdminPasswordLinkService } from '../application/services/admin-password-link.service';
+import { AdminInviteService } from '../application/services/admin-invite.service';
 import { AdminAccessRequestsController } from '../../admin-access-requests/admin-access-requests.controller';
 import { AdminAccessRequestsService } from '../../admin-access-requests/admin-access-requests.service';
 import { CreateAdminHandler } from '../application/commands/handlers/create-admin.handler';
@@ -113,24 +114,30 @@ interface Suite {
 }
 
 const SUITES: Record<string, Suite> = {
-  // Only POST :id/send-password-link is platform-scoped on this controller.
+  // POST :id/send-password-link, POST invite and GET invite-check are platform-scoped on this controller.
   AdminsController: {
     controller: AdminsController,
     build: () => {
       const access = { assertCanManageAdmins: reached(), assertCanManageAdmin: reached() };
+      const invites = { invite: reached(), check: reached() };
       return {
         providers: [
           { provide: AdminAccessControlService, useValue: access },
           { provide: PrismaService, useValue: {} },
           { provide: AdminPasswordLinkService, useValue: {} },
+          { provide: AdminInviteService, useValue: invites },
           ...[CreateAdminHandler, UpdateAdminHandler, DeleteAdminHandler, RestoreAdminHandler, GetAdminsHandler, GetAdminHandler, SupportAccessService].map(
             (provide) => ({ provide, useValue: {} }),
           ),
         ],
-        spies: [access.assertCanManageAdmins, access.assertCanManageAdmin],
+        spies: [access.assertCanManageAdmins, access.assertCanManageAdmin, invites.invite, invites.check],
       };
     },
-    routes: [['post', '/admins/22222222-2222-4222-8222-222222222222/send-password-link']],
+    routes: [
+      ['post', '/admins/22222222-2222-4222-8222-222222222222/send-password-link'],
+      ['post', '/admins/invite'],
+      ['get', '/admins/invite-check'],
+    ],
   },
   AdminAccessRequestsController: {
     controller: AdminAccessRequestsController,
