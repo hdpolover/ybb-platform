@@ -312,6 +312,35 @@ describe('FilesController — requestUploadUrl (brand attribution)', () => {
             expect(mockFileServiceClient.createUploadUrl).toHaveBeenCalled();
         });
 
+        // The bucket is where the file lands; it is checked on its own, so a weak
+        // asset_type cannot carry an upload into a media-library or public bucket.
+        it.each([
+            ['announcement-image', 'gallery', ['announcements:write']],
+            ['announcement-image', 'image', ['announcements:write']],
+            ['support-attachment', 'gallery', ['support:write']],
+            ['support-attachment', 'payment_methods', ['support:write', 'media:write']],
+            ['resource', 'speakers', ['documents:write']],
+        ])('asset_type %s into bucket %s: refused when the bucket set is not held', async (assetType, bucket, permissions) => {
+            mockPrismaRead.admin.findUnique.mockResolvedValue(scopedAdmin(permissions));
+            await expect(
+                controller.requestUploadUrl({ ...baseDto, program_id: PROGRAM_ID, asset_type: assetType, bucket }, adminUser),
+            ).rejects.toBeInstanceOf(ForbiddenException);
+            expect(mockFileServiceClient.createUploadUrl).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['announcement-image', 'documents', ['announcements:write']],
+            ['support-attachment', 'documents', ['support:write']],
+            ['payment-method-instruction-image', 'payment_methods', ['program:write']],
+            ['gallery', 'gallery', ['media:write']],
+            ['image', 'image', ['media:write']],
+            ['resource', 'resources', ['documents:write']],
+        ])('asset_type %s into bucket %s: the dashboard pair passes', async (assetType, bucket, permissions) => {
+            mockPrismaRead.admin.findUnique.mockResolvedValue(scopedAdmin(permissions));
+            await controller.requestUploadUrl({ ...baseDto, program_id: PROGRAM_ID, asset_type: assetType, bucket }, adminUser);
+            expect(mockFileServiceClient.createUploadUrl).toHaveBeenCalled();
+        });
+
         it('a participant (no adminId) uploading into their program needs no permission lookup', async () => {
             const participant = { userId: 'user-p', email: 'p@x.com', brandId: JWT_HOME_BRAND_ID };
             await controller.requestUploadUrl({ ...baseDto, program_id: PROGRAM_ID, asset_type: 'support-attachment' }, participant);
