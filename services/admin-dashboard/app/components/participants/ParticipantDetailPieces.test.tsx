@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { withNuqsTestingAdapter } from "nuqs/adapters/testing";
-import { SubmittedFormTab } from "./tabs/SubmittedFormTab";
+import { SubmittedFormView } from "./tabs/SubmittedFormTab";
 import { ParticipantProfileTabs, type ParticipantTabsData } from "./ParticipantProfileTabs";
 import { CopySummaryButton } from "./CopySummaryButton";
 import { InvalidPhoneFlag } from "./InvalidPhoneFlag";
@@ -24,18 +24,18 @@ const tabsData = {
   submitted: { sections: [] },
 } as unknown as ParticipantTabsData;
 
-describe("SubmittedFormTab", () => {
+describe("SubmittedFormView", () => {
   it("shows answered and unanswered fields, with an open link for URLs", () => {
     render(
-      <SubmittedFormTab
+      <SubmittedFormView
         data={{
           sections: [
             {
               section: "misc",
               label: "Extras",
               fields: [
-                { name: "a", label: "Portfolio", value: "https://x.test/p", isLink: true },
-                { name: "b", label: "Hobby", value: "", isLink: false },
+                { key: "personalData.a", name: "a", label: "Portfolio", value: "https://x.test/p", isLink: true },
+                { key: "personalData.b", name: "b", label: "Hobby", value: "", isLink: false },
               ],
             },
           ],
@@ -47,22 +47,47 @@ describe("SubmittedFormTab", () => {
     expect(screen.getByRole("button", { name: "Copy portfolio" })).toBeInTheDocument();
     expect(screen.getByText("Not answered")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Copy hobby" })).toBeNull();
+    expect(screen.queryByText("Edited by admin")).toBeNull();
+  });
+
+  it("marks admin-edited fields with the originally submitted value", () => {
+    render(
+      <SubmittedFormView
+        data={{
+          sections: [
+            {
+              section: "p",
+              label: "Personal",
+              fields: [
+                { key: "personalData.nationality", name: "nationality", label: "Nationality", value: "Malaysia", isLink: false },
+                { key: "personalData.city", name: "city", label: "City", value: "Lahore", isLink: false },
+              ],
+            },
+          ],
+        }}
+        originals={new Map([["personalData.nationality", "Pakistan"]])}
+      />,
+    );
+    expect(screen.getAllByText("Edited by admin")).toHaveLength(1);
+    expect(screen.getByText("Pakistan")).toBeInTheDocument();
+    expect(screen.getByText(/Originally:/)).toBeInTheDocument();
   });
 
   it("shows the empty state when the application has no form", () => {
-    render(<SubmittedFormTab data={{ sections: [] }} />);
+    render(<SubmittedFormView data={{ sections: [] }} />);
     expect(screen.getByText("No submitted form")).toBeInTheDocument();
   });
 });
 
 describe("ParticipantProfileTabs", () => {
   it("opens the tab named in ?tab= and switches on click", () => {
-    render(<ParticipantProfileTabs data={tabsData} remote={{ programId: "p", applicationId: "a", changeLabels: new Map() }} />, {
-      wrapper: withNuqsTestingAdapter({ searchParams: "?tab=submitted" }),
+    const remote = { programId: "p", applicationId: "a", changeLabels: new Map(), changeFields: new Map() };
+    render(<ParticipantProfileTabs data={tabsData} remote={remote} />, {
+      wrapper: withNuqsTestingAdapter({ searchParams: "?tab=essays" }),
     });
-    expect(screen.getByText("No submitted form")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Essays" }));
-    expect(screen.queryByText("No submitted form")).toBeNull();
+    expect(screen.getByText("No essay questions for this application.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Miscellaneous" }));
+    expect(screen.queryByText("No essay questions for this application.")).toBeNull();
   });
 });
 

@@ -70,15 +70,16 @@ describe("getExtraFieldsByTab", () => {
     ]);
   });
 
-  it("shows the option label for select fields, falling back to the raw value", () => {
+  it("shows the option label for select fields, falling back to the humanized code, free text untouched", () => {
     const options = [{ label: "Instagram", value: "instagram" }];
     const out = getExtraFieldsByTab([
       section("miscellaneous", [
         field({ name: "a", type: "select", value: "instagram ", options, order: 1 }),
         field({ name: "b", type: "radio", value: "other", options, order: 2 }),
+        field({ name: "c", type: "radio", value: "a friend told me", options, order: 3 }),
       ]),
     ]);
-    expect(out.misc.map((f) => f.value)).toEqual(["Instagram", "other"]);
+    expect(out.misc.map((f) => f.value)).toEqual(["Instagram", "Other", "a friend told me"]);
   });
 
   it("flags http(s) values as links regardless of field type", () => {
@@ -125,11 +126,21 @@ describe("getSubmittedSections", () => {
         section: "misc",
         label: "misc",
         fields: [
-          { name: "a", label: "A", value: "", isLink: false },
-          { name: "b", label: "B", value: "https://x.test/cv", isLink: true },
-          { name: "c", label: "C", value: "Instagram", isLink: false },
+          { key: "personalData.a", name: "a", label: "A", value: "", isLink: false },
+          { key: "personalData.b", name: "b", label: "B", value: "https://x.test/cv", isLink: true },
+          { key: "personalData.c", name: "c", label: "C", value: "Instagram", isLink: false },
         ],
       },
     ]);
+  });
+
+  it("shows country names and long dates instead of stored codes", () => {
+    const [out] = getSubmittedSections([
+      section("misc", [
+        field({ name: "home_country", value: "PK", order: 1 }),
+        field({ name: "start", type: "date", value: "2005-12-29", order: 2 }),
+      ]),
+    ]);
+    expect(out.fields.map((f) => f.value)).toEqual(["Pakistan", "29 December 2005"]);
   });
 });
