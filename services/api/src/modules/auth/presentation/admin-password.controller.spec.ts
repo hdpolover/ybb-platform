@@ -45,7 +45,7 @@ describe('AdminPasswordController', () => {
       const res = await post({ email: ' Admin@Example.COM ' });
       expect(res.status).toBe(202);
       expect(res.body).toEqual({ submitted: true });
-      expect(service.requestReset).toHaveBeenCalledWith('admin@example.com');
+      expect(service.requestReset).toHaveBeenCalledWith('admin@example.com', expect.any(String), expect.any(String));
     });
 
     it('answers identically whether or not the service found an admin to mail', async () => {

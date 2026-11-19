@@ -20,7 +20,7 @@ describe('AdminPasswordService', () => {
     $transaction: jest.fn().mockResolvedValue([]),
   };
   const links = { issue: jest.fn().mockResolvedValue(undefined) };
-  const authLogging = { logPasswordChange: jest.fn(), logFailedLogin: jest.fn() };
+  const authLogging = { logPasswordChange: jest.fn(), logFailedLogin: jest.fn(), logForgotPasswordRequest: jest.fn() };
   const service = new AdminPasswordService(prisma as never, links as never, authLogging as never);
 
   beforeAll(async () => {
@@ -79,12 +79,19 @@ describe('AdminPasswordService', () => {
   });
 
   describe('requestReset', () => {
-    const adminUser = { id: 'u1', email: 'a@b.co', admin: { fullName: 'A B', role: { name: 'Reviewer' } } };
+    const adminUser = {
+      id: 'u1',
+      email: 'a@b.co',
+      passwordHash: 'hash',
+      passwordResetExpires: null as Date | null,
+      admin: { fullName: 'A B', role: { name: 'Reviewer' } },
+    };
     const flush = () => new Promise((r) => setImmediate(r));
+    const FUTURE = () => new Date(Date.now() + 60_000);
 
     it('looks up an active, non-deleted admin case-insensitively', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
-      await service.requestReset('A@B.co');
+      await service.requestReset('A@B.co', '1.1.1.1', 'ua');
       expect(prisma.user.findFirst.mock.calls[0][0].where).toEqual({
         email: { equals: 'A@B.co', mode: 'insensitive' },
         isActive: true,
@@ -93,15 +100,22 @@ describe('AdminPasswordService', () => {
       });
     });
 
-    it('issues nothing and resolves quietly when no admin matches', async () => {
+    it('issues nothing and resolves quietly when no admin matches, but still logs the request', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
-      await expect(service.requestReset('nobody@x.co')).resolves.toBeUndefined();
+      await expect(service.requestReset('nobody@x.co', '1.1.1.1', 'ua')).resolves.toBeUndefined();
       expect(links.issue).not.toHaveBeenCalled();
+      expect(authLogging.logForgotPasswordRequest).toHaveBeenCalledWith('nobody@x.co', '1.1.1.1', 'ua', null);
+    });
+
+    it('logs the request with the user id on a hit', async () => {
+      prisma.user.findFirst.mockResolvedValue(adminUser);
+      await service.requestReset('a@b.co', '9.9.9.9', 'agent');
+      expect(authLogging.logForgotPasswordRequest).toHaveBeenCalledWith('a@b.co', '9.9.9.9', 'agent', 'u1');
     });
 
     it('issues a 1h self-requested reset link that keeps the old password working', async () => {
       prisma.user.findFirst.mockResolvedValue(adminUser);
-      await service.requestReset('a@b.co');
+      await service.requestReset('a@b.co', '1.1.1.1', 'ua');
       expect(links.issue).toHaveBeenCalledWith({
         userId: 'u1',
         email: 'a@b.co',
@@ -115,10 +129,29 @@ describe('AdminPasswordService', () => {
       expect(ADMIN_SELF_RESET_TTL_MS).toBe(60 * 60 * 1000);
     });
 
+    it('does not overwrite an unexpired token (a pending 72h invite), still logs and resolves', async () => {
+      prisma.user.findFirst.mockResolvedValue({ ...adminUser, passwordResetExpires: FUTURE() });
+      await expect(service.requestReset('a@b.co', '1.1.1.1', 'ua')).resolves.toBeUndefined();
+      expect(links.issue).not.toHaveBeenCalled();
+      expect(authLogging.logForgotPasswordRequest).toHaveBeenCalledWith('a@b.co', '1.1.1.1', 'ua', 'u1');
+    });
+
+    it('replaces an expired token', async () => {
+      prisma.user.findFirst.mockResolvedValue({ ...adminUser, passwordResetExpires: new Date(Date.now() - 1000) });
+      await service.requestReset('a@b.co', '1.1.1.1', 'ua');
+      expect(links.issue).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not claim the current password still works for an account that has none', async () => {
+      prisma.user.findFirst.mockResolvedValue({ ...adminUser, passwordHash: null });
+      await service.requestReset('a@b.co', '1.1.1.1', 'ua');
+      expect(links.issue).toHaveBeenCalledWith(expect.objectContaining({ selfRequested: false }));
+    });
+
     it('does not wait for, or surface, a failing mail emit', async () => {
       prisma.user.findFirst.mockResolvedValue(adminUser);
       links.issue.mockRejectedValueOnce(new Error('rabbit down'));
-      await expect(service.requestReset('a@b.co')).resolves.toBeUndefined();
+      await expect(service.requestReset('a@b.co', '1.1.1.1', 'ua')).resolves.toBeUndefined();
       await flush();
     });
   });

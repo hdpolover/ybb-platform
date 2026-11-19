@@ -78,10 +78,11 @@ export class AdminPasswordService {
   }
 
   /**
-   * Self-service reset request. Never throws on a miss and does the same work either way up to the
-   * return: the mail goes out in the background so a hit is not slower than a miss.
+   * Self-service reset request. Never throws on a miss and does the same awaited work either way
+   * (one lookup, one security-log write); the mail goes out in the background so a hit is not
+   * slower than a miss.
    */
-  async requestReset(email: string): Promise<void> {
+  async requestReset(email: string, ipAddress: string, userAgent: string): Promise<void> {
     const user = await this.prisma.user.findFirst({
       where: {
         email: { equals: email, mode: 'insensitive' },
@@ -90,9 +91,23 @@ export class AdminPasswordService {
         admin: { is: { deactivatedAt: null, deletedAt: null } },
       },
       orderBy: { createdAt: 'asc' },
-      select: { id: true, email: true, admin: { select: { fullName: true, role: { select: { name: true } } } } },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        passwordResetExpires: true,
+        admin: { select: { fullName: true, role: { select: { name: true } } } },
+      },
     });
+
+    // Same trail as the participant forgot-password, on hit AND miss: it is what makes an
+    // enumeration sweep visible.
+    await this.authLogging.logForgotPasswordRequest(email, ipAddress, userAgent, user?.id ?? null);
+
     if (!user?.admin) return;
+    // An anonymous request must not clobber a live token (a 72h invite would be replaced by a 1h
+    // link). The owner waits for expiry, or an admin uses "Send password link".
+    if (user.passwordResetExpires && user.passwordResetExpires > new Date()) return;
 
     void this.links
       .issue({
@@ -104,7 +119,8 @@ export class AdminPasswordService {
         // The old password keeps working until the link is used, so spamming this cannot lock anyone out.
         invalidateCredentials: false,
         ttlMs: ADMIN_SELF_RESET_TTL_MS,
-        selfRequested: true,
+        // Drives the "your current password still works" wording: untrue for a pending invitee.
+        selfRequested: user.passwordHash !== null,
       })
       .catch((err: unknown) => this.logger.error(`Admin self-reset link failed for user ${user.id}: ${String(err)}`));
   }

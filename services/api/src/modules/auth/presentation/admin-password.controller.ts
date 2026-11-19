@@ -62,8 +62,8 @@ export class AdminPasswordController {
   @Throttle(FORGOT_THROTTLE)
   @ApiOperation({ summary: 'Email an admin a 1h set-password link (always 202: no account enumeration)' })
   @ApiResponse({ status: 202, description: '{ submitted: true }' })
-  async forgotPassword(@Body() dto: AdminForgotPasswordDto) {
-    await this.passwords.requestReset(dto.email);
+  async forgotPassword(@Body() dto: AdminForgotPasswordDto, @ClientIp() ip: string, @Req() req: Request) {
+    await this.passwords.requestReset(dto.email, ip || '0.0.0.0', req.headers['user-agent'] || 'unknown');
     return { submitted: true };
   }
 }
