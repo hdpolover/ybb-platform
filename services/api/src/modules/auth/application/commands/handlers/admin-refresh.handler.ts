@@ -6,6 +6,7 @@ import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { hashToken } from '@shared/utils/hash-token.util';
 import { AdminAuthResponseDto } from '../../../presentation/dto/admin-auth-response.dto';
 import {
+  adminRoleSlug,
   buildAccessiblePrograms,
   getAdminProgramAccessScope,
   mapAdminBrandAssignment,
@@ -150,7 +151,7 @@ export class AdminRefreshHandler {
     const roles: string[] = ['admin'];
     if (user.admin.role) {
       roles.push(user.admin.role.name);
-      const slug = user.admin.role.name.toLowerCase().replace(/\s+/g, '_');
+      const slug = adminRoleSlug(user.admin.role.name);
       if (slug !== user.admin.role.name) roles.push(slug);
     }
     user.admin.adminBrands.forEach((assignment) => {
