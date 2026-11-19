@@ -182,3 +182,29 @@ describe('TurnstileGuard', () => {
     });
   });
 });
+
+describe('TurnstileGuard body token fallback', () => {
+  const ctxWithBody = (body: unknown, headers: Record<string, string> = {}) =>
+    ({
+      switchToHttp: () => ({ getRequest: () => ({ headers, body, method: 'POST', path: '/x', ip: '10.0.0.1' }) }),
+      getHandler: () => () => undefined,
+    }) as unknown as ExecutionContext;
+
+  it('verifies a turnstileToken sent in the body when enforcing', async () => {
+    const { guard, verify } = mkGuard(ENFORCING);
+    await expect(guard.canActivate(ctxWithBody({ turnstileToken: 'from-body' }))).resolves.toBe(true);
+    expect(verify).toHaveBeenCalledWith('from-body', '10.0.0.1');
+  });
+
+  it('prefers the header over the body', async () => {
+    const { guard, verify } = mkGuard(ENFORCING);
+    await guard.canActivate(ctxWithBody({ turnstileToken: 'body' }, { 'x-turnstile-token': 'header' }));
+    expect(verify).toHaveBeenCalledWith('header', '10.0.0.1');
+  });
+
+  it('still 403s when enforcing with neither, or with a non-string body value', async () => {
+    const { guard } = mkGuard(ENFORCING);
+    await expect(guard.canActivate(ctxWithBody({}))).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(guard.canActivate(ctxWithBody({ turnstileToken: { $ne: 1 } }))).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});

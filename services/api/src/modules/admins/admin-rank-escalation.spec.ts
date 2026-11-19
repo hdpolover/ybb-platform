@@ -481,9 +481,11 @@ describe('admin controllers enforce the rank rule before writing', () => {
   let handlers: Record<'create' | 'update' | 'delete' | 'restore', { execute: jest.Mock }>;
   let admins: AdminsController;
   let roles: AdminRolesController;
+  let links: { issue: jest.Mock };
 
   beforeEach(() => {
     const built = buildRankPrisma();
+    links = { issue: jest.fn().mockResolvedValue(undefined) };
     prisma = built.prisma;
     const access = new AdminAccessControlService(built.asService);
     const handler = () => ({ execute: jest.fn().mockResolvedValue({ success: true }) });
@@ -499,6 +501,7 @@ describe('admin controllers enforce the rank rule before writing', () => {
       unused,
       access,
       built.asService,
+      links as never,
     );
     roles = new AdminRolesController(built.asService, access);
   });
@@ -526,6 +529,31 @@ describe('admin controllers enforce the rank rule before writing', () => {
     const dto = { email: 'new@test.local', fullName: 'New', password: 'hunter2hunter2', roleId: ROLES.superAdmin.id };
     await expect(admins.create(dto as CreateAdminDto, asAdmin)).rejects.toBeInstanceOf(ForbiddenException);
     expect(handlers.create.execute).not.toHaveBeenCalled();
+  });
+
+  it('Admin cannot send a password link to a Super Admin', async () => {
+    await expect(admins.sendPasswordLink(superId, asAdmin)).rejects.toThrow(
+      new ForbiddenException('You cannot manage an administrator at or above your own rank.'),
+    );
+    expect(links.issue).not.toHaveBeenCalled();
+  });
+
+  it('Admin can send a password link to a lower admin: credentials invalidated, kind reset', async () => {
+    await expect(admins.sendPasswordLink(ADMINS.programAdmin.id, asAdmin)).resolves.toEqual({ ok: true });
+    expect(links.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: `user-${ADMINS.programAdmin.id}`, kind: 'reset', invalidateCredentials: true }),
+    );
+  });
+
+  it('refuses a deactivated admin account (the link would be dead)', async () => {
+    const target = ADMINS.programAdmin;
+    target.user.isActive = false;
+    try {
+      await expect(admins.sendPasswordLink(target.id, asAdmin)).rejects.toThrow(/deactivated/);
+      expect(links.issue).not.toHaveBeenCalled();
+    } finally {
+      target.user.isActive = true;
+    }
   });
 
   it('Admin can reset a lower admin password', async () => {

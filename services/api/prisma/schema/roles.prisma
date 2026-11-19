@@ -408,3 +408,28 @@ model SupportAccessImpersonationTicket {
   @@index([status, expiresAt])
   @@map("support_access_impersonation_tickets")
 }
+
+// Public "request admin access" form; an admin with admin.manage approves it
+// into a real Admin + single-use set-password link. No FK to admins on purpose:
+// the reviewer/created ids are an audit trail, not a relation to keep alive.
+model AdminAccessRequest {
+  id                  String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  fullName            String    @map("full_name") @db.VarChar(100)
+  email               String    @db.VarChar(255) // stored lowercased
+  whatsapp            String?   @db.VarChar(30)
+  division            String    @db.VarChar(50)
+  requestedProgramIds String[]  @default([]) @map("requested_program_ids") @db.Uuid
+  note                String?   @db.VarChar(1000)
+  status              String    @default("pending") @db.VarChar(20) // pending | approved | rejected
+  reviewedByAdminId   String?   @map("reviewed_by_admin_id") @db.Uuid
+  reviewedAt          DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  rejectReason        String?   @map("reject_reason") @db.VarChar(1000)
+  createdAdminId      String?   @map("created_admin_id") @db.Uuid
+  ip                  String    @db.VarChar(64)
+  userAgent           String    @map("user_agent") @db.VarChar(500)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@map("admin_access_requests")
+}

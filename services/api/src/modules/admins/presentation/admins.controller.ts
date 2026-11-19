@@ -1,5 +1,5 @@
 
-import { Controller, Post, Body, Get, Patch, Delete, Param, Query, UseGuards, UnauthorizedException, Put, Req } from '@nestjs/common';
+import { Controller, Post, Body, Get, Patch, Delete, Param, Query, UseGuards, UnauthorizedException, Put, Req, ConflictException, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CreateAdminDto } from './dto/create-admin.dto';
@@ -25,6 +25,8 @@ import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
 import { SupportAccessService } from '../application/services/support-access.service';
 import { AdminAccessControlService } from '../application/services/admin-access-control.service';
+import { AdminPasswordLinkService } from '../application/services/admin-password-link.service';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import {
     CreateSupportImpersonationDto,
     UpdateSupportAccessConfigDto,
@@ -50,6 +52,7 @@ export class AdminsController {
         private readonly supportAccessService: SupportAccessService,
         private readonly adminAccessControl: AdminAccessControlService,
         private readonly prisma: PrismaService,
+        private readonly passwordLinks: AdminPasswordLinkService,
     ) { }
 
     @Post()
@@ -170,6 +173,43 @@ export class AdminsController {
         });
 
         return { message: 'Admin password reset successfully' };
+    }
+
+    @Post(':id/send-password-link')
+    @UseGuards(AdminScopeGuard)
+    @ScopedBy('platform')
+    @ApiOperation({ summary: 'Invalidate the admin password and email a single-use set-password link' })
+    @ApiResponse({ status: 200, description: '{ ok: true }' })
+    @AuditTrail({ entityType: 'Admin', action: ChangeType.update })
+    async sendPasswordLink(
+        @Param('id') id: string,
+        @CurrentUser() currentUser: CurrentUserData,
+    ) {
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        // Same rank rule as editing the admin; self is allowed only if that rule allows it.
+        await this.adminAccessControl.assertCanManageAdmin(currentUser, id, 'reset-password');
+
+        const admin = await this.prisma.admin.findUnique({
+            where: { id },
+            select: {
+                fullName: true,
+                role: { select: { name: true } },
+                user: { select: { id: true, email: true, isActive: true } },
+            },
+        });
+        if (!admin?.user) throw new NotFoundException('Admin not found');
+        // The reset endpoint refuses inactive accounts, so the link would be dead on arrival.
+        if (!admin.user.isActive) throw new ConflictException('This admin account is deactivated. Reactivate it first.');
+
+        await this.passwordLinks.issue({
+            userId: admin.user.id,
+            email: admin.user.email,
+            fullName: admin.fullName,
+            kind: 'reset',
+            roleName: admin.role?.name ?? null,
+            invalidateCredentials: true,
+        });
+        return { ok: true };
     }
 
     @Delete(':id')

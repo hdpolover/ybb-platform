@@ -10,10 +10,18 @@ export class CreateAdminHandler {
     constructor(private readonly prisma: PrismaService) { }
 
     async execute(command: CreateAdminCommand) {
+        // A caller that names the home brand (access-request approval) has already resolved the
+        // user per brand: the email may legitimately exist as a participant in other brands, and
+        // admin login finds the admin by email across brands, so the global check below would
+        // wrongly refuse it. Unique (email, brand_id) still guards the insert.
+        const callerVetted = command.homeBrandId !== undefined || command.existingUserId !== undefined;
+
         // 1. Check if user exists
-        const existingUser = await this.prisma.user.findFirst({
-            where: { email: command.email }
-        });
+        const existingUser = callerVetted
+            ? null
+            : await this.prisma.user.findFirst({
+                where: { email: command.email }
+            });
 
         if (existingUser) {
             throw new ConflictException('User with this email already exists.');
@@ -61,7 +69,7 @@ export class CreateAdminHandler {
         // 3. Resolve Brand (Admins need a primary brand for the User record, usually system default or first brand)
         // For now, we'll pick the first active brand if brandIds provided, or default
         // The user's home brand, not a grant: a program-only admin lives in their program's brand.
-        let primaryBrandId = resolvedBrandIds[0] ?? programs[0]?.brandId;
+        let primaryBrandId = command.homeBrandId ?? resolvedBrandIds[0] ?? programs[0]?.brandId;
 
         if (!primaryBrandId) {
             const defaultBrand = await this.prisma.brand.findFirst({ select: { id: true } });
@@ -80,7 +88,7 @@ export class CreateAdminHandler {
         // This is also why the backlog's stated fix for M218 (add
         // `deletedAt: null` to the check above) is a no-op: it is already there
         // implicitly. The cause is the surviving row, not the missing filter.
-        const deletedConflict = await this.prisma.user.findFirst({
+        const deletedConflict = callerVetted ? null : await this.prisma.user.findFirst({
             where: {
                 email: command.email,
                 brandId: primaryBrandId,
@@ -103,15 +111,17 @@ export class CreateAdminHandler {
 
         // 4. Create User & Admin in Transaction
         return this.prisma.$transaction(async (tx) => {
-            const user = await tx.user.create({
-                data: {
-                    email: command.email,
-                    passwordHash,
-                    brandId: primaryBrandId,
-                    isActive: true,
-                    emailVerified: true, // Admins auto-verified?
-                }
-            });
+            const user = command.existingUserId
+                ? { id: command.existingUserId }
+                : await tx.user.create({
+                    data: {
+                        email: command.email,
+                        passwordHash,
+                        brandId: primaryBrandId,
+                        isActive: true,
+                        emailVerified: true, // Admins auto-verified?
+                    }
+                });
 
             const admin = await tx.admin.create({
                 data: {

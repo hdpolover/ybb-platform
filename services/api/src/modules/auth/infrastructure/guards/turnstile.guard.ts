@@ -48,7 +48,9 @@ export class TurnstileGuard implements CanActivate {
     const req = context.switchToHttp().getRequest();
     const enforce =
       this.config.get<string>('AUTH_TURNSTILE_ENFORCE') === 'true' && this.turnstile.isConfigured();
-    const token = headerValue(req.headers?.[TURNSTILE_HEADER]);
+    // Header first. A route whose DTO declares `turnstileToken` (admin access request form) may send it in the body.
+    const bodyToken = typeof req.body?.turnstileToken === 'string' ? req.body.turnstileToken || undefined : undefined;
+    const token = headerValue(req.headers?.[TURNSTILE_HEADER]) ?? bodyToken;
 
     if (!enforce) {
       // Dry run: only a configured deployment can verify, and nothing here may block.

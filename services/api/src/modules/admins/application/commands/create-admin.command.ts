@@ -8,5 +8,9 @@ export class CreateAdminCommand {
         public readonly roleId?: string,
         public readonly brandIds?: string[],
         public readonly programIds?: string[],
+        /** User row's home brand; wins over the first program's brand. */
+        public readonly homeBrandId?: string,
+        /** Attach the admin to this existing (active, admin-less) user row instead of creating one. */
+        public readonly existingUserId?: string,
     ) { }
 }
