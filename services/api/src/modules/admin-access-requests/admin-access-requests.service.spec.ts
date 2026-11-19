@@ -102,7 +102,7 @@ describe('AdminAccessRequestsService.getOptions', () => {
 
     expect(prisma.program.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { isActive: true, deletedAt: null },
+        where: { isActive: true, isVisibleToUsers: true, deletedAt: null, brand: { isActive: true } },
         orderBy: [{ brand: { name: 'asc' } }, { name: 'asc' }],
       }),
     );

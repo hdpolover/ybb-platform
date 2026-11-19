@@ -93,7 +93,6 @@ For every service:
     - `STORAGE_PUBLIC_URL`
     - `CORS_ORIGINS` (e.g., `https://chinayouthsummit.com,https://admin.ybbhub.com`)
     - `JWT_SECRET`, `JWT_EXPIRES_IN`
-    - `ADMIN_REGISTRATION_SECRET`
     - `FIREBASE_SERVICE_ACCOUNT_JSON` (full JSON string)
     - `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_STORAGE_BUCKET`
     - `FIREBASE_MESSAGING_SENDER_ID`, `FIREBASE_APP_ID`, `FIREBASE_MEASUREMENT_ID`

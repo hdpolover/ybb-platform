@@ -6,7 +6,6 @@ import {
   CheckCircleIcon,
   ClockIcon,
   EnvelopeIcon,
-  KeyIcon,
   MagnifyingGlassIcon,
   TrashIcon,
   UserIcon,
@@ -26,7 +25,6 @@ export type AdminManagementTableProps = {
   onAddAdmin: () => void;
   onViewAdmin: (admin: AdminRow) => void;
   onEditAdmin: (admin: AdminRow) => void;
-  onResetPassword: (admin: AdminRow) => void;
   onDeleteAdmin: (admin: AdminRow) => void;
 };
 
@@ -44,7 +42,6 @@ export function AdminManagementTable({
   onAddAdmin,
   onViewAdmin,
   onEditAdmin,
-  onResetPassword,
   onDeleteAdmin,
 }: AdminManagementTableProps) {
   return (
@@ -271,14 +268,6 @@ export function AdminManagementTable({
                         onClick={() => onEditAdmin(admin)}
                       >
                         <AdjustmentsHorizontalIcon className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        className="flex h-7 w-7 items-center justify-center rounded-md border border-purple-200 bg-purple-50 text-purple-700 shadow-sm hover:bg-purple-100"
-                        aria-label="Reset password"
-                        onClick={() => onResetPassword(admin)}
-                      >
-                        <KeyIcon className="h-4 w-4" />
                       </button>
                       <button
                         type="button"

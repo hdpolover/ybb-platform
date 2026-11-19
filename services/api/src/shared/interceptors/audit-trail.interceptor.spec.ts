@@ -192,3 +192,24 @@ describe('AuditTrailInterceptor bodyFields', () => {
         expect(JSON.stringify(logged)).not.toMatch(/hunter2|password|token/);
     });
 });
+
+describe('AuditTrailInterceptor queryFields (export routes)', () => {
+    it('logs the allowlisted query keys and never the exported payload', async () => {
+        const request = {
+            params: {}, query: { programId: 'p1', search: 'jane doe' }, body: undefined, method: 'GET',
+            route: { path: '/applications/export' }, url: '/applications/export', headers: {}, user: { adminId: 'a1' },
+        };
+        const context = { getHandler: () => function mockHandler() { /* noop */ }, switchToHttp: () => ({ getRequest: () => request }) } as any;
+        const meta = { entityType: 'Program', action: ChangeType.create, selectFields: { id: true }, queryFields: ['programId'] };
+        const reflector = { get: jest.fn().mockReturnValue(meta) };
+        const logWithDiff = jest.fn().mockResolvedValue(undefined);
+        const interceptor = new AuditTrailInterceptor(reflector as any, {} as any, { logWithDiff } as any);
+        const result$ = await interceptor.intercept(context, { handle: () => of({ rows: [{ email: 'jane@example.com' }] }) } as any);
+        await new Promise<void>((resolve) => result$.subscribe({ complete: () => setTimeout(resolve, 0) }));
+
+        const logged = logWithDiff.mock.calls[0][0];
+        expect(logged).toMatchObject({ entityType: 'Program', action: ChangeType.create, actorId: 'a1', endpoint: 'GET /applications/export' });
+        expect(logged.afterState).toEqual({ request: { programId: 'p1' } });
+        expect(JSON.stringify(logged)).not.toMatch(/jane/);
+    });
+});

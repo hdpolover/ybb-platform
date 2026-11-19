@@ -906,13 +906,6 @@ export function deleteAdmin(id: string): Promise<void> {
   return request<void>(`/admins/${id}`, { method: "DELETE" });
 }
 
-export function resetAdminPassword(id: string, password: string): Promise<{ message: string }> {
-  return request<{ message: string }>(`/admins/${id}/reset-password`, {
-    method: "POST",
-    body: JSON.stringify({ password }),
-  });
-}
-
 // ─── Admin access requests ────────────────────────────────────────────────────
 
 export type AccessRequestProgram = { id: string; name: string; brandName: string };

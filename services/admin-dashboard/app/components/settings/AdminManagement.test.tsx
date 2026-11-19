@@ -26,7 +26,6 @@ vi.mock("@/src/shared/api-client", () => ({
   getAdmin: vi.fn(),
   updateAdmin: vi.fn(),
   deleteAdmin: vi.fn(),
-  resetAdminPassword: vi.fn(),
   checkAdminInvite: () => Promise.resolve({ existingAdminId: null, participantBrands: [] }),
   inviteAdmin: (...a: unknown[]) => inviteAdmin(...a),
 }));

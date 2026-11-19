@@ -10,9 +10,8 @@ import * as path from 'path';
  * unauthenticated path and the docs page holds a bearer token in localStorage
  * (persistAuthorization) on the API's own origin, so production does not serve
  * them. SWAGGER_ENABLED is the deliberate break-glass and is intentionally NOT
- * mapped into docker-compose.dokploy.yml - same pattern as
- * ADMIN_REGISTRATION_ENABLED - so re-enabling docs in production needs a
- * reviewable compose change, not just a panel toggle.
+ * mapped into docker-compose.dokploy.yml, so re-enabling docs in production
+ * needs a reviewable compose change, not just a panel toggle.
  *
  * Only the exact string 'true' enables it; anything else (including 'TRUE',
  * '1', 'yes') stays off, so a typo fails safe rather than exposing docs.

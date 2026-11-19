@@ -21,9 +21,9 @@ type PrunableModel = 'userSession' | 'userSecurityLog' | 'userActivityLog' | 'su
  *  - submission_reminder_logs: older than RETENTION_REMINDER_LOG_DAYS
  *
  * data_change_logs is deliberately NOT handled here - AuditCleanupService
- * (same module) already prunes it daily on a 30-day retention window, which
- * is stricter than any window this service would apply, so a second cron
- * touching the same table would be dead code that never deletes anything.
+ * (same module) owns it: 30 days for participant/system/webhook rows, and
+ * RETENTION_ADMIN_AUDIT_DAYS (default 365) for admin-authored rows. A second
+ * cron on the same table would just compete over the retention policy.
  */
 @Injectable()
 export class RetentionService {

@@ -511,13 +511,6 @@ describe('admin controllers enforce the rank rule before writing', () => {
   const superId = ADMINS.superA.id;
   const asAdmin = actingAs('admin');
 
-  it('Admin cannot reset a Super Admin password', async () => {
-    await expect(admins.resetPassword(superId, { password: 'hunter2hunter2' }, asAdmin)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
-    expect(prisma.user.update).not.toHaveBeenCalled();
-  });
-
   it('Admin cannot update, delete or restore a Super Admin', async () => {
     await expect(admins.update(superId, { fullName: 'x' }, asAdmin)).rejects.toBeInstanceOf(ForbiddenException);
     await expect(admins.remove(superId, asAdmin)).rejects.toBeInstanceOf(ForbiddenException);
@@ -577,16 +570,12 @@ describe('admin controllers enforce the rank rule before writing', () => {
     }
   });
 
-  it('Admin can reset a lower admin password', async () => {
-    await admins.resetPassword(ADMINS.programAdmin.id, { password: 'hunter2hunter2' }, asAdmin);
-    expect(prisma.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: `user-${ADMINS.programAdmin.id}` } }),
-    );
-  });
-
-  it('Super Admin can reset another Super Admin password', async () => {
-    await admins.resetPassword(ADMINS.superB.id, { password: 'hunter2hunter2' }, actingAs('superA'));
-    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+  it('Super Admin can send a password link to another Super Admin', async () => {
+    await expect(admins.sendPasswordLink(ADMINS.superB.id, actingAs('superA'))).resolves.toEqual({
+      ok: true,
+      adminId: ADMINS.superB.id,
+    });
+    expect(links.issue).toHaveBeenCalledTimes(1);
   });
 
   it('Admin cannot edit the Super Admin role or mint a "*" role', async () => {

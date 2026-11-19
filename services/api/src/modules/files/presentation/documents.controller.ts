@@ -20,6 +20,8 @@ import { Public } from '@shared/decorators/public.decorator';
 import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import { FileServiceClient } from '../infrastructure/clients/file-service.client';
 import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 
 function safeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9_.-]/g, '_');
@@ -49,6 +51,7 @@ export class DocumentsController {
   ) {}
 
   @Post('export/participants')
+  @AuditTrail({ entityType: 'Document', action: ChangeType.create, selectFields: { id: true }, bodyFields: ['program_name'] })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('platform')
@@ -81,6 +84,7 @@ export class DocumentsController {
   }
 
   @Post('export/payments')
+  @AuditTrail({ entityType: 'Document', action: ChangeType.create, selectFields: { id: true }, bodyFields: ['program_name', 'start_date', 'end_date'] })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('platform')
@@ -117,6 +121,7 @@ export class DocumentsController {
   }
 
   @Post('export/custom')
+  @AuditTrail({ entityType: 'Document', action: ChangeType.create, selectFields: { id: true }, bodyFields: ['title'] })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('platform')
@@ -146,6 +151,7 @@ export class DocumentsController {
   }
 
   @Post('generate/receipt')
+  @AuditTrail({ entityType: 'Document', action: ChangeType.create, selectFields: { id: true } })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('platform')
@@ -190,6 +196,7 @@ export class DocumentsController {
   }
 
   @Post('generate/offer-letter')
+  @AuditTrail({ entityType: 'Document', action: ChangeType.create, selectFields: { id: true } })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('platform')
@@ -228,6 +235,7 @@ export class DocumentsController {
   }
 
   @Post('generate/certificate')
+  @AuditTrail({ entityType: 'Document', action: ChangeType.create, selectFields: { id: true } })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('platform')

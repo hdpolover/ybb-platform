@@ -19,6 +19,10 @@ const toProgramOption = (p: { id: string; name: string; brand: { name: string } 
   brandName: p.brand.name,
 });
 
+// Requestable = live program on a live brand, and not hidden from the public site.
+// No isTest flag exists on Program: hide a test program by clearing isVisibleToUsers.
+const requestableProgram = { isActive: true, isVisibleToUsers: true, deletedAt: null, brand: { isActive: true } } as const;
+
 const unique = <T>(values: T[]) => Array.from(new Set(values));
 
 @Injectable()
@@ -31,7 +35,7 @@ export class AdminAccessRequestsService {
 
   async getOptions() {
     const programs = await this.prisma.program.findMany({
-      where: { isActive: true, deletedAt: null },
+      where: requestableProgram,
       select: programSelect,
       orderBy: [{ brand: { name: 'asc' } }, { name: 'asc' }],
     });
@@ -55,7 +59,7 @@ export class AdminAccessRequestsService {
     const requestedIds = unique(dto.programIds);
     const valid = requestedIds.length
       ? await this.prisma.program.findMany({
-          where: { id: { in: requestedIds }, isActive: true, deletedAt: null },
+          where: { id: { in: requestedIds }, ...requestableProgram },
           select: { id: true },
         })
       : [];
