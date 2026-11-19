@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Put, Delete,
-  Param, Body, Query, UseGuards, Request,
+  Param, Body, Query, UseGuards, Request, NotFoundException,
 } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
@@ -15,6 +15,14 @@ import { isAdminCaller } from './programs.controller';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '../../../shared/decorators/cache-invalidate.decorator';
 import { ChangeType } from '@prisma/client';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import {
+  AdminScopeGuard,
+  ScopedBy,
+  assertProgramAccess,
+  getRequestAdminScope,
+  orNotFound,
+} from '@shared/guards/admin-scope.guard';
 // imports unified PROGRAM_CONTENT_PATTERNS — broader than the previous local list, which was a subset
 import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
 
@@ -42,7 +50,7 @@ import {
 } from '../application/commands/handlers/manage-program-announcements.handler';
 
 interface AuthenticatedRequest extends ExpressRequest {
-  user: { id: string; userId: string };
+  user: { id: string; userId: string; adminId?: string };
 }
 
 @ApiTags('Program Announcements')
@@ -54,7 +62,40 @@ export class ProgramAnnouncementsController {
     private readonly createHandler: CreateProgramAnnouncementHandler,
     private readonly updateHandler: UpdateProgramAnnouncementHandler,
     private readonly deleteHandler: DeleteProgramAnnouncementHandler,
+    private readonly readPrisma: PrismaReadService,
   ) {}
+
+  /**
+   * Announcement-keyed routes carry no programme id, so the owning programme is
+   * read back from the row. Missing and out-of-scope raise the same 404.
+   */
+  private async assertAnnouncementScope(req: AuthenticatedRequest, itemId: string): Promise<void> {
+    const notFound = () => new NotFoundException(`Announcement ${itemId} not found`);
+    const row = await this.readPrisma.programAnnouncement.findUnique({
+      where: { id: itemId },
+      select: { programId: true },
+    });
+    if (!row) throw notFound();
+    const scope = await getRequestAdminScope(this.readPrisma, req);
+    await orNotFound(() => assertProgramAccess(this.readPrisma, scope, row.programId), notFound);
+  }
+
+  /** Admin (draft/scheduled/restricted) view only for a programme in the caller's scope. */
+  private async isScopedAdminView(
+    req: AuthenticatedRequest,
+    user: CurrentUserData | undefined,
+    programId: string,
+  ): Promise<boolean> {
+    if (!isAdminCaller(user)) return false;
+    try {
+      await assertProgramAccess(this.readPrisma, await getRequestAdminScope(this.readPrisma, req), programId);
+      return true;
+    } catch {
+      // Out of scope (or missing): the caller gets the same public view an
+      // anonymous visitor would, not an error.
+      return false;
+    }
+  }
 
   @Get(':id/announcements')
   @Public()
@@ -68,8 +109,10 @@ export class ProgramAnnouncementsController {
   async list(
     @Param('id') programId: string,
     @Query() query: ListProgramAnnouncementsQueryDto,
+    @Request() req: AuthenticatedRequest,
     @CurrentUser() user?: CurrentUserData,
   ) {
+    const isAdminView = await this.isScopedAdminView(req, user, programId);
     return this.listHandler.execute(
       new ListProgramAnnouncementsCommand(
         programId,
@@ -80,8 +123,9 @@ export class ProgramAnnouncementsController {
         // Audit M14: OptionalJwtAuthGuard resolves an admin bearer token
         // without rejecting an absent/invalid one, so this route stays
         // @Public() for participants while still letting an admin see
-        // draft/scheduled/audience-restricted announcements for management.
-        isAdminCaller(user),
+        // draft/scheduled/audience-restricted announcements for management -
+        // but only for a programme their scope covers.
+        isAdminView,
       ),
     );
   }
@@ -92,13 +136,15 @@ export class ProgramAnnouncementsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get a single program announcement' })
   @ApiResponse({ status: 200, type: ProgramAnnouncementResponseDto })
-  async getOne(@Param('itemId') itemId: string) {
+  async getOne(@Param('itemId') itemId: string, @Request() req: AuthenticatedRequest) {
+    await this.assertAnnouncementScope(req, itemId);
     return this.getHandler.execute(new GetProgramAnnouncementCommand(itemId));
   }
 
   @Post(':id/announcements')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'id')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create program announcement' })
   @ApiResponse({ status: 201, type: ProgramAnnouncementResponseDto })
@@ -127,6 +173,7 @@ export class ProgramAnnouncementsController {
     @Body() dto: UpdateProgramAnnouncementDto,
     @Request() req: AuthenticatedRequest,
   ) {
+    await this.assertAnnouncementScope(req, itemId);
     return this.updateHandler.execute(
       new UpdateProgramAnnouncementCommand(itemId, dto, req.user.id),
     );
@@ -143,6 +190,7 @@ export class ProgramAnnouncementsController {
     @Param('itemId') itemId: string,
     @Request() req: AuthenticatedRequest,
   ) {
+    await this.assertAnnouncementScope(req, itemId);
     return this.deleteHandler.execute(
       new DeleteProgramAnnouncementCommand(itemId, req.user.id),
     );

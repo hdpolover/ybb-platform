@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards, Query, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards, NotFoundException, Req } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -12,6 +12,14 @@ import { GetParticipationInfoQuery, ListParticipationInfoQuery } from '../applic
 import { Public } from '@shared/decorators/public.decorator';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
 import { PROGRAM_CONTENT_PATTERNS as MUTABLE_CONTENT_CACHE_PATTERNS } from '@shared/constants/cache-patterns';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import {
+  AdminScopeGuard,
+  ScopedBy,
+  assertProgramAccess,
+  getRequestAdminScope,
+  orNotFound,
+} from '@shared/guards/admin-scope.guard';
 
 @ApiTags('Programs')
 @Controller('programs/:programId/participation-info')
@@ -19,11 +27,13 @@ export class ProgramParticipationController {
   constructor(
     private readonly commandBus: CommandBus,
     private readonly queryBus: QueryBus,
+    private readonly readPrisma: PrismaReadService,
   ) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Upsert participation info for a category' })
   @ApiResponse({ status: 201, type: ParticipationInfoResponseDto })
@@ -66,7 +76,19 @@ export class ProgramParticipationController {
   async delete(
     @Param('programId') programId: string,
     @Param('id') id: string,
+    @Req() req: { user?: { adminId?: string } },
   ) {
+    // The handler deletes by row id alone, so the scope check runs on the
+    // row's own programme, not the route's.
+    const notFound = () => new NotFoundException('Participation Info not found');
+    const row = await this.readPrisma.programParticipationInfo.findUnique({
+      where: { id },
+      select: { programId: true },
+    });
+    if (!row) throw notFound();
+    const scope = await getRequestAdminScope(this.readPrisma, req);
+    await orNotFound(() => assertProgramAccess(this.readPrisma, scope, row.programId), notFound);
+
     return this.commandBus.execute(new DeleteParticipationInfoCommand(programId, id));
   }
 }
