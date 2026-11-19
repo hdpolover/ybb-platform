@@ -41,6 +41,7 @@ import {
   TrendingUp,
   Star,
   MailWarning,
+  ScrollText,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -78,6 +79,7 @@ export const platformNavSections: NavSection[] = [
       { id: "brands", label: "Brands", href: "/platform/brands", icon: FolderOpen },
       { id: "programs", label: "Programs", href: "/platform/programs", icon: Layers },
       { id: "admins", label: "Admins", href: "/platform/admins", icon: UserCheck },
+      { id: "audit-log", label: "Audit log", href: "/platform/audit", icon: ScrollText },
     ],
   },
   {

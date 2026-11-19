@@ -7,6 +7,12 @@
  */
 
 import { validateUploadFile } from "@/lib/upload-validation";
+import {
+  buildActivityQuery,
+  buildSecurityEventsQuery,
+  type AuditActivityFilters,
+  type SecurityEventFilters,
+} from "@/lib/audit-log";
 import { redirectToLogin } from "@/src/shared/login-redirect";
 import {
   requestAdminProfileRefresh,
@@ -4643,6 +4649,80 @@ export function exportAuditLogsExcel(): Promise<void> {
   return triggerFileDownload(
     buildApiUrl("/reporting/audit-logs/export"),
     `audit-logs-${date}.xlsx`,
+  );
+}
+
+// ─── Platform audit log ──────────────────────────────────────────────────────
+
+/** A data_change_logs row as GET /admin/audit-logs returns it. State blobs are untrusted: render as text only. */
+export type AuditLogEntry = {
+  id: string;
+  createdAt: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  changedFields: string[];
+  beforeState: unknown;
+  afterState: unknown;
+  actorType: string;
+  actorId: string | null;
+  source: string | null;
+  endpoint: string | null;
+  httpMethod: string | null;
+  event: string | null;
+  ipAddress: string | null;
+  riskLevel: string;
+  reason: string | null;
+  status: string | null;
+  errorMessage: string | null;
+};
+
+export type AdminSecurityEvent = {
+  id: string;
+  createdAt: string;
+  eventType: string;
+  eventStatus: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  adminId: string | null;
+  adminName: string | null;
+  adminEmail: string | null;
+};
+
+export function listAuditLogs(
+  filters: AuditActivityFilters,
+  page: number,
+  limit: number,
+): Promise<Paginated<AuditLogEntry>> {
+  return requestPaginated<AuditLogEntry>(`/admin/audit-logs?${buildActivityQuery(filters, { page, limit })}`);
+}
+
+export function listEntityAuditHistory(
+  entityType: string,
+  entityId: string,
+  page: number,
+  limit: number,
+): Promise<Paginated<AuditLogEntry>> {
+  const path = `/admin/audit-logs/entity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`;
+  return requestPaginated<AuditLogEntry>(`${path}?page=${page}&limit=${limit}`);
+}
+
+/** Same filters as the list, no paging. The route streams an .xlsx workbook. */
+export function exportAuditLogs(filters: AuditActivityFilters): Promise<void> {
+  const date = new Date().toISOString().slice(0, 10);
+  return triggerFileDownload(
+    buildApiUrl(`/admin/audit-logs/export?${buildActivityQuery(filters)}`),
+    `admin-activity-${date}.xlsx`,
+  );
+}
+
+export function listAdminSecurityEvents(
+  filters: SecurityEventFilters,
+  page: number,
+  limit: number,
+): Promise<Paginated<AdminSecurityEvent>> {
+  return requestPaginated<AdminSecurityEvent>(
+    `/admin/audit-logs/admin-security-events?${buildSecurityEventsQuery(filters, { page, limit })}`,
   );
 }
 

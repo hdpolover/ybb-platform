@@ -22,6 +22,7 @@ import { UserRole } from '../../core/entities/user.entity';
 import { CurrentUser, CurrentUserData } from '../../shared/decorators/current-user.decorator';
 import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
 import { ListAuditLogsDto } from './dto/list-audit-logs.dto';
+import { AdminSecurityEventsQueryDto } from './dto/admin-security-events.dto';
 import { AuditCleanupService } from './audit-cleanup.service';
 import { Prisma, ChangeType, ChangedByType, RiskLevel } from '@prisma/client';
 import { endOfWibDay, parseWibFilterDate } from '@shared/utils/wib-time';
@@ -98,6 +99,63 @@ export class AuditAdminController {
                 nextCursor,
                 hasMore,
             },
+        };
+    }
+
+    /**
+     * Login / password-reset events of users that have an admins row, newest first.
+     * Declared before `:id` (same reason as `export`). The select is explicit so
+     * nothing beyond IP + user agent leaves the table: no fingerprint, location
+     * or free-text description.
+     */
+    @Get('admin-security-events')
+    @ApiOperation({ summary: 'List Admin Security Events (Admin)', operationId: 'listAdminSecurityEvents' })
+    @ApiResponse({ status: 200, description: 'Paginated admin login / security events' })
+    async adminSecurityEvents(
+        @Query() query: AdminSecurityEventsQueryDto,
+        @CurrentUser() currentUser: CurrentUserData,
+    ) {
+        if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
+
+        const { page = 1, limit = 20, adminId, dateFrom, dateTo } = query;
+
+        const where: Prisma.UserSecurityLogWhereInput = {
+            user: adminId ? { admin: { is: { id: adminId } } } : { admin: { isNot: null } },
+        };
+        if (dateFrom || dateTo) {
+            where.createdAt = {
+                ...(dateFrom ? { gte: parseWibFilterDate(dateFrom) } : {}),
+                ...(dateTo ? { lte: endOfWibDay(parseWibFilterDate(dateTo)) } : {}),
+            };
+        }
+
+        const [rows, total] = await Promise.all([
+            this.prisma.userSecurityLog.findMany({
+                where,
+                orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                skip: (page - 1) * limit,
+                take: limit,
+                select: {
+                    id: true,
+                    createdAt: true,
+                    eventType: true,
+                    eventStatus: true,
+                    ipAddress: true,
+                    userAgent: true,
+                    user: { select: { email: true, admin: { select: { id: true, fullName: true } } } },
+                },
+            }),
+            this.prisma.userSecurityLog.count({ where }),
+        ]);
+
+        return {
+            data: rows.map(({ user, ...row }) => ({
+                ...row,
+                adminId: user?.admin?.id ?? null,
+                adminName: user?.admin?.fullName ?? null,
+                adminEmail: user?.email ?? null,
+            })),
+            meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
         };
     }
 
