@@ -310,7 +310,7 @@ describe('AdminAccessRequestsService.approve', () => {
   });
 
   it('attaches to the participant user already in the first program brand instead of creating one', async () => {
-    const { prisma, service, createAdmin, links } = ready();
+    const { prisma, service, createAdmin } = ready();
     // 1st lookup: no admin owns the email; 2nd: the live participant row in brand-1
     prisma.user.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'participant-user', isActive: true });
 
