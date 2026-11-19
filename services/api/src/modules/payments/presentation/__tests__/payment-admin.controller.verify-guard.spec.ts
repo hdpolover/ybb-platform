@@ -45,6 +45,13 @@ const buildInvoice = (status: string) => ({
     },
 });
 
+// Platform-scope caller: this spec is not about programme scope, which
+// payment-admin.controller.scope.spec.ts covers against the real resolver.
+jest.mock('@shared/guards/admin-scope.guard', () => ({
+    ...jest.requireActual('@shared/guards/admin-scope.guard'),
+    getRequestAdminScope: async () => ({ kind: 'platform', allowedBrandIds: null, allowedProgramIds: null }),
+}));
+
 describe('PaymentAdminController.verifyInvoice — reject guards', () => {
     let controller: PaymentAdminController;
     let rabbitmqProducer: { emit: jest.Mock };

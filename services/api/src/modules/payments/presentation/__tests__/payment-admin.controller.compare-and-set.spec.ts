@@ -26,6 +26,13 @@ import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 
 const MOCK_ADMIN: CurrentUserData = { userId: 'admin-1', email: 'a@test.com', brandId: 'b1', role: [], adminId: 'admin-id-1' };
 
+// Platform-scope caller: this spec is not about programme scope, which
+// payment-admin.controller.scope.spec.ts covers against the real resolver.
+jest.mock('@shared/guards/admin-scope.guard', () => ({
+    ...jest.requireActual('@shared/guards/admin-scope.guard'),
+    getRequestAdminScope: async () => ({ kind: 'platform', allowedBrandIds: null, allowedProgramIds: null }),
+}));
+
 describe('PaymentAdminController.updateInvoiceStatus — compare-and-set (M160)', () => {
     let controller: PaymentAdminController;
     let mockGatewayClient: { voidTransaction: jest.Mock };
