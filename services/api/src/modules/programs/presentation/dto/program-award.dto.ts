@@ -10,6 +10,7 @@ import {
   IsUrl,
   Matches,
   MaxLength,
+  Max,
   Min,
   ValidateIf,
 } from 'class-validator';
@@ -19,6 +20,9 @@ import {
 const OptionalNotNull = () => ValidateIf((_obj, value) => value !== undefined);
 
 const HTTP_URL = { protocols: ['http', 'https'], require_protocol: true };
+
+// program_awards.order / winner_count are Postgres int4; larger values 500 on write.
+const INT32_MAX = 2147483647;
 
 export class CreateProgramAwardDto {
   @ApiProperty({ maxLength: 255 })
@@ -55,6 +59,7 @@ export class CreateProgramAwardDto {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(INT32_MAX)
   winnerCount?: number | null;
 
   @ApiPropertyOptional({ example: '#1D4ED8', nullable: true })
@@ -82,6 +87,8 @@ export class CreateProgramAwardDto {
   @ApiPropertyOptional()
   @OptionalNotNull()
   @IsInt()
+  @Min(-INT32_MAX)
+  @Max(INT32_MAX)
   order?: number;
 }
 

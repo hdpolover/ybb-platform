@@ -1,6 +1,8 @@
 // services/admin-dashboard/app/components/programAwardsMasterData/award-form.ts
 import type { ProgramAward, ProgramAwardInput } from "@/src/shared/api-client";
 
+const INT32_MAX = 2147483647;
+
 export type AwardFormState = {
   name: string;
   category: string;
@@ -72,10 +74,10 @@ export function buildAwardPayload(form: AwardFormState): AwardPayloadResult {
   if (name.length > 255) return { ok: false, error: "Name must be 255 characters or fewer." };
   if (form.category.trim().length > 100) return { ok: false, error: "Category must be 100 characters or fewer." };
   if (form.tier.trim().length > 50) return { ok: false, error: "Tier must be 50 characters or fewer." };
-  if (winnerCount && (!INTEGER.test(winnerCount) || Number(winnerCount) < 0)) {
+  if (winnerCount && (!INTEGER.test(winnerCount) || Number(winnerCount) < 0 || Number(winnerCount) > INT32_MAX)) {
     return { ok: false, error: "Winners must be a whole number of 0 or more." };
   }
-  if (!INTEGER.test(order)) return { ok: false, error: "Order must be a whole number." };
+  if (!INTEGER.test(order) || Math.abs(Number(order)) > INT32_MAX) return { ok: false, error: "Order must be a whole number." };
   if (color && !HEX_COLOR.test(color)) return { ok: false, error: "Color must be a hex value like #1D4ED8." };
   for (const [label, url] of [["Icon URL", iconUrl], ["Badge URL", badgeUrl]] as const) {
     if (url && (!isHttpUrl(url) || url.length > 500)) {
@@ -90,7 +92,7 @@ export function buildAwardPayload(form: AwardFormState): AwardPayloadResult {
       category: form.category.trim() || null,
       tier: form.tier.trim() || null,
       description: form.description.trim() || null,
-      tags: form.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+      tags: [...new Set(form.tags.split(",").map((tag) => tag.trim()).filter(Boolean))],
       winnerCount: winnerCount ? Number(winnerCount) : null,
       color: color || null,
       iconUrl: iconUrl || null,

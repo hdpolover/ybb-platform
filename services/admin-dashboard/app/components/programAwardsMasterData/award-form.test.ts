@@ -42,6 +42,18 @@ describe("buildAwardPayload", () => {
   });
 });
 
+describe("buildAwardPayload limits", () => {
+  it("drops duplicate tags", () => {
+    const result = buildAwardPayload({ ...emptyAwardForm(1), name: "Best Delegate", tags: "leadership, leadership , impact" });
+    expect(result.ok && result.payload.tags).toEqual(["leadership", "impact"]);
+  });
+
+  it("rejects order and winners beyond the int4 column", () => {
+    expect(buildAwardPayload({ ...emptyAwardForm(1), name: "A", order: "99999999999" }).ok).toBe(false);
+    expect(buildAwardPayload({ ...emptyAwardForm(1), name: "A", winnerCount: "99999999999" }).ok).toBe(false);
+  });
+});
+
 describe("filterAwards", () => {
   const awards = [
     award({ id: "1", name: "Best Delegate", category: "Delegate" }),

@@ -1,7 +1,7 @@
 // services/admin-dashboard/app/components/programAwardsMasterData/AwardSheet.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { createProgramAward, updateProgramAward, type ProgramAward } from "@/src/shared/api-client";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/src/ui/sheet";
@@ -21,11 +21,16 @@ export function AwardSheet({ open, programId, item, nextOrder, onClose, onSaved 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // nextOrder changes when the list reloads; reading it through a ref keeps a
+  // reload from wiping a form the admin is already typing into.
+  const nextOrderRef = useRef(nextOrder);
+  useEffect(() => { nextOrderRef.current = nextOrder; }, [nextOrder]);
+
   useEffect(() => {
     if (!open) return;
-    setForm(item ? awardToForm(item) : emptyAwardForm(nextOrder));
+    setForm(item ? awardToForm(item) : emptyAwardForm(nextOrderRef.current));
     setError(null);
-  }, [open, item, nextOrder]);
+  }, [open, item]);
 
   const set = <K extends keyof AwardFormState>(key: K, value: AwardFormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -97,7 +102,7 @@ export function AwardSheet({ open, programId, item, nextOrder, onClose, onSaved 
               <Field label="Order">
                 <input required type="number" step={1} value={form.order} onChange={(e) => set("order", e.target.value)} className={inputCls} />
               </Field>
-              <Field label="Color">
+              <Field label="Color (not shown on the landing page yet)">
                 <div className="flex items-center gap-2">
                   <span
                     aria-hidden
@@ -108,10 +113,10 @@ export function AwardSheet({ open, programId, item, nextOrder, onClose, onSaved 
                 </div>
               </Field>
             </div>
-            <Field label="Icon URL">
+            <Field label="Icon URL (not shown on the landing page yet)">
               <input type="url" maxLength={500} value={form.iconUrl} onChange={(e) => set("iconUrl", e.target.value)} placeholder="https://…" className={inputCls} />
             </Field>
-            <Field label="Badge URL">
+            <Field label="Badge URL (not shown on the landing page yet)">
               <input type="url" maxLength={500} value={form.badgeUrl} onChange={(e) => set("badgeUrl", e.target.value)} placeholder="https://…" className={inputCls} />
             </Field>
             <label className="flex cursor-pointer items-center gap-2">

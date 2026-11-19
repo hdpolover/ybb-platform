@@ -73,7 +73,7 @@ export class GetProgramLandingHandler implements IQueryHandler<GetProgramLanding
             }
           }
         },
-        orderBy: { order: 'asc' },
+        orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
         take: awardsLimit,
       }),
 
