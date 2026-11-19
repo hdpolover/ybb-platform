@@ -127,6 +127,18 @@ const menuPermissionRules: Record<string, string[]> = {
   "menu-management": ["roles.manage", "admin.manage"],
 };
 
+// Write permissions the API enforces inside a program the admin can reach
+// (services/api: program-announcements, payment-admin and applications
+// controllers). Keep the two in step, or a control here offers an action the
+// API answers with 403.
+export const programWritePermissions = {
+  announcements: ["announcements:write", "content:write", "program:write"],
+  payments: ["payments:write"],
+  resendReceipt: ["payments:write", "support:write"],
+  applicationEdit: ["applications:write"],
+  applicationSubmit: ["applications:write", "payments:write"],
+} as const satisfies Record<string, readonly string[]>;
+
 export function getRequiredPermissionsForMenuItem(itemId: string): string[] {
   return menuPermissionRules[itemId] ?? [];
 }
@@ -160,7 +172,7 @@ export function buildPermissionSet(profile: AdminProfile | null, programId?: str
 
 export function hasRequiredPermissions(
   permissionSet: Set<string>,
-  requiredPermissions: string[],
+  requiredPermissions: readonly string[],
 ): boolean {
   if (requiredPermissions.length === 0) {
     return true;

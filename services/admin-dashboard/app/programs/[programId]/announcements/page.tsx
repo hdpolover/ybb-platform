@@ -18,6 +18,8 @@ import {
 } from "@/src/shared/api-client";
 import { formatDateTime } from "@/lib/utils";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import {
   buildAnnouncementExcerpt,
   formatAnnouncementLabel,
@@ -31,6 +33,8 @@ export default function ProgramAnnouncementsPage() {
   const router = useRouter();
   const { accessiblePrograms } = useAuth();
   const resolvedProgramId = useResolvedProgramId(params.programId);
+  // announcements:read alone (Digital Marketing) views; the API refuses writes.
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.announcements);
 
   const [items, setItems] = useState<ProgramAnnouncement[]>([]);
   const [total, setTotal] = useState(0);
@@ -113,13 +117,15 @@ export default function ProgramAnnouncementsPage() {
               <ArrowPathIcon className="h-3.5 w-3.5" />
               Refresh
             </button>
-            <Link
-              href={`/programs/${params.programId}/announcements/new`}
-              className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"
-            >
-              <PlusIcon className="h-3.5 w-3.5" />
-              New Announcement
-            </Link>
+            {canWrite && (
+              <Link
+                href={`/programs/${params.programId}/announcements/new`}
+                className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                New Announcement
+              </Link>
+            )}
           </div>
         </div>
 
@@ -130,11 +136,15 @@ export default function ProgramAnnouncementsPage() {
         {!loading && items.length === 0 ? (
           <EmptyState
             title="No announcements yet"
-            description="Create the first announcement for this program."
-            action={{
-              label: "Create announcement",
-              onClick: () => router.push(`/programs/${params.programId}/announcements/new`),
-            }}
+            description={canWrite ? "Create the first announcement for this program." : "Announcements for this program will appear here."}
+            action={
+              canWrite
+                ? {
+                    label: "Create announcement",
+                    onClick: () => router.push(`/programs/${params.programId}/announcements/new`),
+                  }
+                : undefined
+            }
           />
         ) : (
           <div className="overflow-hidden rounded-md border border-zinc-200">
@@ -213,21 +223,23 @@ export default function ProgramAnnouncementsPage() {
                         {formatDateTime(item.updatedAt)}
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Link
-                            href={`/programs/${params.programId}/announcements/${item.id}/edit`}
-                            className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"
-                          >
-                            <PencilSquareIcon className="h-3.5 w-3.5" />
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteTarget(item)}
-                            className="rounded-md border border-red-100 p-1 text-red-400 hover:bg-red-50"
-                          >
-                            <TrashIcon className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        {canWrite && (
+                          <div className="flex items-center justify-end gap-1">
+                            <Link
+                              href={`/programs/${params.programId}/announcements/${item.id}/edit`}
+                              className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"
+                            >
+                              <PencilSquareIcon className="h-3.5 w-3.5" />
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(item)}
+                              className="rounded-md border border-red-100 p-1 text-red-400 hover:bg-red-50"
+                            >
+                              <TrashIcon className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -32,6 +32,8 @@ import { PaymentsByCountrySection } from "@/app/components/payments/sections/Pay
 import { toast } from "sonner";
 import { ArrowDownTrayIcon, EnvelopeIcon } from "@heroicons/react/24/outline";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import { PageHeader } from "@/src/admin/page-header";
 import { Button } from "@/src/ui/button";
 import { Input } from "@/src/ui/input";
@@ -142,6 +144,9 @@ export default function PaymentsPage({
 }) {
   const { programId } = use(params);
   const { accessiblePrograms } = useAuth();
+  // payments:read views; payment help emails need payments:write (API-enforced).
+  const canWritePayments = useProgramWriteAccess(programId, programWritePermissions.payments);
+  const canSubmitApplication = useProgramWriteAccess(programId, programWritePermissions.applicationSubmit);
 
   const program = useMemo(
     () => accessiblePrograms.find((p) => p.programId === programId || p.programSlug === programId),
@@ -974,7 +979,7 @@ export default function PaymentsPage({
           />
         </div>
 
-        {selectedIds.size > 0 && (
+        {canWritePayments && selectedIds.size > 0 && (
           <div className="flex items-center justify-between gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2.5">
             <span className="text-xs font-medium text-blue-800">
               {selectedIds.size} selected
@@ -1134,15 +1139,19 @@ export default function PaymentsPage({
                           icon: Copy,
                           onClick: () => handleCopyInvoiceId(inv.id),
                         },
-                        {
-                          label: notifyingIds.has(inv.id) ? "Sending…" : "Send payment help email",
-                          icon: Mail,
-                          disabled: notifyingIds.has(inv.id),
-                          onClick: () => void handleNotifyRow(inv.id, inv.participant.email),
-                        },
+                        ...(canWritePayments
+                          ? [
+                              {
+                                label: notifyingIds.has(inv.id) ? "Sending…" : "Send payment help email",
+                                icon: Mail,
+                                disabled: notifyingIds.has(inv.id),
+                                onClick: () => void handleNotifyRow(inv.id, inv.participant.email),
+                              },
+                            ]
+                          : []),
                       ]}
                     />
-                    {inv.status === "paid" && inv.application.status === "draft" && (
+                    {canSubmitApplication && inv.status === "paid" && inv.application.status === "draft" && (
                       <button
                         type="button"
                         disabled={submittingId === inv.id}

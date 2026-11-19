@@ -15,6 +15,8 @@ import {
 import { formatDateTime } from "@/lib/utils";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import {
   formatAnnouncementLabel,
   getProgramAnnouncementStatus,
@@ -35,6 +37,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 export default function ProgramAnnouncementDetailPage() {
   const params = useParams<{ programId: string; id: string }>();
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.announcements);
   const { accessiblePrograms } = useAuth();
   const resolvedProgramId = useResolvedProgramId(params.programId);
 
@@ -107,15 +110,17 @@ export default function ProgramAnnouncementDetailPage() {
           {getProgramAnnouncementStatusLabel(status)}
         </span>
 
-        <div className="ml-auto flex items-center gap-2">
-          <Link
-            href={`/programs/${params.programId}/announcements/${announcement.id}/edit`}
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"
-          >
-            <PencilSquareIcon className="h-3.5 w-3.5" />
-            Edit
-          </Link>
-        </div>
+        {canWrite && (
+          <div className="ml-auto flex items-center gap-2">
+            <Link
+              href={`/programs/${params.programId}/announcements/${announcement.id}/edit`}
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600"
+            >
+              <PencilSquareIcon className="h-3.5 w-3.5" />
+              Edit
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="flex min-h-[calc(100vh-64px-53px)] flex-col lg:flex-row">
