@@ -10,6 +10,7 @@ import { JwtAuthGuard } from '../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/infrastructure/guards/roles.guard';
 import { Roles } from '../auth/application/decorators/roles.decorator';
 import { UserRole } from '../../core/entities/user.entity';
+import { AdminScopeGuard, ScopedBy } from '../../shared/guards/admin-scope.guard';
 import { ProgramDashboardResponseDto } from './dto/program-dashboard-response.dto';
 import { ProgramAnalyticsResponseDto } from './dto/program-analytics-response.dto';
 
@@ -42,8 +43,10 @@ export class StatsController {
   }
 
   @Get('admin/analytics')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  // Unfiltered, it is cross-brand totals; only the /platform pages call it.
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get admin platform analytics summary' })
   @ApiQuery({ name: 'brandId', required: false, type: String, description: 'Filter by brand ID (platform admins only)' })
@@ -55,8 +58,9 @@ export class StatsController {
   }
 
   @Get('admin/programs/:programId/dashboard')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get admin program dashboard analytics' })
   @ApiResponse({ status: 200, type: ProgramDashboardResponseDto })
@@ -67,8 +71,9 @@ export class StatsController {
   }
 
   @Get('admin/programs/:programId/analytics')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get detailed program analytics (participants + payments)' })
   @ApiResponse({ status: 200, type: ProgramAnalyticsResponseDto })
@@ -106,8 +111,9 @@ export class StatsController {
   // ── Participant Analytics ─────────────────────────────────────────────────
 
   @Get('admin/programs/:programId/analytics/knowledge-source')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get knowledge source (discovery channel) analytics for a program' })
   @ApiResponse({ status: 200, description: 'Knowledge source distribution and cross-tab' })
@@ -116,8 +122,9 @@ export class StatsController {
   }
 
   @Get('admin/programs/:programId/analytics/nationality')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get nationality analytics for a program' })
   @ApiResponse({ status: 200, description: 'Nationality distribution and cross-tab' })
@@ -126,8 +133,9 @@ export class StatsController {
   }
 
   @Get('admin/programs/:programId/analytics/gender')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get gender analytics for a program' })
   @ApiResponse({ status: 200, description: 'Gender distribution and cross-tab' })
@@ -136,8 +144,9 @@ export class StatsController {
   }
 
   @Get('admin/programs/:programId/analytics/age')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get age band analytics for a program' })
   @ApiResponse({ status: 200, description: 'Age distribution and cross-tab' })
@@ -146,8 +155,9 @@ export class StatsController {
   }
 
   @Get('admin/programs/:programId/analytics/registrations')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get registration trend analytics for a program' })
   @ApiResponse({ status: 200, description: 'Daily/monthly trend, by country, by source' })
@@ -156,8 +166,9 @@ export class StatsController {
   }
 
   @Get('admin/programs/:programId/analytics/ambassadors')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get ambassador performance analytics for a program' })
   @ApiResponse({ status: 200, description: 'Ambassador leaderboard and referral summary' })

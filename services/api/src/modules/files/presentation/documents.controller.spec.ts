@@ -8,11 +8,14 @@
 //
 // This file did not exist before; the route had no coverage at all.
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
 import { DocumentsController } from './documents.controller';
 import { FileServiceClient } from '../infrastructure/clients/file-service.client';
 import { FileGrpcClient } from '../infrastructure/clients/file-grpc-client.service';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 
 describe('DocumentsController — verifyCertificate (audit M186)', () => {
     let controller: DocumentsController;
@@ -31,6 +34,8 @@ describe('DocumentsController — verifyCertificate (audit M186)', () => {
             providers: [
                 { provide: FileServiceClient, useValue: mockFileServiceClient },
                 { provide: FileGrpcClient, useValue: {} },
+                // AdminScopeGuard on the generator routes needs it to resolve.
+                { provide: PrismaReadService, useValue: {} },
             ],
         })
             // The controller class carries JwtAuthGuard; this route is @Public()
@@ -68,5 +73,55 @@ describe('DocumentsController — verifyCertificate (audit M186)', () => {
         await expect(controller.verifyCertificate('nope')).rejects.toBeInstanceOf(
             BadRequestException,
         );
+    });
+});
+
+// The generators render body-supplied data with no tenant id to scope by, so
+// they are platform-only. Real AdminScopeGuard against the real route metadata.
+describe('DocumentsController generators are platform-only (real AdminScopeGuard)', () => {
+    const BASE = { canManageAdmins: false, canAssignRoles: false, customPermissions: [], role: { name: 'admin', permissions: [] } };
+    const BRAND_ADMIN = { ...BASE, accessLevel: 3, adminBrands: [{ brandId: 'brand-a', permissions: [] }], adminPrograms: [] };
+    const ASSIGNED_ADMIN = { ...BASE, accessLevel: 1, adminBrands: [], adminPrograms: [{ programId: 'prog-a', permissions: [] }] };
+    const PLATFORM_ADMIN = { ...BASE, accessLevel: 10, role: { name: 'super admin', permissions: ['*'] }, adminBrands: [], adminPrograms: [] };
+
+    const prismaRead = { admin: { findUnique: jest.fn() } };
+    const guard = new AdminScopeGuard(new Reflector(), prismaRead as unknown as PrismaReadService);
+
+    function contextFor(handler: (...args: never[]) => unknown): ExecutionContext {
+        const request = { user: { adminId: 'admin-1' }, params: {} };
+        return {
+            getHandler: () => handler,
+            getClass: () => DocumentsController,
+            switchToHttp: () => ({ getRequest: () => request }),
+        } as unknown as ExecutionContext;
+    }
+
+    const p = DocumentsController.prototype;
+    const routes: Array<[string, (...args: never[]) => unknown]> = [
+        ['export/participants', p.exportParticipantReport],
+        ['export/payments', p.exportPaymentReport],
+        ['export/custom', p.exportCustomReport],
+        ['generate/receipt', p.generateReceipt],
+        ['generate/offer-letter', p.generateOfferLetter],
+        ['generate/certificate', p.generateCertificate],
+    ];
+
+    beforeEach(() => jest.clearAllMocks());
+
+    it.each(routes)('%s: brand-scoped and assigned admins get 403', async (_n, handler) => {
+        for (const admin of [BRAND_ADMIN, ASSIGNED_ADMIN]) {
+            prismaRead.admin.findUnique.mockResolvedValue(admin);
+            await expect(guard.canActivate(contextFor(handler))).rejects.toThrow(ForbiddenException);
+        }
+    });
+
+    it.each(routes)('%s: platform admin passes', async (_n, handler) => {
+        prismaRead.admin.findUnique.mockResolvedValue(PLATFORM_ADMIN);
+        await expect(guard.canActivate(contextFor(handler))).resolves.toBe(true);
+    });
+
+    it('public verify/:hash stays unscoped', async () => {
+        await expect(guard.canActivate(contextFor(p.verifyCertificate))).resolves.toBe(true);
+        expect(prismaRead.admin.findUnique).not.toHaveBeenCalled();
     });
 });
