@@ -3,6 +3,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CopyInput, CopyMode, CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier, TemplatePayload } from '../program-copier.interface';
+import { CONTENT_WRITE_PERMISSIONS } from '../../utils/program-content-access.util';
 import { isProgramLandingContentKey, PROGRAM_LANDING_CONTENT_KEYS } from '../program-landing-content.constants';
 import { parseTemplateItems } from '../template-payload.schemas';
 
@@ -53,6 +54,7 @@ export class LandingCopier implements ProgramCopier {
   // One JSON bucket on the Program row — nothing to append to, same
   // reasoning as ProgramDetailsCopier/ContactCopier.
   readonly supportsAppend = false;
+  readonly requiredPermissions = CONTENT_WRITE_PERMISSIONS.programConfig;
 
   constructor(private readonly prisma: PrismaService) {}
 

@@ -67,10 +67,10 @@ export interface ProgramCopier {
   /**
    * Permissions (any one of) the caller must hold on the TARGET program to
    * write this entity through the copy routes, on top of the program scope
-   * check. Omitted = scope alone is enough. Set it when the entity's own
-   * write endpoint is permission-gated, or copying becomes the way around it.
+   * check. Required, and set to the same set as the entity's own write
+   * endpoint: a copier without it made copying the way around that gate.
    */
-  readonly requiredPermissions?: readonly string[];
+  readonly requiredPermissions: readonly string[];
 
   countFor(programId: string): Promise<number>;
   preview(programId: string): Promise<CopyPreviewItem[]>;

@@ -2,6 +2,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CopyInput, CopyMode, CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier, TemplatePayload } from '../program-copier.interface';
+import { CONTENT_WRITE_PERMISSIONS } from '../../utils/program-content-access.util';
 import { parseTemplateItems } from '../template-payload.schemas';
 
 /**
@@ -75,6 +76,7 @@ export class ProgramDetailsCopier implements ProgramCopier {
   // only something to overwrite. The frontend hides the mode toggle for
   // this copier; copy() below rejects append as a belt-and-suspenders check.
   readonly supportsAppend = false;
+  readonly requiredPermissions = CONTENT_WRITE_PERMISSIONS.programConfig;
 
   constructor(private readonly prisma: PrismaService) {}
 

@@ -2,6 +2,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CopyInput, CopyMode, CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier, TemplatePayload } from '../program-copier.interface';
+import { CONTENT_WRITE_PERMISSIONS } from '../../utils/program-content-access.util';
 import { parseTemplateItems } from '../template-payload.schemas';
 
 /**
@@ -42,6 +43,7 @@ export class ContactCopier implements ProgramCopier {
   // Same reasoning as ProgramDetailsCopier: four scalars on the Program row,
   // nothing to append to, only something to overwrite.
   readonly supportsAppend = false;
+  readonly requiredPermissions = CONTENT_WRITE_PERMISSIONS.programConfig;
 
   constructor(private readonly prisma: PrismaService) {}
 

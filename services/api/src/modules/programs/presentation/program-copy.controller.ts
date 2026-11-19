@@ -35,7 +35,6 @@ export class ProgramCopyController {
   // writable around that gate by copying it in. Checked per copier (not with
   // a route-level guard) because the requirement depends on the entity key.
   private async assertCopierPermission(copier: ProgramCopier, user: CurrentUserData, programId: string): Promise<void> {
-    if (!copier.requiredPermissions) return;
     try {
       await assertProgramPermission(this.prismaRead, user, programId, copier.requiredPermissions);
     } catch (error) {

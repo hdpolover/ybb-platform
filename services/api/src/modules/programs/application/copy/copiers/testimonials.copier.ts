@@ -2,6 +2,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CopyInput, CopyMode, CopyPreviewItem, CopyResult, PrismaTx, ProgramCopier, TemplatePayload } from '../program-copier.interface';
+import { CONTENT_WRITE_PERMISSIONS } from '../../utils/program-content-access.util';
 import { applyScopedTemplate, copyScopedRows, ScopedRowsDelegate } from '../copy-scoped-rows';
 import { parseTemplateItems } from '../template-payload.schemas';
 
@@ -58,6 +59,7 @@ export class TestimonialsCopier implements ProgramCopier {
   readonly key = 'testimonials';
   readonly label = 'Testimonials';
   readonly supportsAppend = true;
+  readonly requiredPermissions = CONTENT_WRITE_PERMISSIONS.content;
 
   constructor(private readonly prisma: PrismaService) {}
 
