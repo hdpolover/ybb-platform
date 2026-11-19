@@ -8,8 +8,20 @@ export function getLoginRedirectMessage(reason: string | null): string | null {
   return null;
 }
 
+// Pages that work without a session; a stale token must not bounce visitors off them.
+const PUBLIC_PATHS = ["/request-access", "/set-password"];
+
+export function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
 export function redirectToLogin(reason?: LoginRedirectReason): void {
   if (typeof window === "undefined") {
+    return;
+  }
+
+  // Before clearing the session: a stray 401 on a public page must not log an admin out of this browser.
+  if (isPublicPath(window.location.pathname)) {
     return;
   }
 

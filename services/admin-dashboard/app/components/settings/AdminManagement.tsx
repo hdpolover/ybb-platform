@@ -9,6 +9,11 @@ import {
   UserGroupIcon,
 } from "@heroicons/react/24/solid";
 import { toast } from "sonner";
+import { canSendPasswordLink } from "@/lib/access-requests";
+import {
+  SendPasswordLinkDialog,
+  type PasswordLinkTarget,
+} from "@/app/components/settings/adminManagement/SendPasswordLinkDialog";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { EnglishInput } from "@/src/ui/english-input";
 import { useAuth } from "@/app/contexts/AuthContext";
@@ -89,7 +94,8 @@ function adminToRow(admin: Admin): AdminRow {
 }
 
 export function AdminManagement({ programId, programName }: AdminManagementProps) {
-  const { accessiblePrograms, accessConfig } = useAuth();
+  const { accessiblePrograms, accessConfig, adminProfile } = useAuth();
+  const [linkTarget, setLinkTarget] = useState<PasswordLinkTarget | null>(null);
   const resolvedProgramId = useResolvedProgramId(programId);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [roles, setRoles] = useState<ApiAdminRole[]>([]);
@@ -472,6 +478,13 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
                             }}
                             tone="purple"
                           />
+                          {canSendPasswordLink(accessConfig, adminProfile?.id, source.id) ? (
+                            <ActionButton
+                              label="Send link"
+                              onClick={() => setLinkTarget({ id: source.id, fullName: source.fullName })}
+                              tone="blue"
+                            />
+                          ) : null}
                           <ActionButton label="Deactivate" onClick={() => void handleDelete(source)} tone="rose" />
                         </div>
                       </td>
@@ -697,6 +710,7 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
           />
         </div>
       </DrawerShell>
+      <SendPasswordLinkDialog target={linkTarget} onClose={() => setLinkTarget(null)} />
     </main>
   );
 }

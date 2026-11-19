@@ -87,6 +87,11 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // The set-password token (and request form context) must never leak via Referer.
+        source: "/:path(set-password|request-access)",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
+      {
         source: "/static/:path*",
         headers: [
           {

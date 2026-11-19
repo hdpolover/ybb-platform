@@ -923,6 +923,117 @@ export function resetAdminPassword(id: string, password: string): Promise<{ mess
   });
 }
 
+// ─── Admin access requests ────────────────────────────────────────────────────
+
+export type AccessRequestProgram = { id: string; name: string; brandName: string };
+export type AccessRequestOptions = {
+  divisions: Array<{ key: string; label: string }>;
+  programs: AccessRequestProgram[];
+};
+export type AccessRequestStatus = "pending" | "approved" | "rejected";
+export type CreateAccessRequestInput = {
+  fullName: string;
+  email: string;
+  whatsapp?: string;
+  division: string;
+  programIds: string[];
+  note?: string;
+  turnstileToken?: string;
+};
+export type AccessRequest = {
+  id: string;
+  fullName: string;
+  email: string;
+  whatsapp: string | null;
+  division: string;
+  divisionLabel: string;
+  defaultRoleId: string | null;
+  defaultRoleName: string | null;
+  requestedPrograms: AccessRequestProgram[];
+  note: string | null;
+  status: AccessRequestStatus;
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewedByName: string | null;
+  rejectReason: string | null;
+  existingAdminId: string | null;
+  /** Names of brands where this email already has a participant account. */
+  participantBrands: string[];
+};
+
+export type ApproveAccessRequestResult = {
+  adminId: string;
+  roleId: string;
+  programIds: string[];
+  /** False when the account was created but the invite email could not be sent. */
+  emailSent: boolean;
+};
+
+/** Unauthenticated call for the public request-access / set-password pages: no bearer token, no login redirect. */
+async function publicRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(buildApiUrl(path), {
+    ...init,
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    const { message, errorCode, fieldErrors } = await readErrorBody(res);
+    throw new ApiError(message, res.status, errorCode, fieldErrors);
+  }
+  const payload = await res.json().catch(() => undefined);
+  return (payload && typeof payload === "object" && "data" in payload ? payload.data : payload) as T;
+}
+
+export function getAccessRequestOptions(): Promise<AccessRequestOptions> {
+  return publicRequest<AccessRequestOptions>("/admin-access-requests/options");
+}
+
+export function submitAccessRequest(input: CreateAccessRequestInput): Promise<{ submitted: true }> {
+  return publicRequest<{ submitted: true }>("/admin-access-requests", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/** Uses the existing public POST /auth/reset-password (token from the emailed link). */
+export function setPasswordWithToken(token: string, password: string): Promise<unknown> {
+  return publicRequest<unknown>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  });
+}
+
+export async function listAccessRequests(status: AccessRequestStatus): Promise<AccessRequest[]> {
+  const result = await request<AccessRequest[] | { items?: AccessRequest[] }>(
+    `/admin/access-requests?status=${status}`,
+  );
+  return Array.isArray(result) ? result : (result?.items ?? []);
+}
+
+export function getPendingAccessRequestCount(): Promise<{ count: number }> {
+  return request<{ count: number }>("/admin/access-requests/pending-count");
+}
+
+export function approveAccessRequest(
+  id: string,
+  input: { roleId: string; programIds: string[] },
+): Promise<ApproveAccessRequestResult> {
+  return request<ApproveAccessRequestResult>(`/admin/access-requests/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function rejectAccessRequest(id: string, reason?: string): Promise<unknown> {
+  return request<unknown>(`/admin/access-requests/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+}
+
+export function sendAdminPasswordLink(id: string): Promise<{ ok: true; adminId: string }> {
+  return request<{ ok: true; adminId: string }>(`/admins/${id}/send-password-link`, { method: "POST" });
+}
+
 export function listAdminRoles(params?: {
   programId?: string;
   search?: string;
