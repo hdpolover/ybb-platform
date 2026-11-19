@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { NotFoundException } from '@nestjs/common';
 import { Response } from 'express';
 import { FilesController } from './files.controller';
@@ -262,6 +262,62 @@ describe('FilesController — requestUploadUrl (brand attribution)', () => {
         expect(mockFileServiceClient.createUploadUrl).toHaveBeenCalledWith(
             expect.objectContaining({ user_id: 'real-jwt-user' }),
         );
+    });
+
+    // Admin uploads into a program need the write set of whatever stores the
+    // file, picked by asset_type; unmapped types need some program write.
+    describe('admin upload permissions by asset_type', () => {
+        const adminUser = { userId: 'user-a', email: 'a@x.com', brandId: JWT_HOME_BRAND_ID, adminId: 'admin-a' };
+        const scopedAdmin = (permissions: string[]) => ({
+            accessLevel: 1,
+            canManageAdmins: false,
+            canAssignRoles: false,
+            customPermissions: [],
+            role: { name: 'Scoped', permissions },
+            adminBrands: [],
+            adminPrograms: [{ programId: PROGRAM_ID, permissions: [] }],
+        });
+
+        beforeEach(() => {
+            mockPrisma.program.findUnique.mockResolvedValue({ id: PROGRAM_ID, brandId: JWT_HOME_BRAND_ID, deletedAt: null });
+        });
+
+        it.each([
+            ['announcement-image', ['media:write', 'support:write']],
+            ['payment-method-instruction-image', ['payments:read', 'content:write']],
+            ['support-attachment', ['media:write', 'content:write']],
+            ['document-template', ['content:write']],
+            ['gallery', ['support:write']],
+            ['something-new', ['program:read', 'payments:read']],
+            [undefined, ['program:read']],
+        ])('asset_type %s: refused without its set, before any upload URL is issued', async (assetType, permissions) => {
+            mockPrismaRead.admin.findUnique.mockResolvedValue(scopedAdmin(permissions));
+            await expect(
+                controller.requestUploadUrl({ ...baseDto, program_id: PROGRAM_ID, asset_type: assetType }, adminUser),
+            ).rejects.toBeInstanceOf(ForbiddenException);
+            expect(mockFileServiceClient.createUploadUrl).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['announcement-attachment', ['announcements:write']],
+            ['payment-method-instruction-image', ['program:write']],
+            ['support-attachment', ['support:write']],
+            ['resource', ['documents:write']],
+            ['gallery', ['media:write']],
+            ['image', ['documents:write']],
+            ['something-new', ['participants:write']],
+        ])('asset_type %s: passes with its set', async (assetType, permissions) => {
+            mockPrismaRead.admin.findUnique.mockResolvedValue(scopedAdmin(permissions));
+            await controller.requestUploadUrl({ ...baseDto, program_id: PROGRAM_ID, asset_type: assetType }, adminUser);
+            expect(mockFileServiceClient.createUploadUrl).toHaveBeenCalled();
+        });
+
+        it('a participant (no adminId) uploading into their program needs no permission lookup', async () => {
+            const participant = { userId: 'user-p', email: 'p@x.com', brandId: JWT_HOME_BRAND_ID };
+            await controller.requestUploadUrl({ ...baseDto, program_id: PROGRAM_ID, asset_type: 'support-attachment' }, participant);
+            expect(mockPrismaRead.admin.findUnique).not.toHaveBeenCalled();
+            expect(mockFileServiceClient.createUploadUrl).toHaveBeenCalled();
+        });
     });
 });
 
