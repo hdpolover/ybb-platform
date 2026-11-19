@@ -120,13 +120,15 @@ const SUITES: Record<string, Suite> = {
     build: () => {
       const log = { findMany: reached(), findUnique: reached(), count: reached() };
       const cleanup = { cleanup: reached() };
+      // export is reached for real now that it is declared before `:id`.
+      const excel = { streamExcelRows: reached() };
       return {
         providers: [
           { provide: PrismaService, useValue: { dataChangeLog: log } },
-          { provide: ExcelService, useValue: {} },
+          { provide: ExcelService, useValue: excel },
           { provide: AuditCleanupService, useValue: cleanup },
         ],
-        spies: [log.findMany, log.findUnique, log.count, cleanup.cleanup],
+        spies: [log.findMany, log.findUnique, log.count, cleanup.cleanup, excel.streamExcelRows],
       };
     },
     routes: [

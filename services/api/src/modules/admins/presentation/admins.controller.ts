@@ -61,6 +61,7 @@ export class AdminsController {
         @CurrentUser() currentUser: CurrentUserData
     ) {
         await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        await this.adminAccessControl.assertCanCreateAdmin(currentUser, dto.roleId);
         const adminId = currentUser.adminId;
         if (!adminId) throw new UnauthorizedException('Admin access required');
 
@@ -117,6 +118,10 @@ export class AdminsController {
         @CurrentUser() currentUser: CurrentUserData
     ) {
         await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        await this.adminAccessControl.assertCanManageAdmin(currentUser, id, 'update', {
+            roleId: dto.roleId,
+            isActive: dto.isActive,
+        });
         const adminId = currentUser.adminId;
         if (!adminId) throw new UnauthorizedException('Admin access required');
         const command = new UpdateAdminCommand(id, dto, adminId);
@@ -132,6 +137,7 @@ export class AdminsController {
         @CurrentUser() currentUser: CurrentUserData,
     ) {
         await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        await this.adminAccessControl.assertCanManageAdmin(currentUser, id, 'reset-password');
 
         const admin = await this.prisma.admin.findUnique({
             where: { id },
@@ -173,6 +179,7 @@ export class AdminsController {
         @CurrentUser() currentUser: CurrentUserData
     ) {
         await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        await this.adminAccessControl.assertCanManageAdmin(currentUser, id, 'delete');
         const adminId = currentUser.adminId;
         if (!adminId) throw new UnauthorizedException('Admin access required');
         const command = new DeleteAdminCommand(id, adminId);
@@ -189,6 +196,7 @@ export class AdminsController {
         @CurrentUser() currentUser: CurrentUserData
     ) {
         await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        await this.adminAccessControl.assertCanManageAdmin(currentUser, id, 'restore');
         const adminId = currentUser.adminId;
         if (!adminId) throw new UnauthorizedException('Admin access required');
         const command = new RestoreAdminCommand(id, adminId);
