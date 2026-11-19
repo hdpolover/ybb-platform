@@ -132,6 +132,13 @@ import { ProgramContentRepository } from './infrastructure/persistence/program-c
 import { ProgramRepository } from './infrastructure/persistence/program.repository';
 import { LoaReleaseBatchRepository } from './infrastructure/persistence/loa-release-batch.repository';
 import { ResendWebhookController } from './presentation/resend-webhook.controller';
+import { ProgramAwardsController } from './presentation/program-awards.controller';
+import {
+  ListProgramAwardsHandler,
+  CreateProgramAwardHandler,
+  UpdateProgramAwardHandler,
+  DeleteProgramAwardHandler,
+} from './application/commands/handlers/program-award.handlers';
 import { LoaBatchRecipientSendRepository } from './infrastructure/persistence/loa-batch-recipient-send.repository';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
@@ -174,6 +181,7 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
     ProgramScoringController,
     ProgramCopyController,
     ResendWebhookController,
+    ProgramAwardsController,
   ],
   providers: [
     ListProgramsHandler,
@@ -312,6 +320,10 @@ import { PricingTierCoverageAlertService } from './application/services/pricing-
     CacheService,
     LandingRevalidationService,
     LandingCacheInvalidationService,
+    ListProgramAwardsHandler,
+    CreateProgramAwardHandler,
+    UpdateProgramAwardHandler,
+    DeleteProgramAwardHandler,
     FormFieldKeyValidator,
     LoaReleaseBatchRepository,
     LoaBatchRecipientSendRepository,
