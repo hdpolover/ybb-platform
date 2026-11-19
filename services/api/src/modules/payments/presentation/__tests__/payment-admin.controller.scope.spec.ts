@@ -50,19 +50,23 @@ async function build(opts: { admin: object; invoiceProgramIds?: string[] }) {
                 Promise.resolve({ id: where.id, brandId: 'brand-x', name: 'p', deletedAt: null }),
             ),
         },
-        applicationInvoice: {
-            findMany: jest.fn().mockResolvedValue(
-                (opts.invoiceProgramIds ?? []).map((programId) => ({ application: { programId } })),
-            ),
-        },
         // First downstream read of the programme-level invoice routes.
         $queryRaw: jest.fn().mockRejectedValue(new Error('reached')),
     };
     // Every primary read/write is a "reached the route body" probe.
+    // The scope check reads invoice ownership from the primary too; route it to
+    // its own mock so the route-body findMany stays a clean "reached" probe.
+    const scopeLookup = jest.fn().mockResolvedValue(
+        (opts.invoiceProgramIds ?? []).map((programId) => ({ application: { programId } })),
+    );
+    const bodyFindMany = jest.fn().mockRejectedValue(new Error('reached'));
     const prisma = {
         applicationInvoice: {
             findUnique: jest.fn().mockRejectedValue(new Error('reached')),
-            findMany: jest.fn().mockRejectedValue(new Error('reached')),
+            // Scope lookup selects only application.programId; route bodies also select id.
+            findMany: jest.fn((args?: { select?: { id?: unknown; application?: unknown } }) =>
+                args?.select?.application && !args.select.id ? scopeLookup(args) : bodyFindMany(args),
+            ),
         },
     };
     const paymentServiceClient = {
@@ -96,6 +100,8 @@ async function build(opts: { admin: object; invoiceProgramIds?: string[] }) {
         controller: module.get(PaymentAdminController),
         readPrisma,
         prisma,
+        scopeLookup,
+        bodyFindMany,
         paymentServiceClient,
         cacheService,
     };
@@ -141,7 +147,7 @@ const invoiceRoutes: Array<{ name: string; call: (b: Built) => Promise<unknown>;
     {
         name: 'POST notify-payment-issue',
         call: (b) => b.controller.notifyPaymentIssue({ invoiceIds: [INVOICE_ID] }, USER),
-        probe: (b) => b.prisma.applicationInvoice.findMany,
+        probe: (b) => b.bodyFindMany,
     },
     {
         name: 'POST resend-receipt',
@@ -191,13 +197,13 @@ describe('admin/payments invoice-keyed routes are scoped to the invoice\'s progr
         await expect(
             b.controller.notifyPaymentIssue({ invoiceIds: [INVOICE_ID, METHOD_ID] }, USER),
         ).rejects.toBeInstanceOf(NotFoundException);
-        expect(b.prisma.applicationInvoice.findMany).not.toHaveBeenCalled();
+        expect(b.bodyFindMany).not.toHaveBeenCalled();
     });
 
     it('platform admins skip the lookup entirely', async () => {
         const b = await build({ admin: PLATFORM_ADMIN, invoiceProgramIds: [THEIRS] });
         await b.controller.getInvoice(INVOICE_ID, USER).catch(() => undefined);
-        expect(b.readPrisma.applicationInvoice.findMany).not.toHaveBeenCalled();
+        expect(b.scopeLookup).not.toHaveBeenCalled();
         expect(b.prisma.applicationInvoice.findUnique).toHaveBeenCalled();
     });
 });

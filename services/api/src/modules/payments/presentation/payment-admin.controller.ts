@@ -2441,12 +2441,14 @@ export class PaymentAdminController {
     }
 
     // Ids that match no row are left to the route's own not-found/skip handling.
+    // Ownership is read from the PRIMARY, the same place every route acts on: a
+    // lagging replica would miss a fresh invoice, skip its check and fail open.
     private async assertCanAccessInvoices(user: CurrentUserData | undefined, invoiceIds: string[]): Promise<void> {
         const scope = await getRequestAdminScope(this.readPrisma, { user });
         if (scope.kind === 'platform') return;
 
         const notFound = () => new NotFoundException('Invoice not found');
-        const rows = await this.readPrisma.applicationInvoice.findMany({
+        const rows = await this.prisma.applicationInvoice.findMany({
             where: { id: { in: invoiceIds } },
             select: { application: { select: { programId: true } } },
         });
