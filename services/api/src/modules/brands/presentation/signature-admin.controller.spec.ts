@@ -3,7 +3,7 @@
 // /admin/signatures carried only @Roles, so any admin could list, create, edit
 // or delete any brand's LOA signatures by brandId/id. Each route now checks the
 // brand server-side before the bus is touched, and the writes also need the
-// documents permission set (documents:write / content:write / program:write).
+// documents permission set (documents:write / program:write; content:write is not enough).
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -106,11 +106,17 @@ describe('SignatureAdminController brand scope', () => {
     });
   });
 
-  it.each(['content:write', 'program:write'])('a grant of %s on the program in that brand is enough', async (permission) => {
-    as({ ...ASSIGNED_ADMIN, role: { name: 'Scoped', permissions: [] }, adminPrograms: [{ programId: 'prog-a', permissions: [permission] }] });
+  it('a grant of program:write on the program in that brand is enough', async () => {
+    as({ ...ASSIGNED_ADMIN, role: { name: 'Scoped', permissions: [] }, adminPrograms: [{ programId: 'prog-a', permissions: ['program:write'] }] });
     await controller.create(dto('brand-a'), req());
     await controller.update('sig-a', {}, req());
     expect(commandBus.execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('content:write alone cannot edit signatures (LOA documents are not content)', async () => {
+    as({ ...ASSIGNED_ADMIN, role: { name: 'News Writer', permissions: ['content:write'] } });
+    await expect(controller.update('sig-a', {}, req())).rejects.toThrow(ForbiddenException);
+    expect(commandBus.execute).not.toHaveBeenCalled();
   });
 
   it('brand-scoped admin in its own brand never needs the program lookup', async () => {

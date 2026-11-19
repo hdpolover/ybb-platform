@@ -114,8 +114,9 @@ const NOTIFY_PAYMENT_ISSUE_BATCH_SIZE = 50;
 const PAYMENT_WRITE_PERMISSIONS = ['payments:write'];
 const PROGRAM_PAYMENT_CONFIG_PERMISSIONS = ['payments:write', 'program:write'];
 // Mailing a participant about their own invoice (resending a paid receipt, a
-// payment-help email) is a support reply, not a money move.
-const PARTICIPANT_PAYMENT_SUPPORT_PERMISSIONS = ['payments:write', 'support:write'];
+// payment-help email) is a support reply, not a money move; program:write runs
+// the programme, so it counts too.
+const PARTICIPANT_PAYMENT_SUPPORT_PERMISSIONS = ['payments:write', 'support:write', 'program:write'];
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')

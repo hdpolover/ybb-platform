@@ -255,6 +255,14 @@ describe('admin/payments write routes require a write permission on the programm
         expect(b.prisma.applicationInvoice.findUnique).toHaveBeenCalled();
     });
 
+    it('resend-receipt and notify-payment-issue also pass on program:write', async () => {
+        const b = await build({ admin: withGrant(['program:write']), invoiceProgramIds: [MINE] });
+        await b.controller.resendReceipt({ invoiceId: INVOICE_ID }, USER).catch(() => undefined);
+        await b.controller.notifyPaymentIssue({ invoiceIds: [INVOICE_ID] }, USER).catch(() => undefined);
+        expect(b.prisma.applicationInvoice.findUnique).toHaveBeenCalled();
+        expect(b.bodyFindMany).toHaveBeenCalled();
+    });
+
     it('notify-payment-issue also passes on support:write (a payment-help email is a support reply)', async () => {
         const b = await build({ admin: withGrant(['support:write']), invoiceProgramIds: [MINE] });
         await b.controller.notifyPaymentIssue({ invoiceIds: [INVOICE_ID] }, USER).catch(() => undefined);

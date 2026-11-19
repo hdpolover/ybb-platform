@@ -12,7 +12,9 @@ export const CONTENT_WRITE_PERMISSIONS = {
   content: ['content:write', 'program:write'],
   gallery: ['media:write', 'content:write', 'program:write'],
   partners: ['partnerships:write', 'content:write', 'program:write'],
-  documents: ['documents:write', 'content:write', 'program:write'],
+  // LOA templates, batches, signatures and resources are official documents,
+  // not content: a content writer does not release or sign them.
+  documents: ['documents:write', 'program:write'],
   pricing: ['payments:write', 'program:write'],
   // Form fields, essays, categories and subthemes are program configuration:
   // reviewers (applications:write) work the submissions, they do not reshape the form.
