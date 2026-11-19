@@ -4,7 +4,6 @@ import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { RegisterAdminDto } from './dto/register-admin.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -24,7 +23,6 @@ import { AdminLoginHandler } from '../application/commands/handlers/admin-login.
 import { AdminRefreshHandler } from '../application/commands/handlers/admin-refresh.handler';
 import { RefreshHandler } from '../application/commands/handlers/refresh.handler';
 import { RegisterHandler } from '../application/commands/handlers/register.handler';
-import { RegisterAdminHandler } from '../application/commands/handlers/register-admin.handler';
 import { LogoutHandler } from '../application/commands/handlers/logout.handler';
 import { ForgotPasswordHandler } from '../application/commands/handlers/forgot-password.handler';
 import { ResetPasswordHandler } from '../application/commands/handlers/reset-password.handler';
@@ -38,7 +36,6 @@ import { GetAuthContextHandler } from '../application/queries/handlers/get-auth-
 import { LoginCommand } from '../application/commands/login.command';
 import { AdminLoginCommand } from '../application/commands/admin-login.command'; // [NEW]
 import { RegisterCommand } from '../application/commands/register.command';
-import { RegisterAdminCommand } from '../application/commands/register-admin.command';
 import { LogoutCommand } from '../application/commands/logout.command';
 import { ForgotPasswordCommand } from '../application/commands/forgot-password.command';
 import { ResetPasswordCommand } from '../application/commands/reset-password.command';
@@ -236,7 +233,6 @@ export class AuthController {
     private readonly refreshHandler: RefreshHandler,
     private readonly ambassadorLoginHandler: AmbassadorLoginHandler,
     private readonly registerHandler: RegisterHandler,
-    private readonly registerAdminHandler: RegisterAdminHandler,
     private readonly logoutHandler: LogoutHandler,
     private readonly forgotPasswordHandler: ForgotPasswordHandler,
     private readonly resetPasswordHandler: ResetPasswordHandler,
@@ -423,32 +419,6 @@ export class AuthController {
       dto.marketingOptIn,
     );
     return this.registerHandler.execute(command, brandDomain);
-  }
-
-  @Public()
-  @Post('register-admin')
-  // 3 guesses per hour at the shared secret, per client IP. clientIpTracker is
-  // named EXPLICITLY and must stay that way: the guard's default tracker is
-  // user-aware, and /auth/register hands out an access token immediately with
-  // no email verification, so leaving this on the default would let a caller
-  // mint throwaway accounts (~2400/hour per IP under MAILBOX_THROTTLE) and
-  // spend a fresh 3-guess bucket per account — thousands of guesses an hour
-  // against an intended 3. This is the one route in this file whose security
-  // rests on a small number, so it does not get to inherit a tracker.
-  @Throttle({ default: { limit: 3, ttl: ONE_HOUR, getTracker: clientIpTracker } })
-  @ApiOperation({ summary: 'Register Admin (Requires Secret Key)' })
-  @ApiResponse({ status: 201, description: 'Admin successfully registered', type: AuthResponseDto })
-  async registerAdmin(@Body() dto: RegisterAdminDto): Promise<AuthResponseDto> {
-    const command = new RegisterAdminCommand(
-      dto.email,
-      dto.password,
-      dto.fullName,
-      dto.secretKey,
-      dto.brandId,
-      dto.role,
-      dto.additionalBrandIds,
-    );
-    return this.registerAdminHandler.execute(command);
   }
 
   @Public()

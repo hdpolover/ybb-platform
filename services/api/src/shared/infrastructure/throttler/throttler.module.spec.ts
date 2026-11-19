@@ -21,8 +21,8 @@ jest.mock('ioredis', () => ({
 describe('throttler wiring for the auth routes', () => {
   it('registers a throttler literally named "default"', async () => {
     // @Throttle({ default: {...} }) addresses a throttler by that exact name.
-    // If this entry is renamed or dropped, the decorator on register-admin
-    // matches nothing, is silently ignored, and the route falls back to the
+    // If this entry is renamed or dropped, the @Throttle decorators on the auth routes
+    // match nothing, is silently ignored, and the route falls back to the
     // 300/min 'long' limiter — no error, no log, just an unguarded secret.
     //
     // The factory is invoked directly rather than through Nest's injector so
@@ -139,19 +139,6 @@ describe('throttler wiring for the auth routes', () => {
     // address it invents.
     expect(trackerFor(handler, 'default')).toBe(emailTracker);
     expect(trackerFor(handler, 'long')).toBe(clientIpTracker);
-  });
-
-  it('pins register-admin to the client IP, never the guard default', () => {
-    // This assertion exists because the opposite one used to be here, and it
-    // was wrong. The guard's default tracker is USER-aware, and /auth/register
-    // hands out an access token with no email verification — so inheriting the
-    // default would let a caller mint throwaway accounts and spend a fresh
-    // 3-guess bucket per account against the shared admin secret, thousands of
-    // guesses an hour against an intended 3.
-    // The cap on this route is only meaningful if the bucket is something the
-    // caller cannot mint. That is the client IP, and it must stay named here.
-    expect(trackerFor(AuthController.prototype.registerAdmin, 'default')).toBe(clientIpTracker);
-    expect(trackerFor(AuthController.prototype.registerAdmin, 'default')).not.toBe(emailTracker);
   });
 
   describe('the per-inbox mail budget actually aggregates', () => {
