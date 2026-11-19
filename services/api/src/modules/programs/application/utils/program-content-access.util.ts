@@ -14,7 +14,9 @@ export const CONTENT_WRITE_PERMISSIONS = {
   partners: ['partnerships:write', 'content:write', 'program:write'],
   documents: ['documents:write', 'content:write', 'program:write'],
   pricing: ['payments:write', 'program:write'],
-  submissionForm: ['program:write', 'applications:write'],
+  // Form fields, essays, categories and subthemes are program configuration:
+  // reviewers (applications:write) work the submissions, they do not reshape the form.
+  submissionForm: ['program:write'],
 } as const satisfies Record<string, readonly string[]>;
 
 /**

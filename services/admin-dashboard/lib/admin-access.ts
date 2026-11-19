@@ -151,7 +151,8 @@ export const programWritePermissions = {
   partners: ["partnerships:write", "content:write", "program:write"],
   documents: ["documents:write", "content:write", "program:write"],
   pricing: ["payments:write", "program:write"],
-  submissionForm: ["program:write", "applications:write"],
+  // Form fields, essays, categories and subthemes are program configuration.
+  submissionForm: ["program:write"],
   media: ["media:write", "content:write", "program:write"],
   ambassadors: ["participants:write", "program:write"],
 } as const satisfies Record<string, readonly string[]>;

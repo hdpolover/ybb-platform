@@ -418,9 +418,16 @@ describe('ProgramApplicationConfigController', () => {
             await expect(call()).resolves.toBe('reached');
         });
 
-        it.each(submissionForm)('%s: passes with applications:write', async (_name, call) => {
+        it.each(submissionForm)('%s: 403 for a Reviewer with applications:write, handler never runs', async (_name, call) => {
             rowsIn('prog-mine');
             mockReadPrisma.admin.findUnique.mockResolvedValue(assignedWith(['applications:write']));
+            await expect(call()).rejects.toBeInstanceOf(ForbiddenException);
+            expect(mockExecute.execute).not.toHaveBeenCalled();
+        });
+
+        it.each(submissionForm)('%s: passes with program:write', async (_name, call) => {
+            rowsIn('prog-mine');
+            mockReadPrisma.admin.findUnique.mockResolvedValue(assignedWith(['program:write']));
             await expect(call()).resolves.toBe('reached');
         });
 
