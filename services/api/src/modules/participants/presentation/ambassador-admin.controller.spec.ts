@@ -89,6 +89,57 @@ describe('AmbassadorAdminController', () => {
     });
   });
 
+  // Writes need participants:write or program:write (AMBASSADOR_WRITE_PERMISSIONS);
+  // the refusal comes before any user/ambassador row or command is touched.
+  describe('write permission', () => {
+    const inScopeWith = (permissions: string[]) => ({
+      accessLevel: 1,
+      canManageAdmins: false,
+      canAssignRoles: false,
+      customPermissions: [],
+      role: { name: 'Scoped', permissions },
+      adminBrands: [],
+      adminPrograms: [{ programId: 'prog-1', permissions: [] }],
+    });
+    const createBody = { email: 'amb@x.io', fullName: 'Amb', programId: 'prog-1' } as never;
+
+    beforeEach(() => {
+      mockPrismaRead.program.findUnique.mockResolvedValue({ id: 'prog-1', brandId: 'brand-1', name: 'P', deletedAt: null });
+      mockPrismaRead.ambassador.findFirst.mockResolvedValue({ programId: 'prog-1' });
+    });
+
+    afterEach(() => {
+      mockPrismaRead.admin.findUnique.mockResolvedValue({
+        accessLevel: 5, canManageAdmins: true, canAssignRoles: true, customPermissions: [],
+        role: { name: 'super_admin', permissions: ['platform_access'] }, adminBrands: [], adminPrograms: [],
+      });
+    });
+
+    it('403 for an in-scope admin without it: create, update, remove, resend, activate', async () => {
+      mockPrismaRead.admin.findUnique.mockResolvedValue(inScopeWith(['participants:read', 'applications:write']));
+
+      await expect(controller.create(createBody, platformActor)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(controller.update('amb-1', {} as never, platformActor)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(controller.remove('amb-1', { user: { id: 'u' } }, platformActor)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(controller.resendCredentials('amb-1', platformActor)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(controller.activate('amb-1', platformActor)).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(mockPrismaService.program.findUnique).not.toHaveBeenCalled();
+      expect(mockPrismaService.user.create).not.toHaveBeenCalled();
+      expect(mockPrismaService.ambassador.create).not.toHaveBeenCalled();
+      expect(mockPrismaService.ambassador.update).not.toHaveBeenCalled();
+      expect(mockCommandBus.execute).not.toHaveBeenCalled();
+    });
+
+    it.each(['participants:write', 'program:write'])('passes the check with %s', async (permission) => {
+      mockPrismaRead.admin.findUnique.mockResolvedValue(inScopeWith([permission]));
+
+      await controller.remove('amb-1', { user: { id: 'u' } }, platformActor);
+      await controller.activate('amb-1', platformActor);
+      expect(mockCommandBus.execute).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('activate', () => {
       it('should execute UpdateAmbassadorStatusCommand with isActive=true', async () => {
           await controller.activate('amb-1', platformActor);
