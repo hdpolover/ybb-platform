@@ -5,6 +5,7 @@ import {
   ADMIN_PERMISSION_KEY,
   AdminPermissionGuard,
   RequiresProgramPermissionMetadata,
+  assertBrandPermission,
   assertProgramPermission,
 } from './admin-permission.guard';
 
@@ -160,5 +161,51 @@ describe('AdminPermissionGuard', () => {
     await expect(
       guard.canActivate(buildContext({ user: USER, params: { programId: PROGRAM_ID } })),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe('assertBrandPermission', () => {
+  const DOCUMENTS = ['documents:write', 'content:write', 'program:write'];
+  // programs.findMany answers with the ids of the granted programs that sit in BRAND_ID.
+  function checkBrand(adminRow: unknown, programsInBrand: string[] = [], user: { adminId?: string } = USER) {
+    const prisma = {
+      admin: { findUnique: jest.fn().mockResolvedValue(adminRow) },
+      program: { findMany: jest.fn().mockResolvedValue(programsInBrand.map((id) => ({ id }))) },
+    };
+    return { prisma, result: assertBrandPermission(prisma as never, user, BRAND_ID, DOCUMENTS) };
+  }
+
+  it('rejects a principal with no admin profile without querying', async () => {
+    const { prisma, result } = checkBrand(admin(), [], { adminId: undefined });
+    await expect(result).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.admin.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('lets the platform tier through without the permission', async () => {
+    await expect(checkBrand(admin({ accessLevel: 5 })).result).resolves.toBeUndefined();
+  });
+
+  it('passes on a role permission', async () => {
+    await expect(checkBrand(admin({ role: { name: 'admin', permissions: ['documents:write'] } })).result).resolves.toBeUndefined();
+  });
+
+  it('passes on a grant on this brand, refuses one on another brand', async () => {
+    const grant = (brandId: string) => admin({ adminBrands: [{ brandId, permissions: ['content:write'] }] });
+    await expect(checkBrand(grant(BRAND_ID)).result).resolves.toBeUndefined();
+    await expect(checkBrand(grant('brand-other')).result).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('passes on a grant on a program in this brand, refuses one on a program elsewhere', async () => {
+    const row = admin({ adminPrograms: [{ programId: 'p-in', permissions: ['program:write'] }] });
+    await expect(checkBrand(row, ['p-in']).result).resolves.toBeUndefined();
+    await expect(checkBrand(row, []).result).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('refuses an in-scope admin holding only unrelated permissions (Reviewer)', async () => {
+    const row = admin({
+      role: { name: 'Reviewer', permissions: ['applications:write', 'review:write'] },
+      adminPrograms: [{ programId: 'p-in', permissions: [] }],
+    });
+    await expect(checkBrand(row, ['p-in']).result).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

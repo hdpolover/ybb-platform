@@ -57,8 +57,65 @@ export async function assertProgramPermission(
     throw new ForbiddenException(FORBIDDEN_MESSAGE);
   }
 
-  const admin = await prisma.admin.findUnique({
-    where: { id: user.adminId },
+  const admin = await loadNonPlatformAdmin(prisma, user.adminId);
+  if (!admin) return;
+
+  const brandId =
+    admin.adminBrands.length > 0
+      ? (await prisma.program.findUnique({ where: { id: programId }, select: { brandId: true } }))?.brandId
+      : undefined;
+
+  assertHoldsAny(
+    admin,
+    (grant) => brandId !== undefined && grant.brandId === brandId,
+    (grant) => grant.programId === programId,
+    anyOf,
+  );
+}
+
+/**
+ * Brand-keyed twin of assertProgramPermission, for brand-owned rows with no
+ * program id (LOA signatures). Counted: role permissions, custom permissions,
+ * the grant on THIS brand, and the grants on the admin's programs in this brand.
+ */
+export async function assertBrandPermission(
+  prisma: PrismaReadService,
+  user: Pick<CurrentUserData, 'adminId'> | undefined,
+  brandId: string,
+  anyOf: readonly string[],
+): Promise<void> {
+  if (!user?.adminId || !brandId) {
+    throw new ForbiddenException(FORBIDDEN_MESSAGE);
+  }
+
+  const admin = await loadNonPlatformAdmin(prisma, user.adminId);
+  if (!admin) return;
+
+  const grantedProgramIds = admin.adminPrograms.map((grant) => grant.programId);
+  const programsInBrand = new Set(
+    grantedProgramIds.length > 0
+      ? (
+          await prisma.program.findMany({
+            where: { id: { in: grantedProgramIds }, brandId, deletedAt: null },
+            select: { id: true },
+          })
+        ).map((program) => program.id)
+      : [],
+  );
+
+  assertHoldsAny(
+    admin,
+    (grant) => grant.brandId === brandId,
+    (grant) => programsInBrand.has(grant.programId),
+    anyOf,
+  );
+}
+
+type PermissionAdmin = NonNullable<Awaited<ReturnType<typeof findPermissionAdmin>>>;
+
+function findPermissionAdmin(prisma: PrismaReadService, adminId: string) {
+  return prisma.admin.findUnique({
+    where: { id: adminId },
     select: {
       accessLevel: true,
       canManageAdmins: true,
@@ -69,35 +126,36 @@ export async function assertProgramPermission(
       adminPrograms: { select: { programId: true, permissions: true } },
     },
   });
+}
 
+/**
+ * The admin row, or null for the platform tier (super admins, but also access
+ * level >= 5, platform_access, admin.manage), which passes every check, as
+ * AdminScopeGuard already lets it through every scope check; permissions only
+ * narrow brand/program admins. Throws for an unknown admin.
+ */
+async function loadNonPlatformAdmin(prisma: PrismaReadService, adminId: string): Promise<PermissionAdmin | null> {
+  const admin = await findPermissionAdmin(prisma, adminId);
   if (!admin) {
     throw new ForbiddenException(FORBIDDEN_MESSAGE);
   }
-
-  // Platform tier (super admins, but also access level >= 5, platform_access,
-  // admin.manage) passes every check, as AdminScopeGuard already lets it
-  // through every scope check; permissions only narrow brand/program admins.
   // Same cast, for the same reason, as resolveRevenueAccessScope: the classifier
   // never reads the nested brand/program summaries its parameter type asks for.
-  if (getAdminProgramAccessScope(admin as unknown as AdminAccessLike) === 'platform') {
-    return;
-  }
+  return getAdminProgramAccessScope(admin as unknown as AdminAccessLike) === 'platform' ? null : admin;
+}
 
-  const brandId =
-    admin.adminBrands.length > 0
-      ? (await prisma.program.findUnique({ where: { id: programId }, select: { brandId: true } }))?.brandId
-      : undefined;
-
+function assertHoldsAny(
+  admin: PermissionAdmin,
+  countsBrandGrant: (grant: PermissionAdmin['adminBrands'][number]) => boolean,
+  countsProgramGrant: (grant: PermissionAdmin['adminPrograms'][number]) => boolean,
+  anyOf: readonly string[],
+): void {
   const granted = new Set(
     [
       ...normalizePermissions(admin.role?.permissions),
       ...normalizePermissions(admin.customPermissions),
-      ...admin.adminBrands
-        .filter((grant) => brandId !== undefined && grant.brandId === brandId)
-        .flatMap((grant) => normalizePermissions(grant.permissions)),
-      ...admin.adminPrograms
-        .filter((grant) => grant.programId === programId)
-        .flatMap((grant) => normalizePermissions(grant.permissions)),
+      ...admin.adminBrands.filter(countsBrandGrant).flatMap((grant) => normalizePermissions(grant.permissions)),
+      ...admin.adminPrograms.filter(countsProgramGrant).flatMap((grant) => normalizePermissions(grant.permissions)),
     ].map((permission) => permission.toLowerCase()),
   );
 
