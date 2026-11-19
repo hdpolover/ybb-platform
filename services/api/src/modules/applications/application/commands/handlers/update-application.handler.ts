@@ -8,6 +8,7 @@ import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tok
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { invalidateParticipantPortalCache } from '@shared/utils/invalidate-participant-portal-cache.util';
+import { assertPricingTierInProgram } from '../../helpers/pricing-tier-program.helper';
 
 /**
  * Update Application Handler
@@ -76,6 +77,10 @@ export class UpdateApplicationHandler {
       fields.push('twibbonLink');
     }
     if (command.updates.pricingTierId !== undefined) {
+      // null clears the tier; re-sending the current one is not a change.
+      if (command.updates.pricingTierId !== null && command.updates.pricingTierId !== application.pricingTierId) {
+        await assertPricingTierInProgram(this.prisma, command.updates.pricingTierId, application.programId);
+      }
       application.pricingTierId = command.updates.pricingTierId;
       fields.push('pricingTierId');
     }
