@@ -2,7 +2,8 @@
 //
 // /admin/programs/:programId/partnership-enquiries carried only @Roles, so any
 // admin could read and edit any programme's enquiries (names, emails, WhatsApp
-// numbers) by programme id. Now @ScopedBy('program', 'programId').
+// numbers) by programme id. Now @ScopedBy('program', 'programId'), and the
+// writes (PATCH/DELETE) also need the partners permission set.
 import { Test } from '@nestjs/testing';
 import { ExecutionContext, INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
@@ -25,7 +26,7 @@ const admins = {
   platform: { accessLevel: 800, adminBrands: [], adminPrograms: [] },
 };
 
-async function bootstrap(persona: keyof typeof admins) {
+async function bootstrap(persona: keyof typeof admins, rolePermissions: string[] = ['partnerships:write']) {
   const prisma = {
     partnershipEnquiry: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -44,7 +45,7 @@ async function bootstrap(persona: keyof typeof admins) {
         canManageAdmins: false,
         canAssignRoles: false,
         customPermissions: null,
-        role: { name: 'Role', permissions: [] },
+        role: { name: 'Role', permissions: rolePermissions },
         ...admins[persona],
       }),
     },
@@ -110,6 +111,38 @@ describe('partnership enquiries are scoped to the admin\'s programmes', () => {
 
     expect(built.prisma.partnershipEnquiry.update).toHaveBeenCalled();
     expect(built.prisma.partnershipEnquiry.updateMany).toHaveBeenCalled();
+  });
+
+  it.each(['brandA', 'assignedA'] as const)('%s: without a partners write permission reads pass but writes 403, nothing written', async (persona) => {
+    const built = await bootstrap(persona, ['partnerships:read', 'applications:write']);
+    app = built.app;
+    const server = app.getHttpServer();
+
+    await request(server).get(base('prog-a')).expect(200);
+    await request(server).get(`${base('prog-a')}/enq-1`).expect(200);
+    await request(server).patch(`${base('prog-a')}/enq-1`).send({ status: 'done' }).expect(403);
+    await request(server).delete(`${base('prog-a')}/enq-1`).expect(403);
+
+    expect(built.prisma.partnershipEnquiry.update).not.toHaveBeenCalled();
+    expect(built.prisma.partnershipEnquiry.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each(['partnerships:write', 'content:write', 'program:write'])('assignedA with %s can write', async (permission) => {
+    const built = await bootstrap('assignedA', [permission]);
+    app = built.app;
+    const server = app.getHttpServer();
+
+    await request(server).patch(`${base('prog-a')}/enq-1`).send({ status: 'done' }).expect(200);
+    await request(server).delete(`${base('prog-a')}/enq-1`).expect(200);
+  });
+
+  it('platform admin writes without any partners permission', async () => {
+    const built = await bootstrap('platform', []);
+    app = built.app;
+    const server = app.getHttpServer();
+
+    await request(server).patch(`${base('prog-b')}/enq-1`).send({ status: 'done' }).expect(200);
+    await request(server).delete(`${base('prog-b')}/enq-1`).expect(200);
   });
 
   it('platform admin reaches any brand\'s programme', async () => {
