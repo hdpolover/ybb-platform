@@ -10,16 +10,20 @@ import { RolesGuard } from '../auth/infrastructure/guards/roles.guard';
 import { Roles } from '../auth/application/decorators/roles.decorator';
 import { UserRole } from '../../core/entities/user.entity';
 import { Public } from '../../shared/decorators/public.decorator';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 
 @ApiTags('AI Bot')
 @Controller('ai-bot')
-@UseGuards(JwtAuthGuard, RolesGuard)
+// Per-route @ScopedBy, never class-level: it would also catch the @Public GET active.
+// Platform-only because botConfig is raw embed code rendered on public pages.
+@UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
 @ApiBearerAuth()
 export class AiBotController {
   constructor(private readonly aiBotService: AiBotService) { }
 
   @Post()
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('platform')
   @AuditTrail({ entityType: 'AiChatBotConfig', action: ChangeType.create })
   @ApiOperation({ summary: 'Create new AI Bot configuration (Admin)' })
   @ApiResponse({ status: HttpStatus.CREATED, description: 'Created successfully' })
@@ -31,6 +35,7 @@ export class AiBotController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('platform')
   @ApiOperation({ summary: 'List all bot configurations (Admin)' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Paginated list of configs' })
   @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Unauthorized' })
@@ -52,6 +57,7 @@ export class AiBotController {
 
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('platform')
   @ApiOperation({ summary: 'Get details of a config' })
   findOne(@Param('id') id: string) {
     return this.aiBotService.findOne(id);
@@ -59,6 +65,7 @@ export class AiBotController {
 
   @Patch(':id')
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('platform')
   @AuditTrail({ entityType: 'AiChatBotConfig', action: ChangeType.update })
   @ApiOperation({ summary: 'Update configuration' })
   update(@Param('id') id: string, @Body() dto: UpdateAiBotConfigDto) {
@@ -67,6 +74,7 @@ export class AiBotController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('platform')
   @AuditTrail({ entityType: 'AiChatBotConfig', action: ChangeType.delete })
   @ApiOperation({ summary: 'Delete configuration' })
   remove(@Param('id') id: string) {

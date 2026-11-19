@@ -9,6 +9,7 @@ import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import { ListSystemAnnouncementsQuery } from '../application/queries/list-system-announcements.query';
 import { GetSystemAnnouncementQuery } from '../application/queries/get-system-announcement.query';
 import { MarkAnnouncementReadCommand } from '../application/commands/mark-announcement-read.command';
@@ -70,10 +71,13 @@ export class SystemAnnouncementsController {
     }
 
     // ─── Admin Endpoints ──────────────────────────────────────────────────────
+    // Platform-only: these are site-wide banners, and the admin list/detail
+    // include every brand's unpublished drafts.
 
     @Get('admin/all')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('platform')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Admin: list all announcements (paginated)' })
     @ApiResponse({ status: 200, type: [AdminSystemAnnouncementResponseDto] })
@@ -86,8 +90,9 @@ export class SystemAnnouncementsController {
     }
 
     @Get('admin/:id')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('platform')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Admin: get a single announcement with all fields' })
     @ApiResponse({ status: 200, type: AdminSystemAnnouncementResponseDto })
@@ -96,8 +101,9 @@ export class SystemAnnouncementsController {
     }
 
     @Post('admin')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('platform')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Admin: create announcement' })
     @ApiResponse({ status: 201, type: AdminSystemAnnouncementResponseDto })
@@ -111,8 +117,9 @@ export class SystemAnnouncementsController {
     }
 
     @Patch('admin/:id')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('platform')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Admin: update announcement' })
     @ApiResponse({ status: 200, type: AdminSystemAnnouncementResponseDto })
@@ -127,8 +134,9 @@ export class SystemAnnouncementsController {
     }
 
     @Delete('admin/:id')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('platform')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Admin: delete announcement' })
     @ApiResponse({ status: 200 })
@@ -142,8 +150,9 @@ export class SystemAnnouncementsController {
     }
 
     @Post('admin/:id/publish')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('platform')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Admin: publish or unpublish announcement' })
     @ApiQuery({ name: 'publish', required: false, type: Boolean, description: 'true to publish, false to unpublish' })

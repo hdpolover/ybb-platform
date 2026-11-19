@@ -84,6 +84,8 @@ async function resolveAllowedBrandIds(
   prismaRead: PrismaReadService,
   scope: { kind: string; allowedBrandIds: string[] | null; allowedProgramIds: string[] | null },
 ): Promise<string[]> {
+  // brand_scope stays at its explicit brands: its extra programme grants must
+  // not widen into brand-wide user management (they only reach that programme).
   if (scope.kind === 'brand_scope') {
     return scope.allowedBrandIds ?? [];
   }

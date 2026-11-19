@@ -115,15 +115,32 @@ function buildPermissionSet(admin: AdminAccessLike): Set<string> {
   return new Set(values);
 }
 
+/**
+ * The slug admin tokens carry next to the role's display name; RolesGuard
+ * matches it against UserRole ("Super Admin" -> "super_admin"). Anything that
+ * decides what a role name grants must go through this, or "Super  Admin"
+ * reads as ordinary while it logs in as super_admin.
+ */
+export function adminRoleSlug(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, '_');
+}
+
+const SUPER_ADMIN_ROLE_SLUGS = new Set(['super_admin', 'super-admin', 'owner']);
+
+export function isSuperAdminRoleName(name: string | null | undefined): boolean {
+  // Trimming first only widens the match: a slug that is exactly super_admin
+  // never came from a name with edge whitespace.
+  return SUPER_ADMIN_ROLE_SLUGS.has(adminRoleSlug((name ?? '').trim()));
+}
+
 export function isSuperAdmin(admin: AdminAccessLike): boolean {
-  const roleName = admin.role?.name?.toLowerCase() ?? '';
   const permissionSet = buildPermissionSet(admin);
 
   return (
     admin.accessLevel >= 10 ||
     admin.canManageAdmins === true ||
     admin.canAssignRoles === true ||
-    ['super admin', 'super_admin', 'super-admin', 'owner'].includes(roleName) ||
+    isSuperAdminRoleName(admin.role?.name) ||
     permissionSet.has('*') ||
     permissionSet.has('admin.*') ||
     permissionSet.has('platform.*')

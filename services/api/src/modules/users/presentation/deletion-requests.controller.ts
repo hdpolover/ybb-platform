@@ -10,11 +10,15 @@ import { RolesGuard } from '../../auth/infrastructure/guards/roles.guard';
 import { Roles } from '../../auth/application/decorators/roles.decorator';
 import { UserRole } from '../../../core/entities/user.entity';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 
 @ApiTags('Users')
 @Controller('admin/deletion-requests')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+// Cross-brand list of participants' deletion requests, and approving one deletes
+// the account. No dashboard screen uses it, so platform only.
+@ScopedBy('platform')
 @ApiBearerAuth()
 export class DeletionRequestsController {
   constructor(

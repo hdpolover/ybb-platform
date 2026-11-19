@@ -128,6 +128,15 @@ describe('resolveUsersBrandFilter', () => {
 
         await expect(resolveUsersBrandFilter(prisma, actor, 'brand-1')).rejects.toThrow(ForbiddenException);
     });
+
+    // An extra programme grant must not escalate into brand-wide user management.
+    it('keeps a brand admin with an extra programme grant at their own brands', async () => {
+        const admin = { ...brandAdmin(['brand-1']), adminPrograms: [{ programId: 'program-x', permissions: [] }] };
+        const prisma = makePrisma(admin, ['brand-x']);
+
+        await expect(resolveUsersBrandFilter(prisma, actor, 'brand-1')).resolves.toBe('brand-1');
+        await expect(resolveUsersBrandFilter(prisma, actor, 'brand-x')).rejects.toThrow(ForbiddenException);
+    });
 });
 
 describe('assertCanChangeUserStatus', () => {

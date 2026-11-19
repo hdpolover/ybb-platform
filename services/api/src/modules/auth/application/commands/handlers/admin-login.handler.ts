@@ -10,6 +10,7 @@ import { AdminLoginCommand } from '../admin-login.command';
 import { AdminAuthResponseDto } from '../../../presentation/dto/admin-auth-response.dto';
 import { MetricsService } from '../../../../../shared/infrastructure/monitoring/metrics.service';
 import {
+    adminRoleSlug,
     buildAccessiblePrograms,
     getAdminProgramAccessScope,
     mapAdminBrandAssignment,
@@ -173,7 +174,7 @@ export class AdminLoginHandler {
             // Also push a normalized slug so RolesGuard can match UserRole enum values
             // (e.g. "Super Admin" → "super_admin"). Without this, @Roles(UserRole.SUPER_ADMIN)
             // never matches because the token only carries the human-readable display name.
-            const slug = user.admin.role.name.toLowerCase().replace(/\s+/g, '_');
+            const slug = adminRoleSlug(user.admin.role.name);
             if (slug !== user.admin.role.name) roles.push(slug);
         }
         // Add brand roles

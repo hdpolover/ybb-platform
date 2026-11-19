@@ -12,8 +12,11 @@ import { LegalDocument, ChangeType } from '@prisma/client';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
 import { LANDING_BRAND_PATTERNS } from '@shared/constants/cache-patterns';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 
 @ApiTags('Legal')
+// Admin routes are platform-only: ToS/Privacy are binding, consent-bearing text,
+// and the :id routes never checked the doc against :brandSlug anyway.
 @Controller('brands/:brandSlug/legal-documents')
 export class LegalDocumentController {
     constructor(private readonly service: LegalDocumentService) { }
@@ -36,8 +39,9 @@ export class LegalDocumentController {
     }
 
     @Get('admin')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('platform')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'List all legal documents for a brand including inactive (Admin Only)' })
     @ApiParam({ name: 'brandSlug', description: 'The slug of the brand' })
@@ -49,8 +53,9 @@ export class LegalDocumentController {
     }
 
     @Get('admin/:id')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('platform')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Get a legal document by ID (Admin Only)' })
     @ApiParam({ name: 'brandSlug', description: 'The slug of the brand' })
@@ -76,8 +81,9 @@ export class LegalDocumentController {
 
     @Post()
     @CacheInvalidate(LANDING_BRAND_PATTERNS)
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('platform')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'LegalDocument', action: ChangeType.create })
     @ApiOperation({ summary: 'Create a new legal document (Admin Only)' })
@@ -95,8 +101,9 @@ export class LegalDocumentController {
 
     @Put(':id')
     @CacheInvalidate(LANDING_BRAND_PATTERNS)
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('platform')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'LegalDocument', action: ChangeType.update })
     @ApiOperation({ summary: 'Update a legal document (Admin Only)' })
@@ -115,8 +122,9 @@ export class LegalDocumentController {
 
     @Delete(':id')
     @CacheInvalidate(LANDING_BRAND_PATTERNS)
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('platform')
     @ApiBearerAuth()
     @AuditTrail({ entityType: 'LegalDocument', action: ChangeType.delete })
     @ApiOperation({ summary: 'Delete a legal document (Admin Only)' })

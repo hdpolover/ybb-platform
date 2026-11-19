@@ -1,11 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { HttpException } from '@nestjs/common';
+import { ExecutionContext, HttpException, INestApplication } from '@nestjs/common';
+import * as request from 'supertest';
 import { AuditAdminController } from './audit-admin.controller';
 import { PrismaService } from '../../shared/infrastructure/prisma/prisma.service';
 import { ExcelService } from '../../shared/infrastructure/excel/excel.service';
 import { AuditCleanupService } from './audit-cleanup.service';
 import { JwtAuthGuard } from '../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/infrastructure/guards/roles.guard';
+import { AdminScopeGuard } from '../../shared/guards/admin-scope.guard';
 import { CurrentUserData } from '../../shared/decorators/current-user.decorator';
 import { ListAuditLogsDto } from './dto/list-audit-logs.dto';
 
@@ -65,6 +67,8 @@ describe('AuditAdminController – cursor pagination', () => {
             .overrideGuard(JwtAuthGuard)
             .useValue({ canActivate: () => true })
             .overrideGuard(RolesGuard)
+            .useValue({ canActivate: () => true })
+            .overrideGuard(AdminScopeGuard)
             .useValue({ canActivate: () => true })
             .compile();
 
@@ -240,5 +244,54 @@ describe('AuditAdminController – cursor pagination', () => {
             // directly: lte must be materially after midnight of that day.
             expect(lte.getTime() - gte.getTime()).toBeGreaterThan(23 * 60 * 60 * 1000);
         });
+    });
+});
+
+describe('AuditAdminController – route order', () => {
+    let app: INestApplication;
+    const detail = jest.fn().mockResolvedValue(null);
+    const streamExcelRows = jest.fn((res) => res.status(200).send('xlsx'));
+
+    beforeAll(async () => {
+        const module = await Test.createTestingModule({
+            controllers: [AuditAdminController],
+            providers: [
+                { provide: PrismaService, useValue: { dataChangeLog: { findUnique: detail, findMany: jest.fn() } } },
+                { provide: ExcelService, useValue: { streamExcelRows } },
+                { provide: AuditCleanupService, useValue: {} },
+            ],
+        })
+            .overrideGuard(JwtAuthGuard)
+            .useValue({
+                canActivate: (context: ExecutionContext) => {
+                    context.switchToHttp().getRequest().user = ADMIN_USER;
+                    return true;
+                },
+            })
+            .overrideGuard(RolesGuard)
+            .useValue({ canActivate: () => true })
+            .overrideGuard(AdminScopeGuard)
+            .useValue({ canActivate: () => true })
+            .compile();
+
+        app = module.createNestApplication();
+        await app.init();
+    });
+
+    afterAll(() => app.close());
+
+    // `GET :id` used to be declared first and swallowed `export` as an id.
+    it('routes GET /admin/audit-logs/export to the export handler, not :id', async () => {
+        const res = await request(app.getHttpServer()).get('/admin/audit-logs/export');
+
+        expect(res.status).toBe(200);
+        expect(streamExcelRows).toHaveBeenCalledTimes(1);
+        expect(detail).not.toHaveBeenCalled();
+    });
+
+    it('still routes GET /admin/audit-logs/:id to the detail handler', async () => {
+        await request(app.getHttpServer()).get('/admin/audit-logs/log-1');
+
+        expect(detail).toHaveBeenCalledWith({ where: { id: 'log-1' } });
     });
 });

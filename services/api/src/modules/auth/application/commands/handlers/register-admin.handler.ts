@@ -13,6 +13,7 @@ import { UnitOfWork } from '../../../../../shared/infrastructure/database/unit-o
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
+import { adminRoleSlug } from '@shared/admin-access-response';
 
 /**
  * The only roles this route may hand out, mapped to the AdminRole rows the
@@ -215,7 +216,7 @@ export class RegisterAdminHandler {
     // ('owner', 'manager'), which matches no @Roles() value and none of the
     // linked row's names, so a freshly registered admin 403'd on every
     // role-guarded route until they logged out and back in.
-    const roleSlug = role.name.toLowerCase().replace(/\s+/g, '_');
+    const roleSlug = adminRoleSlug(role.name);
     const roles = [
       'admin',
       role.name,

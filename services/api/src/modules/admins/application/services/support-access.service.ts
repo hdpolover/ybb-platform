@@ -13,6 +13,7 @@ import { ChangeType, ChangedByType } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { hashToken } from '@shared/utils/hash-token.util';
+import { adminRoleSlug } from '@shared/admin-access-response';
 import {
   CreateSupportImpersonationDto,
   UpdateSupportAccessConfigDto,
@@ -482,7 +483,7 @@ export class SupportAccessService {
       throw new UnauthorizedException('Admin record not found.');
     }
 
-    const roleName = (admin.role?.name || '').toLowerCase().replace(/\s+/g, '_');
+    const roleName = adminRoleSlug(admin.role?.name || '');
     const tokenRoles = Array.isArray(currentUser.role)
       ? currentUser.role.map((value) => value.toLowerCase())
       : typeof currentUser.role === 'string'

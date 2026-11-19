@@ -38,6 +38,7 @@ describe('BrandsController', () => {
 
     const mockAdminAccessControl = {
         assertCanManageAdmins: jest.fn().mockResolvedValue(undefined),
+        assertCanManageAdmin: jest.fn().mockResolvedValue(undefined),
     };
 
     beforeEach(async () => {
@@ -62,6 +63,7 @@ describe('BrandsController', () => {
         
         jest.clearAllMocks();
         mockAdminAccessControl.assertCanManageAdmins.mockResolvedValue(undefined);
+        mockAdminAccessControl.assertCanManageAdmin.mockResolvedValue(undefined);
     });
 
     it('should be defined', () => {
@@ -277,6 +279,17 @@ describe('BrandsController', () => {
             await expect(
                 controller.removeBrandAdmin('brand-1', 'admin-1', user),
             ).rejects.toThrow(ForbiddenException);
+            expect(mockCommandBus.execute).not.toHaveBeenCalled();
+        });
+
+        it('rejects assigning or removing brand grants of an admin the caller does not outrank', async () => {
+            mockAdminAccessControl.assertCanManageAdmin.mockRejectedValueOnce(new ForbiddenException());
+            await expect(
+                controller.assignBrandAdmin('brand-1', { adminId: 'super-1' }, user),
+            ).rejects.toThrow(ForbiddenException);
+
+            mockAdminAccessControl.assertCanManageAdmin.mockRejectedValueOnce(new ForbiddenException());
+            await expect(controller.removeBrandAdmin('brand-1', 'super-1', user)).rejects.toThrow(ForbiddenException);
             expect(mockCommandBus.execute).not.toHaveBeenCalled();
         });
 

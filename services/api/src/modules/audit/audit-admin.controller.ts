@@ -24,11 +24,15 @@ import { ListAuditLogsDto } from './dto/list-audit-logs.dto';
 import { AuditCleanupService } from './audit-cleanup.service';
 import { Prisma, ChangeType, ChangedByType, RiskLevel } from '@prisma/client';
 import { endOfWibDay, parseWibFilterDate } from '@shared/utils/wib-time';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 
 @ApiTags('audit')
 @Controller('admin/audit-logs')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+// The platform audit log holds every brand's before/after PII diffs and rows have
+// no brand column to filter on, so every route here is platform only.
+@ScopedBy('platform')
 @ApiBearerAuth()
 export class AuditAdminController {
     private readonly logger = new Logger(AuditAdminController.name);
@@ -94,6 +98,51 @@ export class AuditAdminController {
                 hasMore,
             },
         };
+    }
+
+    // Declared before `:id` on purpose: Nest matches routes in declaration order,
+    // so below it `GET export` was swallowed by `GET :id` and never reached.
+    /**
+     * Export audit logs as Excel.
+     */
+    @Get('export')
+    @ApiOperation({ summary: 'Export Audit Logs (Admin)', operationId: 'exportAuditLogsAdmin' })
+    @ApiResponse({ status: 200, description: 'Excel file download' })
+    async export(
+        @Query() query: QueryAuditLogsDto,
+        @Res() res: Response,
+        @CurrentUser() currentUser: CurrentUserData,
+    ) {
+        if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
+
+        const where = this.buildWhereClause(query);
+
+        const columns = [
+            { header: 'ID', key: 'id', width: 36 },
+            { header: 'Timestamp', key: 'timestamp', width: 20 },
+            { header: 'Action', key: 'action', width: 15 },
+            { header: 'Entity Type', key: 'entityType', width: 25 },
+            { header: 'Entity ID', key: 'entityId', width: 36 },
+            { header: 'Event', key: 'event', width: 30 },
+            { header: 'Actor Type', key: 'actorType', width: 12 },
+            { header: 'Actor ID', key: 'actorId', width: 36 },
+            { header: 'Risk Level', key: 'riskLevel', width: 12 },
+            { header: 'Source', key: 'source', width: 12 },
+            { header: 'Endpoint', key: 'endpoint', width: 40 },
+            { header: 'Status', key: 'status', width: 12 },
+            { header: 'Changed Fields', key: 'changedFields', width: 30 },
+            { header: 'Reason', key: 'reason', width: 30 },
+            { header: 'Before State', key: 'beforeState', width: 50 },
+            { header: 'After State', key: 'afterState', width: 50 },
+            { header: 'IP Address', key: 'ip', width: 15 },
+        ];
+
+        await this.excelService.streamExcelRows(
+            res,
+            this.iterateAuditExportRows(where),
+            columns,
+            'audit-logs-export',
+        );
     }
 
     /**
@@ -171,49 +220,6 @@ export class AuditAdminController {
                 hasMore,
             },
         };
-    }
-
-    /**
-     * Export audit logs as Excel.
-     */
-    @Get('export')
-    @ApiOperation({ summary: 'Export Audit Logs (Admin)', operationId: 'exportAuditLogsAdmin' })
-    @ApiResponse({ status: 200, description: 'Excel file download' })
-    async export(
-        @Query() query: QueryAuditLogsDto,
-        @Res() res: Response,
-        @CurrentUser() currentUser: CurrentUserData,
-    ) {
-        if (!currentUser.adminId) throw new UnauthorizedException('Admin access required');
-
-        const where = this.buildWhereClause(query);
-
-        const columns = [
-            { header: 'ID', key: 'id', width: 36 },
-            { header: 'Timestamp', key: 'timestamp', width: 20 },
-            { header: 'Action', key: 'action', width: 15 },
-            { header: 'Entity Type', key: 'entityType', width: 25 },
-            { header: 'Entity ID', key: 'entityId', width: 36 },
-            { header: 'Event', key: 'event', width: 30 },
-            { header: 'Actor Type', key: 'actorType', width: 12 },
-            { header: 'Actor ID', key: 'actorId', width: 36 },
-            { header: 'Risk Level', key: 'riskLevel', width: 12 },
-            { header: 'Source', key: 'source', width: 12 },
-            { header: 'Endpoint', key: 'endpoint', width: 40 },
-            { header: 'Status', key: 'status', width: 12 },
-            { header: 'Changed Fields', key: 'changedFields', width: 30 },
-            { header: 'Reason', key: 'reason', width: 30 },
-            { header: 'Before State', key: 'beforeState', width: 50 },
-            { header: 'After State', key: 'afterState', width: 50 },
-            { header: 'IP Address', key: 'ip', width: 15 },
-        ];
-
-        await this.excelService.streamExcelRows(
-            res,
-            this.iterateAuditExportRows(where),
-            columns,
-            'audit-logs-export',
-        );
     }
 
     /**

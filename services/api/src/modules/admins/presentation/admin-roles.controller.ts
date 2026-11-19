@@ -24,11 +24,16 @@ import { normalizePermissions } from '@shared/admin-access-response';
 import { CreateAdminRoleDto } from './dto/create-admin-role.dto';
 import { UpdateAdminRoleDto } from './dto/update-admin-role.dto';
 import { AdminAccessControlService } from '../application/services/admin-access-control.service';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 
 @ApiTags('admin-roles')
 @Controller('admin-roles')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+// Roles are global. assertCanAssignRoles also admits 'roles.manage', which the
+// scope classifier does not count as platform, so a brand admin holding it could
+// rewrite every brand's roles, their own included. Platform only.
+@ScopedBy('platform')
 @ApiBearerAuth()
 export class AdminRolesController {
   constructor(
@@ -121,6 +126,11 @@ export class AdminRolesController {
       throw new BadRequestException('Role name is required.');
     }
 
+    await this.adminAccessControl.assertCanWriteRole(currentUser, null, {
+      name: normalizedName,
+      permissions,
+    });
+
     const existingRole = await this.prisma.adminRole.findFirst({
       where: {
         deletedAt: null,
@@ -184,6 +194,11 @@ export class AdminRolesController {
           ),
         )
       : undefined;
+
+    await this.adminAccessControl.assertCanWriteRole(currentUser, existingRole, {
+      name: normalizedName || existingRole.name,
+      permissions: permissions ?? existingRole.permissions,
+    });
 
     const role = await this.prisma.adminRole.update({
       where: { id },
@@ -257,6 +272,8 @@ export class AdminRolesController {
     if (!role) {
       throw new NotFoundException('Admin role not found.');
     }
+
+    await this.adminAccessControl.assertCanWriteRole(currentUser, role, null);
 
     if (role._count.admins > 0) {
       throw new ConflictException('This role is still assigned to active administrators.');

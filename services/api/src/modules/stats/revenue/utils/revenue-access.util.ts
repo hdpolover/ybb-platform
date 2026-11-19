@@ -9,7 +9,11 @@ export interface RevenueAccessScope {
   kind: 'platform' | 'brand_scope' | 'assigned';
   /** null = no brand-level restriction (platform admin). */
   allowedBrandIds: string[] | null;
-  /** null = no explicit program-level restriction. Only set for 'assigned' scope. */
+  /**
+   * Explicit admin_programs grants. null only for platform. For 'assigned' it is the
+   * whole reach; for 'brand_scope' it is ADDITIVE to the brands (a programme outside
+   * them the admin was assigned to individually, which the dashboard already lists).
+   */
   allowedProgramIds: string[] | null;
 }
 
@@ -63,7 +67,7 @@ export async function resolveRevenueAccessScope(
     return {
       kind: 'brand_scope',
       allowedBrandIds: admin.adminBrands.map((assignment) => assignment.brandId),
-      allowedProgramIds: null,
+      allowedProgramIds: admin.adminPrograms.map((assignment) => assignment.programId),
     };
   }
 
@@ -80,7 +84,8 @@ export async function resolveRevenueAccessScope(
  *
  * - platform: any brandId (or none, for "all brands").
  * - brand_scope: brandId must be one of the caller's own adminBrands, or omitted (defaults to
- *   all of the caller's brands). Anything else is REJECTED (ForbiddenException) rather than
+ *   all of the caller's brands plus any programme they hold an explicit admin_programs
+ *   grant on outside them). Anything else is REJECTED (ForbiddenException) rather than
  *   silently ignored, so a scoped admin can't probe another brand's revenue by guessing an id.
  * - assigned: no brand-level grant at all; scoped straight to the caller's adminPrograms.
  *   Supplying any brandId here is rejected.
@@ -101,7 +106,9 @@ export function buildInvoiceScopeWhere(
       }
       return { application: { program: { brandId: requestedBrandId } } };
     }
-    return { application: { program: { brandId: { in: allowed } } } };
+    const byBrand: Prisma.ApplicationInvoiceWhereInput = { application: { program: { brandId: { in: allowed } } } };
+    const extra = scope.allowedProgramIds ?? [];
+    return extra.length ? { OR: [byBrand, { application: { programId: { in: extra } } }] } : byBrand;
   }
 
   // scope.kind === 'assigned'
@@ -129,7 +136,10 @@ export function buildProgramScopeWhere(
       }
       return { brandId: requestedBrandId };
     }
-    return { brandId: { in: allowed } };
+    const extra = scope.allowedProgramIds ?? [];
+    return extra.length
+      ? { OR: [{ brandId: { in: allowed } }, { id: { in: extra } }] }
+      : { brandId: { in: allowed } };
   }
 
   if (requestedBrandId) {
@@ -162,11 +172,11 @@ export async function assertProgramAccess(
     return program;
   }
 
+  // brand_scope reaches its brands OR its explicit programme grants; 'assigned' only the latter.
   const inScope =
     !missing &&
-    (scope.kind === 'brand_scope'
-      ? !!scope.allowedBrandIds?.includes(program!.brandId)
-      : !!scope.allowedProgramIds?.includes(program!.id));
+    (!!scope.allowedProgramIds?.includes(program!.id) ||
+      (scope.kind === 'brand_scope' && !!scope.allowedBrandIds?.includes(program!.brandId)));
 
   // Everyone else gets the SAME answer for "does not exist" and "exists but is
   // not yours". Distinguishing them let an admin scoped to brand A probe ids and
