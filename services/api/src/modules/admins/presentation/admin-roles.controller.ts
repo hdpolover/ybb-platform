@@ -126,6 +126,11 @@ export class AdminRolesController {
       throw new BadRequestException('Role name is required.');
     }
 
+    await this.adminAccessControl.assertCanWriteRole(currentUser, null, {
+      name: normalizedName,
+      permissions,
+    });
+
     const existingRole = await this.prisma.adminRole.findFirst({
       where: {
         deletedAt: null,
@@ -189,6 +194,11 @@ export class AdminRolesController {
           ),
         )
       : undefined;
+
+    await this.adminAccessControl.assertCanWriteRole(currentUser, existingRole, {
+      name: normalizedName || existingRole.name,
+      permissions: permissions ?? existingRole.permissions,
+    });
 
     const role = await this.prisma.adminRole.update({
       where: { id },
@@ -262,6 +272,8 @@ export class AdminRolesController {
     if (!role) {
       throw new NotFoundException('Admin role not found.');
     }
+
+    await this.adminAccessControl.assertCanWriteRole(currentUser, role, null);
 
     if (role._count.admins > 0) {
       throw new ConflictException('This role is still assigned to active administrators.');
