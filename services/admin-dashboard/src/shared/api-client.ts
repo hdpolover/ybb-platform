@@ -1379,6 +1379,53 @@ export function deleteProgramFaq(id: string): Promise<void> {
   return request<void>(`/programs/faqs/${id}`, { method: "DELETE" });
 }
 
+// ─── Program Content — Awards ────────────────────────────────────────────────
+
+export type ProgramAward = {
+  id: string;
+  programId: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  tier: string | null;
+  tags: string[];
+  winnerCount: number | null;
+  color: string | null;
+  iconUrl: string | null;
+  badgeUrl: string | null;
+  isActive: boolean;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProgramAwardInput = Partial<Omit<ProgramAward, "id" | "programId" | "createdAt" | "updatedAt">>;
+
+export function listProgramAwards(programId: string): Promise<ProgramAward[]> {
+  return request<ProgramAward[]>(`/admin/programs/${programId}/awards`);
+}
+
+export function createProgramAward(
+  programId: string,
+  input: ProgramAwardInput & { name: string },
+): Promise<ProgramAward> {
+  return request<ProgramAward>(`/admin/programs/${programId}/awards`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateProgramAward(programId: string, awardId: string, input: ProgramAwardInput): Promise<ProgramAward> {
+  return request<ProgramAward>(`/admin/programs/${programId}/awards/${awardId}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteProgramAward(programId: string, awardId: string): Promise<void> {
+  return request<void>(`/admin/programs/${programId}/awards/${awardId}`, { method: "DELETE" });
+}
+
 // ─── Program Content — Speakers ──────────────────────────────────────────────
 
 export function listProgramSpeakers(programId: string): Promise<ProgramSpeaker[]> {
