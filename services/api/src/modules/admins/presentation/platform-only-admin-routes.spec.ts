@@ -21,6 +21,17 @@ import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.ser
 import { ExcelService } from '@shared/infrastructure/excel/excel.service';
 import { HttpExceptionFilter } from '@shared/filters/http-exception.filter';
 import { AdminRolesController } from './admin-roles.controller';
+import { AdminsController } from './admins.controller';
+import { AdminPasswordLinkService } from '../application/services/admin-password-link.service';
+import { AdminAccessRequestsController } from '../../admin-access-requests/admin-access-requests.controller';
+import { AdminAccessRequestsService } from '../../admin-access-requests/admin-access-requests.service';
+import { CreateAdminHandler } from '../application/commands/handlers/create-admin.handler';
+import { UpdateAdminHandler } from '../application/commands/handlers/update-admin.handler';
+import { DeleteAdminHandler } from '../application/commands/handlers/delete-admin.handler';
+import { RestoreAdminHandler } from '../application/commands/handlers/restore-admin.handler';
+import { GetAdminsHandler } from '../application/queries/handlers/get-admins.handler';
+import { GetAdminHandler } from '../application/queries/handlers/get-admin.handler';
+import { SupportAccessService } from '../application/services/support-access.service';
 import { AdminAccessControlService } from '../application/services/admin-access-control.service';
 import { AuthProviderController } from '@modules/auth/presentation/auth-provider.controller';
 import { CreateAuthProviderHandler } from '@modules/auth/application/commands/handlers/create-auth-provider.handler';
@@ -102,6 +113,45 @@ interface Suite {
 }
 
 const SUITES: Record<string, Suite> = {
+  // Only POST :id/send-password-link is platform-scoped on this controller.
+  AdminsController: {
+    controller: AdminsController,
+    build: () => {
+      const access = { assertCanManageAdmins: reached(), assertCanManageAdmin: reached() };
+      return {
+        providers: [
+          { provide: AdminAccessControlService, useValue: access },
+          { provide: PrismaService, useValue: {} },
+          { provide: AdminPasswordLinkService, useValue: {} },
+          ...[CreateAdminHandler, UpdateAdminHandler, DeleteAdminHandler, RestoreAdminHandler, GetAdminsHandler, GetAdminHandler, SupportAccessService].map(
+            (provide) => ({ provide, useValue: {} }),
+          ),
+        ],
+        spies: [access.assertCanManageAdmins, access.assertCanManageAdmin],
+      };
+    },
+    routes: [['post', '/admins/22222222-2222-4222-8222-222222222222/send-password-link']],
+  },
+  AdminAccessRequestsController: {
+    controller: AdminAccessRequestsController,
+    build: () => {
+      const access = { assertCanManageAdmins: reached() };
+      const service = { list: reached(), pendingCount: reached(), approve: reached(), reject: reached() };
+      return {
+        providers: [
+          { provide: AdminAccessControlService, useValue: access },
+          { provide: AdminAccessRequestsService, useValue: service },
+        ],
+        spies: [access.assertCanManageAdmins, ...Object.values(service)],
+      };
+    },
+    routes: [
+      ['get', '/admin/access-requests'],
+      ['get', '/admin/access-requests/pending-count'],
+      ['post', '/admin/access-requests/11111111-1111-4111-8111-111111111111/approve'],
+      ['post', '/admin/access-requests/11111111-1111-4111-8111-111111111111/reject'],
+    ],
+  },
   AdminRolesController: {
     controller: AdminRolesController,
     build: () => {

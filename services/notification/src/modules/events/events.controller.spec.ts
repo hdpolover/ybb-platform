@@ -1680,3 +1680,58 @@ describe('EventsController fan-out per-recipient records', () => {
     expect(key).not.toContain('example.com');
   });
 });
+
+describe('EventsController.handleAdminPasswordLink', () => {
+  const build = (shouldProcess = true) => {
+    const sendAdminPasswordLinkEmail = jest.fn().mockResolvedValue(undefined);
+    const controller = new EventsController(
+      { sendAdminPasswordLinkEmail } as unknown as EmailService,
+      {} as ReceiptService,
+      {
+        shouldProcess: jest.fn().mockResolvedValue({ shouldProcess, dedupeKey: 'key', reason: shouldProcess ? 'new' : 'duplicate' }),
+        markProcessed: jest.fn().mockResolvedValue(undefined),
+        release: jest.fn().mockResolvedValue(undefined),
+      } as unknown as NotificationIdempotencyService,
+      { emit: jest.fn().mockResolvedValue(true) } as unknown as RabbitMQProducerService,
+    );
+    return { controller, sendAdminPasswordLinkEmail };
+  };
+
+  it('sends the invite email with the token, role and platform brand', async () => {
+    const { controller, sendAdminPasswordLinkEmail } = build();
+    await controller.handleAdminPasswordLink(
+      { email: 'new@ybb.org', name: 'Rani', token: 'tok', kind: 'invite', roleName: 'Reviewer', brand: { name: 'YBB Platform' } },
+      makeContext(),
+    );
+    expect(sendAdminPasswordLinkEmail).toHaveBeenCalledWith('new@ybb.org', {
+      name: 'Rani', token: 'tok', kind: 'invite', roleName: 'Reviewer', brand: { name: 'YBB Platform' },
+    });
+  });
+
+  it('treats anything but kind=reset as an invite, and defaults the brand to the platform', async () => {
+    const { controller, sendAdminPasswordLinkEmail } = build();
+    await controller.handleAdminPasswordLink({ email: 'a@ybb.org', token: 't' }, makeContext());
+    expect(sendAdminPasswordLinkEmail).toHaveBeenCalledWith('a@ybb.org', expect.objectContaining({
+      kind: 'invite', name: 'there', brand: { name: 'YBB Platform' },
+    }));
+  });
+
+  it('sends the reset variant', async () => {
+    const { controller, sendAdminPasswordLinkEmail } = build();
+    await controller.handleAdminPasswordLink({ email: 'a@ybb.org', token: 't', kind: 'reset' }, makeContext());
+    expect(sendAdminPasswordLinkEmail).toHaveBeenCalledWith('a@ybb.org', expect.objectContaining({ kind: 'reset' }));
+  });
+
+  it('sends nothing without an email or token', async () => {
+    const { controller, sendAdminPasswordLinkEmail } = build();
+    await controller.handleAdminPasswordLink({ email: 'a@ybb.org' }, makeContext());
+    await controller.handleAdminPasswordLink({ token: 't' }, makeContext());
+    expect(sendAdminPasswordLinkEmail).not.toHaveBeenCalled();
+  });
+
+  it('skips a duplicate delivery', async () => {
+    const { controller, sendAdminPasswordLinkEmail } = build(false);
+    await controller.handleAdminPasswordLink({ email: 'a@ybb.org', token: 't' }, makeContext());
+    expect(sendAdminPasswordLinkEmail).not.toHaveBeenCalled();
+  });
+});

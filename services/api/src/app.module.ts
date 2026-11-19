@@ -48,6 +48,7 @@ import { RemindersModule } from '@modules/reminders/reminders.module';
 import { AuditModule } from '@modules/audit/audit.module';
 import { ReportingModule } from '@modules/reporting/reporting.module';
 import { AdminsModule } from '@modules/admins/admins.module';
+import { AdminAccessRequestsModule } from '@modules/admin-access-requests/admin-access-requests.module';
 import { EmailTemplatesModule } from '@modules/email-templates/email-templates.module';
 import { PlatformSettingsModule } from '@modules/platform-settings/platform-settings.module';
 import { CheckoutModule } from '@modules/checkout/checkout.module';
@@ -161,6 +162,7 @@ import { CheckoutModule } from '@modules/checkout/checkout.module';
     AuditModule,
     ReportingModule,
     AdminsModule,
+    AdminAccessRequestsModule,
     PlatformSettingsModule,
     ReadinessModule,
     CheckoutModule,

@@ -14,6 +14,7 @@ import { DeleteAdminHandler } from './application/commands/handlers/delete-admin
 import { RestoreAdminHandler } from './application/commands/handlers/restore-admin.handler';
 import { SupportAccessService } from './application/services/support-access.service';
 import { AdminAccessControlService } from './application/services/admin-access-control.service';
+import { AdminPasswordLinkService } from './application/services/admin-password-link.service';
 
 import { AuthModule } from '../auth/auth.module';
 
@@ -42,7 +43,8 @@ import { AuthModule } from '../auth/auth.module';
         RestoreAdminHandler,
         SupportAccessService,
         AdminAccessControlService,
+        AdminPasswordLinkService,
     ],
-    exports: [AdminAccessControlService],
+    exports: [AdminAccessControlService, AdminPasswordLinkService, CreateAdminHandler],
 })
 export class AdminsModule { }

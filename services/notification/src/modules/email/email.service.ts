@@ -995,6 +995,38 @@ export class EmailService {
     return this.sendRawEmail(to, subject, html);
   }
 
+  /**
+   * Admin dashboard set-password link (new admin invite, or "Send password link" on an
+   * existing one). The base URL is the dashboard's, not the participant brand's, so it
+   * comes from ADMIN_DASHBOARD_URL (already enumerated in the compose file).
+   */
+  async sendAdminPasswordLinkEmail(
+    to: string,
+    data: {
+      name: string;
+      token: string;
+      kind: 'invite' | 'reset';
+      roleName?: string;
+      brand?: unknown;
+    },
+  ) {
+    const baseUrl = (
+      this.configService.get<string>('ADMIN_DASHBOARD_URL') || 'http://localhost:3001'
+    ).replace(/\/$/, '');
+    const isInvite = data.kind === 'invite';
+    const html = await this.compileTemplate('admin-password-link', {
+      name: data.name,
+      roleName: data.roleName,
+      isInvite,
+      setPasswordUrl: `${baseUrl}/set-password?token=${encodeURIComponent(data.token)}`,
+      brand: data.brand,
+    });
+    const subject = isInvite
+      ? 'You now have access to the YBB admin dashboard'
+      : 'Set a new password for the YBB admin dashboard';
+    return this.sendRawEmail(to, subject, html);
+  }
+
   async sendVerificationEmail(
     to: string,
     name: string,

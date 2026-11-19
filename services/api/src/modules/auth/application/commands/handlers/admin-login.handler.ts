@@ -1,5 +1,5 @@
 
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -22,6 +22,8 @@ import { hashToken } from '@shared/utils/hash-token.util';
 
 @Injectable()
 export class AdminLoginHandler {
+    private readonly logger = new Logger(AdminLoginHandler.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly jwtService: JwtService,
@@ -123,7 +125,9 @@ export class AdminLoginHandler {
         // Verify Password
         // Admins must have a password hash (local auth)
         if (!user.passwordHash) {
-            throw new UnauthorizedException('Admin account has no password set. Please use other login method or reset password.');
+            // Same message as a wrong password: a distinct one would reveal which emails are pending invitees.
+            this.logger.warn(`Admin login refused: user ${user.id} has no password set (pending invite or link not used)`);
+            throw new UnauthorizedException('Invalid credentials');
         }
 
         // Locked out from prior failed attempts

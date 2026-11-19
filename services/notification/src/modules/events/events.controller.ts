@@ -978,6 +978,36 @@ export class EventsController {
     );
   }
 
+  // Routing key is covered by the existing 'user.#' binding in main.ts.
+  @EventPattern('user.admin-password-link')
+  async handleAdminPasswordLink(
+    @Payload() data: unknown,
+    @Ctx() context: RmqContext,
+  ) {
+    const payload = asRecord(data);
+    await this.processEvent(
+      'user.admin-password-link',
+      payload,
+      context,
+      async () => {
+        // Deliberately no payload dump: it carries the raw single-use token.
+        this.logger.log('Received user.admin-password-link event');
+
+        const email = getString(payload, 'email');
+        const token = getString(payload, 'token');
+        if (!email || !token) return;
+
+        await this.emailService.sendAdminPasswordLinkEmail(email, {
+          name: getString(payload, 'name') || 'there',
+          token,
+          kind: getString(payload, 'kind') === 'reset' ? 'reset' : 'invite',
+          roleName: getString(payload, 'roleName') || undefined,
+          brand: payload.brand ?? { name: 'YBB Platform' },
+        });
+      },
+    );
+  }
+
   @EventPattern('user.verify-email')
   async handleVerifyEmail(
     @Payload() data: unknown,

@@ -31,6 +31,52 @@ describe('EmailService fallback subjects', () => {
       .mockResolvedValue(undefined as never);
   });
 
+  describe('sendAdminPasswordLinkEmail', () => {
+    const withAdminUrl = (url?: string) => {
+      const config = {
+        get: (key: string) => (key === 'ADMIN_DASHBOARD_URL' ? url : undefined),
+      } as unknown as ConfigService;
+      const svc = new EmailService(config);
+      jest.spyOn(svc as any, 'fetchManagedTemplate').mockResolvedValue(null);
+      const send = jest.spyOn(svc, 'sendRawEmail').mockResolvedValue(undefined as never);
+      return { svc, send };
+    };
+
+    it('invite: names the role, links to the dashboard /set-password with the encoded token, says 72 hours', async () => {
+      const { svc, send } = withAdminUrl('https://admin.example.com/');
+      await svc.sendAdminPasswordLinkEmail('new@ybb.org', {
+        name: 'Rani', token: 'abc+/=', kind: 'invite', roleName: 'Reviewer', brand: { name: 'YBB Platform' },
+      });
+
+      const [to, subject, html] = send.mock.calls[0] as [string, string, string];
+      expect(to).toBe('new@ybb.org');
+      expect(subject).toBe('You now have access to the YBB admin dashboard');
+      expect(html).toContain("You've been given access to the YBB admin dashboard");
+      expect(html).toContain('<strong>Reviewer</strong>');
+      expect(html).toContain('href="https://admin.example.com/set-password?token&#x3D;abc%2B%2F%3D"');
+      expect(html).toContain('Set your password');
+      expect(html).toContain('expires in 72 hours');
+      expect(html).toContain("If you didn't request this");
+      expect(html).not.toContain('linear-gradient(135');
+    });
+
+    it('reset: says a new password is required and does not name a role', async () => {
+      const { svc, send } = withAdminUrl('https://admin.example.com');
+      await svc.sendAdminPasswordLinkEmail('a@ybb.org', { name: 'A', token: 't', kind: 'reset', roleName: 'Reviewer' });
+
+      const [, subject, html] = send.mock.calls[0] as [string, string, string];
+      expect(subject).toBe('Set a new password for the YBB admin dashboard');
+      expect(html).toContain('A new password is required for your YBB admin dashboard account');
+      expect(html).not.toContain("You've been given access");
+    });
+
+    it('falls back to localhost only when ADMIN_DASHBOARD_URL is unset', async () => {
+      const { svc, send } = withAdminUrl(undefined);
+      await svc.sendAdminPasswordLinkEmail('a@ybb.org', { name: 'A', token: 't', kind: 'invite' });
+      expect((send.mock.calls[0] as string[])[2]).toContain('http://localhost:3001/set-password');
+    });
+  });
+
   describe('sendLoaReadyEmail', () => {
     it('names the program in the subject, falling back to brand, then bare', async () => {
       await service.sendLoaReadyEmail('j@example.com', {

@@ -4,7 +4,7 @@
 // 2026-11-19: two Super Admins (999), one "Admin" (800, can_manage_admins,
 // admin.manage), Project Manager (level 1 but platform perms, so platform tier),
 // scoped roles below. Rank is tier (super > platform > scoped), then level.
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AdminAccessControlService, AdminTargetAction } from './application/services/admin-access-control.service';
@@ -481,9 +481,11 @@ describe('admin controllers enforce the rank rule before writing', () => {
   let handlers: Record<'create' | 'update' | 'delete' | 'restore', { execute: jest.Mock }>;
   let admins: AdminsController;
   let roles: AdminRolesController;
+  let links: { issue: jest.Mock };
 
   beforeEach(() => {
     const built = buildRankPrisma();
+    links = { issue: jest.fn().mockResolvedValue(undefined) };
     prisma = built.prisma;
     const access = new AdminAccessControlService(built.asService);
     const handler = () => ({ execute: jest.fn().mockResolvedValue({ success: true }) });
@@ -499,6 +501,7 @@ describe('admin controllers enforce the rank rule before writing', () => {
       unused,
       access,
       built.asService,
+      links as never,
     );
     roles = new AdminRolesController(built.asService, access);
   });
@@ -526,6 +529,41 @@ describe('admin controllers enforce the rank rule before writing', () => {
     const dto = { email: 'new@test.local', fullName: 'New', password: 'hunter2hunter2', roleId: ROLES.superAdmin.id };
     await expect(admins.create(dto as CreateAdminDto, asAdmin)).rejects.toBeInstanceOf(ForbiddenException);
     expect(handlers.create.execute).not.toHaveBeenCalled();
+  });
+
+  it('Admin cannot send a password link to a Super Admin', async () => {
+    await expect(admins.sendPasswordLink(superId, asAdmin)).rejects.toThrow(
+      new ForbiddenException('You cannot manage an administrator at or above your own rank.'),
+    );
+    expect(links.issue).not.toHaveBeenCalled();
+  });
+
+  it('Admin can send a password link to a lower admin: credentials invalidated, kind reset', async () => {
+    await expect(admins.sendPasswordLink(ADMINS.programAdmin.id, asAdmin)).resolves.toEqual({
+      ok: true,
+      adminId: ADMINS.programAdmin.id,
+    });
+    expect(links.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: `user-${ADMINS.programAdmin.id}`, kind: 'reset', invalidateCredentials: true }),
+    );
+  });
+
+  it.each(['admin', 'superA'] as const)('L3: %s cannot send a password link to themselves (400, every tier)', async (who) => {
+    await expect(admins.sendPasswordLink(ADMINS[who].id, actingAs(who))).rejects.toThrow(
+      new BadRequestException('Use your profile to change your own password.'),
+    );
+    expect(links.issue).not.toHaveBeenCalled();
+  });
+
+  it('refuses a deactivated admin account (the link would be dead)', async () => {
+    const target = ADMINS.programAdmin;
+    target.user.isActive = false;
+    try {
+      await expect(admins.sendPasswordLink(target.id, asAdmin)).rejects.toThrow(/deactivated/);
+      expect(links.issue).not.toHaveBeenCalled();
+    } finally {
+      target.user.isActive = true;
+    }
   });
 
   it('Admin can reset a lower admin password', async () => {
