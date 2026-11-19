@@ -60,6 +60,13 @@ describe('resolveAmbassadorProgramScope', () => {
         await expect(resolveAmbassadorProgramScope(prisma, actor)).resolves.toEqual(['p1', 'p2', 'p3']);
     });
 
+    it('adds a brand admin\'s explicit programme grants outside their brands', async () => {
+        const admin = { ...brandAdmin(['brand-1']), adminPrograms: [{ programId: 'p-extra', permissions: [] }] };
+        const prisma = makePrisma(admin, { brandPrograms: ['p1'] });
+
+        await expect(resolveAmbassadorProgramScope(prisma, actor)).resolves.toEqual(['p1', 'p-extra']);
+    });
+
     it('returns a program-scoped admin their own programme list', async () => {
         await expect(
             resolveAmbassadorProgramScope(makePrisma(assignedAdmin(['p9', 'p10'])), actor),

@@ -84,19 +84,18 @@ async function resolveAllowedBrandIds(
   prismaRead: PrismaReadService,
   scope: { kind: string; allowedBrandIds: string[] | null; allowedProgramIds: string[] | null },
 ): Promise<string[]> {
-  if (scope.kind === 'brand_scope') {
-    return scope.allowedBrandIds ?? [];
-  }
-
+  // brand_scope also carries explicit programme grants outside its brands; they
+  // reach their programme's brand here exactly as they do for 'assigned'.
+  const brandIds = scope.kind === 'brand_scope' ? scope.allowedBrandIds ?? [] : [];
   const programIds = scope.allowedProgramIds ?? [];
-  if (programIds.length === 0) return [];
+  if (programIds.length === 0) return brandIds;
 
   const programs = await prismaRead.program.findMany({
     where: { id: { in: programIds } },
     select: { brandId: true },
   });
 
-  return [...new Set(programs.map((program) => program.brandId))];
+  return [...new Set([...brandIds, ...programs.map((program) => program.brandId)])];
 }
 
 /**

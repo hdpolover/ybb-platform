@@ -30,7 +30,8 @@ export async function resolveAmbassadorProgramScope(
       where: { brandId: { in: scope.allowedBrandIds ?? [] }, deletedAt: null },
       select: { id: true },
     });
-    return programs.map((program) => program.id);
+    // Plus explicit admin_programs grants outside those brands (additive, see RevenueAccessScope).
+    return [...new Set([...programs.map((program) => program.id), ...(scope.allowedProgramIds ?? [])])];
   }
 
   // 'assigned': an explicit programme list. resolveRevenueAccessScope also fails

@@ -1,6 +1,6 @@
 // src/modules/applications/application/commands/handlers/create-application.handler.spec.ts
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { CreateApplicationHandler } from './create-application.handler';
 import { CreateApplicationCommand } from '../create-application.command';
 import { APPLICATION_REPOSITORY } from '@modules/applications/infrastructure/tokens';
@@ -23,7 +23,7 @@ describe('CreateApplicationHandler (admin path)', () => {
     invalidatePortalCache: jest.fn().mockResolvedValue(undefined),
     invalidateKeys: jest.fn().mockResolvedValue(undefined),
   };
-  const mockPrisma = { participant: { findUnique: jest.fn() } };
+  const mockPrisma = { participant: { findUnique: jest.fn() }, programPricingTier: { findFirst: jest.fn() } };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -71,5 +71,31 @@ describe('CreateApplicationHandler (admin path)', () => {
     });
     expect(mockCacheService.invalidatePortalCache).toHaveBeenCalledWith('participant-user-1');
     expect(mockCacheService.invalidatePortalCache).not.toHaveBeenCalledWith('admin-user-999');
+  });
+
+  const withTier = (tierId: string) =>
+    new CreateApplicationCommand(
+      'participant-1', 'program-1', ApplicationCategory.SELF_FUNDED,
+      undefined, undefined, undefined, undefined, undefined, undefined, tierId,
+    );
+
+  it("rejects with 400 a pricing tier outside the application's program, and creates nothing", async () => {
+    mockPrisma.programPricingTier.findFirst.mockResolvedValue(null);
+
+    await expect(handler.execute(withTier('tier-foreign'))).rejects.toThrow(BadRequestException);
+
+    expect(mockPrisma.programPricingTier.findFirst).toHaveBeenCalledWith({
+      where: { id: 'tier-foreign', programId: 'program-1', deletedAt: null },
+      select: { id: true },
+    });
+    expect(mockAppRepository.create).not.toHaveBeenCalled();
+  });
+
+  it("creates the application when the tier belongs to its program", async () => {
+    mockPrisma.programPricingTier.findFirst.mockResolvedValue({ id: 'tier-1' });
+
+    await handler.execute(withTier('tier-1'));
+
+    expect(mockAppRepository.create).toHaveBeenCalledWith(expect.objectContaining({ pricingTierId: 'tier-1' }));
   });
 });

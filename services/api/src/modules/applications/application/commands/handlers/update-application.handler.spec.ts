@@ -8,8 +8,10 @@ import { ApplicationMapper } from '@modules/applications/infrastructure/mappers/
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 
-const makeDomainApp = (overrides: { participantId?: string; canEdit?: boolean } = {}) => ({
+const makeDomainApp = (overrides: { participantId?: string; canEdit?: boolean; pricingTierId?: string } = {}) => ({
   id: 'app-1',
+  programId: 'program-1',
+  pricingTierId: overrides.pricingTierId,
   participantId: overrides.participantId ?? 'participant-1',
   status: 'draft',
   canEdit: jest.fn().mockReturnValue(overrides.canEdit ?? true),
@@ -24,7 +26,7 @@ describe('UpdateApplicationHandler (admin path)', () => {
     invalidatePortalCache: jest.fn().mockResolvedValue(undefined),
     invalidateKeys: jest.fn().mockResolvedValue(undefined),
   };
-  const mockPrisma = { participant: { findUnique: jest.fn() } };
+  const mockPrisma = { participant: { findUnique: jest.fn() }, programPricingTier: { findFirst: jest.fn() } };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -79,5 +81,43 @@ describe('UpdateApplicationHandler (admin path)', () => {
     });
     expect(mockCacheService.invalidatePortalCache).toHaveBeenCalledWith('participant-user-1');
     expect(mockCacheService.invalidatePortalCache).not.toHaveBeenCalledWith('admin-user-999');
+  });
+
+  describe('pricingTierId', () => {
+    it("rejects with 400 a tier that is missing or belongs to another program, and writes nothing", async () => {
+      mockAppRepository.findById.mockResolvedValue(makeDomainApp());
+      mockPrisma.programPricingTier.findFirst.mockResolvedValue(null);
+
+      await expect(
+        handler.execute(new UpdateApplicationCommand('app-1', { pricingTierId: 'tier-foreign' })),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.programPricingTier.findFirst).toHaveBeenCalledWith({
+        where: { id: 'tier-foreign', programId: 'program-1', deletedAt: null },
+        select: { id: true },
+      });
+      expect(mockAppRepository.update).not.toHaveBeenCalled();
+    });
+
+    it("accepts a tier of the application's own program", async () => {
+      const app = makeDomainApp();
+      mockAppRepository.findById.mockResolvedValue(app);
+      mockAppRepository.update.mockResolvedValue(app);
+      mockPrisma.programPricingTier.findFirst.mockResolvedValue({ id: 'tier-1' });
+
+      await handler.execute(new UpdateApplicationCommand('app-1', { pricingTierId: 'tier-1' }));
+
+      expect(mockAppRepository.update).toHaveBeenCalledWith(app, ['pricingTierId']);
+    });
+
+    it('does not re-check a tier the application already has', async () => {
+      const app = makeDomainApp({ pricingTierId: 'tier-1' });
+      mockAppRepository.findById.mockResolvedValue(app);
+      mockAppRepository.update.mockResolvedValue(app);
+
+      await handler.execute(new UpdateApplicationCommand('app-1', { pricingTierId: 'tier-1' }));
+
+      expect(mockPrisma.programPricingTier.findFirst).not.toHaveBeenCalled();
+    });
   });
 });

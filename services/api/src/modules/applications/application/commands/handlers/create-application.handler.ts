@@ -9,6 +9,7 @@ import { MetricsService } from '@shared/infrastructure/monitoring/metrics.servic
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { invalidateParticipantPortalCache } from '@shared/utils/invalidate-participant-portal-cache.util';
+import { assertPricingTierInProgram } from '../../helpers/pricing-tier-program.helper';
 
 /**
  * Create Application Handler
@@ -38,6 +39,10 @@ export class CreateApplicationHandler {
       throw new ConflictException(
         `Application already exists for participant ${command.participantId} in program ${command.programId}`,
       );
+    }
+
+    if (command.pricingTierId) {
+      await assertPricingTierInProgram(this.prisma, command.pricingTierId, command.programId);
     }
 
     // Create application entity
