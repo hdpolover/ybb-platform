@@ -155,4 +155,46 @@ describe('UsersController', () => {
           expect(cmd.notificationId).toBe('notif-1');
       });
   });
+
+  // POST /users took body.brandId straight into the new account, so any admin
+  // could create accounts in any brand. It now goes through the same brand
+  // resolver as the other admin routes on this controller.
+  describe('create (POST /users)', () => {
+    const actor = { userId: 'u-actor', adminId: 'admin-1' } as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData;
+    const adminWith = (role: { name: string; permissions: string[] }) => ({
+      accessLevel: 1,
+      canManageAdmins: false,
+      canAssignRoles: false,
+      customPermissions: null,
+      role,
+      adminBrands: [{ brandId: 'brand-1', permissions: [] }],
+      adminPrograms: [],
+    });
+    const digitalMarketing = adminWith({ name: 'Digital Marketing', permissions: ['participants:write'] });
+    const projectManager = adminWith({ name: 'Project Manager', permissions: ['platform_access'] });
+    const dtoFor = (brandId: string) => ({ brandId, email: 'new@example.com', password: 'Secret123!' });
+
+    it('refuses a brand-scoped admin naming another brand, before the handler runs', async () => {
+      mockPrismaRead.admin.findUnique.mockResolvedValue(digitalMarketing);
+
+      await expect(controller.create(actor, dtoFor('brand-2'))).rejects.toThrow('You do not have access to this brand.');
+      expect(mockCreateUserHandler.execute).not.toHaveBeenCalled();
+    });
+
+    it('lets a brand-scoped admin create a user in their own brand', async () => {
+      mockPrismaRead.admin.findUnique.mockResolvedValue(digitalMarketing);
+
+      await controller.create(actor, dtoFor('brand-1'));
+
+      expect(mockCreateUserHandler.execute.mock.calls[0][0].brandId).toBe('brand-1');
+    });
+
+    it('lets a platform admin create a user in any brand', async () => {
+      mockPrismaRead.admin.findUnique.mockResolvedValue(projectManager);
+
+      await controller.create(actor, dtoFor('brand-2'));
+
+      expect(mockCreateUserHandler.execute.mock.calls[0][0].brandId).toBe('brand-2');
+    });
+  });
 });

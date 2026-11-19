@@ -197,7 +197,14 @@ export class UsersController {
   @ApiOperation({ summary: 'Create New User' })
   @ApiResponse({ status: 201, description: 'User successfully created', type: UserResponseDto })
   @AuditTrail({ entityType: 'User', action: ChangeType.create })
-  async create(@Body() dto: CreateUserDto): Promise<UserResponseDto> {
+  async create(
+    @CurrentUser() actor: CurrentUserData,
+    @Body() dto: CreateUserDto,
+  ): Promise<UserResponseDto> {
+    // The body's brandId is the tenant the new account lands in, so a scoped
+    // admin may only name one of their own brands (403 otherwise).
+    await resolveUsersBrandFilter(this.prismaRead, actor, dto.brandId);
+
     const command = new CreateUserCommand(
       dto.brandId,
       dto.email,
