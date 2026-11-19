@@ -80,7 +80,22 @@ function buildProviders(overrides: Record<string, unknown> = {}) {
     { provide: ListApplicationsHandler, useValue: overrides.listApplicationsHandler ?? noopHandler },
     { provide: ExportApplicationsHandler, useValue: overrides.exportApplicationsHandler ?? noopHandler },
     { provide: CacheService, useValue: overrides.cacheService ?? { get: jest.fn(), set: jest.fn() } },
-    { provide: PrismaReadService, useValue: overrides.readPrisma ?? {} },
+    // Platform-scope admin by default: these specs are about routing/envelopes,
+    // the programme-scope rule has its own spec (applications-review-scope).
+    {
+      provide: PrismaReadService,
+      useValue: overrides.readPrisma ?? {
+        admin: {
+          findUnique: jest.fn().mockResolvedValue({
+            accessLevel: 5,
+            customPermissions: null,
+            role: null,
+            adminBrands: [],
+            adminPrograms: [],
+          }),
+        },
+      },
+    },
     { provide: GetApplicationReviewHandler, useValue: overrides.getApplicationReviewHandler ?? noopHandler },
     { provide: UpsertApplicationReviewHandler, useValue: overrides.upsertApplicationReviewHandler ?? noopHandler },
     { provide: RegistrationFeeMismatchesHandler, useValue: overrides.registrationFeeMismatchesHandler ?? noopHandler },

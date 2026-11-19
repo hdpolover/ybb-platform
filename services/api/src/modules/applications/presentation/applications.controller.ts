@@ -363,8 +363,16 @@ export class ApplicationsController {
   // cached admin list page for up to 5 minutes (audit M106).
   @CacheInvalidate(['application:list:*'])
   @AuditTrail({ entityType: 'ParticipantApplication', action: ChangeType.create })
-  async create(@Body() dto: CreateApplicationRequestDto): Promise<ApplicationResponseDto> {
+  async create(
+    @Body() dto: CreateApplicationRequestDto,
+    @Req() req: { user?: { adminId?: string } },
+  ): Promise<ApplicationResponseDto> {
     this.logger.log(`Creating application for participant ${dto.participantId} in program ${dto.programId}`);
+    // The body programId IS the target here (there is no row yet to read it from).
+    const scope = await getRequestAdminScope(this.readPrisma, req);
+    if (scope.kind !== 'platform') {
+      await assertProgramAccess(this.readPrisma, scope, dto.programId);
+    }
 
     const command = new CreateApplicationCommand(
       dto.participantId,
@@ -695,9 +703,11 @@ export class ApplicationsController {
   @ApiResponse({ status: 404, description: 'Application not found' })
   async findOne(
     @Param('id') id: string,
-    @Query('includeRelations') includeRelations?: boolean,
+    @Query('includeRelations') includeRelations: boolean | undefined,
+    @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Getting application ${id}`);
+    await this.assertCanReviewApplication(req, id);
 
     const query = new GetApplicationQuery(id, includeRelations);
     return this.getApplicationHandler.execute(query);
@@ -721,8 +731,10 @@ export class ApplicationsController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateApplicationRequestDto,
+    @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Updating application ${id}`);
+    await this.assertCanReviewApplication(req, id);
 
     const command = new UpdateApplicationCommand(id, dto);
     return this.updateApplicationHandler.execute(command);
@@ -745,8 +757,13 @@ export class ApplicationsController {
     @Param('id') id: string,
     @Body() dto: SwitchApplicationCategoryRequestDto,
     @CurrentUser() user: CurrentUserData,
+    @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Switching category for application ${id} to ${dto.targetCategory}`);
+    // Participants (no adminId) keep the handler's ownership check; admins are scoped.
+    if (user.adminId) {
+      await this.assertCanReviewApplication(req, id);
+    }
 
     // user.adminId is only set for admin principals, so participants keep the
     // ownership check while the reviewer queue can fix a miscategorised
@@ -782,8 +799,10 @@ export class ApplicationsController {
   async submit(
     @Param('id') id: string,
     @Body('participantId') participantId: string,
+    @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Submitting application ${id}`);
+    await this.assertCanReviewApplication(req, id);
 
     const command = new SubmitApplicationCommand(id, participantId);
     return this.submitApplicationHandler.execute(command);
@@ -797,7 +816,8 @@ export class ApplicationsController {
    * can correct typos (e.g. names) that would otherwise propagate to ID cards,
    * certificates, and LoA documents.
    *
-   * Auth: requires an admin/super-admin role (RolesGuard) on top of a valid JWT.
+   * Auth: requires an admin/super-admin role (RolesGuard) on top of a valid JWT,
+   * and the admin must be scoped to the application's programme.
    * This mutation bypasses the submission lock, so it must never be reachable by
    * a participant token.
    *
@@ -833,7 +853,9 @@ export class ApplicationsController {
     @Param('id') id: string,
     @Body() dto: AdminUpdateSubmissionDto,
     @CurrentUser() user: CurrentUserData,
+    @Req() req: { user?: { adminId?: string } },
   ): Promise<{ success: boolean; applicationId: string; editHistoryId: string }> {
+    await this.assertCanReviewApplication(req, id);
     this.logger.log(
       `Admin ${user.userId} editing submission data for application ${id}: ${dto.reason}`,
     );
@@ -853,9 +875,8 @@ export class ApplicationsController {
 
   /**
    * Admin: edit history of one application (newest first, max 100).
-   * Scope: same programme-scope rule as review(); the PATCH submission-data
-   * route above carries no such check, but history exposes old PII values so
-   * a programme-scoped admin may only read applications of their programmes.
+   * Scope: same programme-scope rule as review(); history exposes old PII
+   * values so a programme-scoped admin may only read their programmes' rows.
    */
   @Get(':id/edit-history')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -885,9 +906,11 @@ export class ApplicationsController {
   // cache directly using the users.id it already resolves.
   async createPaymentIntent(
     @Param('id') id: string,
-    @Body('userId') userId: string
+    @Body('userId') userId: string,
+    @Req() req: { user?: { adminId?: string } },
   ) {
     this.logger.log(`Creating payment intent for application ${id}`);
+    await this.assertCanReviewApplication(req, id);
     const command = new CreateRegistrationPaymentIntentCommand(id, userId);
     return this.createRegistrationPaymentIntentHandler.execute(command);
   }
@@ -911,7 +934,9 @@ export class ApplicationsController {
   async getReview(
     @Param('applicationId') applicationId: string,
     @Query('stage', new ParseEnumPipe(ScoringStage)) stage: ScoringStage,
+    @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationReviewResponseDto> {
+    await this.assertCanReviewApplication(req, applicationId);
     return this.getApplicationReviewHandler.execute(new GetApplicationReviewQuery(applicationId, stage));
   }
 
@@ -936,7 +961,9 @@ export class ApplicationsController {
     @Query('stage', new ParseEnumPipe(ScoringStage)) stage: ScoringStage,
     @Body() dto: UpsertApplicationReviewRequestDto,
     @CurrentUser() user: CurrentUserData,
+    @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationReviewResponseDto> {
+    await this.assertCanReviewApplication(req, applicationId);
     // actingAdminId/actingAdminRole MUST come from the authenticated JWT
     // principal, never from the request body or a query param. Same
     // attribution-forgery rule Task 6 applied to createdById.
@@ -1080,8 +1107,10 @@ export class ApplicationsController {
   async withdraw(
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserData,
+    @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Withdrawing application ${id}`);
+    await this.assertCanReviewApplication(req, id);
 
     // The actor comes from the JWT, never the body. withdrawn_by is a real FK to
     // users(id) and status_history.changedBy is the audit trail for this action -
