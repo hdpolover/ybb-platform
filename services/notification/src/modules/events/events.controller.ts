@@ -1002,6 +1002,9 @@ export class EventsController {
           token,
           kind: getString(payload, 'kind') === 'reset' ? 'reset' : 'invite',
           roleName: getString(payload, 'roleName') || undefined,
+          expiresInHours:
+            typeof payload.expiresInHours === 'number' ? payload.expiresInHours : undefined,
+          selfRequested: payload.selfRequested === true,
           brand: payload.brand ?? { name: 'YBB Platform' },
         });
       },

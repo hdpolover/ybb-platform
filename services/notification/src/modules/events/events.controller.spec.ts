@@ -1705,7 +1705,19 @@ describe('EventsController.handleAdminPasswordLink', () => {
     );
     expect(sendAdminPasswordLinkEmail).toHaveBeenCalledWith('new@ybb.org', {
       name: 'Rani', token: 'tok', kind: 'invite', roleName: 'Reviewer', brand: { name: 'YBB Platform' },
+      expiresInHours: undefined, selfRequested: false,
     });
+  });
+
+  it('passes the link lifetime and the self-requested flag through', async () => {
+    const { controller, sendAdminPasswordLinkEmail } = build();
+    await controller.handleAdminPasswordLink(
+      { email: 'a@ybb.org', token: 't', kind: 'reset', expiresInHours: 1, selfRequested: true },
+      makeContext(),
+    );
+    expect(sendAdminPasswordLinkEmail).toHaveBeenCalledWith('a@ybb.org', expect.objectContaining({
+      kind: 'reset', expiresInHours: 1, selfRequested: true,
+    }));
   });
 
   it('treats anything but kind=reset as an invite, and defaults the brand to the platform', async () => {
