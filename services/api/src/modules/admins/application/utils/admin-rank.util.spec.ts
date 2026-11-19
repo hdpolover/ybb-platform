@@ -77,7 +77,7 @@ describe('admin rank', () => {
     ['canAssignRoles', { accessLevel: 1, canAssignRoles: true }],
     ['platform_access', { accessLevel: 1, customPermissions: ['platform_access'] }],
     ['platform.manage', { accessLevel: 1, role: { name: 'X', permissions: ['platform.manage'] } }],
-    ['admin.manage', { accessLevel: 1, adminBrands: [{ permissions: ['admin.manage'] }] }],
+    ['admin.manage', { accessLevel: 1, adminPrograms: [{ permissions: ['admin.manage'] }] }],
   ])('puts %s in the platform tier, as the scope classifier does', (_label, admin) => {
     expect(getAdminRank(admin)).toBeGreaterThanOrEqual(1000);
     expect(getAdminRank(admin)).toBeLessThan(SUPER_ADMIN_RANK);

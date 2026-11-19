@@ -64,7 +64,7 @@ const MOCK_INVOICE = {
 // payment-admin.controller.scope.spec.ts covers against the real resolver.
 jest.mock('@shared/guards/admin-scope.guard', () => ({
     ...jest.requireActual('@shared/guards/admin-scope.guard'),
-    getRequestAdminScope: async () => ({ kind: 'platform', allowedBrandIds: null, allowedProgramIds: null }),
+    getRequestAdminScope: async () => ({ kind: 'platform', allowedProgramIds: null }),
 }));
 
 describe('PaymentAdminController — payment.rejected brand emission', () => {

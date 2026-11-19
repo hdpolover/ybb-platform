@@ -69,7 +69,7 @@ class AdminProgramSummaryDto {
     @ApiProperty({ type: [String] })
     permissions: string[];
 
-    @ApiProperty({ enum: ['assigned', 'brand_scope', 'platform'] })
+    @ApiProperty({ enum: ['assigned', 'platform'] })
     accessType: AdminProgramAccessScope;
 }
 

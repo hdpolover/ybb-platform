@@ -278,6 +278,7 @@ describe('ProgramScoringController write-route scope enforcement (real AdminScop
     adminBrands: [{ brandId: 'brand-a', permissions: [] }],
     adminPrograms: [],
   };
+  const ASSIGNED_ADMIN = { ...BRAND_ADMIN, accessLevel: 1, adminBrands: [], adminPrograms: [{ programId: 'prog-a', permissions: [] }] };
   const PLATFORM_ADMIN = { ...BRAND_ADMIN, accessLevel: 10, role: { name: 'super admin', permissions: ['*'] }, adminBrands: [] };
 
   const prismaRead = { admin: { findUnique: jest.fn() }, program: { findUnique: jest.fn() } };
@@ -303,14 +304,20 @@ describe('ProgramScoringController write-route scope enforcement (real AdminScop
     );
   });
 
-  it.each(routes)('%s: a brand-scoped admin is refused (404) on another brand\'s program', async (_name, handler, params) => {
+  it.each(routes)('%s: a brand-row-only admin is refused (404) on another brand\'s program', async (_name, handler, params) => {
     prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
     await expect(guard.canActivate(contextFor(handler, { ...params, programId: 'prog-b' }))).rejects.toThrow(NotFoundException);
   });
 
-  it.each(routes)('%s: a brand-scoped admin passes on a program in their own brand', async (_name, handler, params) => {
-    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+  it.each(routes)('%s: an assigned admin passes on their assigned program', async (_name, handler, params) => {
+    prismaRead.admin.findUnique.mockResolvedValue(ASSIGNED_ADMIN);
     await expect(guard.canActivate(contextFor(handler, { ...params, programId: 'prog-a' }))).resolves.toBe(true);
+  });
+
+  // brand rows grant nothing (owner policy 2026-11-19)
+  it.each(routes)('%s: a brand-row-only admin is refused (404) even on a program in their own brand', async (_name, handler, params) => {
+    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+    await expect(guard.canActivate(contextFor(handler, { ...params, programId: 'prog-a' }))).rejects.toThrow(NotFoundException);
   });
 
   it.each(routes)('%s: a platform admin passes on any program', async (_name, handler, params) => {

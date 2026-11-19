@@ -6,20 +6,15 @@ import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { getAdminProgramAccessScope } from '../../../../shared/admin-access-response';
 
 export interface RevenueAccessScope {
-  kind: 'platform' | 'brand_scope' | 'assigned';
-  /** null = no brand-level restriction (platform admin). */
-  allowedBrandIds: string[] | null;
-  /**
-   * Explicit admin_programs grants. null only for platform. For 'assigned' it is the
-   * whole reach; for 'brand_scope' it is ADDITIVE to the brands (a programme outside
-   * them the admin was assigned to individually, which the dashboard already lists).
-   */
+  /** No 'brand_scope': brand rows grant no programme access (see AdminProgramAccessScope). */
+  kind: 'platform' | 'assigned';
+  /** Explicit admin_programs grants; the whole reach of an 'assigned' admin. null only for platform. */
   allowedProgramIds: string[] | null;
 }
 
 /**
  * Resolves the caller's revenue-reporting access scope off their Admin record
- * (accessLevel/role/adminBrands/adminPrograms). Reuses the same
+ * (accessLevel/role/adminPrograms). Reuses the same
  * getAdminProgramAccessScope() classifier the admin-login flow already uses
  * (see shared/admin-access-response.ts) so "who can see what" here stays in
  * sync with the rest of the admin console instead of inventing a second,
@@ -32,7 +27,7 @@ export async function resolveRevenueAccessScope(
   if (!user.adminId) {
     // Admin-guarded routes should never be reached without adminId (RolesGuard
     // already requires the admin/super_admin role), but fail closed just in case.
-    return { kind: 'assigned', allowedBrandIds: [], allowedProgramIds: [] };
+    return { kind: 'assigned', allowedProgramIds: [] };
   }
 
   const admin = await prisma.admin.findUnique({
@@ -43,37 +38,28 @@ export async function resolveRevenueAccessScope(
       canAssignRoles: true,
       customPermissions: true,
       role: { select: { name: true, permissions: true } },
-      adminBrands: { select: { brandId: true, permissions: true } },
       adminPrograms: { select: { programId: true, permissions: true } },
     },
   });
 
   if (!admin) {
-    return { kind: 'assigned', allowedBrandIds: [], allowedProgramIds: [] };
+    return { kind: 'assigned', allowedProgramIds: [] };
   }
 
-  // getAdminProgramAccessScope's parameter type (AdminAccessLike) additionally requires a
-  // nested `brand`/`program` summary on each assignment (for building UI-facing summaries
-  // elsewhere) that this classifier never actually reads — only accessLevel/role/
-  // permissions/adminBrands.length are used. Casting avoids joining brand/program rows on
-  // every revenue request just to satisfy a shape we don't need here.
-  const scope = getAdminProgramAccessScope(admin as unknown as Parameters<typeof getAdminProgramAccessScope>[0]);
+  // getAdminProgramAccessScope's parameter type (AdminAccessLike) additionally requires
+  // adminBrands and a nested `program` summary on each assignment (for building UI-facing
+  // summaries elsewhere) that the classifier never reads. Casting avoids joining rows on
+  // every request just to satisfy a shape we don't need here.
+  const scope = getAdminProgramAccessScope(
+    { ...admin, adminBrands: [] } as unknown as Parameters<typeof getAdminProgramAccessScope>[0],
+  );
 
   if (scope === 'platform') {
-    return { kind: 'platform', allowedBrandIds: null, allowedProgramIds: null };
-  }
-
-  if (scope === 'brand_scope') {
-    return {
-      kind: 'brand_scope',
-      allowedBrandIds: admin.adminBrands.map((assignment) => assignment.brandId),
-      allowedProgramIds: admin.adminPrograms.map((assignment) => assignment.programId),
-    };
+    return { kind: 'platform', allowedProgramIds: null };
   }
 
   return {
     kind: 'assigned',
-    allowedBrandIds: null,
     allowedProgramIds: admin.adminPrograms.map((assignment) => assignment.programId),
   };
 }
@@ -83,12 +69,9 @@ export async function resolveRevenueAccessScope(
  * optional client-supplied brandId query param.
  *
  * - platform: any brandId (or none, for "all brands").
- * - brand_scope: brandId must be one of the caller's own adminBrands, or omitted (defaults to
- *   all of the caller's brands plus any programme they hold an explicit admin_programs
- *   grant on outside them). Anything else is REJECTED (ForbiddenException) rather than
- *   silently ignored, so a scoped admin can't probe another brand's revenue by guessing an id.
- * - assigned: no brand-level grant at all; scoped straight to the caller's adminPrograms.
- *   Supplying any brandId here is rejected.
+ * - assigned: scoped straight to the caller's adminPrograms. Supplying any brandId is
+ *   REJECTED (ForbiddenException) rather than silently ignored, so a scoped admin can't
+ *   probe another brand's revenue by guessing an id.
  */
 export function buildInvoiceScopeWhere(
   scope: RevenueAccessScope,
@@ -98,20 +81,6 @@ export function buildInvoiceScopeWhere(
     return requestedBrandId ? { application: { program: { brandId: requestedBrandId } } } : {};
   }
 
-  if (scope.kind === 'brand_scope') {
-    const allowed = scope.allowedBrandIds ?? [];
-    if (requestedBrandId) {
-      if (!allowed.includes(requestedBrandId)) {
-        throw new ForbiddenException('You do not have access to this brand.');
-      }
-      return { application: { program: { brandId: requestedBrandId } } };
-    }
-    const byBrand: Prisma.ApplicationInvoiceWhereInput = { application: { program: { brandId: { in: allowed } } } };
-    const extra = scope.allowedProgramIds ?? [];
-    return extra.length ? { OR: [byBrand, { application: { programId: { in: extra } } }] } : byBrand;
-  }
-
-  // scope.kind === 'assigned'
   if (requestedBrandId) {
     throw new ForbiddenException('You do not have access to this brand.');
   }
@@ -126,20 +95,6 @@ export function buildProgramScopeWhere(
 ): Prisma.ProgramWhereInput {
   if (scope.kind === 'platform') {
     return requestedBrandId ? { brandId: requestedBrandId } : {};
-  }
-
-  if (scope.kind === 'brand_scope') {
-    const allowed = scope.allowedBrandIds ?? [];
-    if (requestedBrandId) {
-      if (!allowed.includes(requestedBrandId)) {
-        throw new ForbiddenException('You do not have access to this brand.');
-      }
-      return { brandId: requestedBrandId };
-    }
-    const extra = scope.allowedProgramIds ?? [];
-    return extra.length
-      ? { OR: [{ brandId: { in: allowed } }, { id: { in: extra } }] }
-      : { brandId: { in: allowed } };
   }
 
   if (requestedBrandId) {
@@ -172,11 +127,8 @@ export async function assertProgramAccess(
     return program;
   }
 
-  // brand_scope reaches its brands OR its explicit programme grants; 'assigned' only the latter.
-  const inScope =
-    !missing &&
-    (!!scope.allowedProgramIds?.includes(program!.id) ||
-      (scope.kind === 'brand_scope' && !!scope.allowedBrandIds?.includes(program!.brandId)));
+  // Only an explicit programme grant reaches a programme; its brand never does.
+  const inScope = !missing && !!scope.allowedProgramIds?.includes(program!.id);
 
   // Everyone else gets the SAME answer for "does not exist" and "exists but is
   // not yours". Distinguishing them let an admin scoped to brand A probe ids and

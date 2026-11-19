@@ -1,10 +1,26 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { resolveRevenueAccessScope } from '@modules/stats/revenue/utils/revenue-access.util';
 
 /**
- * Resolve which brand an admin request on the users module is allowed to act on.
+ * Who an admin request on the users module may see and act on.
+ *
+ * - brandId: the brand to filter on; null = no brand restriction, which only a
+ *   platform-scope admin can obtain (the deliberate cross-brand listing).
+ * - programIds: only users with an application in one of these programmes;
+ *   null = no restriction (platform only). A non-platform admin manages the
+ *   participants of their assigned programmes, never the whole brand behind
+ *   them (owner policy 2026-11-19: no program assignment => whole brand).
+ */
+export interface UsersScope {
+  brandId: string | null;
+  programIds: string[] | null;
+}
+
+/**
+ * Resolve the UsersScope for a request.
  *
  * These routes took `?brandId=` and passed it straight into the Prisma filter,
  * so any admin could read, activate or deactivate any other brand's users just
@@ -12,36 +28,36 @@ import { resolveRevenueAccessScope } from '@modules/stats/revenue/utils/revenue-
  * them: it resolves the tenant id from `request.params` only, and here the id
  * lives in the query.
  *
- * Two things this must get right, both of which a naive
- * `brandId === caller.brandId` check gets wrong:
- *
- * 1. A brand-scope admin can legitimately own SEVERAL brands, so the comparison
- *    has to go through assertBrandAccess and its allowedBrandIds list.
- * 2. Omitting the parameter must not mean "no filter". `where.brandId =
- *    undefined` is treated by Prisma as "no condition at all", so dropping the
- *    param returned every user in every brand - a wider hole than supplying
- *    someone else's id, and one that needs no guessing. Any equality-based fix
- *    that only rejects MISMATCHES leaves this open.
- *
- * Returns the brandId to filter on, or null meaning "no brand restriction",
- * which only a platform-scope admin can obtain. That preserves the existing
- * platform users view, which deliberately lists across brands.
+ * Omitting the parameter must not mean "no filter": `where.brandId = undefined`
+ * is treated by Prisma as "no condition at all". For a non-platform admin the
+ * brand must be one their assigned programmes belong to (the Users pages send
+ * the programme's own brandId), and the programme filter then narrows it to
+ * those programmes' applicants.
  */
-export async function resolveUsersBrandFilter(
+export async function resolveUsersScope(
   prismaRead: PrismaReadService,
   actor: CurrentUserData,
   requestedBrandId?: string,
-): Promise<string | null> {
+): Promise<UsersScope> {
   const scope = await resolveRevenueAccessScope(prismaRead, actor);
 
   if (scope.kind === 'platform') {
-    // A platform admin may name a brand, or omit it for the deliberate
-    // cross-brand listing.
-    return requestedBrandId || null;
+    return { brandId: requestedBrandId || null, programIds: null };
   }
 
-  const allowedBrandIds = await resolveAllowedBrandIds(prismaRead, scope);
+  const programIds = scope.allowedProgramIds ?? [];
+  const programs = programIds.length
+    ? await prismaRead.program.findMany({
+        where: { id: { in: programIds }, deletedAt: null },
+        select: { id: true, brandId: true },
+      })
+    : [];
+  const brandId = pickBrand([...new Set(programs.map((program) => program.brandId))], requestedBrandId);
 
+  return { brandId, programIds: programs.filter((program) => program.brandId === brandId).map((program) => program.id) };
+}
+
+function pickBrand(allowedBrandIds: string[], requestedBrandId?: string): string {
   if (requestedBrandId) {
     if (!allowedBrandIds.includes(requestedBrandId)) {
       throw new ForbiddenException('You do not have access to this brand.');
@@ -49,10 +65,8 @@ export async function resolveUsersBrandFilter(
     return requestedBrandId;
   }
 
-  // Omitting the parameter must never mean "no filter" for a scoped admin -
-  // Prisma would drop the condition and return every brand. But when the
-  // caller only has one brand there is nothing to disambiguate, so requiring
-  // the parameter would just be a 400 the frontend has to learn to avoid.
+  // With one brand there is nothing to disambiguate, so requiring the
+  // parameter would just be a 400 the frontend has to learn to avoid.
   if (allowedBrandIds.length === 1) {
     return allowedBrandIds[0];
   }
@@ -65,40 +79,30 @@ export async function resolveUsersBrandFilter(
 }
 
 /**
- * Which brands a non-platform admin may act on.
- *
- * assertBrandAccess is not usable on its own here. Its docblock is explicit
- * that 'assigned' scope "carries no brand-level grant at all and never
- * passes" - which is right for the revenue routes it was written for, and
- * wrong here. A program-scoped admin (adminPrograms populated, adminBrands
- * empty) legitimately manages the participants of their assigned programs,
- * and the Users pages have always let them: they send the program's own
- * brandId. Handing that straight to assertBrandAccess 403s them, and omitting
- * it 400s them, so there was no way through in either direction.
- *
- * So for 'assigned' scope the allowed brands are derived from the brands of
- * the programs they are actually assigned to, rather than from a brand-level
- * grant they do not have.
+ * Throws `notFound()` unless the user is inside the scope: in its brand and,
+ * for a non-platform admin, an applicant to one of its programmes. Same error
+ * as a missing user, so these id-keyed routes are no existence oracle.
  */
-async function resolveAllowedBrandIds(
+export async function assertUserInScope(
   prismaRead: PrismaReadService,
-  scope: { kind: string; allowedBrandIds: string[] | null; allowedProgramIds: string[] | null },
-): Promise<string[]> {
-  // brand_scope stays at its explicit brands: its extra programme grants must
-  // not widen into brand-wide user management (they only reach that programme).
-  if (scope.kind === 'brand_scope') {
-    return scope.allowedBrandIds ?? [];
-  }
+  scope: UsersScope,
+  userId: string,
+  notFound: () => Error,
+): Promise<void> {
+  if (!scope.programIds) return;
 
-  const programIds = scope.allowedProgramIds ?? [];
-  if (programIds.length === 0) return [];
+  const count = await prismaRead.user.count({ where: { id: userId, ...usersScopeWhere(scope) } });
+  if (count === 0) throw notFound();
+}
 
-  const programs = await prismaRead.program.findMany({
-    where: { id: { in: programIds } },
-    select: { brandId: true },
-  });
-
-  return [...new Set(programs.map((program) => program.brandId))];
+/** The Prisma User filter for a non-platform scope; {} for platform. */
+export function usersScopeWhere(scope: UsersScope): Prisma.UserWhereInput {
+  return {
+    ...(scope.brandId ? { brandId: scope.brandId } : {}),
+    ...(scope.programIds
+      ? { participant: { applications: { some: { programId: { in: scope.programIds }, deletedAt: null } } } }
+      : {}),
+  };
 }
 
 /**

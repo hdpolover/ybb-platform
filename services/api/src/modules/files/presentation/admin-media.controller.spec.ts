@@ -135,9 +135,9 @@ describe('AdminMediaController — listMedia', () => {
         );
     });
 
-    it('allows a brand-scoped admin to list media for a program in their own brand', async () => {
+    it('allows an admin assigned to the program to list its media', async () => {
         mockPrismaRead.admin.findUnique.mockResolvedValue(
-            mockAdmin({ adminBrands: [{ brandId: PROGRAM_BRAND_ID, permissions: null }] }),
+            mockAdmin({ adminPrograms: [{ programId: PROGRAM_ID, permissions: null }] }),
         );
         mockFileServiceClient.listProgramMedia.mockResolvedValue({ files: [], total: 0 });
 
@@ -148,7 +148,17 @@ describe('AdminMediaController — listMedia', () => {
         );
     });
 
-    it('rejects a brand-scoped admin from listing media for a program outside their brand', async () => {
+    // brand rows grant nothing (owner policy 2026-11-19)
+    it('rejects a brand-row-only admin from listing media even for a program in their own brand', async () => {
+        mockPrismaRead.admin.findUnique.mockResolvedValue(
+            mockAdmin({ adminBrands: [{ brandId: PROGRAM_BRAND_ID, permissions: null }] }),
+        );
+
+        await expect(controller.listMedia(PROGRAM_ID, brandScopedAdminUser)).rejects.toThrow(NotFoundException);
+        expect(mockFileServiceClient.listProgramMedia).not.toHaveBeenCalled();
+    });
+
+    it('rejects a brand-row-only admin from listing media for a program outside their brand', async () => {
         mockPrismaRead.admin.findUnique.mockResolvedValue(
             mockAdmin({ adminBrands: [{ brandId: 'some-other-brand', permissions: null }] }),
         );

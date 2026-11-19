@@ -39,9 +39,9 @@ const FORBIDDEN_MESSAGE = 'You do not have permission to perform this action on 
 /**
  * Throws ForbiddenException unless the caller holds one of `anyOf` for this
  * program. Counted: role permissions, the admin's custom permissions, and the
- * grants on THIS program or its brand. A grant attached to some other program
- * or brand is deliberately not counted, which is stricter than the dashboard's
- * union of every assignment.
+ * grant on THIS program. A grant attached to some other program is deliberately
+ * not counted, which is stricter than the dashboard's union of every
+ * assignment; a brand row's grant never counts (brand rows grant nothing).
  */
 export async function assertProgramPermission(
   prisma: PrismaReadService,
@@ -60,23 +60,13 @@ export async function assertProgramPermission(
   const admin = await loadNonPlatformAdmin(prisma, user.adminId);
   if (!admin) return;
 
-  const brandId =
-    admin.adminBrands.length > 0
-      ? (await prisma.program.findUnique({ where: { id: programId }, select: { brandId: true } }))?.brandId
-      : undefined;
-
-  assertHoldsAny(
-    admin,
-    (grant) => brandId !== undefined && grant.brandId === brandId,
-    (grant) => grant.programId === programId,
-    anyOf,
-  );
+  assertHoldsAny(admin, (grant) => grant.programId === programId, anyOf);
 }
 
 /**
  * Brand-keyed twin of assertProgramPermission, for brand-owned rows with no
  * program id (LOA signatures). Counted: role permissions, custom permissions,
- * the grant on THIS brand, and the grants on the admin's programs in this brand.
+ * and the grants on the admin's programs in this brand (not a brand row's).
  */
 export async function assertBrandPermission(
   prisma: PrismaReadService,
@@ -103,12 +93,7 @@ export async function assertBrandPermission(
       : [],
   );
 
-  assertHoldsAny(
-    admin,
-    (grant) => grant.brandId === brandId,
-    (grant) => programsInBrand.has(grant.programId),
-    anyOf,
-  );
+  assertHoldsAny(admin, (grant) => programsInBrand.has(grant.programId), anyOf);
 }
 
 type PermissionAdmin = NonNullable<Awaited<ReturnType<typeof findPermissionAdmin>>>;
@@ -122,7 +107,6 @@ function findPermissionAdmin(prisma: PrismaReadService, adminId: string) {
       canAssignRoles: true,
       customPermissions: true,
       role: { select: { name: true, permissions: true } },
-      adminBrands: { select: { brandId: true, permissions: true } },
       adminPrograms: { select: { programId: true, permissions: true } },
     },
   });
@@ -141,12 +125,13 @@ async function loadNonPlatformAdmin(prisma: PrismaReadService, adminId: string):
   }
   // Same cast, for the same reason, as resolveRevenueAccessScope: the classifier
   // never reads the nested brand/program summaries its parameter type asks for.
-  return getAdminProgramAccessScope(admin as unknown as AdminAccessLike) === 'platform' ? null : admin;
+  return getAdminProgramAccessScope({ ...admin, adminBrands: [] } as unknown as AdminAccessLike) === 'platform'
+    ? null
+    : admin;
 }
 
 function assertHoldsAny(
   admin: PermissionAdmin,
-  countsBrandGrant: (grant: PermissionAdmin['adminBrands'][number]) => boolean,
   countsProgramGrant: (grant: PermissionAdmin['adminPrograms'][number]) => boolean,
   anyOf: readonly string[],
 ): void {
@@ -154,7 +139,6 @@ function assertHoldsAny(
     [
       ...normalizePermissions(admin.role?.permissions),
       ...normalizePermissions(admin.customPermissions),
-      ...admin.adminBrands.filter(countsBrandGrant).flatMap((grant) => normalizePermissions(grant.permissions)),
       ...admin.adminPrograms.filter(countsProgramGrant).flatMap((grant) => normalizePermissions(grant.permissions)),
     ].map((permission) => permission.toLowerCase()),
   );

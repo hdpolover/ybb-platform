@@ -12,7 +12,8 @@ export interface IUserRepository {
   
   findByEmail(email: string, brandId: string): Promise<User | null>;
   
-  findAll(brandId?: string, skip?: number, take?: number, role?: string): Promise<User[]>;
+  /** programIds: only users with an application in one of these programmes (undefined = no restriction). */
+  findAll(brandId?: string, skip?: number, take?: number, role?: string, programIds?: string[]): Promise<User[]>;
   
   create(user: User, passwordHash: string): Promise<User>;
   

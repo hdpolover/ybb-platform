@@ -1,3 +1,4 @@
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { UsersController } from './users.controller';
@@ -58,6 +59,8 @@ describe('UsersController', () => {
   // would be skipped entirely on a warm cache entry.
   const mockPrismaRead = {
     admin: { findUnique: jest.fn(), findFirst: jest.fn() },
+    program: { findMany: jest.fn() },
+    user: { count: jest.fn() },
   };
 
   beforeEach(async () => {
@@ -174,15 +177,18 @@ describe('UsersController', () => {
     const projectManager = adminWith({ name: 'Project Manager', permissions: ['platform_access'] });
     const dtoFor = (brandId: string) => ({ brandId, email: 'new@example.com', password: 'Secret123!' });
 
-    it('refuses a brand-scoped admin naming another brand, before the handler runs', async () => {
+    // Brand rows grant nothing (owner policy 2026-11-19), not even in their own brand.
+    it('refuses a brand-row-only admin, even in that brand, before the handler runs', async () => {
       mockPrismaRead.admin.findUnique.mockResolvedValue(digitalMarketing);
 
-      await expect(controller.create(actor, dtoFor('brand-2'))).rejects.toThrow('You do not have access to this brand.');
+      await expect(controller.create(actor, dtoFor('brand-1'))).rejects.toThrow(ForbiddenException);
+      await expect(controller.create(actor, dtoFor('brand-2'))).rejects.toThrow(ForbiddenException);
       expect(mockCreateUserHandler.execute).not.toHaveBeenCalled();
     });
 
-    it('lets a brand-scoped admin create a user in their own brand', async () => {
-      mockPrismaRead.admin.findUnique.mockResolvedValue(digitalMarketing);
+    it('lets an assigned admin create a user in the brand of a programme they hold', async () => {
+      mockPrismaRead.admin.findUnique.mockResolvedValue({ ...digitalMarketing, adminBrands: [], adminPrograms: [{ programId: 'p-1', permissions: [] }] });
+      mockPrismaRead.program.findMany.mockResolvedValue([{ id: 'p-1', brandId: 'brand-1' }]);
 
       await controller.create(actor, dtoFor('brand-1'));
 
@@ -195,6 +201,65 @@ describe('UsersController', () => {
       await controller.create(actor, dtoFor('brand-2'));
 
       expect(mockCreateUserHandler.execute.mock.calls[0][0].brandId).toBe('brand-2');
+    });
+  });
+
+  // An assigned admin manages the applicants of their programmes, never every
+  // user of the brand behind them (owner policy 2026-11-19).
+  describe('programme-scoped user access', () => {
+    const actor = { userId: 'u-actor', adminId: 'admin-1' } as unknown as import('@shared/decorators/current-user.decorator').CurrentUserData;
+    const assigned = {
+      accessLevel: 1,
+      canManageAdmins: false,
+      canAssignRoles: false,
+      customPermissions: null,
+      role: { name: 'Program Admin', permissions: ['participants:read'] },
+      adminBrands: [{ brandId: 'brand-1', permissions: [] }],
+      adminPrograms: [{ programId: 'p-1', permissions: [] }],
+    };
+
+    beforeEach(() => {
+      mockPrismaRead.admin.findUnique.mockResolvedValue(assigned);
+      mockPrismaRead.program.findMany.mockResolvedValue([{ id: 'p-1', brandId: 'brand-1' }]);
+    });
+
+    it('lists only applicants of the assigned programmes, bypassing the brand-keyed cache', async () => {
+      mockGetUsersHandler.execute.mockResolvedValue([]);
+
+      await controller.findAll(actor, 'brand-1');
+
+      const query = mockGetUsersHandler.execute.mock.calls[0][0];
+      expect(query.brandId).toBe('brand-1');
+      expect(query.programIds).toEqual(['p-1']);
+      expect(mockCacheService.get).not.toHaveBeenCalled();
+      expect(mockCacheService.set).not.toHaveBeenCalled();
+    });
+
+    it('404s a user with no application in the assigned programmes, handler never reached', async () => {
+      mockPrismaRead.user.count.mockResolvedValue(0);
+
+      await expect(controller.findOne(actor, 'u-other', 'brand-1')).rejects.toThrow(NotFoundException);
+      await expect(controller.deactivateUser(actor, 'u-other', 'brand-1')).rejects.toThrow(NotFoundException);
+      expect(mockGetUserHandler.execute).not.toHaveBeenCalled();
+      expect(mockDeactivateUserHandler.execute).not.toHaveBeenCalled();
+    });
+
+    it('serves an applicant of an assigned programme', async () => {
+      mockPrismaRead.user.count.mockResolvedValue(1);
+      mockGetUserHandler.execute.mockResolvedValue({ id: 'u-1' });
+
+      await expect(controller.findOne(actor, 'u-1', 'brand-1')).resolves.toEqual({ id: 'u-1' });
+    });
+
+    it('keeps the platform listing unfiltered by programme', async () => {
+      mockPrismaRead.admin.findUnique.mockResolvedValue({ ...assigned, accessLevel: 5 });
+      mockGetUsersHandler.execute.mockResolvedValue([]);
+
+      await controller.findAll(actor, undefined);
+
+      const query = mockGetUsersHandler.execute.mock.calls[0][0];
+      expect(query.brandId).toBeUndefined();
+      expect(query.programIds).toBeUndefined();
     });
   });
 });

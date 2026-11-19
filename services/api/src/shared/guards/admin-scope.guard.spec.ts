@@ -20,6 +20,7 @@ const SUPER_ADMIN = {
   adminPrograms: [],
 };
 
+// Holds a brand row but no programme: under the 2026-11-19 policy that row grants nothing.
 const BRAND_ADMIN = {
   accessLevel: 1,
   canManageAdmins: false,
@@ -57,28 +58,11 @@ function buildGuard(metadata: ScopedByMetadata | undefined, prismaRead: unknown)
 }
 
 describe('assertBrandAccess', () => {
-  const platform: AdminScope = { kind: 'platform', allowedBrandIds: null, allowedProgramIds: null };
-  const brandScoped: AdminScope = {
-    kind: 'brand_scope',
-    allowedBrandIds: ['brand-mine'],
-    allowedProgramIds: null,
-  };
-  const assigned: AdminScope = {
-    kind: 'assigned',
-    allowedBrandIds: null,
-    allowedProgramIds: ['program-mine'],
-  };
+  const platform: AdminScope = { kind: 'platform', allowedProgramIds: null };
+  const assigned: AdminScope = { kind: 'assigned', allowedProgramIds: ['program-mine'] };
 
   it('lets a platform admin through for any brand', () => {
     expect(() => assertBrandAccess(platform, 'any-brand')).not.toThrow();
-  });
-
-  it('lets a brand-scoped admin through for their own brand', () => {
-    expect(() => assertBrandAccess(brandScoped, 'brand-mine')).not.toThrow();
-  });
-
-  it('rejects a brand-scoped admin on someone else’s brand', () => {
-    expect(() => assertBrandAccess(brandScoped, 'brand-theirs')).toThrow(ForbiddenException);
   });
 
   it('rejects a program-assigned admin on any brand (they hold no brand grant)', () => {
@@ -95,7 +79,7 @@ describe('getRequestAdminScope', () => {
     const second = await getRequestAdminScope(prismaRead as never, request);
 
     expect(first).toBe(second);
-    expect(first.kind).toBe('brand_scope');
+    expect(first).toEqual({ kind: 'assigned', allowedProgramIds: [] });
     expect(prismaRead.admin.findUnique).toHaveBeenCalledTimes(1);
   });
 
@@ -104,7 +88,7 @@ describe('getRequestAdminScope', () => {
 
     const scope = await getRequestAdminScope(prismaRead as never, {});
 
-    expect(scope).toEqual({ kind: 'assigned', allowedBrandIds: [], allowedProgramIds: [] });
+    expect(scope).toEqual({ kind: 'assigned', allowedProgramIds: [] });
     expect(prismaRead.admin.findUnique).not.toHaveBeenCalled();
   });
 });
@@ -136,26 +120,26 @@ describe('AdminScopeGuard', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('checks a brand route against the named param', async () => {
+  it('refuses a brand route even for the brand the admin holds a brand row on', async () => {
     const prismaRead = { admin: { findUnique: jest.fn().mockResolvedValue(BRAND_ADMIN) } };
     const guard = buildGuard({ target: 'brand', paramName: 'id' }, prismaRead);
 
     await expect(
       guard.canActivate(buildContext({ user: { adminId: 'admin-1' }, params: { id: 'brand-mine' } })),
-    ).resolves.toBe(true);
+    ).rejects.toThrow(ForbiddenException);
 
     await expect(
       guard.canActivate(buildContext({ user: { adminId: 'admin-1' }, params: { id: 'brand-theirs' } })),
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('resolves a program route through the program’s own brand, not the request', async () => {
+  it('404s a program in the brand the admin holds a brand row on but is not assigned to', async () => {
     const prismaRead = {
       admin: { findUnique: jest.fn().mockResolvedValue(BRAND_ADMIN) },
       program: {
         findUnique: jest.fn().mockResolvedValue({
           id: 'program-1',
-          brandId: 'brand-theirs',
+          brandId: 'brand-mine',
           name: 'Foreign program',
           deletedAt: null,
         }),

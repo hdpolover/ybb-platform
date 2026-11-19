@@ -216,4 +216,32 @@ describe('AdminRefreshHandler - rotation is a guarded updateMany, not find-then-
     expect(result.accessToken).toBe('signed-token');
     expect(result.refreshToken).toBe('signed-token');
   });
+
+  // Owner policy 2026-11-19: a brand row grants no programme, so the dashboard's
+  // accessiblePrograms is exactly the assigned list - never the brand's editions.
+  it('lists exactly the assigned programmes for a non-platform admin holding a brand row', async () => {
+    prisma.userSession.updateMany.mockResolvedValue({ count: 1 });
+    const brand = { id: 'brand-1', name: 'B', slug: 'b', isActive: true };
+    const program = {
+      id: 'p-1', brandId: 'brand-1', name: 'P1', slug: 'p1', year: 2026, status: 'open', isActive: true,
+      startDate: new Date('2026-01-01'), endDate: new Date('2026-12-31'), brand,
+    };
+    prisma.userSession.findFirst.mockResolvedValue({
+      ...fullSession,
+      user: {
+        ...fullSession.user,
+        admin: {
+          ...fullSession.user.admin,
+          accessLevel: 1,
+          adminBrands: [{ brandId: 'brand-1', roleInBrand: 'Reviewer', permissions: [], brand }],
+          adminPrograms: [{ programId: 'p-1', roleInProgram: null, permissions: [], program }],
+        },
+      },
+    });
+
+    const result = await handler.execute('presented-refresh-token');
+
+    expect(prisma.program.findMany).not.toHaveBeenCalled();
+    expect(result.admin.accessiblePrograms.map((entry) => [entry.programId, entry.accessType])).toEqual([['p-1', 'assigned']]);
+  });
 });

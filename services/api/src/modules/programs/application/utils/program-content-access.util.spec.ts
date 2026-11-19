@@ -49,13 +49,14 @@ describe('assertProgramContentAccess', () => {
         ).resolves.toBeUndefined();
     });
 
-    it('lets a brand admin write to a programme in a brand they own', async () => {
+    // brand rows grant nothing (owner policy 2026-11-19)
+    it('refuses a brand-row-only admin even on a programme in a brand they hold', async () => {
         await expect(
             assertProgramContentAccess(makePrisma(brandAdmin(['brand-1', 'brand-9'])), actor, 'prog-1'),
-        ).resolves.toBeUndefined();
+        ).rejects.toThrow(NotFoundException);
     });
 
-    it('refuses a brand admin a programme outside their brands', async () => {
+    it('refuses a brand-row-only admin a programme outside their brands', async () => {
         await expect(
             assertProgramContentAccess(makePrisma(brandAdmin(['brand-other'])), actor, 'prog-1'),
         ).rejects.toThrow(NotFoundException);

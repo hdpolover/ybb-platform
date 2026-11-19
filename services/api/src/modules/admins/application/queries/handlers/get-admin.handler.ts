@@ -83,9 +83,6 @@ export class GetAdminHandler {
                 availablePrograms: await this.prisma.program.findMany({
                     where: {
                         deletedAt: null,
-                        ...(accessScope === 'brand_scope'
-                            ? { brandId: { in: admin.adminBrands.map((assignment) => assignment.brandId) } }
-                            : {}),
                     },
                     select: {
                         id: true,

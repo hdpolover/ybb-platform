@@ -24,7 +24,7 @@ import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 // payment-admin.controller.scope.spec.ts covers against the real resolver.
 jest.mock('@shared/guards/admin-scope.guard', () => ({
     ...jest.requireActual('@shared/guards/admin-scope.guard'),
-    getRequestAdminScope: async () => ({ kind: 'platform', allowedBrandIds: null, allowedProgramIds: null }),
+    getRequestAdminScope: async () => ({ kind: 'platform', allowedProgramIds: null }),
 }));
 
 describe('PaymentAdminController — payment method catalog cache (audit M149)', () => {

@@ -26,7 +26,9 @@ const BRAND_ADMIN = {
   adminBrands: [{ brandId: 'brand-a', permissions: [] }],
   adminPrograms: [],
 };
+// Brand rows grant nothing (owner policy 2026-11-19): BRAND_ADMIN reaches no program.
 const ASSIGNED_ADMIN = { ...BRAND_ADMIN, role: { name: 'Program Admin', permissions: ['program:write'] }, adminBrands: [], adminPrograms: [{ programId: 'prog-a', permissions: [] }] };
+const ASSIGNED_NEWS_WRITER = { ...ASSIGNED_ADMIN, role: { name: 'News Writer', permissions: ['announcements:write'] } };
 const PLATFORM_ADMIN = { ...BRAND_ADMIN, accessLevel: 10, role: { name: 'super admin', permissions: ['*'] }, adminBrands: [] };
 
 function makePrismaRead() {
@@ -70,7 +72,7 @@ describe('programme-keyed admin routes (real AdminScopeGuard)', () => {
     expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(AdminScopeGuard);
   });
 
-  it.each(routes)("%s: a brand-scoped admin is refused (404) on another brand's program", async (_name, handler, cls, param) => {
+  it.each(routes)("%s: a brand-row-only admin is refused (404) on another brand's program", async (_name, handler, cls, param) => {
     prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
     await expect(guard.canActivate(contextFor(handler, cls, { [param]: 'prog-b' }))).rejects.toThrow(NotFoundException);
   });
@@ -80,11 +82,15 @@ describe('programme-keyed admin routes (real AdminScopeGuard)', () => {
     await expect(guard.canActivate(contextFor(handler, cls, { [param]: 'prog-b' }))).rejects.toThrow(NotFoundException);
   });
 
-  it.each(routes)('%s: brand-scoped and assigned admins pass on their own program', async (_name, handler, cls, param) => {
-    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
-    await expect(guard.canActivate(contextFor(handler, cls, { [param]: 'prog-a' }))).resolves.toBe(true);
+  it.each(routes)('%s: an assigned admin passes on their assigned program', async (_name, handler, cls, param) => {
     prismaRead.admin.findUnique.mockResolvedValue(ASSIGNED_ADMIN);
     await expect(guard.canActivate(contextFor(handler, cls, { [param]: 'prog-a' }))).resolves.toBe(true);
+  });
+
+  // brand rows grant nothing (owner policy 2026-11-19)
+  it.each(routes)('%s: a brand-row-only admin is refused (404) even on a program in their own brand', async (_name, handler, cls, param) => {
+    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+    await expect(guard.canActivate(contextFor(handler, cls, { [param]: 'prog-a' }))).rejects.toThrow(NotFoundException);
   });
 
   it.each(routes)('%s: a platform admin passes on any program', async (_name, handler, cls, param) => {
@@ -134,7 +140,7 @@ describe('child-entity admin routes resolve the owning program from the row', ()
 
   beforeEach(() => jest.clearAllMocks());
 
-  it.each(routes)("%s: a brand-scoped admin gets 404 on another brand's row and nothing runs", async (_name, call, probe, message) => {
+  it.each(routes)("%s: a brand-row-only admin gets 404 on another brand's row and nothing runs", async (_name, call, probe, message) => {
     prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
     rowIn('prog-b');
     await expect(call()).rejects.toThrow(new NotFoundException(message));
@@ -155,17 +161,26 @@ describe('child-entity admin routes resolve the owning program from the row', ()
     expect(probe()).not.toHaveBeenCalled();
   });
 
-  it.each(routes)('%s: scoped admins pass on a row in their own program', async (_name, call, probe) => {
+  it.each(routes)('%s: an assigned admin passes on a row in their assigned program', async (_name, call, probe) => {
     rowIn('prog-a');
     // Holds the write permission of every route here; the 403 cases live below.
+    prismaRead.admin.findUnique.mockResolvedValue({
+      ...ASSIGNED_ADMIN,
+      role: { name: 'Program Admin', permissions: ['announcements:write', 'program:write'] },
+    });
+    await expect(call()).resolves.toBe('reached');
+    expect(probe()).toHaveBeenCalledTimes(1);
+  });
+
+  // brand rows grant nothing (owner policy 2026-11-19)
+  it.each(routes)('%s: a brand-row-only admin gets 404 even on a row in their own brand and nothing runs', async (_name, call, probe, message) => {
+    rowIn('prog-a');
     prismaRead.admin.findUnique.mockResolvedValue({
       ...BRAND_ADMIN,
       role: { name: 'Program Admin', permissions: ['announcements:write', 'program:write'] },
     });
-    await expect(call()).resolves.toBe('reached');
-    prismaRead.admin.findUnique.mockResolvedValue(ASSIGNED_ADMIN);
-    await expect(call()).resolves.toBe('reached');
-    expect(probe()).toHaveBeenCalledTimes(2);
+    await expect(call()).rejects.toThrow(new NotFoundException(message));
+    expect(probe()).not.toHaveBeenCalled();
   });
 
   it.each(routes)('%s: a platform admin passes on any row', async (_name, call, probe) => {
@@ -185,16 +200,23 @@ describe('child-entity admin routes resolve the owning program from the row', ()
       expect(prismaRead.admin.findUnique).not.toHaveBeenCalled();
     });
 
-    it("a brand-scoped admin gets only the public view of another brand's program", async () => {
+    it("a brand-row-only admin gets only the public view of another brand's program", async () => {
       prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
       await announcements.list('prog-b', {} as never, req(), ADMIN_USER);
       expect(isAdminArg()).toBe(false);
     });
 
-    it('a brand-scoped admin gets the admin view of their own program', async () => {
-      prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+    it('an assigned admin gets the admin view of their assigned program', async () => {
+      prismaRead.admin.findUnique.mockResolvedValue(ASSIGNED_ADMIN);
       await announcements.list('prog-a', {} as never, req(), ADMIN_USER);
       expect(isAdminArg()).toBe(true);
+    });
+
+    // brand rows grant nothing (owner policy 2026-11-19)
+    it('a brand-row-only admin gets only the public view even of a program in their own brand', async () => {
+      prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+      await announcements.list('prog-a', {} as never, req(), ADMIN_USER);
+      expect(isAdminArg()).toBe(false);
     });
 
     it('a platform admin gets the admin view of any program', async () => {
@@ -223,7 +245,7 @@ describe('announcement writes need announcements:write (or content:write / progr
   const req = () => ({ user: { id: 'user-1', userId: 'user-1', adminId: 'admin-1' } }) as never;
 
   // Prod Digital Marketing: in the brand, announcements:read only.
-  const READ_ONLY_ADMIN = { ...BRAND_ADMIN, role: { name: 'Digital Marketing', permissions: ['announcements:read'] } };
+  const READ_ONLY_ADMIN = { ...ASSIGNED_ADMIN, role: { name: 'Digital Marketing', permissions: ['announcements:read'] } };
   // Prod "Admin" role shape: platform tier through platform_access, no grant-all.
   const PLATFORM_ACCESS_ADMIN = { ...BRAND_ADMIN, accessLevel: 1, role: { name: 'Admin', permissions: ['platform_access'] }, adminBrands: [] };
 
@@ -256,7 +278,7 @@ describe('announcement writes need announcements:write (or content:write / progr
   });
 
   it.each([
-    ['announcements:write (News Writer)', BRAND_ADMIN],
+    ['announcements:write (News Writer)', ASSIGNED_NEWS_WRITER],
     ['program:write (Program Admin)', ASSIGNED_ADMIN],
     ['platform_access (Admin)', PLATFORM_ACCESS_ADMIN],
   ])('POST programs/:id/announcements: passes with %s', async (_label, row) => {

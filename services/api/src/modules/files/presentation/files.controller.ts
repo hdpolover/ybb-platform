@@ -180,15 +180,14 @@ export class FilesController {
       throw new NotFoundException(`Program ${programId} not found`);
     }
 
-    // Same-brand upload (the overwhelming common case for both participants and
-    // single-brand admins) — always allowed, no extra scope lookup needed.
-    if (program.brandId === user.brandId) {
+    // Same-brand upload by a participant — always allowed, no extra scope lookup
+    // needed. Not for admins: a home brand grants an admin no programme.
+    if (!user.adminId && program.brandId === user.brandId) {
       return program.brandId;
     }
 
-    // Cross-brand upload: only an admin with actual access to that program/brand
-    // (platform admin, or brand_scope/assigned admin granted this program) may do
-    // this. Reuses the same admin access classifier the revenue endpoints use
+    // Otherwise only an admin with actual access to that program (platform admin,
+    // or one explicitly assigned to it) may do this. Reuses the same admin access classifier the revenue endpoints use
     // (services/api/src/modules/stats/revenue/utils/revenue-access.util.ts) instead
     // of inventing a second notion of "who can touch this brand".
     if (!user.adminId) {

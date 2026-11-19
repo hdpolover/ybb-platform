@@ -14,7 +14,7 @@ import { CreateSignatureDto } from './dto/signature.dto';
 const BASE = { canManageAdmins: false, canAssignRoles: false, customPermissions: [], role: { name: 'admin', permissions: ['documents:write'] } };
 const BRAND_ADMIN = { ...BASE, accessLevel: 3, adminBrands: [{ brandId: 'brand-a', permissions: [] }], adminPrograms: [] };
 const ASSIGNED_ADMIN = { ...BASE, accessLevel: 1, adminBrands: [], adminPrograms: [{ programId: 'prog-a', permissions: [] }] };
-// brand_scope over brand-x only, plus an explicit extra grant on prog-a (brand-a).
+// A brand row on brand-x (grants nothing) plus an explicit grant on prog-a (brand-a).
 const BRAND_ADMIN_WITH_EXTRA = { ...BASE, accessLevel: 3, adminBrands: [{ brandId: 'brand-x', permissions: [] }], adminPrograms: [{ programId: 'prog-a', permissions: [] }] };
 const PLATFORM_ADMIN = { ...BASE, accessLevel: 10, role: { name: 'super admin', permissions: ['*'] }, adminBrands: [], adminPrograms: [] };
 // Prod "Admin" role: platform tier through platform_access, none of the documents set.
@@ -55,9 +55,8 @@ describe('SignatureAdminController brand scope', () => {
   });
 
   describe.each([
-    ['brand-scoped', BRAND_ADMIN],
     ['assigned', ASSIGNED_ADMIN],
-    ['brand-scoped with an extra program grant', BRAND_ADMIN_WITH_EXTRA],
+    ['brand row elsewhere plus a program grant', BRAND_ADMIN_WITH_EXTRA],
   ])('%s admin', (_label, admin) => {
     beforeEach(() => as(admin));
 
@@ -86,9 +85,8 @@ describe('SignatureAdminController brand scope', () => {
   });
 
   describe.each([
-    ['brand-scoped', BRAND_ADMIN],
     ['assigned', ASSIGNED_ADMIN],
-    ['brand-scoped with an extra program grant', BRAND_ADMIN_WITH_EXTRA],
+    ['brand row elsewhere plus a program grant', BRAND_ADMIN_WITH_EXTRA],
   ])('%s admin without a documents write permission (Reviewer)', (_label, admin) => {
     beforeEach(() => as({ ...admin, role: { name: 'Reviewer', permissions: ['applications:write', 'review:write'] } }));
 
@@ -119,10 +117,15 @@ describe('SignatureAdminController brand scope', () => {
     expect(commandBus.execute).not.toHaveBeenCalled();
   });
 
-  it('brand-scoped admin in its own brand never needs the program lookup', async () => {
+  // Brand rows grant nothing (owner policy 2026-11-19): only a program grant in the brand reaches it.
+  it('refuses a brand-row-only admin in that very brand, bus never reached', async () => {
     as(BRAND_ADMIN);
-    await controller.list('brand-a', req());
-    expect(readPrisma.program.count).not.toHaveBeenCalled();
+    await expect(controller.list('brand-a', req())).rejects.toThrow(ForbiddenException);
+    await expect(controller.create(dto('brand-a'), req())).rejects.toThrow(ForbiddenException);
+    await expect(controller.update('sig-a', {}, req())).rejects.toThrow(NotFoundException);
+    await expect(controller.remove('sig-a', req())).rejects.toThrow(NotFoundException);
+    expect(queryBus.execute).not.toHaveBeenCalled();
+    expect(commandBus.execute).not.toHaveBeenCalled();
   });
 
   it.each([['super admin', PLATFORM_ADMIN], ['platform_access', PLATFORM_ACCESS_ADMIN]])('%s passes on any brand and leaves not-found to the handler', async (_label, admin) => {
@@ -136,7 +139,7 @@ describe('SignatureAdminController brand scope', () => {
   });
 
   it('reads signature ownership from the primary, not the replica', async () => {
-    as(BRAND_ADMIN);
+    as(ASSIGNED_ADMIN);
     await controller.update('sig-a', {}, req());
     expect(prisma.signature.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'sig-a', deletedAt: null } }));
   });

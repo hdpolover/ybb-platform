@@ -83,7 +83,7 @@ describe('partnership enquiries are scoped to the admin\'s programmes', () => {
     if (app) await app.close();
   });
 
-  it.each(['brandA', 'assignedA'] as const)('%s: another brand\'s programme reads as missing on every route', async (persona) => {
+  it.each(['brandA', 'assignedA'] as const)('%s: an unassigned programme reads as missing on every route', async (persona) => {
     const built = await bootstrap(persona);
     app = built.app;
     const server = app.getHttpServer();
@@ -99,7 +99,23 @@ describe('partnership enquiries are scoped to the admin\'s programmes', () => {
     expect(built.prisma.partnershipEnquiry.updateMany).not.toHaveBeenCalled();
   });
 
-  it.each(['brandA', 'assignedA', 'platform'] as const)('%s: its own programme passes', async (persona) => {
+  // brand rows grant nothing (owner policy 2026-11-19)
+  it('brandA: a brand-row-only admin is refused even its own brand\'s programme, nothing touched', async () => {
+    const built = await bootstrap('brandA');
+    app = built.app;
+    const server = app.getHttpServer();
+
+    await request(server).get(base('prog-a')).expect(404);
+    await request(server).get(`${base('prog-a')}/enq-1`).expect(404);
+    await request(server).patch(`${base('prog-a')}/enq-1`).send({ status: 'done' }).expect(404);
+    await request(server).delete(`${base('prog-a')}/enq-1`).expect(404);
+
+    expect(built.prisma.partnershipEnquiry.findMany).not.toHaveBeenCalled();
+    expect(built.prisma.partnershipEnquiry.update).not.toHaveBeenCalled();
+    expect(built.prisma.partnershipEnquiry.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each(['assignedA', 'platform'] as const)('%s: its own programme passes', async (persona) => {
     const built = await bootstrap(persona);
     app = built.app;
     const server = app.getHttpServer();
@@ -113,7 +129,7 @@ describe('partnership enquiries are scoped to the admin\'s programmes', () => {
     expect(built.prisma.partnershipEnquiry.updateMany).toHaveBeenCalled();
   });
 
-  it.each(['brandA', 'assignedA'] as const)('%s: without a partners write permission reads pass but writes 403, nothing written', async (persona) => {
+  it.each(['assignedA'] as const)('%s: without a partners write permission reads pass but writes 403, nothing written', async (persona) => {
     const built = await bootstrap(persona, ['partnerships:read', 'applications:write']);
     app = built.app;
     const server = app.getHttpServer();

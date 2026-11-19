@@ -273,16 +273,13 @@ export class ApplicationsController {
       return { programId };
     }
 
+    // A whole-brand filter is platform-only: assertBrandAccess always refuses here.
     if (brandId) {
       assertBrandAccess(scope, brandId);
       return { brandId };
     }
 
-    if (scope.kind === 'assigned') {
-      return { programIds: scope.allowedProgramIds ?? [] };
-    }
-
-    throw new ForbiddenException('Specify a brandId or programId you have access to.');
+    return { programIds: scope.allowedProgramIds ?? [] };
   }
 
   // Scoring is a regular-admin job even though editing rubric weights (the

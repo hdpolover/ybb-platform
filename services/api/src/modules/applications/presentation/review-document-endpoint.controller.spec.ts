@@ -106,7 +106,7 @@ describe('POST /applications/:applicationId/documents/:documentId/review', () =>
 
   beforeAll(async () => {
     currentUser = { userId: 'user-1', adminId: 'admin-1', role: [UserRole.ADMIN] };
-    adminScope = { kind: 'platform', allowedBrandIds: null, allowedProgramIds: null };
+    adminScope = { kind: 'platform', allowedProgramIds: null };
     applicationProgramId = 'program-1';
 
     const module: TestingModule = await Test.createTestingModule({
@@ -142,7 +142,7 @@ describe('POST /applications/:applicationId/documents/:documentId/review', () =>
   beforeEach(() => {
     jest.clearAllMocks();
     currentUser = { userId: 'user-1', adminId: 'admin-1', role: [UserRole.ADMIN] };
-    adminScope = { kind: 'platform', allowedBrandIds: null, allowedProgramIds: null };
+    adminScope = { kind: 'platform', allowedProgramIds: null };
     applicationProgramId = 'program-1';
     adminPermissions = ['review:write'];
   });
@@ -181,7 +181,7 @@ describe('POST /applications/:applicationId/documents/:documentId/review', () =>
   });
 
   it('rejects with 404 when the application belongs to a programme outside the admin\'s scope', async () => {
-    adminScope = { kind: 'assigned', allowedBrandIds: [], allowedProgramIds: ['some-other-program'] };
+    adminScope = { kind: 'assigned', allowedProgramIds: ['some-other-program'] };
     applicationProgramId = 'program-1'; // not in allowedProgramIds
 
     await request(app.getHttpServer())
@@ -193,7 +193,7 @@ describe('POST /applications/:applicationId/documents/:documentId/review', () =>
   });
 
   it('allows the request through when the application programme is in the admin\'s assigned scope', async () => {
-    adminScope = { kind: 'assigned', allowedBrandIds: [], allowedProgramIds: ['program-1'] };
+    adminScope = { kind: 'assigned', allowedProgramIds: ['program-1'] };
     applicationProgramId = 'program-1';
     mockReviewDocumentHandler.execute.mockResolvedValue({ id: 'doc-1', submissionStatus: 'approved' });
 
@@ -206,7 +206,7 @@ describe('POST /applications/:applicationId/documents/:documentId/review', () =>
   });
 
   it('403s an in-scope admin without review:write or applications:write, before the handler runs', async () => {
-    adminScope = { kind: 'assigned', allowedBrandIds: [], allowedProgramIds: ['program-1'] };
+    adminScope = { kind: 'assigned', allowedProgramIds: ['program-1'] };
     adminPermissions = ['applications:read', 'documents:read'];
 
     await request(app.getHttpServer())

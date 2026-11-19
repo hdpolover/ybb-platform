@@ -17,10 +17,9 @@ export const AMBASSADOR_WRITE_PERMISSIONS = ['participants:write', 'program:writ
  * the users list return every brand when its parameter was simply omitted.
  *
  * Deliberately expressed as a set of PROGRAMME ids rather than a single brand
- * id, unlike resolveUsersBrandFilter. Ambassadors hang off programmes, and a
- * brand-scoped admin owns every programme in their brands while a program-scoped
- * admin owns an explicit list - collapsing either to one brand id would silently
- * widen or narrow what they can reach.
+ * id. Ambassadors hang off programmes, and a non-platform admin owns an explicit
+ * programme list - collapsing it to a brand id would silently widen what they
+ * can reach (every edition of that brand).
  */
 export async function resolveAmbassadorProgramScope(
   prismaRead: PrismaReadService,
@@ -29,15 +28,6 @@ export async function resolveAmbassadorProgramScope(
   const scope = await resolveRevenueAccessScope(prismaRead, actor);
 
   if (scope.kind === 'platform') return null;
-
-  if (scope.kind === 'brand_scope') {
-    const programs = await prismaRead.program.findMany({
-      where: { brandId: { in: scope.allowedBrandIds ?? [] }, deletedAt: null },
-      select: { id: true },
-    });
-    // Plus explicit admin_programs grants outside those brands (additive, see RevenueAccessScope).
-    return [...new Set([...programs.map((program) => program.id), ...(scope.allowedProgramIds ?? [])])];
-  }
 
   // 'assigned': an explicit programme list. resolveRevenueAccessScope also fails
   // closed into this kind with an empty list when the caller has no admin row,
