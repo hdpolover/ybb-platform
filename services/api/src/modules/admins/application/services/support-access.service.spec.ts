@@ -377,3 +377,57 @@ describe('SupportAccessService.endImpersonation', () => {
     );
   });
 });
+
+/**
+ * Pins the "Login as Participant" gate for scoped admins. The impersonation
+ * routes carry only @Roles(ADMIN, SUPER_ADMIN); the real gate is assertSuperAdmin,
+ * whose every passing condition (super-admin role name or token role, accessLevel
+ * >= 10, canManageAdmins, canAssignRoles) is one the scope classifier also counts
+ * as platform. A brand admin must be refused before the config, the support
+ * secret or the target participant is ever read.
+ */
+describe('SupportAccessService impersonation is Super Admin only', () => {
+  it.each([
+    ['Digital Marketing', 1, ['admin', 'Digital Marketing', 'digital_marketing', 'brand:brand-1:member']],
+    ['Program Admin', 3, ['admin', 'Program Admin', 'program_admin']],
+  ])('refuses a scoped %s admin before any lookup', async (roleName, accessLevel, tokenRoles) => {
+    const prisma = {
+      admin: {
+        findUnique: jest.fn().mockResolvedValue({
+          accessLevel,
+          canManageAdmins: false,
+          canAssignRoles: false,
+          role: { name: roleName },
+        }),
+      },
+      supportAccessConfig: { findUnique: jest.fn() },
+      participant: { findUnique: jest.fn() },
+      supportAccessImpersonationTicket: { create: jest.fn() },
+    };
+    const service = new SupportAccessService(prisma as never, {} as JwtService, {} as ConfigService);
+    const scopedAdmin = {
+      userId: 'user-9',
+      adminId: 'admin-9',
+      email: 'dm@example.com',
+      brandId: 'brand-1',
+      role: tokenRoles as string[],
+    };
+
+    await expect(
+      service.createImpersonation(
+        scopedAdmin,
+        {
+          participantId: 'participant-in-brand-2',
+          programId: 'program-in-brand-2',
+          supportSecret: 'secret',
+          reason: 'checking a support ticket',
+        },
+        '127.0.0.1',
+        'jest',
+      ),
+    ).rejects.toThrow('Only Super Admin can use support access.');
+    expect(prisma.supportAccessConfig.findUnique).not.toHaveBeenCalled();
+    expect(prisma.participant.findUnique).not.toHaveBeenCalled();
+    expect(prisma.supportAccessImpersonationTicket.create).not.toHaveBeenCalled();
+  });
+});
