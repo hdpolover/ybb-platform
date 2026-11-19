@@ -46,7 +46,7 @@ describe('assertProgramContentAccess', () => {
     it('lets a platform admin write to any programme', async () => {
         await expect(
             assertProgramContentAccess(makePrisma(platformAdmin), actor, 'prog-1'),
-        ).resolves.toBeUndefined();
+        ).resolves.toMatchObject({ id: expect.any(String) });
     });
 
     // brand rows grant nothing (owner policy 2026-11-19)
@@ -68,7 +68,7 @@ describe('assertProgramContentAccess', () => {
     it('lets a program-scoped admin write to a programme they are assigned to', async () => {
         await expect(
             assertProgramContentAccess(makePrisma(assignedAdmin(['prog-1'])), actor, 'prog-1'),
-        ).resolves.toBeUndefined();
+        ).resolves.toMatchObject({ id: expect.any(String) });
     });
 
     it('refuses a program-scoped admin a programme they are not assigned to', async () => {
@@ -81,7 +81,7 @@ describe('assertProgramContentAccess', () => {
     it('honours every programme an assigned admin holds, across brands', async () => {
         await expect(
             assertProgramContentAccess(makePrisma(assignedAdmin(['prog-a', 'prog-1'])), actor, 'prog-1'),
-        ).resolves.toBeUndefined();
+        ).resolves.toMatchObject({ id: expect.any(String) });
     });
 
     it('refuses an admin with no assignments at all', async () => {
@@ -117,7 +117,7 @@ describe('assertProgramContentAccess with write permissions', () => {
         assertProgramContentAccess(makePrisma(admin), actor, 'prog-1', perms);
 
     it('passes an in-scope admin holding one of the permissions', async () => {
-        await expect(check(assignedAdmin(['prog-1'], ['content:write']), CONTENT_WRITE_PERMISSIONS.content)).resolves.toBeUndefined();
+        await expect(check(assignedAdmin(['prog-1'], ['content:write']), CONTENT_WRITE_PERMISSIONS.content)).resolves.toMatchObject({ id: expect.any(String) });
     });
 
     // Prod Reviewer (applications/review only) reaching a content page by id.
@@ -134,6 +134,6 @@ describe('assertProgramContentAccess with write permissions', () => {
     });
 
     it('passes a platform admin', async () => {
-        await expect(check(platformAdmin, CONTENT_WRITE_PERMISSIONS.programConfig)).resolves.toBeUndefined();
+        await expect(check(platformAdmin, CONTENT_WRITE_PERMISSIONS.programConfig)).resolves.toMatchObject({ id: expect.any(String) });
     });
 });
