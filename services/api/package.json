@@ -156,8 +156,20 @@
     ],
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
+      "^.+/node_modules/uuid/.+\\.js$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "allowJs": true,
+            "isolatedModules": true
+          }
+        }
+      ],
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "transformIgnorePatterns": [
+      "/node_modules/(?!uuid/)"
+    ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
