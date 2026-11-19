@@ -11,6 +11,8 @@ import { Roles } from '../auth/application/decorators/roles.decorator';
 import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import { UserRole } from '../../core/entities/user.entity';
 import { acknowledgeRmqMessage } from '@shared/infrastructure/rabbitmq/rmq-ack';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 
 @ApiTags('Reporting')
 @Controller('reporting')
@@ -20,6 +22,7 @@ export class ReportingController {
   constructor(private readonly reportingService: ReportingService) { }
 
   @Get('audit-logs/export')
+  @AuditTrail({ entityType: 'DataChangeLog', action: ChangeType.create, selectFields: { id: true } })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   // Unfiltered, cross-brand dumps: there is nothing here to scope to a brand or
@@ -35,6 +38,7 @@ export class ReportingController {
   }
 
   @Get('users/export')
+  @AuditTrail({ entityType: 'User', action: ChangeType.create, selectFields: { id: true } })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   // Unfiltered, cross-brand dumps: there is nothing here to scope to a brand or
@@ -50,6 +54,7 @@ export class ReportingController {
   }
 
   @Get('participants/export')
+  @AuditTrail({ entityType: 'Participant', action: ChangeType.create, selectFields: { id: true } })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   // Unfiltered, cross-brand dumps: there is nothing here to scope to a brand or
@@ -65,6 +70,7 @@ export class ReportingController {
   }
 
   @Get('payments/export')
+  @AuditTrail({ entityType: 'ApplicationInvoice', action: ChangeType.create, selectFields: { id: true }, queryFields: ['programId', 'status', 'paymentMethod', 'tierId', 'feeType', 'applicationStatus', 'followUpStatus', 'payerType', 'currency', 'dateFrom', 'dateTo', 'paidFrom', 'paidTo'] })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   // Unfiltered, cross-brand dumps: there is nothing here to scope to a brand or

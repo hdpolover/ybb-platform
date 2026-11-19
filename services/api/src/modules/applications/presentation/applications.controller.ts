@@ -411,6 +411,8 @@ export class ApplicationsController {
   }
 
   @Get('export')
+  // Free-text `search` is deliberately not recorded.
+  @AuditTrail({ entityType: 'Program', action: ChangeType.create, selectFields: { id: true }, queryFields: ['brandId', 'programId', 'status', 'category', 'country', 'registrationPaymentStatus', 'programPaymentStatus', 'scoreStatus', 'startDate', 'endDate'] })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()

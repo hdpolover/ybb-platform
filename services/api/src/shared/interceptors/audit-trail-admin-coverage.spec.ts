@@ -7,6 +7,9 @@ import { ApplicationsController } from '../../modules/applications/presentation/
 import { AuditAdminController } from '../../modules/audit/audit-admin.controller';
 import { AuthProviderController } from '../../modules/auth/presentation/auth-provider.controller';
 import { AdminMediaController } from '../../modules/files/presentation/admin-media.controller';
+import { DocumentsController } from '../../modules/files/presentation/documents.controller';
+import { ReportingController } from '../../modules/reporting/reporting.controller';
+import { RevenueController } from '../../modules/stats/revenue/revenue.controller';
 import { PaymentAdminController } from '../../modules/payments/presentation/payment-admin.controller';
 import { PaymentReconciliationController } from '../../modules/payments/presentation/payment-reconciliation.controller';
 import { PlatformSettingsController } from '../../modules/platform-settings/presentation/platform-settings.controller';
@@ -59,6 +62,13 @@ const rows: Row[] = [
     ['reminders: cancel', ParticipantRemindersController, 'cancel', { entityType: 'ParticipantReminder', action: ChangeType.status_change }],
     ['system announcements: publish toggle', SystemAnnouncementsController, 'adminTogglePublish', { entityType: 'SystemAnnouncement', action: ChangeType.status_change }],
     ['deletion requests: review', DeletionRequestsController, 'review', { entityType: 'AccountDeletionRequest', action: ChangeType.status_change }],
+    ['applications: CSV export records who pulled which program', ApplicationsController, 'export', { entityType: 'Program', action: ChangeType.create, selectFields: { id: true }, queryFields: ['brandId', 'programId', 'status', 'category', 'country', 'registrationPaymentStatus', 'programPaymentStatus', 'scoreStatus', 'startDate', 'endDate'] }],
+    ['reporting: participants export', ReportingController, 'exportParticipants', { entityType: 'Participant', action: ChangeType.create, selectFields: { id: true } }],
+    ['reporting: users export', ReportingController, 'exportUsers', { entityType: 'User', action: ChangeType.create, selectFields: { id: true } }],
+    ['reporting: audit logs export', ReportingController, 'exportAuditLogs', { entityType: 'DataChangeLog', action: ChangeType.create, selectFields: { id: true } }],
+    ['documents: participant report export records the program name', DocumentsController, 'exportParticipantReport', { entityType: 'Document', action: ChangeType.create, selectFields: { id: true }, bodyFields: ['program_name'] }],
+    ['documents: offer letter generation', DocumentsController, 'generateOfferLetter', { entityType: 'Document', action: ChangeType.create, selectFields: { id: true } }],
+    ['revenue: transactions export', RevenueController, 'exportRevenueTransactions', { entityType: 'ApplicationInvoice', action: ChangeType.create, selectFields: { id: true }, queryFields: ['programId', 'brandId', 'status', 'currency', 'paymentMethod', 'dateFrom', 'dateTo', 'paidFrom', 'paidTo'] }],
     ['queue: purge', QueueController, 'purgeQueues', { entityType: 'MessageQueue', action: ChangeType.bulk_update }],
 ];
 

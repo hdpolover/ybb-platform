@@ -11,6 +11,8 @@ import { UserRole } from '../../../core/entities/user.entity';
 import { RevenueService } from './revenue.service';
 import { resolveRevenueAccessScope } from './utils/revenue-access.util';
 import { PlatformRevenueQueryDto, RevenueTransactionsQueryDto } from './dto/revenue-query.dto';
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import {
   PlatformRevenueRollupResponseDto,
   ProgramRevenueSummaryResponseDto,
@@ -61,6 +63,7 @@ export class RevenueController {
   }
 
   @Get('revenue/transactions/export')
+  @AuditTrail({ entityType: 'ApplicationInvoice', action: ChangeType.create, selectFields: { id: true }, queryFields: ['programId', 'brandId', 'status', 'currency', 'paymentMethod', 'dateFrom', 'dateTo', 'paidFrom', 'paidTo'] })
   @ApiOperation({ summary: 'Export the revenue transaction audit list to Excel (same filters as the list endpoint)' })
   @ApiResponse({ status: 200, description: 'Excel file with revenue transactions' })
   async exportRevenueTransactions(

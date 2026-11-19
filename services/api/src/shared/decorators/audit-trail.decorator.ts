@@ -42,6 +42,13 @@ export interface AuditTrailMetadata {
      * key-based redaction in DataChangeLogService.
      */
     bodyFields?: string[];
+
+    /**
+     * Query-string keys to record under `afterState.request`, for GET routes
+     * (exports) that have no body. Same allowlist rules as bodyFields: never name
+     * a free-text or secret-bearing key.
+     */
+    queryFields?: string[];
 }
 
 /**
