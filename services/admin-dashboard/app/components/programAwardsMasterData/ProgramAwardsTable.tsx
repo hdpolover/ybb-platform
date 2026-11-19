@@ -1,124 +1,79 @@
-import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
-import { 
-  AwardSearch, 
-  AddAwardAction, 
-  ViewAwardAction, 
-  EditAwardAction, 
-  DeleteAwardAction 
-} from "./AwardActions";
+// services/admin-dashboard/app/components/programAwardsMasterData/ProgramAwardsTable.tsx
+"use client";
 
-// TYPES
-export type AwardStatus = "Active" | "Inactive";
+import { PencilSquareIcon, TrashIcon, CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
+import type { ProgramAward } from "@/src/shared/api-client";
 
-export type ProgramAward = {
-  id: number;
-  award: string; 
-  title: string; 
-  type: "Winner" | "Runner Up" | "Honorable Mention" | "Other";
-  order: number; 
-  description: string;
-  status: AwardStatus;
-};
-
-// UTILS
-function getAwardTypeBadgeClass(type: ProgramAward["type"]): string {
-  switch (type) {
-    case "Winner": return "bg-emerald-50 text-emerald-700";
-    case "Runner Up": return "bg-blue-50 text-blue-700";
-    case "Honorable Mention": return "bg-amber-50 text-amber-700";
-    case "Other":
-    default: return "bg-zinc-100 text-zinc-700";
-  }
+interface ProgramAwardsTableProps {
+  awards: ProgramAward[];
+  togglingId: string | null;
+  onEdit: (award: ProgramAward) => void;
+  onDelete: (award: ProgramAward) => void;
+  onToggleActive: (award: ProgramAward) => void;
 }
 
-// MAIN SERVER COMPONENT
-export function ProgramAwardsTable({ 
-  data, 
-  currentSearch 
-}: { 
-  data: ProgramAward[], 
-  currentSearch: string 
-}) {
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="w-full">
-          <label className="mb-1.5 block text-xs font-medium text-zinc-500">Search Awards</label>
-          <div className="flex w-full gap-3">
-            <AwardSearch initialSearch={currentSearch} />
-            <AddAwardAction />
-          </div>
-        </div>
-      </div>
+const COLUMNS = ["Order", "Name", "Category", "Tier", "Winners", "Tags", "Status", "Actions"];
 
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <table className="min-w-full border-collapse text-left text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50/80 text-xs uppercase tracking-wider text-zinc-500">
-            <tr>
-              <th className="w-12 px-6 py-4 font-semibold">No</th>
-              <th className="px-6 py-4 font-semibold">Award</th>
-              <th className="px-6 py-4 font-semibold">Title</th>
-              <th className="px-6 py-4 font-semibold">Award Type</th>
-              <th className="px-6 py-4 text-center font-semibold">Order</th>
-              <th className="px-6 py-4 font-semibold">Description</th>
-              <th className="px-6 py-4 font-semibold">Status</th>
-              <th className="px-6 py-4 text-right font-semibold">Actions</th>
+export function ProgramAwardsTable({ awards, togglingId, onEdit, onDelete, onToggleActive }: ProgramAwardsTableProps) {
+  return (
+    <div className="overflow-x-auto rounded-md border border-zinc-200">
+      <table className="min-w-full text-left text-[11px]">
+        <thead className="bg-zinc-50 text-zinc-600">
+          <tr>
+            {COLUMNS.map((column) => (
+              <th key={column} className={`px-3 py-2 font-semibold ${column === "Actions" ? "text-right" : ""}`}>{column}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {awards.map((award, idx) => (
+            <tr key={award.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
+              <td className="px-3 py-2 text-zinc-400">{award.order}</td>
+              <td className="max-w-xs px-3 py-2">
+                <div className="flex items-center gap-1.5 font-medium text-zinc-900">
+                  {award.color && <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: award.color }} />}
+                  {award.name}
+                </div>
+                {award.description && <div className="mt-0.5 line-clamp-1 text-zinc-500">{award.description}</div>}
+              </td>
+              <td className="px-3 py-2 text-zinc-700">{award.category || <span className="text-zinc-400">—</span>}</td>
+              <td className="px-3 py-2">
+                {award.tier
+                  ? <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">{award.tier}</span>
+                  : <span className="text-zinc-400">—</span>}
+              </td>
+              <td className="px-3 py-2 text-zinc-700">{award.winnerCount ?? <span className="text-zinc-400">—</span>}</td>
+              <td className="px-3 py-2">
+                {award.tags.length > 0
+                  ? <div className="flex flex-wrap gap-1">{award.tags.map((tag) => <span key={tag} className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600">{tag}</span>)}</div>
+                  : <span className="text-zinc-400">—</span>}
+              </td>
+              <td className="px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => onToggleActive(award)}
+                  disabled={togglingId === award.id}
+                  title={award.isActive ? "Click to deactivate" : "Click to activate"}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition disabled:cursor-wait ${
+                    award.isActive
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:bg-emerald-50/40"
+                      : "border-zinc-200 bg-zinc-100 text-zinc-600 hover:bg-zinc-200 disabled:bg-zinc-50"
+                  }`}
+                >
+                  {award.isActive ? <CheckCircleIcon className="h-3 w-3" /> : <XCircleIcon className="h-3 w-3" />}
+                  {award.isActive ? "Active" : "Inactive"}
+                </button>
+              </td>
+              <td className="px-3 py-2 text-right">
+                <div className="flex items-center justify-end gap-1">
+                  <button type="button" aria-label={`Edit ${award.name}`} onClick={() => onEdit(award)} className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"><PencilSquareIcon className="h-3.5 w-3.5" /></button>
+                  <button type="button" aria-label={`Delete ${award.name}`} onClick={() => onDelete(award)} className="rounded-md border border-red-100 p-1 text-red-400 hover:bg-red-50"><TrashIcon className="h-3.5 w-3.5" /></button>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-200 bg-white">
-            {data.length === 0 ? (
-              <tr>
-                <td colSpan={8} className="px-6 py-12 text-center text-sm text-zinc-500">
-                  <div className="inline-flex flex-col items-center gap-1">
-                    <span className="font-semibold text-zinc-900">No awards found</span>
-                    <span className="text-xs text-zinc-500">
-                      Adjust your search or use the Add Award button to create one.
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              data.map((award, index) => (
-                <tr key={award.id} className="transition-colors hover:bg-zinc-50/50">
-                  <td className="px-6 py-4 align-top text-xs font-medium text-zinc-500">
-                    {index + 1}
-                  </td>
-                  <td className="px-6 py-4 align-top font-semibold text-zinc-900">
-                    {award.award}
-                  </td>
-                  <td className="px-6 py-4 align-top text-zinc-700">
-                    {award.title}
-                  </td>
-                  <td className="px-6 py-4 align-top">
-                    <span className={`inline-flex items-center justify-center rounded px-2.5 py-0.5 text-xs font-semibold capitalize whitespace-nowrap ${getAwardTypeBadgeClass(award.type)}`}>
-                      {award.type}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 align-top text-center text-zinc-700">
-                    {award.order}
-                  </td>
-                  <td className="px-6 py-4 align-top text-sm leading-relaxed text-zinc-700 max-w-sm">
-                    {award.description}
-                  </td>
-                  <td className="px-6 py-4 align-top">
-                    <span className={`inline-flex items-center gap-1.5 rounded px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide ${award.status === "Active" ? "bg-emerald-50 text-emerald-700" : "bg-zinc-50 text-zinc-600"}`}>
-                      {award.status === "Active" ? <CheckCircleIcon className="h-4 w-4" /> : <XCircleIcon className="h-4 w-4" />}
-                      <span>{award.status}</span>
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 align-top text-right">
-                    <div className="inline-flex items-center justify-end gap-2">
-                      <ViewAwardAction award={award} />
-                      <EditAwardAction award={award} />
-                      <DeleteAwardAction id={award.id} />
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

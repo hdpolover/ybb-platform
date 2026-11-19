@@ -212,8 +212,9 @@ export class HomeStrategy implements ILandingPageStrategy {
             // Also used by the program_awards section further below — merged here
             // to avoid a duplicate program.findFirst with the identical where/orderBy.
             awards: {
-              where: { isActive: true },
-              orderBy: { order: 'asc' }
+              where: { isActive: true, deletedAt: null },
+              // Legacy rows share order 0; createdAt keeps ties in the admin table's order.
+              orderBy: [{ order: 'asc' }, { createdAt: 'asc' }]
             }
           },
         }),
