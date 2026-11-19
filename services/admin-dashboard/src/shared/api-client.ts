@@ -973,7 +973,7 @@ export type ApproveAccessRequestResult = {
 async function publicRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(buildApiUrl(path), {
     ...init,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(init?.headers as Record<string, string> | undefined) },
   });
   if (!res.ok) {
     const { message, errorCode, fieldErrors } = await readErrorBody(res);
@@ -987,10 +987,21 @@ export function getAccessRequestOptions(): Promise<AccessRequestOptions> {
   return publicRequest<AccessRequestOptions>("/admin-access-requests/options");
 }
 
-export function submitAccessRequest(input: CreateAccessRequestInput): Promise<{ submitted: true }> {
+/** Cloudflare Turnstile site key (public, same for every brand); null when the API has none configured. */
+export async function getTurnstileSiteKey(): Promise<string | null> {
+  const context = await publicRequest<{ turnstileSiteKey?: string | null }>("/auth/context");
+  return context?.turnstileSiteKey || null;
+}
+
+/** The Turnstile token rides in a header (the API's ValidationPipe rejects unknown body fields on other routes). */
+export function submitAccessRequest(
+  input: CreateAccessRequestInput,
+  turnstileToken?: string | null,
+): Promise<{ submitted: true }> {
   return publicRequest<{ submitted: true }>("/admin-access-requests", {
     method: "POST",
     body: JSON.stringify(input),
+    ...(turnstileToken ? { headers: { "x-turnstile-token": turnstileToken } } : {}),
   });
 }
 
