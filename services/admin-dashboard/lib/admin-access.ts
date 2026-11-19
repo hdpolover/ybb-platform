@@ -185,7 +185,7 @@ export function buildPermissionSet(profile: AdminProfile | null, programId?: str
     [
       ...profile.permissions,
       ...profile.customPermissions,
-      ...profile.assignedBrands.flatMap((brand) => brand.permissions),
+      // Brand rows grant nothing (owner policy 2026-11-19); the API ignores them too.
       ...profile.assignedPrograms.flatMap((program) => program.permissions),
       ...assignedProgramPermissions,
     ].map((permission) => permission.toLowerCase()),

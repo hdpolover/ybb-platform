@@ -356,7 +356,7 @@ export type Admin = {
     logoUrl?: string | null;
     role: string | null;
     permissions: string[];
-    accessType: "assigned" | "brand_scope" | "platform";
+    accessType: "assigned" | "platform";
   }>;
   accessLevel: number | null;
   canManageAdmins: boolean;

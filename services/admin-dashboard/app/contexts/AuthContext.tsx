@@ -24,7 +24,7 @@ export type AdminProgram = {
   logoUrl?: string | null;
   roleInProgram: string;
   permissions: string[];
-  accessType: "assigned" | "brand_scope" | "platform";
+  accessType: "assigned" | "platform";
 };
 
 export type AdminBrand = {
@@ -110,7 +110,7 @@ type AdminLoginResponse = {
       logoUrl?: string | null;
       role: string;
       permissions?: string[];
-      accessType: "assigned" | "brand_scope" | "platform";
+      accessType: "assigned" | "platform";
     }>;
     accessiblePrograms?: Array<{
       programId: string;
@@ -127,7 +127,7 @@ type AdminLoginResponse = {
       logoUrl?: string | null;
       role: string | null;
       permissions?: string[];
-      accessType: "assigned" | "brand_scope" | "platform";
+      accessType: "assigned" | "platform";
     }>;
     brands?: Array<{
       brandId: string;
@@ -279,8 +279,8 @@ function computeAccessConfig(profile: AdminProfile | null): AdminAccessConfig {
     [
       ...profile.permissions,
       ...profile.customPermissions,
+      // Brand rows grant nothing (owner policy 2026-11-19); the API ignores them too.
       ...profile.assignedPrograms.flatMap((program) => program.permissions),
-      ...profile.assignedBrands.flatMap((brand) => brand.permissions),
     ].map((permission) => permission.toLowerCase()),
   );
 
