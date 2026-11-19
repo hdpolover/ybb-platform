@@ -14,9 +14,13 @@ import type { ProfessionalProfile } from "@/app/components/participants/tabs/Pro
 import type { EntryInformation } from "@/app/components/participants/tabs/EntryInformationTab";
 import type { Miscellaneous } from "@/app/components/participants/tabs/MiscellaneousTab";
 import type { Essay } from "@/app/components/participants/tabs/EssaysTab";
+import type { SubmittedForm } from "@/app/components/participants/tabs/SubmittedFormTab";
+import { ParticipantNavBar } from "@/app/components/participants/ParticipantNavBar";
 import { listApplications, getApplication, createSupportImpersonation, type Application } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
-import { getExtraFieldsByTab, getFieldDisplayValue } from "@/lib/form-extra-fields";
+import { getExtraFieldsByTab, getFieldDisplayValue, getSubmittedSections } from "@/lib/form-extra-fields";
+import { STATUS_LABEL, humanizeStatus } from "@/lib/application-badges";
+import type { ProfileSummaryFields } from "@/lib/profile-summary";
 import { Button } from "@/src/ui/button";
 import { Input } from "@/src/ui/input";
 import { Label } from "@/src/ui/label";
@@ -29,6 +33,7 @@ interface ParticipantData extends ProfileHeaderData {
   entry: EntryInformation;
   misc: Miscellaneous;
   essays: Essay[];
+  submitted: SubmittedForm;
 }
 
 const regionNames = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
@@ -103,6 +108,7 @@ function mapToParticipantData(app: Application): ParticipantData {
     avatarUrl: p?.profilePictureUrl ?? "",
     email: p?.email ?? "—",
     phone,
+    phoneValid: p?.phoneValid,
     location,
     status: app.status,
     applicationCategory: app.applicationCategory,
@@ -120,8 +126,10 @@ function mapToParticipantData(app: Application): ParticipantData {
       originAddress: clean(p?.originAddress),
       currentAddress: clean(p?.currentAddress),
       phone,
+      phoneValid: p?.phoneValid,
       emergencyContactName: clean(p?.emergencyContactName),
       emergencyPhone: clean(p?.emergencyContactPhone),
+      emergencyPhoneValid: p?.emergencyContactPhoneValid,
       contactRelation: clean(p?.emergencyContactRelation),
       shirtSize: clean(p?.tshirtSize),
       diseaseHistory: clean(p?.medicalConditions),
@@ -155,6 +163,7 @@ function mapToParticipantData(app: Application): ParticipantData {
       extraFields: extras.misc,
     },
     essays: app.essays ?? [],
+    submitted: { sections: getSubmittedSections(sections) },
   };
 }
 
@@ -180,6 +189,25 @@ export default function ParticipantDetailPage() {
   const [reason, setReason] = useState("");
   const [startingImpersonation, setStartingImpersonation] = useState(false);
 
+  const summary = useMemo<ProfileSummaryFields | null>(() => {
+    if (!participant) return null;
+    const program =
+      rawApplication?.program?.name ?? accessiblePrograms.find((p) => p.programId === programId)?.programName ?? "";
+    return {
+      name: participant.name,
+      email: participant.email,
+      phone: participant.phone,
+      program,
+      category: participant.entry.category,
+      applicationStatus: STATUS_LABEL[participant.status] ?? humanizeStatus(participant.status),
+      registrationFee: humanizeStatus(participant.registrationPaymentStatus),
+      programFee: humanizeStatus(participant.programPaymentStatus),
+      nationality: participant.personal.nationality,
+      institution: participant.professional.institution,
+      major: participant.professional.major,
+    };
+  }, [participant, rawApplication, accessiblePrograms, programId]);
+
   useEffect(() => {
     if (!programId || !accountId) return;
     let cancelled = false;
@@ -187,6 +215,9 @@ export default function ParticipantDetailPage() {
     async function load() {
       setLoading(true);
       setError(null);
+      // Prev/next lands here with a new accountId: drop the old profile instead of showing it under the spinner.
+      setParticipant(null);
+      setRawApplication(null);
       try {
         const list = await listApplications({ programId, participantId: accountId, limit: 1 });
         const apps = list.data;
@@ -311,10 +342,13 @@ export default function ParticipantDetailPage() {
       </Dialog>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
-          <Link href={`/programs/${programId}/dashboard`} className="hover:text-zinc-800 transition-colors">Dashboard</Link>
-          <span>&gt;</span>
-          <span className="font-semibold text-blue-600">Detail Participant</span>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
+            <Link href={`/programs/${programId}/dashboard`} className="hover:text-zinc-800 transition-colors">Dashboard</Link>
+            <span>&gt;</span>
+            <span className="font-semibold text-blue-600">Detail Participant</span>
+          </div>
+          <ParticipantNavBar programParam={programIdParam} accountId={accountId} />
         </div>
         <div className="flex items-center gap-2.5">
           {accessConfig.canAccessPrograms && rawApplication ? (
@@ -352,9 +386,9 @@ export default function ParticipantDetailPage() {
         {error && (
           <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
-        {participant && (
+        {participant && summary && (
           <>
-            <ProfileHeader data={participant} />
+            <ProfileHeader data={participant} summary={summary} />
             <ParticipantProfileTabs data={participant} />
           </>
         )}

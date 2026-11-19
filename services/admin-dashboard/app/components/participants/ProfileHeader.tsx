@@ -2,6 +2,9 @@
 import React from "react";
 import { EnvelopeIcon, MapPinIcon, PhoneIcon } from "@heroicons/react/24/outline";
 import { SendEmailButton } from "./SendEmailButton";
+import { CopySummaryButton } from "./CopySummaryButton";
+import { InvalidPhoneFlag } from "./InvalidPhoneFlag";
+import type { ProfileSummaryFields } from "@/lib/profile-summary";
 import { CopyButton, IconActions, whatsappActions } from "./IconActions";
 import { FfResultBadge } from "./FfResult";
 import Image from "next/image";
@@ -17,6 +20,8 @@ export interface ProfileHeaderData {
   email: string;
   /** Full international number, country code already included. */
   phone: string;
+  /** API phone-format check; false = failed validation, null/undefined = unknown. */
+  phoneValid?: boolean | null;
   status: string;
   applicationCategory: string;
   createdAt: string;
@@ -71,7 +76,7 @@ function ApplicationSummary({ data }: { data: ProfileHeaderData }) {
   );
 }
 
-export function ProfileHeader({ data }: { data: ProfileHeaderData }) {
+export function ProfileHeader({ data, summary }: { data: ProfileHeaderData; summary: ProfileSummaryFields }) {
   const DEFAULT_AVATAR = "/avatar-default.svg";
   const imageSource = data.avatarUrl || DEFAULT_AVATAR;
 
@@ -113,15 +118,17 @@ export function ProfileHeader({ data }: { data: ProfileHeaderData }) {
             <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-500">
               <PhoneIcon className="h-4 w-4" />
               <span>{data.phone}</span>
-              <IconActions copyValue={data.phone} copyLabel="Phone number" actions={whatsappActions(data.phone)} />
+              <IconActions copyValue={data.phone} copyLabel="Phone number" actions={whatsappActions(data.phone, data.phoneValid)} />
+              <InvalidPhoneFlag valid={data.phoneValid} />
             </div>
           </div>
 
           <ApplicationSummary data={data} />
         </div>
 
-        <div className="mt-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <SendEmailButton email={data.email} />
+          <CopySummaryButton fields={summary} />
         </div>
       </div>
       </div>

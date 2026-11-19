@@ -11,9 +11,11 @@ interface InfoFieldProps {
   copyValue?: string;
   /** Extra icon links (WhatsApp, open profile, ...) that open in a new tab. */
   actions?: IconAction[];
+  /** Shown under the value (e.g. an invalid-phone flag). */
+  warning?: React.ReactNode;
 }
 
-export function InfoField({ label, value, isLink = false, copyValue, actions }: InfoFieldProps) {
+export function InfoField({ label, value, isLink = false, copyValue, actions, warning }: InfoFieldProps) {
   const text = typeof value === "string" ? value : undefined;
   const canAct = isPresent(copyValue ?? text);
   const showLink = isLink && text !== undefined && isHttpUrl(text);
@@ -36,6 +38,7 @@ export function InfoField({ label, value, isLink = false, copyValue, actions }: 
         )}
         {canAct && <IconActions copyValue={copyValue} copyLabel={label} actions={actions} />}
       </div>
+      {warning}
     </div>
   );
 }

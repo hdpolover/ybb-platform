@@ -4,6 +4,7 @@ import type { ExtraField } from "@/lib/form-extra-fields";
 import { InfoField } from "../InfoField";
 import { ExtraFieldRows } from "../ExtraFieldRows";
 import { whatsappActions } from "../IconActions";
+import { InvalidPhoneFlag } from "../InvalidPhoneFlag";
 
 export interface PersonalDetails {
   fullName: string;
@@ -15,9 +16,12 @@ export interface PersonalDetails {
   currentAddress: string;
   /** Full international number, country code already included. */
   phone: string;
+  /** API phone-format check; false = failed validation, null/undefined = unknown. */
+  phoneValid?: boolean | null;
   emergencyContactName: string;
   /** Full international number, country code already included. */
   emergencyPhone: string;
+  emergencyPhoneValid?: boolean | null;
   contactRelation: string;
   shirtSize: string;
   diseaseHistory: string;
@@ -37,13 +41,20 @@ export function PersonalDetailsTab({ data }: { data: PersonalDetails }) {
         <InfoField label="Nationality" value={data.nationality} />
         <InfoField label="Origin Address" value={data.originAddress} copyValue={data.originAddress} />
         <InfoField label="Current Address" value={data.currentAddress} copyValue={data.currentAddress} />
-        <InfoField label="Phone Number" value={data.phone} copyValue={data.phone} actions={whatsappActions(data.phone)} />
+        <InfoField
+          label="Phone Number"
+          value={data.phone}
+          copyValue={data.phone}
+          actions={whatsappActions(data.phone, data.phoneValid)}
+          warning={<InvalidPhoneFlag valid={data.phoneValid} />}
+        />
         <InfoField label="Emergency Contact Name" value={data.emergencyContactName} />
         <InfoField
           label="Emergency Phone Number"
           value={data.emergencyPhone}
           copyValue={data.emergencyPhone}
-          actions={whatsappActions(data.emergencyPhone)}
+          actions={whatsappActions(data.emergencyPhone, data.emergencyPhoneValid)}
+          warning={<InvalidPhoneFlag valid={data.emergencyPhoneValid} />}
         />
         <InfoField label="Emergency Contact Relationship" value={data.contactRelation} />
         <InfoField label="T-Shirt Size" value={data.shirtSize} />

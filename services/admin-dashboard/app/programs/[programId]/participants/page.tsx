@@ -25,6 +25,7 @@ import { RowActions } from "@/src/ui/row-actions";
 import { formatDate } from "@/lib/utils";
 import { PAYMENT_BADGE, STATUS_BADGE, STATUS_LABEL } from "@/lib/application-badges";
 import { getFfResultsHiddenNotice } from "@/lib/ff-results-notice";
+import { saveParticipantNav } from "@/lib/participant-nav";
 import { FfResultBadge, FfResultBulkAction } from "@/app/components/participants/FfResult";
 
 const regionNames = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
@@ -263,6 +264,15 @@ export default function ParticipantsPage() {
       .then((config) => setFfAnnouncedAt(config.fundingResultsAnnouncedAt ?? null))
       .catch(() => setFfAnnouncedAt(undefined));
   }, [resolvedProgramId]);
+
+  // Hand the displayed order to the detail page's prev/next. Keyed by the route param, as the detail URL carries it.
+  useEffect(() => {
+    if (items.length === 0) return;
+    saveParticipantNav(params.programId, {
+      ids: items.map((app) => app.participantId),
+      listHref: window.location.pathname + window.location.search,
+    });
+  }, [items, params.programId]);
 
   const selectableIds = useMemo(
     () => items.filter((app) => app.applicationCategory === "fully_funded").map((app) => app.id),

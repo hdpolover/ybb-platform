@@ -1,7 +1,7 @@
 // services/admin-dashboard/lib/form-extra-fields.test.ts
 import { describe, expect, it } from "vitest";
 import type { SubmissionFormFieldAdmin, SubmissionSectionAdmin } from "@/src/shared/api-client";
-import { getExtraFieldsByTab, getFieldDisplayValue } from "./form-extra-fields";
+import { getExtraFieldsByTab, getFieldDisplayValue, getSubmittedSections } from "./form-extra-fields";
 
 const field = (over: Partial<SubmissionFormFieldAdmin>): SubmissionFormFieldAdmin => ({
   name: "x",
@@ -104,5 +104,32 @@ describe("getFieldDisplayValue", () => {
     expect(getFieldDisplayValue(sections, "knowledge_source")).toBe("Instagram");
     expect(getFieldDisplayValue(sections, "blank")).toBeUndefined();
     expect(getFieldDisplayValue(undefined, "x")).toBeUndefined();
+  });
+});
+
+describe("getSubmittedSections", () => {
+  it("returns [] when there is no form", () => {
+    expect(getSubmittedSections(undefined)).toEqual([]);
+  });
+
+  it("keeps every field in order, including unanswered ones, with option labels and link flags", () => {
+    const out = getSubmittedSections([
+      section("misc", [
+        field({ name: "b", label: "B", order: 2, value: "https://x.test/cv" }),
+        field({ name: "a", label: "A", order: 1, value: "" }),
+        field({ name: "c", label: "C", order: 3, value: "ig", options: [{ label: "Instagram", value: "ig" }] }),
+      ]),
+    ]);
+    expect(out).toEqual([
+      {
+        section: "misc",
+        label: "misc",
+        fields: [
+          { name: "a", label: "A", value: "", isLink: false },
+          { name: "b", label: "B", value: "https://x.test/cv", isLink: true },
+          { name: "c", label: "C", value: "Instagram", isLink: false },
+        ],
+      },
+    ]);
   });
 });

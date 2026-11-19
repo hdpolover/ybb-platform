@@ -688,6 +688,8 @@ export type Application = {
     phoneCountryCode?: string | null;
     /** Full international number; the country code is already included. */
     phoneNumber?: string | null;
+    /** libphonenumber check of phoneNumber; null = no number, undefined = older API build (unknown). */
+    phoneValid?: boolean | null;
     birthdate?: string | null;
     gender?: string | null;
     nationality?: string | null;
@@ -700,6 +702,8 @@ export type Application = {
     emergencyContactName?: string | null;
     /** Full international number; the country code is already included. */
     emergencyContactPhone?: string | null;
+    /** Same as phoneValid, for emergencyContactPhone. */
+    emergencyContactPhoneValid?: boolean | null;
     emergencyContactCountryCode?: string | null;
     emergencyContactRelation?: string | null;
     tshirtSize?: string | null;

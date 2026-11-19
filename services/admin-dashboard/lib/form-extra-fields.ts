@@ -88,3 +88,31 @@ export function getFieldDisplayValue(
   }
   return undefined;
 }
+
+export interface SubmittedField {
+  name: string;
+  label: string;
+  /** Display value (option label when defined); "" when unanswered. */
+  value: string;
+  isLink: boolean;
+}
+
+export interface SubmittedSection {
+  section: string;
+  label: string;
+  fields: SubmittedField[];
+}
+
+/** The form exactly as the program defines it: every section and field in `order`, answered or not. */
+export function getSubmittedSections(sections: SubmissionSectionAdmin[] | undefined): SubmittedSection[] {
+  return (sections ?? []).map((s) => ({
+    section: s.section,
+    label: s.label,
+    fields: [...s.fields]
+      .sort((a, b) => a.order - b.order)
+      .map((f) => {
+        const value = displayValue(f);
+        return { name: f.name, label: f.label, value, isLink: isHttpUrl(value) };
+      }),
+  }));
+}

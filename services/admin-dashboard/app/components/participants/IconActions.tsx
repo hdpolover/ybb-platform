@@ -24,9 +24,23 @@ export interface IconAction {
   icon: LucideIcon;
 }
 
-export function whatsappActions(phone: string | null | undefined): IconAction[] {
+/** WhatsApp link for a number; hidden when the API flagged it as invalid (`phoneValid === false`). */
+export function whatsappActions(phone: string | null | undefined, phoneValid?: boolean | null): IconAction[] {
+  if (phoneValid === false) return [];
   const href = whatsappUrl(phone);
   return href ? [{ href, label: "Open in WhatsApp", icon: MessageCircle }] : [];
+}
+
+/** Writes to the clipboard and toasts "<label> copied" or the shared failure message. Resolves true on success. */
+export async function copyText(text: string, label: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    toast.error("Couldn't copy. Select the text and copy it manually.");
+    return false;
+  }
+  toast.success(`${label} copied`);
+  return true;
 }
 
 export function CopyButton({ text, label }: { text: string; label: string }) {
@@ -36,13 +50,7 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      toast.error("Couldn't copy. Select the text and copy it manually.");
-      return;
-    }
-    toast.success(`${label} copied`);
+    if (!(await copyText(text, label))) return;
     setCopied(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
