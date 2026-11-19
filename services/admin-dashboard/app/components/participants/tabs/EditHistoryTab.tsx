@@ -7,24 +7,34 @@ import { ArrowRight, History } from "lucide-react";
 import { getApplicationEditHistory, type ApplicationEditHistoryEntry } from "@/src/shared/api-client";
 import { EmptyState } from "@/src/admin/empty-state";
 import { formatDateTime } from "@/lib/utils";
-import { EMPTY_VALUE, changeLabel, formatChangeValue, isLongValue } from "@/lib/edit-history";
+import { EMPTY_VALUE, changeField, changeLabel, formatChangeValue, isLongValue } from "@/lib/edit-history";
+import type { FieldFormatShape } from "@/lib/field-value-format";
 import { TabError, TabSkeleton } from "./TabLoadStates";
 
 /** Query key for an application's edit history; invalidate it after a submission edit. */
 export const editHistoryQueryKey = (applicationId: string) => ["application-edit-history", applicationId] as const;
 
+/** The one edit-history query: Edit History and As Submitted share it, so opening both fetches once. */
+export function useEditHistory(applicationId: string) {
+  return useQuery({
+    queryKey: editHistoryQueryKey(applicationId),
+    queryFn: () => getApplicationEditHistory(applicationId),
+  });
+}
+
+const NO_FIELDS: ReadonlyMap<string, FieldFormatShape> = new Map();
+
 interface EditHistoryTabProps {
   applicationId: string;
   /** From buildChangeLabels(application.submissionForm.sections, application.essays). */
   changeLabels: ReadonlyMap<string, string>;
+  /** From buildChangeFields(application.submissionForm.sections): formats old/new like the other tabs. */
+  changeFields?: ReadonlyMap<string, FieldFormatShape>;
 }
 
 /** Mounted only while the tab is open, so the first fetch happens on first open. */
-export function EditHistoryTab({ applicationId, changeLabels }: EditHistoryTabProps) {
-  const { data, isPending, isError, error, refetch } = useQuery({
-    queryKey: editHistoryQueryKey(applicationId),
-    queryFn: () => getApplicationEditHistory(applicationId),
-  });
+export function EditHistoryTab({ applicationId, changeLabels, changeFields = NO_FIELDS }: EditHistoryTabProps) {
+  const { data, isPending, isError, error, refetch } = useEditHistory(applicationId);
 
   if (isPending) return <TabSkeleton label="Loading edit history" />;
   if (isError) return <TabError title="Couldn't load edit history" error={error} onRetry={() => void refetch()} />;
@@ -37,15 +47,17 @@ export function EditHistoryTab({ applicationId, changeLabels }: EditHistoryTabPr
       />
     );
   }
-  return <EditHistoryList entries={data} changeLabels={changeLabels} />;
+  return <EditHistoryList entries={data} changeLabels={changeLabels} changeFields={changeFields} />;
 }
 
 export function EditHistoryList({
   entries,
   changeLabels,
+  changeFields = NO_FIELDS,
 }: {
   entries: ApplicationEditHistoryEntry[];
   changeLabels: ReadonlyMap<string, string>;
+  changeFields?: ReadonlyMap<string, FieldFormatShape>;
 }) {
   return (
     <ol className="space-y-4">
@@ -77,9 +89,9 @@ export function EditHistoryList({
                     {changeLabel(c.key, changeLabels)}
                   </dt>
                   <dd className="flex min-w-0 flex-col gap-1 text-sm md:flex-row md:items-start md:gap-2">
-                    <ChangeValue value={c.old} tone="old" />
+                    <ChangeValue value={c.old} field={changeField(c.key, changeFields)} tone="old" />
                     <ArrowRight className="hidden h-4 w-4 shrink-0 text-zinc-300 md:mt-0.5 md:block" aria-label="changed to" />
-                    <ChangeValue value={c.new} tone="new" />
+                    <ChangeValue value={c.new} field={changeField(c.key, changeFields)} tone="new" />
                   </dd>
                 </div>
               ))}
@@ -91,9 +103,9 @@ export function EditHistoryList({
   );
 }
 
-function ChangeValue({ value, tone }: { value: unknown; tone: "old" | "new" }) {
+function ChangeValue({ value, field, tone }: { value: unknown; field: FieldFormatShape; tone: "old" | "new" }) {
   const [expanded, setExpanded] = useState(false);
-  const text = formatChangeValue(value);
+  const text = formatChangeValue(value, field);
   const isEmpty = text === EMPTY_VALUE;
   const isLong = !isEmpty && isLongValue(text);
   const toneClass = isEmpty ? "italic text-zinc-400" : tone === "old" ? "text-zinc-500" : "text-zinc-900";

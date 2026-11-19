@@ -1,6 +1,7 @@
 // services/admin-dashboard/lib/edit-history.ts
 // Labels and display values for the participant detail "Edit History" tab.
-import type { Application, SubmissionSectionAdmin } from "@/src/shared/api-client";
+import type { Application, ApplicationEditHistoryEntry, SubmissionSectionAdmin } from "@/src/shared/api-client";
+import { formatFieldValue, type FieldFormatShape } from "@/lib/field-value-format";
 
 export const EMPTY_VALUE = "(empty)";
 
@@ -40,6 +41,17 @@ export function buildChangeLabels(
   ]);
 }
 
+/** Change key -> the form field it edits, so old/new values format like the rest of the page. */
+export function buildChangeFields(sections: SubmissionSectionAdmin[] | undefined): ReadonlyMap<string, FieldFormatShape> {
+  return new Map((sections ?? []).flatMap((s) => s.fields.map((f): [string, FieldFormatShape] => [`${f.store}.${f.name}`, f])));
+}
+
+/** The form field behind a change key; keys the form doesn't define still format by field name (e.g. nationality). */
+export function changeField(key: string, fields: ReadonlyMap<string, FieldFormatShape>): FieldFormatShape {
+  const dot = key.indexOf(".");
+  return fields.get(key) ?? { name: dot === -1 ? key : key.slice(dot + 1) };
+}
+
 /** Human label for a change key; unknown keys fall back to the humanized field name. */
 export function changeLabel(key: string, labels: ReadonlyMap<string, string>): string {
   const known = labels.get(key) ?? FIXED_LABELS[key];
@@ -51,10 +63,16 @@ export function changeLabel(key: string, labels: ReadonlyMap<string, string>): s
   return humanizeKey(field);
 }
 
-/** Old/new JSON value as text: strings as-is, everything else JSON; null, blank and {} / [] read "(empty)". */
-export function formatChangeValue(value: unknown): string {
+/**
+ * Old/new JSON value as text: strings formatted for `field` when given (else as-is), everything else JSON;
+ * null, blank and {} / [] read "(empty)".
+ */
+export function formatChangeValue(value: unknown, field?: FieldFormatShape): string {
   if (value === null || value === undefined) return EMPTY_VALUE;
-  if (typeof value === "string") return value.trim() === "" ? EMPTY_VALUE : value;
+  if (typeof value === "string") {
+    if (value.trim() === "") return EMPTY_VALUE;
+    return field ? formatFieldValue(value, field) : value;
+  }
   if (typeof value === "object") return Object.keys(value).length === 0 ? EMPTY_VALUE : JSON.stringify(value);
   return String(value);
 }
@@ -62,4 +80,23 @@ export function formatChangeValue(value: unknown): string {
 /** True when a value should start clamped behind a "Show more" toggle. */
 export function isLongValue(text: string): boolean {
   return text.length > LONG_VALUE_CHARS || text.split("\n").length > LONG_VALUE_LINES;
+}
+
+/**
+ * Change key -> display text of the `old` value of its earliest admin edit, i.e. the answer as the participant
+ * submitted it, formatted like the rest of the page ("(empty)" when it was blank).
+ */
+export function originalValuesByKey(
+  entries: ReadonlyArray<Pick<ApplicationEditHistoryEntry, "editedAt" | "changes">>,
+  fields: ReadonlyMap<string, FieldFormatShape>,
+): ReadonlyMap<string, string> {
+  // The API sends newest first; sorted anyway so the result doesn't depend on that.
+  const oldestFirst = [...entries].sort((a, b) => Date.parse(a.editedAt) - Date.parse(b.editedAt));
+  const originals = new Map<string, string>();
+  for (const entry of oldestFirst) {
+    for (const change of entry.changes) {
+      if (!originals.has(change.key)) originals.set(change.key, formatChangeValue(change.old, changeField(change.key, fields)));
+    }
+  }
+  return originals;
 }

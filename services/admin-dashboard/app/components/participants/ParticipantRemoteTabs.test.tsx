@@ -19,7 +19,8 @@ const toastError = vi.fn();
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: (m: string) => toastError(m) } }));
 
 function withProviders(searchParams = "") {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // staleTime as in app/providers.tsx, so switching tabs reuses cached queries like the real page.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
   const Nuqs = withNuqsTestingAdapter({ searchParams });
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return (
@@ -110,16 +111,17 @@ describe("Edit History tab", () => {
 
 describe("Payments tab", () => {
   it("loads this application's invoices and toasts a missing proof", async () => {
-    api.listProgramInvoices.mockResolvedValue({ data: [invoice] });
+    api.listProgramInvoices.mockResolvedValue({ data: [invoice], meta: { total: 1 } });
     api.downloadInvoiceProof.mockRejectedValue(new Error("No payment proof available"));
     render(<PaymentsTab programId="p1" applicationId="app-1" />, { wrapper: withProviders() });
 
     expect(await screen.findByText("Registration Fee")).toBeInTheDocument();
-    expect(api.listProgramInvoices).toHaveBeenCalledWith({ programId: "p1", applicationId: "app-1", limit: 50 });
+    expect(api.listProgramInvoices).toHaveBeenCalledWith({ programId: "p1", applicationId: "app-1", limit: 200 });
     expect(screen.getByText("Early bird")).toBeInTheDocument();
     expect(screen.getByText("Blurry receipt")).toBeInTheDocument();
     expect(screen.getByText("Manual Proof Rejected")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open payment/ })).toHaveAttribute("href", "/programs/p1/payments/inv-1");
+    expect(screen.queryByText(/Showing 1 of/)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Download payment proof" }));
     await waitFor(() => expect(toastError).toHaveBeenCalledWith("No payment proof available"));
@@ -127,8 +129,54 @@ describe("Payments tab", () => {
   });
 
   it("shows the empty state", async () => {
-    api.listProgramInvoices.mockResolvedValue({ data: [] });
+    api.listProgramInvoices.mockResolvedValue({ data: [], meta: { total: 0 } });
     render(<PaymentsTab programId="p1" applicationId="app-1" />, { wrapper: withProviders() });
     expect(await screen.findByText("No invoices yet")).toBeInTheDocument();
+  });
+
+  it("says when not every invoice is shown and links to the payments search", async () => {
+    api.listProgramInvoices.mockResolvedValue({ data: [invoice], meta: { total: 250 } });
+    render(<PaymentsTab programId="p1" applicationId="app-1" participantEmail="a+b@ybb.test" />, { wrapper: withProviders() });
+    expect(await screen.findByText(/Showing 1 of 250 invoices/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "See all in Payments" })).toHaveAttribute(
+      "href",
+      "/programs/p1/payments?search=a%2Bb%40ybb.test",
+    );
+  });
+});
+
+describe("As Submitted tab", () => {
+  const submitted = {
+    sections: [
+      {
+        section: "p",
+        label: "Personal",
+        fields: [{ key: "personalData.phone_number", name: "phone_number", label: "Phone", value: "+62811", isLink: false }],
+      },
+    ],
+  };
+  const remote = { programId: "p1", applicationId: "app-1", changeLabels: new Map(), changeFields: new Map() };
+
+  it("reuses the Edit History query: one fetch for both tabs, edited fields marked", async () => {
+    api.getApplicationEditHistory.mockResolvedValue(history);
+    render(<ParticipantProfileTabs data={{ ...tabsData, submitted }} remote={remote} />, {
+      wrapper: withProviders("?tab=submitted"),
+    });
+    expect(await screen.findByText("Edited by admin")).toBeInTheDocument();
+    expect(screen.getByText("(empty)")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit History" }));
+    expect(await screen.findByText("Rina Admin")).toBeInTheDocument();
+    expect(api.getApplicationEditHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it("still renders the form when the history request fails", async () => {
+    api.getApplicationEditHistory.mockRejectedValue(new Error("boom"));
+    render(<ParticipantProfileTabs data={{ ...tabsData, submitted }} remote={remote} />, {
+      wrapper: withProviders("?tab=submitted"),
+    });
+    expect(screen.getByText("+62811")).toBeInTheDocument();
+    await waitFor(() => expect(api.getApplicationEditHistory).toHaveBeenCalled());
+    expect(screen.queryByText("Edited by admin")).toBeNull();
   });
 });

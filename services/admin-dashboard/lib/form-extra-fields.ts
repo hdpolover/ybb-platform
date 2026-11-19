@@ -1,6 +1,7 @@
 // services/admin-dashboard/lib/form-extra-fields.ts
 import type { SubmissionFormFieldAdmin, SubmissionSectionAdmin } from "@/src/shared/api-client";
 import { isHttpUrl } from "@/lib/contact-links";
+import { formatFieldValue } from "@/lib/field-value-format";
 
 export interface ExtraField {
   name: string;
@@ -43,11 +44,8 @@ const COVERED = new Set([
   "essay_guidelines",
 ]);
 
-function displayValue(f: SubmissionFormFieldAdmin): string {
-  const value = f.value.trim();
-  const option = f.options?.find((o) => o.value.trim() === value);
-  return option?.label.trim() || value;
-}
+// Option label, country name, long date or humanized code; free text as entered.
+const displayValue = (f: SubmissionFormFieldAdmin): string => formatFieldValue(f.value, f);
 
 function toExtra(f: SubmissionFormFieldAdmin): ExtraField {
   const value = displayValue(f);
@@ -77,7 +75,7 @@ export function getExtraFieldsByTab(sections: SubmissionSectionAdmin[] | undefin
   };
 }
 
-/** Display value (option label when the field has options) of the first answered field with this name. */
+/** Display value (see formatFieldValue) of the first answered field with this name. */
 export function getFieldDisplayValue(
   sections: SubmissionSectionAdmin[] | undefined,
   name: string,
@@ -89,10 +87,26 @@ export function getFieldDisplayValue(
   return undefined;
 }
 
+/** First form field with one of these names, answered or not: its type and options drive formatFieldValue. */
+export function findFormField(
+  sections: SubmissionSectionAdmin[] | undefined,
+  ...names: string[]
+): SubmissionFormFieldAdmin | undefined {
+  for (const name of names) {
+    for (const section of sections ?? []) {
+      const f = section.fields.find((x) => x.name === name);
+      if (f) return f;
+    }
+  }
+  return undefined;
+}
+
 export interface SubmittedField {
+  /** "<store>.<name>", the key edit-history changes use. */
+  key: string;
   name: string;
   label: string;
-  /** Display value (option label when defined); "" when unanswered. */
+  /** Display value (see formatFieldValue); "" when unanswered. */
   value: string;
   isLink: boolean;
 }
@@ -112,7 +126,7 @@ export function getSubmittedSections(sections: SubmissionSectionAdmin[] | undefi
       .sort((a, b) => a.order - b.order)
       .map((f) => {
         const value = displayValue(f);
-        return { name: f.name, label: f.label, value, isLink: isHttpUrl(value) };
+        return { key: `${f.store}.${f.name}`, name: f.name, label: f.label, value, isLink: isHttpUrl(value) };
       }),
   }));
 }

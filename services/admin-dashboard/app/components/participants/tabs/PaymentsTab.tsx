@@ -16,24 +16,27 @@ import { FollowUpPill, InvoiceStatusPill } from "@/app/components/payments/Invoi
 import { CopyButton } from "../IconActions";
 import { TabError, TabSkeleton } from "./TabLoadStates";
 
-const INVOICE_LIMIT = 50;
+// The API's cap for one application (program-wide lists stop at 100).
+const INVOICE_LIMIT = 200;
 
 interface PaymentsTabProps {
   programId: string;
   applicationId: string;
+  /** Used for the payments-page search link when not every invoice fits. */
+  participantEmail?: string;
 }
 
 /** Mounted only while the tab is open, so the first fetch happens on first open. */
-export function PaymentsTab({ programId, applicationId }: PaymentsTabProps) {
+export function PaymentsTab({ programId, applicationId, participantEmail }: PaymentsTabProps) {
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ["application-invoices", programId, applicationId],
     queryFn: () => listProgramInvoices({ programId, applicationId, limit: INVOICE_LIMIT }),
-    select: (res) => res.data,
+    select: (res) => ({ invoices: res.data, total: res.meta.total }),
   });
 
   if (isPending) return <TabSkeleton label="Loading invoices" />;
   if (isError) return <TabError title="Couldn't load invoices" error={error} onRetry={() => void refetch()} />;
-  if (data.length === 0) {
+  if (data.invoices.length === 0) {
     return (
       <EmptyState
         icon={Receipt}
@@ -42,20 +45,45 @@ export function PaymentsTab({ programId, applicationId }: PaymentsTabProps) {
       />
     );
   }
-  return <InvoiceList invoices={data} programId={programId} />;
+  return (
+    <InvoiceList invoices={data.invoices} total={data.total} programId={programId} participantEmail={participantEmail} />
+  );
 }
 
-export function InvoiceList({ invoices, programId }: { invoices: InvoiceListItem[]; programId: string }) {
+interface InvoiceListProps {
+  invoices: InvoiceListItem[];
+  /** All of this application's invoices; more than `invoices.length` when the list was capped. */
+  total?: number;
+  programId: string;
+  participantEmail?: string;
+}
+
+export function InvoiceList({ invoices, total = invoices.length, programId, participantEmail }: InvoiceListProps) {
   const totals = paidTotalsByCurrency(invoices);
+  const isCapped = total > invoices.length;
+  const email = participantEmail?.trim();
   return (
     <div className="space-y-4">
       <p className="text-sm text-zinc-600">
-        Total paid:{" "}
+        Total paid{isCapped ? " (shown invoices)" : ""}:{" "}
         <span className="font-semibold text-zinc-900">
           {totals.length ? totals.map((t) => formatInvoiceAmount(t.amount, t.currency)).join(" + ") : "nothing yet"}
         </span>
         <span className="text-zinc-400"> · {invoices.length} invoice{invoices.length === 1 ? "" : "s"}</span>
       </p>
+      {isCapped && (
+        <p className="text-xs text-zinc-500">
+          Showing {invoices.length} of {total} invoices.{" "}
+          {email && (
+            <Link
+              href={`/programs/${programId}/payments?search=${encodeURIComponent(email)}`}
+              className="font-medium text-blue-600 hover:underline"
+            >
+              See all in Payments
+            </Link>
+          )}
+        </p>
+      )}
       <ul className="space-y-3">
         {invoices.map((inv) => (
           <InvoiceRow key={inv.id} invoice={inv} programId={programId} />

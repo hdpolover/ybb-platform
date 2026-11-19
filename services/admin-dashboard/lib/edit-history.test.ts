@@ -1,7 +1,65 @@
 // services/admin-dashboard/lib/edit-history.test.ts
 import { describe, expect, it } from "vitest";
 import type { SubmissionSectionAdmin } from "@/src/shared/api-client";
-import { buildChangeLabels, changeLabel, EMPTY_VALUE, formatChangeValue, isLongValue } from "./edit-history";
+import {
+  buildChangeFields,
+  buildChangeLabels,
+  changeField,
+  changeLabel,
+  EMPTY_VALUE,
+  formatChangeValue,
+  isLongValue,
+  originalValuesByKey,
+} from "./edit-history";
+
+describe("formatChangeValue with a field", () => {
+  it("formats strings like the rest of the page", () => {
+    expect(formatChangeValue("PK", { name: "nationality" })).toBe("Pakistan");
+    expect(formatChangeValue("2005-12-29", { name: "birthdate" })).toBe("29 December 2005");
+    expect(formatChangeValue("", { name: "nationality" })).toBe(EMPTY_VALUE);
+  });
+});
+
+describe("changeField", () => {
+  const fields = buildChangeFields([
+    { section: "p", label: "P", fields: [{ name: "gender", label: "Gender", type: "select", store: "personalData", section: "p", isRequired: false, value: "", readonly: false, order: 1, options: [{ value: "m", label: "Male" }] }] },
+  ]);
+
+  it("uses the form field for a known key and the bare field name otherwise", () => {
+    expect(formatChangeValue("m", changeField("personalData.gender", fields))).toBe("Male");
+    expect(changeField("personalData.home_country", fields)).toEqual({ name: "home_country" });
+    expect(changeField("participant", fields)).toEqual({ name: "participant" });
+  });
+});
+
+describe("originalValuesByKey", () => {
+  const entries = [
+    // Newest first, as the API sends them.
+    { editedAt: "2026-11-10T09:00:00Z", changes: [{ key: "personalData.nationality", old: "ID", new: "MY" }] },
+    {
+      editedAt: "2026-11-01T09:00:00Z",
+      changes: [
+        { key: "personalData.nationality", old: "PK", new: "ID" },
+        { key: "personalData.city", old: null, new: "Lahore" },
+      ],
+    },
+  ];
+
+  it("takes the old value of the earliest edit per key, formatted", () => {
+    const originals = originalValuesByKey(entries, new Map());
+    expect(originals.get("personalData.nationality")).toBe("Pakistan");
+    expect(originals.get("personalData.city")).toBe(EMPTY_VALUE);
+    expect(originals.has("personalData.gender")).toBe(false);
+  });
+
+  it("does not depend on the API's ordering", () => {
+    expect(originalValuesByKey([...entries].reverse(), new Map()).get("personalData.nationality")).toBe("Pakistan");
+  });
+
+  it("is empty without history", () => {
+    expect(originalValuesByKey([], new Map()).size).toBe(0);
+  });
+});
 
 const field = (name: string, label: string, store: "personalData" | "essayAnswers") => ({
   name, label, store, type: "text", section: "s", isRequired: false, value: "", readonly: false, order: 1,
