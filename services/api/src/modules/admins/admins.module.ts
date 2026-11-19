@@ -15,6 +15,7 @@ import { RestoreAdminHandler } from './application/commands/handlers/restore-adm
 import { SupportAccessService } from './application/services/support-access.service';
 import { AdminAccessControlService } from './application/services/admin-access-control.service';
 import { AdminPasswordLinkService } from './application/services/admin-password-link.service';
+import { AdminInviteService } from './application/services/admin-invite.service';
 
 import { AuthModule } from '../auth/auth.module';
 
@@ -44,7 +45,8 @@ import { AuthModule } from '../auth/auth.module';
         SupportAccessService,
         AdminAccessControlService,
         AdminPasswordLinkService,
+        AdminInviteService,
     ],
-    exports: [AdminAccessControlService, AdminPasswordLinkService, CreateAdminHandler],
+    exports: [AdminAccessControlService, AdminPasswordLinkService, AdminInviteService, CreateAdminHandler],
 })
 export class AdminsModule { }

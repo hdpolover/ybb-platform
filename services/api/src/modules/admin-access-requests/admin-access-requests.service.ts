@@ -1,12 +1,10 @@
 // services/api/src/modules/admin-access-requests/admin-access-requests.service.ts
-import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AdminAccessControlService } from '../admins/application/services/admin-access-control.service';
-import { AdminPasswordLinkService } from '../admins/application/services/admin-password-link.service';
-import { CreateAdminHandler } from '../admins/application/commands/handlers/create-admin.handler';
-import { CreateAdminCommand } from '../admins/application/commands/create-admin.command';
+import { AdminInviteService, InviteAdminResult } from '../admins/application/services/admin-invite.service';
 import { ADMIN_DIVISIONS, divisionByKey, isPlatformTierRole } from './admin-divisions';
 import { CreateAccessRequestDto } from './dto/create-access-request.dto';
 import { ApproveAccessRequestDto } from './dto/approve-access-request.dto';
@@ -25,13 +23,10 @@ const unique = <T>(values: T[]) => Array.from(new Set(values));
 
 @Injectable()
 export class AdminAccessRequestsService {
-  private readonly logger = new Logger(AdminAccessRequestsService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: AdminAccessControlService,
-    private readonly createAdmin: CreateAdminHandler,
-    private readonly links: AdminPasswordLinkService,
+    private readonly invites: AdminInviteService,
   ) {}
 
   async getOptions() {
@@ -174,37 +169,6 @@ export class AdminAccessRequestsService {
       throw new ConflictException('This access request is not pending.');
     }
 
-    // Case-insensitive on purpose: CreateAdminHandler's own duplicate check is exact-match.
-    const existing = await this.prisma.user.findFirst({
-      where: { email: { equals: request.email, mode: 'insensitive' }, admin: { isNot: null } },
-      select: { id: true },
-    });
-    if (existing) {
-      throw new ConflictException('This email already belongs to an admin. Use "Send password link" instead.');
-    }
-
-    await this.access.assertCanCreateAdmin(currentUser, dto.roleId);
-
-    const role = await this.prisma.adminRole.findFirst({
-      where: { id: dto.roleId, deletedAt: null, isActive: true },
-      select: { id: true, name: true },
-    });
-    if (!role) throw new BadRequestException('Selected role was not found or is inactive.');
-
-    const programIds = unique(dto.programIds);
-    const found = programIds.length
-      ? await this.prisma.program.findMany({
-          where: { id: { in: programIds }, isActive: true, deletedAt: null },
-          select: { id: true, brandId: true },
-        })
-      : [];
-    if (found.length !== programIds.length) {
-      throw new BadRequestException('One or more selected programs were not found or are inactive.');
-    }
-
-    const homeBrandId = await this.resolveHomeBrandId(found.find((p) => p.id === programIds[0])?.brandId);
-    const existingUserId = await this.findAttachableUserId(request.email, homeBrandId);
-
     // Claim first: only one concurrent approve gets count 1, so only one creates the admin.
     const claimed = await this.prisma.adminAccessRequest.updateMany({
       where: { id, status: 'pending' },
@@ -212,15 +176,14 @@ export class AdminAccessRequestsService {
     });
     if (claimed.count === 0) throw new ConflictException('This access request is not pending.');
 
-    let admin: { id: string; userId: string };
+    let invited: InviteAdminResult;
     try {
-      // password null: the handler leaves the user with no usable credential (an attached
-      // participant account is wiped in the same transaction as the admin row).
-      admin = await this.createAdmin.execute(
-        new CreateAdminCommand(
-          request.email, request.fullName, null, reviewerId, role.id, [], programIds, homeBrandId, existingUserId,
-        ),
-      );
+      invited = await this.invites.invite(currentUser, {
+        email: request.email,
+        fullName: request.fullName,
+        roleId: dto.roleId,
+        programIds: dto.programIds,
+      });
     } catch (error) {
       await this.prisma.adminAccessRequest.updateMany({
         where: { id, status: 'approved', createdAdminId: null },
@@ -229,50 +192,8 @@ export class AdminAccessRequestsService {
       throw error;
     }
 
-    await this.prisma.adminAccessRequest.update({ where: { id }, data: { createdAdminId: admin.id } });
-
-    // The admin exists and cannot be un-created here: a mail failure is reported, not thrown,
-    // so the approver can use "Send password link" instead of retrying into a 409.
-    let emailSent = true;
-    try {
-      await this.links.issue({
-        userId: admin.userId,
-        email: request.email,
-        fullName: request.fullName,
-        kind: 'invite',
-        roleName: role.name,
-      });
-    } catch (error) {
-      emailSent = false;
-      // Never log the event payload: it carries the raw token.
-      this.logger.error(`Invite link failed for new admin ${admin.id}: ${error instanceof Error ? error.message : 'unknown error'}`);
-    }
-    return { adminId: admin.id, roleId: role.id, programIds, emailSent };
-  }
-
-  /** Brand of the first approved program; with no programs, the brand create-admin defaults to. */
-  private async resolveHomeBrandId(firstProgramBrandId: string | undefined): Promise<string> {
-    if (firstProgramBrandId) return firstProgramBrandId;
-    const fallback = await this.prisma.brand.findFirst({ select: { id: true } });
-    if (!fallback) throw new BadRequestException('No brands available to assign to admin.');
-    return fallback.id;
-  }
-
-  /**
-   * Team members are often ex-participants: the email may already have a user row in the
-   * target brand. Attach the admin to it (admin login finds users by email across brands).
-   * A deactivated or deleted row must be reactivated by hand, never silently revived.
-   */
-  private async findAttachableUserId(email: string, brandId: string): Promise<string | undefined> {
-    const sameBrand = { email: { equals: email, mode: 'insensitive' as const }, brandId };
-    const live = await this.prisma.user.findFirst({ where: sameBrand, select: { id: true, isActive: true } });
-    const deleted = live ? null : await this.prisma.user.findFirst({ where: { ...sameBrand, deletedAt: { not: null } }, select: { id: true } });
-    if (!live && !deleted) return undefined;
-    if (live?.isActive) return live.id;
-    const brand = await this.prisma.brand.findUnique({ where: { id: brandId }, select: { name: true } });
-    throw new ConflictException(
-      `This email's account in ${brand?.name ?? 'the target brand'} is deactivated; reactivate it first.`,
-    );
+    await this.prisma.adminAccessRequest.update({ where: { id }, data: { createdAdminId: invited.adminId } });
+    return invited;
   }
 
   async reject(currentUser: CurrentUserData, id: string, reason?: string) {

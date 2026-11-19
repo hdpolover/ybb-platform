@@ -26,6 +26,8 @@ import { ChangeType } from '@prisma/client';
 import { SupportAccessService } from '../application/services/support-access.service';
 import { AdminAccessControlService } from '../application/services/admin-access-control.service';
 import { AdminPasswordLinkService } from '../application/services/admin-password-link.service';
+import { AdminInviteService } from '../application/services/admin-invite.service';
+import { InviteAdminDto, InviteCheckQueryDto } from './dto/invite-admin.dto';
 import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import {
     CreateSupportImpersonationDto,
@@ -53,6 +55,7 @@ export class AdminsController {
         private readonly adminAccessControl: AdminAccessControlService,
         private readonly prisma: PrismaService,
         private readonly passwordLinks: AdminPasswordLinkService,
+        private readonly invites: AdminInviteService,
     ) { }
 
     @Post()
@@ -78,6 +81,34 @@ export class AdminsController {
             dto.programIds,
         );
         return this.createAdminHandler.execute(command);
+    }
+
+    @Post('invite')
+    @UseGuards(AdminScopeGuard)
+    @ScopedBy('platform')
+    @ApiOperation({ summary: 'Invite an admin: create with no password and email a single-use set-password link' })
+    @ApiResponse({ status: 201, description: '{ adminId, roleId, programIds, emailSent }' })
+    @AuditTrail({ entityType: 'Admin', action: ChangeType.create })
+    async invite(
+        @Body() dto: InviteAdminDto,
+        @CurrentUser() currentUser: CurrentUserData,
+    ) {
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        return this.invites.invite(currentUser, dto);
+    }
+
+    // Declared before :id so "invite-check" is not read as an admin id.
+    @Get('invite-check')
+    @UseGuards(AdminScopeGuard)
+    @ScopedBy('platform')
+    @ApiOperation({ summary: 'Does this email already belong to an admin or a participant account?' })
+    @ApiResponse({ status: 200, description: '{ existingAdminId, participantBrands }' })
+    async inviteCheck(
+        @Query() query: InviteCheckQueryDto,
+        @CurrentUser() currentUser: CurrentUserData,
+    ) {
+        await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        return this.invites.check(query.email);
     }
 
     @Get()
