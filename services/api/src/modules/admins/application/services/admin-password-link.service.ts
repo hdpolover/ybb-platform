@@ -11,6 +11,9 @@ export const ADMIN_PASSWORD_LINK_TTL_MS = 72 * 60 * 60 * 1000;
 // Bound by the existing 'user.#' binding in services/notification/src/main.ts.
 export const ADMIN_PASSWORD_LINK_EVENT = 'user.admin-password-link';
 
+/** Self-service "forgot password" links are short-lived: the admin is at the keyboard. */
+export const ADMIN_SELF_RESET_TTL_MS = 60 * 60 * 1000;
+
 export type AdminPasswordLinkKind = 'invite' | 'reset';
 
 export type IssueAdminPasswordLinkParams = {
@@ -21,6 +24,10 @@ export type IssueAdminPasswordLinkParams = {
   roleName: string | null;
   /** "Send password link" on an existing admin: kill the old credential and every session first. */
   invalidateCredentials?: boolean;
+  /** Link lifetime; defaults to the 72h invite window. */
+  ttlMs?: number;
+  /** The admin asked for this themselves: the mail says the old password still works until the link is used. */
+  selfRequested?: boolean;
 };
 
 /**
@@ -39,13 +46,14 @@ export class AdminPasswordLinkService {
   async issue(params: IssueAdminPasswordLinkParams): Promise<void> {
     const token = randomBytes(32).toString('hex');
     const now = new Date();
+    const ttlMs = params.ttlMs ?? ADMIN_PASSWORD_LINK_TTL_MS;
 
     const writes = [
       this.prisma.user.update({
         where: { id: params.userId },
         data: {
           passwordResetToken: hashToken(token),
-          passwordResetExpires: new Date(now.getTime() + ADMIN_PASSWORD_LINK_TTL_MS),
+          passwordResetExpires: new Date(now.getTime() + ttlMs),
           ...(params.invalidateCredentials
             ? { passwordHash: null, failedLoginAttempts: 0, lockedUntil: null }
             : {}),
@@ -69,6 +77,8 @@ export class AdminPasswordLinkService {
       token,
       kind: params.kind,
       roleName: params.roleName,
+      expiresInHours: Math.max(1, Math.round(ttlMs / 3_600_000)),
+      selfRequested: params.selfRequested === true,
       // Platform brand block: without one the notification falls back to FRONTEND_URL links.
       brand: { name: 'YBB Platform' },
     });
