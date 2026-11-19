@@ -2,7 +2,8 @@
 //
 // Rank rule for admin management. Personas are prod admins + admin_roles as of
 // 2026-11-19: two Super Admins (999), one "Admin" (800, can_manage_admins,
-// admin.manage), Project Manager (level 1 but admin.manage), scoped roles below.
+// admin.manage), Project Manager (level 1 but platform perms, so platform tier),
+// scoped roles below. Rank is tier (super > platform > scoped), then level.
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -27,6 +28,7 @@ const ROLES = {
   },
   digitalMarketing: { id: 'role-dm', name: 'Digital Marketing', permissions: ['participants:read'] },
   programAdmin: { id: 'role-program-admin', name: 'Program Admin', permissions: ['program:read', 'applications:read'] },
+  reviewer: { id: 'role-reviewer', name: 'Reviewer', permissions: ['review:read'] },
   wildcard: { id: 'role-wildcard', name: 'Ops', permissions: ['*'] },
 } satisfies Record<string, Role>;
 
@@ -56,6 +58,8 @@ const ADMINS = {
     customPermissions: ['brand.manage', 'admin.manage', 'program:read'],
   }),
   projectManager: persona('pm', 1, ROLES.projectManager),
+  projectManagerB: persona('pm-b', 1, ROLES.projectManager),
+  reviewer: persona('reviewer', 1, ROLES.reviewer, { adminBrands: [{ permissions: ['review:read'] }] }),
   digitalMarketing: persona('dm', 1, ROLES.digitalMarketing),
   programAdmin: persona('program-admin', 3, ROLES.programAdmin),
 };
@@ -149,7 +153,10 @@ describe('AdminAccessControlService rank rule', () => {
 
     it('may still create roles with functional permissions it does not hold itself', async () => {
       await expect(
-        service.assertCanWriteRole(actingAs('admin'), null, { name: 'Reviewer', permissions: ['review:read', 'documents:read'] }),
+        service.assertCanWriteRole(actingAs('admin'), null, {
+          name: 'Document Reviewer',
+          permissions: ['review:read', 'documents:read'],
+        }),
       ).resolves.toBeUndefined();
     });
 
@@ -214,23 +221,78 @@ describe('AdminAccessControlService rank rule', () => {
     });
   });
 
-  describe('Project Manager (level 1, admin.manage)', () => {
-    it('cannot reset the Admin (800) password', async () => {
+  describe('Admin (800) against the Project Manager (platform tier, level 1)', () => {
+    it.each(MUTATIONS)('allows %s', async (action) => {
       await expect(
-        service.assertCanManageAdmin(actingAs('projectManager'), ADMINS.admin.id, 'reset-password'),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+        service.assertCanManageAdmin(actingAs('admin'), ADMINS.projectManager.id, action),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('Project Manager (platform tier, level 1)', () => {
+    it.each(MUTATIONS)('cannot %s the Admin (800)', async (action) => {
+      await expect(
+        service.assertCanManageAdmin(actingAs('projectManager'), ADMINS.admin.id, action),
+      ).rejects.toThrow('You cannot manage an administrator at or above your own rank.');
     });
 
-    it('cannot manage a peer at the same level', async () => {
+    it('cannot manage another Project Manager (same tier, same level)', async () => {
       await expect(
-        service.assertCanManageAdmin(actingAs('projectManager'), ADMINS.digitalMarketing.id, 'delete'),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+        service.assertCanManageAdmin(actingAs('projectManager'), ADMINS.projectManagerB.id, 'reset-password'),
+      ).rejects.toThrow('You cannot manage an administrator at or above your own rank.');
     });
 
-    it('cannot create admins, since a new admin starts at level 1', async () => {
-      await expect(service.assertCanCreateAdmin(actingAs('projectManager'))).rejects.toBeInstanceOf(
-        ForbiddenException,
+    it.each(['digitalMarketing', 'programAdmin', 'reviewer'] as const)('may manage scoped admin %s', async (target) => {
+      for (const action of MUTATIONS) {
+        await expect(
+          service.assertCanManageAdmin(actingAs('projectManager'), ADMINS[target].id, action),
+        ).resolves.toBeUndefined();
+      }
+    });
+
+    it('may move a scoped admin to another scoped role', async () => {
+      await expect(
+        service.assertCanManageAdmin(actingAs('projectManager'), ADMINS.digitalMarketing.id, 'update', {
+          roleId: ROLES.programAdmin.id,
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('cannot promote a scoped admin into the platform tier', async () => {
+      await expect(
+        service.assertCanManageAdmin(actingAs('projectManager'), ADMINS.digitalMarketing.id, 'update', {
+          roleId: ROLES.projectManager.id,
+        }),
+      ).rejects.toThrow('You cannot manage an administrator at or above your own rank.');
+    });
+
+    it.each([undefined, ROLES.digitalMarketing.id, ROLES.programAdmin.id, ROLES.reviewer.id])(
+      'may create a scoped admin (role %s)',
+      async (roleId) => {
+        await expect(service.assertCanCreateAdmin(actingAs('projectManager'), roleId)).resolves.toBeUndefined();
+      },
+    );
+
+    it.each([ROLES.projectManager.id, ROLES.admin.id])('cannot create a platform-tier admin (role %s)', async (roleId) => {
+      await expect(service.assertCanCreateAdmin(actingAs('projectManager'), roleId)).rejects.toThrow(
+        'You cannot create an administrator at or above your own rank.',
       );
+    });
+  });
+
+  describe('scoped admins', () => {
+    it.each(['digitalMarketing', 'programAdmin', 'reviewer'] as const)(
+      '%s is refused at the manage-admins and assign-roles gates',
+      async (name) => {
+        await expect(service.assertCanManageAdmins(actingAs(name))).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(service.assertCanAssignRoles(actingAs(name))).rejects.toBeInstanceOf(ForbiddenException);
+      },
+    );
+
+    it('cannot manage a scoped peer at the same level', async () => {
+      await expect(
+        service.assertCanManageAdmin(actingAs('digitalMarketing'), ADMINS.reviewer.id, 'delete'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
 
@@ -288,6 +350,107 @@ describe('AdminAccessControlService rank rule', () => {
           name: 'Program Admin',
           permissions: ['program:read', 'program:write'],
         }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('Admin may rename the Project Manager role without holding platform.manage', async () => {
+      await expect(
+        service.assertCanWriteRole(actingAs('admin'), ROLES.projectManager, {
+          name: 'Programme Lead',
+          permissions: ROLES.projectManager.permissions,
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('Admin may drop permissions from the Project Manager role', async () => {
+      await expect(
+        service.assertCanWriteRole(actingAs('admin'), ROLES.projectManager, {
+          name: 'Project Manager',
+          permissions: ['platform_access', 'platform.manage'],
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('Admin cannot ADD platform.manage to a role on update', async () => {
+      await expect(
+        service.assertCanWriteRole(actingAs('admin'), ROLES.programAdmin, {
+          name: 'Program Admin',
+          permissions: [...ROLES.programAdmin.permissions, 'platform.manage'],
+        }),
+      ).rejects.toThrow('You cannot grant permissions you do not hold: platform.manage.');
+    });
+
+    it('Admin cannot create a role carrying platform.manage (create checks every permission)', async () => {
+      await expect(
+        service.assertCanWriteRole(actingAs('admin'), null, {
+          name: 'PM Copy',
+          permissions: ROLES.projectManager.permissions,
+        }),
+      ).rejects.toThrow('You cannot grant permissions you do not hold: platform.manage.');
+    });
+
+    it('Admin cannot move a lower admin onto the Project Manager role (assignment checks the whole role)', async () => {
+      await expect(
+        service.assertCanManageAdmin(actingAs('admin'), ADMINS.digitalMarketing.id, 'update', {
+          roleId: ROLES.projectManager.id,
+        }),
+      ).rejects.toThrow('You cannot grant permissions you do not hold: platform.manage.');
+    });
+
+    it('Project Manager cannot lift a scoped role into the platform tier, even with a permission it holds', async () => {
+      await expect(
+        service.assertCanWriteRole(actingAs('projectManager'), ROLES.digitalMarketing, {
+          name: 'Digital Marketing',
+          permissions: [...ROLES.digitalMarketing.permissions, 'platform_access'],
+        }),
+      ).rejects.toThrow(/held by an administrator at or above your own rank/);
+    });
+
+    it('Project Manager may edit a scoped role', async () => {
+      await expect(
+        service.assertCanWriteRole(actingAs('projectManager'), ROLES.digitalMarketing, {
+          name: 'Digital Marketing',
+          permissions: ['participants:read', 'participants:export'],
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it.each(['Super  Admin', 'Super\tAdmin', 'super admin'])(
+      'Admin cannot create a role named %j (logs in as super_admin)',
+      async (name) => {
+        await expect(service.assertCanWriteRole(actingAs('admin'), null, { name, permissions: [] })).rejects.toThrow(
+          'Only a super admin can create or change a super-admin role.',
+        );
+      },
+    );
+
+    it.each(['Program Manager', 'admin', 'Reviewer', 'Super-Admin', 'OWNER'])(
+      'Admin cannot create or rename to the reserved name %j',
+      async (name) => {
+        await expect(
+          service.assertCanWriteRole(actingAs('admin'), null, { name, permissions: [] }),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(
+          service.assertCanWriteRole(actingAs('admin'), ROLES.digitalMarketing, { name, permissions: [] }),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+      },
+    );
+
+    it('Program Manager is rejected as a reserved name, not a super-admin one', async () => {
+      await expect(
+        service.assertCanWriteRole(actingAs('admin'), null, { name: 'Program Manager', permissions: [] }),
+      ).rejects.toThrow('Only a super admin can give a role a reserved name.');
+    });
+
+    it('Admin may still edit an existing role whose name is already reserved, if the name stays', async () => {
+      await expect(
+        service.assertCanWriteRole(actingAs('admin'), ROLES.reviewer, { name: 'Reviewer', permissions: ['review:write'] }),
+      ).resolves.toBeUndefined();
+    });
+
+    it('Super Admin may use a reserved name', async () => {
+      await expect(
+        service.assertCanWriteRole(actingAs('superA'), null, { name: 'Program Manager', permissions: [] }),
       ).resolves.toBeUndefined();
     });
 
@@ -373,5 +536,11 @@ describe('admin controllers enforce the rank rule before writing', () => {
       ForbiddenException,
     );
     expect(prisma.adminRole.update).not.toHaveBeenCalled();
+  });
+
+  it('Admin cannot create a role whose token slug is super_admin', async () => {
+    await expect(roles.createRole(asAdmin, { name: 'Super\tAdmin', permissions: [] })).rejects.toThrow(
+      'Only a super admin can create or change a super-admin role.',
+    );
   });
 });

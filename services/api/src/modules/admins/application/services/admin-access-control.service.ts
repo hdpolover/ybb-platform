@@ -6,10 +6,11 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
-import { normalizePermissions } from '@shared/admin-access-response';
+import { adminRoleSlug, normalizePermissions } from '@shared/admin-access-response';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import {
   getAdminRank,
+  isReservedRoleName,
   isSuperAdminRole,
   isSuperAdminTier,
   RankedRole,
@@ -150,8 +151,11 @@ export class AdminAccessControlService {
   /**
    * Rank ceiling for /admin-roles writes. Editing a role edits every admin
    * holding it, so a non-super caller may not touch a super-admin role, mint
-   * one, or change a role held by anyone they do not outrank (their own role
-   * included, which is how they would otherwise raise their own permissions).
+   * one, give a role a name whose token slug is a UserRole value, or change a
+   * role held by anyone they do not outrank, before or after the edit (their
+   * own role included, which is how they would otherwise raise their own
+   * permissions). The grant ceiling covers only what an edit adds, so renaming
+   * a role does not require holding every permission already on it.
    */
   async assertCanWriteRole(
     currentUser: CurrentUserData,
@@ -164,7 +168,11 @@ export class AdminAccessControlService {
     if (isSuperAdminRole(current) || isSuperAdminRole(next)) {
       throw new ForbiddenException('Only a super admin can create or change a super-admin role.');
     }
-    this.assertGrantsWithinActor(actor, next);
+    const isNameChange = !!next?.name && adminRoleSlug(next.name.trim()) !== adminRoleSlug((current?.name ?? '').trim());
+    if (isNameChange && isReservedRoleName(next?.name)) {
+      throw new ForbiddenException('Only a super admin can give a role a reserved name.');
+    }
+    this.assertGrantsWithinActor(actor, next, current);
 
     if (!current) return;
 
@@ -172,6 +180,8 @@ export class AdminAccessControlService {
       where: { roleId: current.id, deletedAt: null },
       select: {
         accessLevel: true,
+        canManageAdmins: true,
+        canAssignRoles: true,
         customPermissions: true,
         adminBrands: { select: { permissions: true } },
         adminPrograms: { select: { permissions: true } },
@@ -179,7 +189,9 @@ export class AdminAccessControlService {
     });
 
     const actorRank = getAdminRank(actor);
-    if (holders.some((holder) => getAdminRank({ ...holder, role: current }) >= actorRank)) {
+    const holderRank = (holder: (typeof holders)[number]) =>
+      Math.max(getAdminRank({ ...holder, role: current }), next ? getAdminRank({ ...holder, role: next }) : 0);
+    if (holders.some((holder) => holderRank(holder) >= actorRank)) {
       throw new ForbiddenException(
         'You cannot change a role held by an administrator at or above your own rank, including your own.',
       );
@@ -211,10 +223,10 @@ export class AdminAccessControlService {
     return admin;
   }
 
-  private assertGrantsWithinActor(actor: AdminAccessSnapshot, role: RankedRole): void {
-    const held = this.permissionSet(actor);
-    const missing = normalizePermissions(role?.permissions)
-      .map((permission) => permission.trim().toLowerCase())
+  /** `alreadyGranted`: the role as it stands, for an edit; only what the edit adds is checked. */
+  private assertGrantsWithinActor(actor: AdminAccessSnapshot, role: RankedRole, alreadyGranted?: RankedRole): void {
+    const held = new Set([...this.permissionSet(actor), ...this.lowerPermissions(alreadyGranted?.permissions)]);
+    const missing = this.lowerPermissions(role?.permissions)
       // Any wildcard counts as privileged too: matching is exact today, but a
       // future prefix matcher must not turn a granted "roles.*" into a bypass.
       .filter((permission) => (PRIVILEGED_PERMISSIONS.includes(permission) || permission.endsWith('*')) && !held.has(permission));
@@ -223,15 +235,17 @@ export class AdminAccessControlService {
     }
   }
 
+  private lowerPermissions(value: unknown): string[] {
+    return normalizePermissions(value).map((permission) => permission.trim().toLowerCase());
+  }
+
   private permissionSet(access: AdminAccessSnapshot): Set<string> {
-    return new Set(
-      [
-        ...normalizePermissions(access.role?.permissions),
-        ...normalizePermissions(access.customPermissions),
-        ...access.adminBrands.flatMap((assignment) => normalizePermissions(assignment.permissions)),
-        ...access.adminPrograms.flatMap((assignment) => normalizePermissions(assignment.permissions)),
-      ].map((permission) => permission.trim().toLowerCase()),
-    );
+    return new Set([
+      ...this.lowerPermissions(access.role?.permissions),
+      ...this.lowerPermissions(access.customPermissions),
+      ...access.adminBrands.flatMap((assignment) => this.lowerPermissions(assignment.permissions)),
+      ...access.adminPrograms.flatMap((assignment) => this.lowerPermissions(assignment.permissions)),
+    ]);
   }
 
   private hasPermission(access: AdminAccessSnapshot, candidates: string[]): boolean {
