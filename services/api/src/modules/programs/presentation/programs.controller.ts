@@ -389,10 +389,11 @@ export class ProgramsController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ScopedBy('program', 'id')
-  @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.programConfig], 'id')
+  // Deleting a whole program/edition is destructive and cross-cutting (applications,
+  // invoices, LOAs): platform admins only, never a program-scoped program:write role.
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete program (Admin only)' })
   @ApiResponse({ status: 200, description: 'Program deleted successfully' })
