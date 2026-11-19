@@ -12,6 +12,7 @@ import {
     HttpException,
     BadRequestException,
     NotFoundException,
+    ForbiddenException,
     Res,
     Logger
 } from '@nestjs/common';
@@ -30,6 +31,7 @@ import { ResendReceiptDto } from './dto/resend-receipt.dto';
 import { FileServiceClient } from '@modules/files/infrastructure/clients/file-service.client';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { assertProgramAccess, getRequestAdminScope, orNotFound } from '@shared/guards/admin-scope.guard';
 import { ChangeType, PaymentStatus, Prisma } from '@prisma/client';
 
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
@@ -132,7 +134,7 @@ export class PaymentAdminController {
     @ApiQuery({ name: 'sortBy', required: false, description: 'createdAt | paidAt | amount | updatedAt' })
     @ApiQuery({ name: 'sortOrder', required: false, description: 'asc | desc' })
     @ApiQuery({ name: 'cursor', required: false, description: 'Opaque cursor token for seek pagination' })
-    async listInvoices(@Query() query: Record<string, string>) {
+    async listInvoices(@Query() query: Record<string, string>, @CurrentUser() user?: CurrentUserData) {
         const {
             programId,
             applicationId,
@@ -159,6 +161,7 @@ export class PaymentAdminController {
         } = query;
 
         if (!programId) throw new HttpException('programId is required', 400);
+        await this.assertCanAccessProgram(user, programId);
 
         // Validated here (before the obsolete-invoice query) so an invalid payerType
         // 400s immediately rather than after an unnecessary DB round trip.
@@ -585,8 +588,12 @@ export class PaymentAdminController {
     @ApiOperation({ summary: 'Get paid invoices grouped by country, ranked (Admin)' })
     @ApiQuery({ name: 'programId', required: true })
     @ApiResponse({ status: 200, description: 'Paid invoice count and per-currency amount by country, ranked' })
-    async getPaymentsByCountry(@Query('programId') programId: string): Promise<PaymentsByCountryResponse> {
+    async getPaymentsByCountry(
+        @Query('programId') programId: string,
+        @CurrentUser() user?: CurrentUserData,
+    ): Promise<PaymentsByCountryResponse> {
         if (!programId) throw new HttpException('programId is required', 400);
+        await this.assertCanAccessProgram(user, programId);
         return this.buildPaymentsByCountry(programId);
     }
 
@@ -641,10 +648,11 @@ export class PaymentAdminController {
 
     @Get('invoices/:id')
     @ApiOperation({ summary: 'Get invoice detail (Admin)' })
-    async getInvoice(@Param('id') id: string) {
+    async getInvoice(@Param('id') id: string, @CurrentUser() user?: CurrentUserData) {
         // Guard non-UUID ids (e.g. a gateway timestamp passed as :id) so Prisma's
         // uuid cast doesn't throw an unhandled 500 — surface a clean 404 instead.
         if (!this.isValidUUID(id)) throw new HttpException('Invoice not found', 404);
+        await this.assertCanAccessInvoices(user, [id]);
         // The invoice lookup and the payment-method catalog fetch don't depend
         // on each other, so run them concurrently instead of back-to-back.
         const [invoice, paymentMethodCatalog] = await Promise.all([
@@ -733,8 +741,9 @@ export class PaymentAdminController {
 
     @Get('invoices/:id/proof')
     @ApiOperation({ summary: 'Download payment proof file (Admin)' })
-    async downloadInvoiceProof(@Param('id') id: string, @Res() res: Response) {
+    async downloadInvoiceProof(@Param('id') id: string, @Res() res: Response, @CurrentUser() user?: CurrentUserData) {
         if (!this.isValidUUID(id)) throw new HttpException('Invoice not found', 404);
+        await this.assertCanAccessInvoices(user, [id]);
 
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id },
@@ -869,6 +878,7 @@ export class PaymentAdminController {
             throw new HttpException('Reason is required for rejection', 400);
         }
         if (!this.isValidUUID(id)) throw new HttpException('Invoice not found', 404);
+        await this.assertCanAccessInvoices(user, [id]);
 
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id },
@@ -1138,6 +1148,7 @@ export class PaymentAdminController {
         @Body() body: NotifyPaymentIssueDto,
         @CurrentUser() user: CurrentUserData,
     ): Promise<{ sent: number; skipped: { invoiceId: string; reason: string }[] }> {
+        await this.assertCanAccessInvoices(user, body.invoiceIds);
         const invoices = await this.prisma.applicationInvoice.findMany({
             where: { id: { in: body.invoiceIds } },
             select: {
@@ -1287,6 +1298,7 @@ export class PaymentAdminController {
         @Body() body: ResendReceiptDto,
         @CurrentUser() user: CurrentUserData,
     ): Promise<{ sent: boolean; email: string }> {
+        await this.assertCanAccessInvoices(user, [body.invoiceId]);
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id: body.invoiceId },
             select: {
@@ -1413,6 +1425,7 @@ export class PaymentAdminController {
             throw new HttpException('Invalid payment status', 400);
         }
         if (!this.isValidUUID(id)) throw new HttpException('Invoice not found', 404);
+        await this.assertCanAccessInvoices(user, [id]);
 
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id },
@@ -1790,6 +1803,7 @@ export class PaymentAdminController {
     @ApiBody({ type: CreatePaymentMethodDto })
     @ApiResponse({ status: 201, description: 'Payment method created' })
     async createMethod(@Body() body: CreatePaymentMethodDto, @CurrentUser() user: CurrentUserData) {
+        await this.assertPlatformScope(user);
         try {
             if (body.icon) {
                 body.icon = await this.resolveIconUrl(body.icon, user);
@@ -1847,6 +1861,7 @@ export class PaymentAdminController {
     @ApiBody({ type: UpdatePaymentMethodDto })
     @ApiResponse({ status: 200, description: 'Payment method updated' })
     async updateMethod(@Param('id') id: string, @Body() body: UpdatePaymentMethodDto, @CurrentUser() user: CurrentUserData) {
+        await this.assertPlatformScope(user);
         try {
             if (body.icon) {
                 body.icon = await this.resolveIconUrl(body.icon, user);
@@ -1869,7 +1884,8 @@ export class PaymentAdminController {
     @AuditTrail({ entityType: 'PaymentMethod', action: ChangeType.delete })
     @ApiOperation({ summary: 'Delete payment method' })
     @ApiResponse({ status: 200, description: 'Payment method deleted' })
-    async deleteMethod(@Param('id') id: string) {
+    async deleteMethod(@Param('id') id: string, @CurrentUser() user?: CurrentUserData) {
+        await this.assertPlatformScope(user);
         try {
             const { data } = await this.paymentServiceClient.delete(`/api/v1/payment-methods/${id}`, {
                 headers: this.buildInternalHeaders(),
@@ -1897,8 +1913,9 @@ export class PaymentAdminController {
     @ApiOperation({ summary: 'List merged (fallback-aware) payment methods for a program (Admin)' })
     @ApiParam({ name: 'programId', description: 'Program ID (UUID)' })
     @ApiResponse({ status: 200, description: 'Merged program payment methods list' })
-    async listProgramMethods(@Param('programId') programId: string) {
+    async listProgramMethods(@Param('programId') programId: string, @CurrentUser() user?: CurrentUserData) {
         if (!this.isValidUUID(programId)) throw new HttpException('Invalid program id', 400);
+        await this.assertCanAccessProgram(user, programId);
         try {
             const cacheKey = CACHE_KEYS.PROGRAM_PAYMENT_METHODS(programId);
 
@@ -1933,9 +1950,11 @@ export class PaymentAdminController {
         @Param('programId') programId: string,
         @Param('methodId') methodId: string,
         @Body() body: UpsertProgramMethodDto,
+        @CurrentUser() user?: CurrentUserData,
     ) {
         if (!this.isValidUUID(programId)) throw new HttpException('Invalid program id', 400);
         if (!this.isValidUUID(methodId)) throw new HttpException('Invalid payment method id', 400);
+        await this.assertCanAccessProgram(user, programId);
         try {
             const { data } = await this.paymentServiceClient.put(
                 `/api/v1/programs/${programId}/payment-methods/${methodId}`,
@@ -1970,8 +1989,10 @@ export class PaymentAdminController {
     async bulkUpsertProgramMethods(
         @Param('programId') programId: string,
         @Body() body: BulkUpsertProgramMethodsDto,
+        @CurrentUser() user?: CurrentUserData,
     ) {
         if (!this.isValidUUID(programId)) throw new HttpException('Invalid program id', 400);
+        await this.assertCanAccessProgram(user, programId);
         try {
             const { data } = await this.paymentServiceClient.put(
                 `/api/v1/programs/${programId}/payment-methods`,
@@ -2401,6 +2422,48 @@ export class PaymentAdminController {
                 this.logger.warn(`Error details: ${response.status ?? 'unknown'} ${JSON.stringify(response.data)}`);
             }
             return icon;
+        }
+    }
+
+    // ─── Admin scope ──────────────────────────────────────────────────────────────
+    // Same programme-scope rule as ApplicationsController.assertCanReviewApplication.
+    // Platform scope passes untouched. Everyone else must hold the programme the
+    // invoice's application belongs to, read from the row; "missing" and "not
+    // yours" answer the same 404 so invoice ids cannot be probed across brands.
+    // Runs before any Go payment-service call and outside the try/handleError
+    // blocks (handleError would turn these into a 500).
+
+    private async assertCanAccessProgram(user: CurrentUserData | undefined, programId: string): Promise<void> {
+        const scope = await getRequestAdminScope(this.readPrisma, { user });
+        if (scope.kind !== 'platform') {
+            await assertProgramAccess(this.readPrisma, scope, programId);
+        }
+    }
+
+    // Ids that match no row are left to the route's own not-found/skip handling.
+    // Ownership is read from the PRIMARY, the same place every route acts on: a
+    // lagging replica would miss a fresh invoice, skip its check and fail open.
+    private async assertCanAccessInvoices(user: CurrentUserData | undefined, invoiceIds: string[]): Promise<void> {
+        const scope = await getRequestAdminScope(this.readPrisma, { user });
+        if (scope.kind === 'platform') return;
+
+        const notFound = () => new NotFoundException('Invoice not found');
+        const rows = await this.prisma.applicationInvoice.findMany({
+            where: { id: { in: invoiceIds } },
+            select: { application: { select: { programId: true } } },
+        });
+        for (const programId of new Set(rows.map((row) => row.application?.programId))) {
+            if (!programId) throw notFound();
+            await orNotFound(() => assertProgramAccess(this.readPrisma, scope, programId), notFound);
+        }
+    }
+
+    // The global payment_methods master feeds every programme that has no
+    // per-programme override, so editing it is a platform-wide change.
+    private async assertPlatformScope(user: CurrentUserData | undefined): Promise<void> {
+        const scope = await getRequestAdminScope(this.readPrisma, { user });
+        if (scope.kind !== 'platform') {
+            throw new ForbiddenException('This action is restricted to platform administrators.');
         }
     }
 

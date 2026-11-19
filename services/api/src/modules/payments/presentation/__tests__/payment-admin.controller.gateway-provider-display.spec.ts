@@ -11,6 +11,13 @@ import { RabbitMQProducerService } from '@shared/infrastructure/rabbitmq/rabbitm
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '@modules/auth/infrastructure/guards/roles.guard';
 
+// Platform-scope caller: this spec is not about programme scope, which
+// payment-admin.controller.scope.spec.ts covers against the real resolver.
+jest.mock('@shared/guards/admin-scope.guard', () => ({
+    ...jest.requireActual('@shared/guards/admin-scope.guard'),
+    getRequestAdminScope: async () => ({ kind: 'platform', allowedBrandIds: null, allowedProgramIds: null }),
+}));
+
 describe('PaymentAdminController.getInvoice — gateway_response.provider display', () => {
     let controller: PaymentAdminController;
 

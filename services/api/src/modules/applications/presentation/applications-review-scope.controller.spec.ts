@@ -78,8 +78,9 @@ async function bootstrap(
   readPrisma: unknown,
   reviewHandler: { execute: jest.Mock },
   editHistoryHandler: { execute: jest.Mock } | typeof noop = noop,
+  overrides: Array<[unknown, unknown]> = [],
 ) {
-  const module: TestingModule = await Test.createTestingModule({
+  let builder = Test.createTestingModule({
     controllers: [ApplicationsController],
     providers: [
       { provide: CreateApplicationHandler, useValue: noop },
@@ -115,8 +116,11 @@ async function bootstrap(
       },
     })
     .overrideGuard(RolesGuard)
-    .useValue({ canActivate: () => true })
-    .compile();
+    .useValue({ canActivate: () => true });
+  for (const [token, value] of overrides) {
+    builder = builder.overrideProvider(token).useValue(value);
+  }
+  const module: TestingModule = await builder.compile();
 
   const app = module.createNestApplication();
   app.useGlobalFilters(new HttpExceptionFilter());
@@ -226,5 +230,76 @@ describe('GET /applications/:id/edit-history is scoped to the application\'s pro
     const res = await request(app.getHttpServer()).get('/applications/app-1/edit-history').expect(200);
     expect(res.body).toEqual([{ id: 'h1' }]);
     expect(history.execute).toHaveBeenCalledWith(expect.objectContaining({ applicationId: 'app-1' }));
+  });
+});
+
+// The same rule on every other admin route that takes an application id (and
+// on create, which takes the programme id itself). Before this, each carried
+// only JwtAuthGuard + @Roles, so an admin scoped to programme A could read,
+// edit, submit, withdraw, score or bill any application in any brand.
+describe('admin application routes are scoped to the application\'s programme', () => {
+  const UUID = '0b3f9c1e-5f4a-4b8e-9c2d-1a2b3c4d5e6f';
+  const routes: Array<{
+    name: string;
+    handler: unknown;
+    send: (server: Parameters<typeof request>[0]) => request.Test;
+  }> = [
+    { name: 'GET /applications/:id', handler: GetApplicationHandler, send: (s) => request(s).get('/applications/app-1') },
+    { name: 'PUT /applications/:id', handler: UpdateApplicationHandler, send: (s) => request(s).put('/applications/app-1').send({}) },
+    { name: 'POST /applications/:id/switch-category', handler: SwitchApplicationCategoryHandler, send: (s) => request(s).post('/applications/app-1/switch-category').send({ targetCategory: 'self_funded' }) },
+    { name: 'POST /applications/:id/submit', handler: SubmitApplicationHandler, send: (s) => request(s).post('/applications/app-1/submit').send({ participantId: 'p-1' }) },
+    { name: 'PATCH /applications/:id/submission-data', handler: AdminUpdateSubmissionHandler, send: (s) => request(s).patch('/applications/app-1/submission-data').send({ reason: 'typo' }) },
+    { name: 'POST /applications/:id/payment-intent', handler: CreateRegistrationPaymentIntentHandler, send: (s) => request(s).post('/applications/app-1/payment-intent').send({ userId: 'p-1' }) },
+    { name: 'GET /applications/:id/review', handler: GetApplicationReviewHandler, send: (s) => request(s).get('/applications/app-1/review?stage=application') },
+    { name: 'PUT /applications/:id/review', handler: UpsertApplicationReviewHandler, send: (s) => request(s).put('/applications/app-1/review?stage=application').send({ status: 'draft', items: [] }) },
+    { name: 'POST /applications/:id/withdraw', handler: WithdrawApplicationHandler, send: (s) => request(s).post('/applications/app-1/withdraw') },
+  ];
+
+  let app: INestApplication;
+
+  afterEach(async () => {
+    if (app) await app.close();
+  });
+
+  it.each(routes)('$name: 404 for an admin outside the programme, handler never runs', async ({ handler, send }) => {
+    const target = { execute: jest.fn().mockResolvedValue({ id: 'app-1' }) };
+    app = await bootstrap(
+      buildReadPrisma({ adminProgramId: 'program-A', applicationProgramId: 'program-B' }),
+      { execute: jest.fn() },
+      noop,
+      [[handler, target]],
+    );
+
+    const res = await send(app.getHttpServer());
+    expect(res.status).toBe(404);
+    expect(target.execute).not.toHaveBeenCalled();
+  });
+
+  it('POST /applications: 403 for any non-platform admin, even inside their programme', async () => {
+    const target = { execute: jest.fn().mockResolvedValue({ id: 'app-1' }) };
+    app = await bootstrap(
+      buildReadPrisma({ adminProgramId: UUID, applicationProgramId: UUID }),
+      { execute: jest.fn() },
+      noop,
+      [[CreateApplicationHandler, target]],
+    );
+
+    const res = await request(app.getHttpServer()).post('/applications').send({ participantId: UUID, programId: UUID });
+    expect(res.status).toBe(403);
+    expect(target.execute).not.toHaveBeenCalled();
+  });
+
+  it.each(routes)('$name: passes for an admin holding the programme', async ({ handler, send }) => {
+    const target = { execute: jest.fn().mockResolvedValue({ id: 'app-1' }) };
+    app = await bootstrap(
+      buildReadPrisma({ adminProgramId: 'program-A', applicationProgramId: 'program-A' }),
+      { execute: jest.fn() },
+      noop,
+      [[handler, target]],
+    );
+
+    const res = await send(app.getHttpServer());
+    expect(res.status).toBeLessThan(300);
+    expect(target.execute).toHaveBeenCalled();
   });
 });
