@@ -118,6 +118,14 @@ describe('PaymentAdminController — category-aware filter in listInvoices', () 
             );
         });
 
+        it('keeps superseded invoices when listing one application', async () => {
+            const APP_ID = '11111111-1111-4111-8111-111111111111';
+            await controller.listInvoices({ programId: PROGRAM_ID, applicationId: APP_ID });
+
+            const [[arg]] = (mockPrisma.applicationInvoice.findMany as jest.Mock).mock.calls;
+            expect(arg.where.id).toBeUndefined();
+        });
+
         it('passes id: { notIn } to both aggregate calls', async () => {
             await controller.listInvoices({ programId: PROGRAM_ID });
 

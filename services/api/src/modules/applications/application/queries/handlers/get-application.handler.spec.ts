@@ -15,6 +15,7 @@ describe('GetApplicationHandler birthdate resolution', () => {
   let applicationRepository: { findById: jest.Mock };
   let prisma: {
     participant: { findUnique: jest.Mock };
+    participantApplication: { findUnique: jest.Mock };
     programEssay: { findMany: jest.Mock };
     applicationFormField: { findMany: jest.Mock };
   };
@@ -35,6 +36,7 @@ describe('GetApplicationHandler birthdate resolution', () => {
     applicationRepository = { findById: jest.fn() };
     prisma = {
       participant: { findUnique: jest.fn() },
+      participantApplication: { findUnique: jest.fn().mockResolvedValue(null) },
       programEssay: { findMany: jest.fn().mockResolvedValue([]) },
       applicationFormField: { findMany: jest.fn().mockResolvedValue([]) },
     };
@@ -108,6 +110,123 @@ describe('GetApplicationHandler birthdate resolution', () => {
     const dto = await handler.execute(new GetApplicationQuery('app-1', true));
 
     expect(dto.participant?.birthdate).toBeNull();
+  });
+
+  it('returns the registration and program fee statuses the list endpoint shows', async () => {
+    applicationRepository.findById.mockResolvedValue(buildApplication({}));
+    prisma.participant.findUnique.mockResolvedValue(null);
+    prisma.participantApplication.findUnique.mockResolvedValue({
+      registrationPaymentStatus: 'paid',
+      programPaymentStatus: 'unpaid',
+    });
+
+    const dto = await handler.execute(new GetApplicationQuery('app-1', true));
+
+    expect(dto.registrationPaymentStatus).toBe('paid');
+    expect(dto.programPaymentStatus).toBe('unpaid');
+  });
+
+  describe('participant contact fields across form templates', () => {
+    const bareParticipant = {
+      id: 'participant-1',
+      fullName: 'Abdullah',
+      birthdate: null,
+      phoneCountryCode: null,
+      phoneNumber: null,
+      emergencyContactPhone: '',
+      emergencyContactCountryCode: null,
+      emergencyContactRelation: '',
+      user: { email: 'a@example.com' },
+    };
+
+    it('reads the newer template keys (phone, emergency_contact_*, cv_upload, referral_source) without doubling the country code', async () => {
+      applicationRepository.findById.mockResolvedValue(buildApplication({
+        phone: '+923347354006',
+        phone_country_code: '+92',
+        emergency_contact_name: 'Faqir Muhammad',
+        emergency_contact_relation: 'Grand father',
+        emergency_contact_country_code: '+92',
+        emergency_contact_phone: '+923219343709',
+        cv_upload: 'https://drive.google.com/file/d/x/view',
+        referral_source: 'instagram',
+        occupation: 'Student',
+        account_person_name: 'Abdul Moiz',
+      }));
+      prisma.participant.findUnique.mockResolvedValue(bareParticipant);
+
+      const dto = await handler.execute(new GetApplicationQuery('app-1', true));
+
+      expect(dto.participant).toMatchObject({
+        phoneNumber: '+923347354006',
+        emergencyContactName: 'Faqir Muhammad',
+        emergencyContactRelation: 'Grand father',
+        emergencyContactPhone: '+923219343709',
+        resumeUrl: 'https://drive.google.com/file/d/x/view',
+        knowledgeSource: 'instagram',
+        occupation: 'Student',
+      });
+      expect(dto.sourceAccountName).toBe('Abdul Moiz');
+    });
+
+    it('combines the older split keys (phone_number + phone_country_code, emergency_phone_number, contact_relation)', async () => {
+      applicationRepository.findById.mockResolvedValue(buildApplication({
+        phone_country_code: '+62',
+        phone_number: '081234567890',
+        emergency_country_code: '62',
+        emergency_phone_number: '0811222333',
+        contact_relation: 'Mother',
+        resume_url: 'https://example.com/cv.pdf',
+      }));
+      prisma.participant.findUnique.mockResolvedValue(bareParticipant);
+
+      const dto = await handler.execute(new GetApplicationQuery('app-1', true));
+
+      expect(dto.participant).toMatchObject({
+        phoneNumber: '+6281234567890',
+        emergencyContactPhone: '+62811222333',
+        emergencyContactRelation: 'Mother',
+        resumeUrl: 'https://example.com/cv.pdf',
+      });
+    });
+
+    describe('phone validity flags', () => {
+      const run = async (pd: Record<string, unknown>) => {
+        applicationRepository.findById.mockResolvedValue(buildApplication(pd));
+        prisma.participant.findUnique.mockResolvedValue(bareParticipant);
+        return (await handler.execute(new GetApplicationQuery('app-1', true))).participant;
+      };
+
+      it('flags valid international numbers as valid', async () => {
+        const p = await run({
+          phone: '+923347354006',
+          emergency_contact_country_code: '+92',
+          emergency_contact_phone: '+923219343709',
+        });
+        expect(p?.phoneValid).toBe(true);
+        expect(p?.emergencyContactPhoneValid).toBe(true);
+      });
+
+      it('flags malformed numbers as invalid without altering the displayed value', async () => {
+        const p = await run({ phone: '+62123', emergency_contact_phone: '+9212' });
+        expect(p?.phoneNumber).toBe('+62123');
+        expect(p?.phoneValid).toBe(false);
+        expect(p?.emergencyContactPhoneValid).toBe(false);
+      });
+
+      it('uses personal_data nationality as region hint for numbers without a country code', async () => {
+        const valid = await run({ phone: '081234567890', nationality: 'ID' });
+        expect(valid?.phoneValid).toBe(true);
+        const noHint = await run({ phone: '081234567890' });
+        expect(noHint?.phoneValid).toBe(false);
+      });
+
+      it('returns null when there is no number', async () => {
+        const p = await run({});
+        expect(p?.phoneNumber).toBeNull();
+        expect(p?.phoneValid).toBeNull();
+        expect(p?.emergencyContactPhoneValid).toBeNull();
+      });
+    });
   });
 
   describe('submissionForm inputType', () => {

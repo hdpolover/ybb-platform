@@ -36,6 +36,9 @@ export interface InvoiceFilterQuery {
     // The admin list endpoint enforces its own `programId is required` 400
     // before ever calling this builder, so it always passes a real value.
     programId?: string;
+    // Narrows to one application's invoices. Merged into the same `application`
+    // clause as programId, so an id from another program yields no rows.
+    applicationId?: string;
     status?: string;
     search?: string;
     paymentMethod?: string;
@@ -199,6 +202,7 @@ export function buildInvoiceWhere(
 ): Prisma.ApplicationInvoiceWhereInput {
     const {
         programId,
+        applicationId,
         status,
         search,
         paymentMethod,
@@ -232,6 +236,13 @@ export function buildInvoiceWhere(
                 : undefined;
 
     const applicationFilter: Prisma.ParticipantApplicationWhereInput = { programId };
+    if (applicationId?.trim()) {
+        const id = applicationId.trim();
+        if (!INVOICE_ID_RE.test(id)) {
+            throw new HttpException('applicationId must be a valid UUID', 400);
+        }
+        applicationFilter.id = id;
+    }
     const searchKeyword = search?.trim() || null;
     if (applicationStatus?.trim()) {
         applicationFilter.status = applicationStatus as Prisma.EnumApplicationStatusFilter;

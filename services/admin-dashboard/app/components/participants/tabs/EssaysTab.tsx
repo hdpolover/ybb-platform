@@ -1,4 +1,6 @@
+// services/admin-dashboard/app/components/participants/tabs/EssaysTab.tsx
 import React from "react";
+import { CopyButton } from "../IconActions";
 
 export interface Essay {
   id: string;
@@ -11,6 +13,17 @@ export interface Essay {
 
 export interface EssayCollection {
   essays: Essay[];
+}
+
+export function countWords(text: string): number {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
+function WordCount({ answer, limit }: { answer: string; limit: number | null }) {
+  const count = countWords(answer);
+  const isOver = limit != null && count > limit;
+  const label = limit != null ? `${count} / ${limit} words` : `${count} words`;
+  return <span className={`text-xs ${isOver ? "font-semibold text-amber-600" : "text-zinc-400"}`}>{label}</span>;
 }
 
 export function EssaysTab({ data }: { data: EssayCollection }) {
@@ -43,9 +56,15 @@ export function EssaysTab({ data }: { data: EssayCollection }) {
               )}
             </div>
             {essay.answer ? (
-              <p className="rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm leading-relaxed text-zinc-900 whitespace-pre-wrap">
-                {essay.answer}
-              </p>
+              <>
+                <p className="rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm leading-relaxed text-zinc-900 whitespace-pre-wrap">
+                  {essay.answer}
+                </p>
+                <div className="flex items-center gap-2">
+                  <WordCount answer={essay.answer} limit={essay.wordLimit} />
+                  <CopyButton text={essay.answer} label="Answer" />
+                </div>
+              </>
             ) : (
               <p className="text-sm text-zinc-400 italic">No answer provided.</p>
             )}

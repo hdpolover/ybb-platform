@@ -139,7 +139,10 @@ export class ApplicationResponseDto {
     nickName?: string | null;
     email: string;
     phoneCountryCode?: string | null;
+    /** Full international number, country code already included — display as-is. */
     phoneNumber?: string | null;
+    /** libphonenumber validity of phoneNumber; null when no number. */
+    phoneValid?: boolean | null;
     birthdate?: Date | null;
     gender?: string | null;
     nationality?: string | null;
@@ -150,7 +153,10 @@ export class ApplicationResponseDto {
     currentCountry?: string | null;
     currentAddress?: string | null;
     emergencyContactName?: string | null;
+    /** Full international number, country code already included — display as-is. */
     emergencyContactPhone?: string | null;
+    /** libphonenumber validity of emergencyContactPhone; null when no number. */
+    emergencyContactPhoneValid?: boolean | null;
     emergencyContactCountryCode?: string | null;
     emergencyContactRelation?: string | null;
     tshirtSize?: string | null;
@@ -158,6 +164,7 @@ export class ApplicationResponseDto {
     educationLevel?: string | null;
     institution?: string | null;
     major?: string | null;
+    occupation?: string | null;
     organizations?: string | null;
     instagramUsername?: string | null;
     linkedinUrl?: string | null;

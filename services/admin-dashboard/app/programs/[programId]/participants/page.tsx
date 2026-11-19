@@ -23,7 +23,9 @@ import { FilterField } from "@/src/ui/filter-grid";
 import { FilterPanel, type FilterPanelActiveFilter } from "@/src/ui/filter-panel";
 import { RowActions } from "@/src/ui/row-actions";
 import { formatDate } from "@/lib/utils";
+import { PAYMENT_BADGE, STATUS_BADGE, STATUS_LABEL } from "@/lib/application-badges";
 import { getFfResultsHiddenNotice } from "@/lib/ff-results-notice";
+import { saveParticipantNav } from "@/lib/participant-nav";
 import { FfResultBadge, FfResultBulkAction } from "@/app/components/participants/FfResult";
 
 const regionNames = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
@@ -34,37 +36,6 @@ function formatCountry(raw: string | null | undefined): string {
   }
   return raw;
 }
-
-const PAYMENT_BADGE: Record<string, string> = {
-  PAID: "bg-emerald-50 text-emerald-700",
-  paid: "bg-emerald-50 text-emerald-700",
-  PENDING: "bg-amber-50 text-amber-700",
-  pending: "bg-amber-50 text-amber-700",
-  UNPAID: "bg-red-50 text-red-700",
-  unpaid: "bg-red-50 text-red-700",
-};
-
-const STATUS_BADGE: Record<string, string> = {
-  draft: "bg-zinc-100 text-zinc-500",
-  submitted: "bg-blue-50 text-blue-700",
-  under_review: "bg-amber-50 text-amber-700",
-  interview_scheduled: "bg-purple-50 text-purple-700",
-  accepted: "bg-emerald-50 text-emerald-700",
-  rejected: "bg-red-50 text-red-700",
-  waitlisted: "bg-orange-50 text-orange-700",
-  withdrawn: "bg-zinc-100 text-zinc-500",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  draft: "Draft",
-  submitted: "Submitted",
-  under_review: "Under Review",
-  interview_scheduled: "Interview",
-  accepted: "Accepted",
-  rejected: "Rejected",
-  waitlisted: "Waitlisted",
-  withdrawn: "Withdrawn",
-};
 
 const STATUS_FILTERS = [
   { value: "", label: "All" },
@@ -293,6 +264,15 @@ export default function ParticipantsPage() {
       .then((config) => setFfAnnouncedAt(config.fundingResultsAnnouncedAt ?? null))
       .catch(() => setFfAnnouncedAt(undefined));
   }, [resolvedProgramId]);
+
+  // Hand the displayed order to the detail page's prev/next. Keyed by the route param, as the detail URL carries it.
+  useEffect(() => {
+    if (items.length === 0) return;
+    saveParticipantNav(params.programId, {
+      ids: items.map((app) => app.participantId),
+      listHref: window.location.pathname + window.location.search,
+    });
+  }, [items, params.programId]);
 
   const selectableIds = useMemo(
     () => items.filter((app) => app.applicationCategory === "fully_funded").map((app) => app.id),

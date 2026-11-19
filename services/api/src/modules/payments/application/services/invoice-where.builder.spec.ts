@@ -95,3 +95,33 @@ describe('buildFollowUpStatusWhere legacy imports', () => {
         expect(JSON.stringify(buildFollowUpStatusWhere('participant_cancelled'))).not.toContain('legacyId');
     });
 });
+
+describe('buildInvoiceWhere applicationId filter', () => {
+    const APP_ID = '3f2b8c1e-5a4d-4e6f-9b7a-1c2d3e4f5a6b';
+
+    it('narrows to the application while keeping the programId scope in the same clause', () => {
+        const where = buildInvoiceWhere({ programId: 'prog-1', applicationId: APP_ID }, []);
+
+        expect(where.application).toEqual({ programId: 'prog-1', id: APP_ID });
+    });
+
+    it('is a no-op when absent or blank', () => {
+        expect(buildInvoiceWhere({ programId: 'prog-1' }, []).application).toEqual({ programId: 'prog-1' });
+        expect(buildInvoiceWhere({ programId: 'prog-1', applicationId: '  ' }, []).application).toEqual({
+            programId: 'prog-1',
+        });
+    });
+
+    it('rejects a non-UUID applicationId with a 400', () => {
+        expect(() => buildInvoiceWhere({ programId: 'prog-1', applicationId: 'abc' }, [])).toThrow(
+            'applicationId must be a valid UUID',
+        );
+    });
+
+    it('also constrains the application inside the free-text search branch', () => {
+        const where = buildInvoiceWhere({ programId: 'prog-1', applicationId: APP_ID, search: 'ann' }, []);
+        const searchApp = (where.OR as Array<{ application?: { id?: string } }>).find((c) => c.application);
+
+        expect(searchApp?.application?.id).toBe(APP_ID);
+    });
+});

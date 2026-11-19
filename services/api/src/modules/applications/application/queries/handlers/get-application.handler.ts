@@ -18,6 +18,7 @@ import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/pay
 import { isRenderableEssayQuestion, coalesceStr } from '../../helpers/application-coalesce.helpers';
 import { isAllowedForCategory } from '@shared/utils/category-scope.util';
 import { resolveApplicationBirthdate } from '@shared/utils/birthdate-resolution';
+import { buildE164Phone, extractPhoneFromPersonalData, sanitizePhone } from '@shared/utils/phone-e164';
 
 /**
  * Get Application Handler
@@ -66,7 +67,7 @@ export class GetApplicationHandler {
     dto.achievements = coalesceStr(application.achievements) ?? coalesceStr(pd['achievements']) ?? undefined;
 
     // New app-level fields from personalData
-    dto.sourceAccountName = coalesceStr(pd['source_account_name']) ?? null;
+    dto.sourceAccountName = coalesceStr(pd['source_account_name']) ?? coalesceStr(pd['account_person_name']) ?? null;
     dto.requirementLink = coalesceStr(pd['requirement_link']) ?? null;
     dto.referralCode = coalesceStr(pd['ref_code_ambassador']) ?? coalesceStr(pd['ambassador_referral_code']) ?? null;
     dto.subthemeId = coalesceStr(pd['program_subtheme_id']) ?? null;
@@ -80,6 +81,7 @@ export class GetApplicationHandler {
     // task ever throws past its own catch.
     const tasks: Promise<void>[] = [
       this.attachPaymentStatus(application, dto),
+      this.attachFeeStatuses(application, dto),
       this.attachFormStepsAndSubmissionForm(application, dto),
     ];
     if (query.includeRelations) {
@@ -122,46 +124,93 @@ export class GetApplicationHandler {
         },
       });
       if (participant) {
+        // Program form templates name the same answer differently (e.g. `phone`
+        // vs `phone_number`, `emergency_contact_relation` vs `contact_relation`,
+        // `cv_upload` vs `resume_url`), so every lookup lists each known key.
+        // Participant columns win when non-empty; most are never written in prod.
+        const pick = (...vals: unknown[]): string | null => vals.map(coalesceStr).find(Boolean) ?? null;
+        const emergencyCountryCode = pick(
+          participant.emergencyContactCountryCode,
+          pd['emergency_contact_country_code'],
+          pd['emergency_country_code'],
+        );
+        const phoneNumber =
+          buildE164Phone(participant.phoneCountryCode, participant.phoneNumber)
+          ?? extractPhoneFromPersonalData(pd)
+          ?? null;
+        const emergencyContactPhone =
+          buildE164Phone(
+            emergencyCountryCode,
+            pick(participant.emergencyContactPhone, pd['emergency_contact_phone'], pd['emergency_phone_number']),
+          ) ?? null;
+        // Region only matters for numbers stored without a leading "+".
+        const regionHint = coalesceStr(pd['nationality']) || undefined;
         dto.participant = {
           id: participant.id,
           fullName: participant.fullName,
-          nickName: participant.nickName ?? coalesceStr(pd['nickname']) ?? null,
+          nickName: pick(participant.nickName, pd['nickname']),
           email: participant.user?.email ?? '',
-          phoneCountryCode: participant.phoneCountryCode ?? coalesceStr(pd['phone_country_code']) ?? null,
-          phoneNumber: participant.phoneNumber ?? coalesceStr(pd['phone_number']) ?? null,
+          phoneCountryCode: pick(participant.phoneCountryCode, pd['phone_country_code']),
+          phoneNumber,
+          phoneValid: phoneValidity(phoneNumber, regionHint),
           // Onboarding only ever collects a birth year, so participant.birthdate
           // is stored as Jan 1 of that year for nearly every row in prod.
           // Prefer the real date the applicant entered on the application form.
           birthdate: resolveApplicationBirthdate(application.personalData, participant.birthdate),
-          gender: participant.gender ?? coalesceStr(pd['gender']) ?? null,
-          nationality: participant.nationality ?? coalesceStr(pd['nationality']) ?? null,
+          gender: pick(participant.gender, pd['gender']),
+          nationality: pick(participant.nationality, pd['nationality']),
           originCity: participant.originCity,
           originCountry: participant.originCountry,
-          originAddress: participant.originAddress ?? coalesceStr(pd['origin_address']) ?? null,
+          originAddress: pick(participant.originAddress, pd['origin_address']),
           currentCity: participant.currentCity,
           currentCountry: participant.currentCountry,
-          currentAddress: participant.currentAddress ?? coalesceStr(pd['current_address']) ?? null,
-          emergencyContactName: coalesceStr(pd['emergency_contact_name']) ?? null,
-          emergencyContactPhone: participant.emergencyContactPhone ?? coalesceStr(pd['emergency_phone_number']) ?? null,
-          emergencyContactCountryCode: participant.emergencyContactCountryCode ?? coalesceStr(pd['emergency_country_code']) ?? null,
-          emergencyContactRelation: participant.emergencyContactRelation ?? coalesceStr(pd['contact_relation']) ?? null,
-          tshirtSize: participant.tshirtSize ?? coalesceStr(pd['tshirt_size']) ?? null,
-          medicalConditions: participant.medicalConditions ?? coalesceStr(pd['disease_history']) ?? null,
-          educationLevel: participant.educationLevel ?? coalesceStr(pd['education_level']) ?? null,
-          institution: participant.institution ?? coalesceStr(pd['institution']) ?? null,
-          major: participant.major ?? coalesceStr(pd['major']) ?? null,
-          organizations: participant.organizations ?? coalesceStr(pd['organizations']) ?? null,
-          instagramUsername: participant.instagramUsername ?? coalesceStr(pd['instagram_account']) ?? null,
+          currentAddress: pick(participant.currentAddress, pd['current_address']),
+          emergencyContactName: pick(pd['emergency_contact_name']),
+          emergencyContactCountryCode: emergencyCountryCode,
+          emergencyContactPhone,
+          emergencyContactPhoneValid: phoneValidity(emergencyContactPhone, regionHint),
+          emergencyContactRelation: pick(
+            participant.emergencyContactRelation,
+            pd['emergency_contact_relation'],
+            pd['contact_relation'],
+          ),
+          tshirtSize: pick(participant.tshirtSize, pd['tshirt_size']),
+          medicalConditions: pick(participant.medicalConditions, pd['disease_history']),
+          educationLevel: pick(participant.educationLevel, pd['education_level']),
+          institution: pick(participant.institution, pd['institution']),
+          major: pick(participant.major, pd['major']),
+          occupation: pick(pd['occupation']),
+          organizations: pick(participant.organizations, pd['organizations']),
+          instagramUsername: pick(participant.instagramUsername, pd['instagram_account']),
           linkedinUrl: participant.linkedinUrl,
           portfolioUrl: participant.portfolioUrl,
-          knowledgeSource: participant.knowledgeSource ?? coalesceStr(pd['knowledge_source']) ?? null,
+          knowledgeSource: pick(participant.knowledgeSource, pd['knowledge_source'], pd['referral_source']),
           referralCode: participant.referralCode,
           profilePictureUrl: participant.profilePictureUrl,
-          resumeUrl: participant.resumeUrl ?? coalesceStr(pd['resume_url']) ?? null,
+          // May be pasted CV text rather than a link on some templates.
+          resumeUrl: pick(participant.resumeUrl, pd['resume_url'], pd['cv_upload']),
         };
       }
     } catch (e) {
       console.error('Failed to fetch participant for application', e);
+    }
+  }
+
+  // The list endpoint enriches these two columns separately; the entity and
+  // mapper don't carry them, so the detail view read them back as undefined.
+  private async attachFeeStatuses(
+    application: ParticipantApplication,
+    dto: ApplicationResponseDto,
+  ): Promise<void> {
+    try {
+      const row = await this.prisma.participantApplication.findUnique({
+        where: { id: application.id },
+        select: { registrationPaymentStatus: true, programPaymentStatus: true },
+      });
+      dto.registrationPaymentStatus = row?.registrationPaymentStatus ?? undefined;
+      dto.programPaymentStatus = row?.programPaymentStatus ?? undefined;
+    } catch (e) {
+      console.error(`Failed to load fee statuses for app ${application.id}`, e);
     }
   }
 
@@ -545,4 +594,7 @@ export class GetApplicationHandler {
   }
 }
 
-
+/** null when there is no number, otherwise whether libphonenumber accepts it. */
+function phoneValidity(raw: string | null, regionHint?: string): boolean | null {
+  return raw ? sanitizePhone(raw, regionHint).isValid : null;
+}

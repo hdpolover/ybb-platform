@@ -83,6 +83,7 @@ export class ReportingController {
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'paymentMethod', required: false })
+  @ApiQuery({ name: 'applicationId', required: false })
   @ApiQuery({ name: 'tierId', required: false })
   @ApiQuery({ name: 'feeType', required: false })
   @ApiQuery({ name: 'applicationStatus', required: false })
@@ -101,6 +102,7 @@ export class ReportingController {
   ) {
     const filters: InvoiceFilterQuery = {
       programId: query.programId,
+      applicationId: query.applicationId,
       status: query.status,
       search: query.search,
       paymentMethod: query.paymentMethod,

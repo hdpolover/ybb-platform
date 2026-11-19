@@ -107,6 +107,7 @@ export class PaymentAdminController {
     @Get('invoices')
     @ApiOperation({ summary: 'List invoices for a program (Admin)' })
     @ApiQuery({ name: 'programId', required: true })
+    @ApiQuery({ name: 'applicationId', required: false, description: 'Only invoices of this application (UUID, must belong to programId)' })
     @ApiQuery({ name: 'page', required: false })
     @ApiQuery({ name: 'limit', required: false })
     @ApiQuery({ name: 'status', required: false })
@@ -134,6 +135,7 @@ export class PaymentAdminController {
     async listInvoices(@Query() query: Record<string, string>) {
         const {
             programId,
+            applicationId,
             page = '1',
             limit = '20',
             status,
@@ -192,6 +194,7 @@ export class PaymentAdminController {
         const where: Prisma.ApplicationInvoiceWhereInput = buildInvoiceWhere(
             {
                 programId,
+                applicationId,
                 status,
                 search,
                 paymentMethod,
@@ -208,7 +211,9 @@ export class PaymentAdminController {
                 minAmount,
                 maxAmount,
             },
-            obsoleteInvoiceIds,
+            // One applicant's history must keep an invoice superseded by a
+            // category switch: an admin override keeps the paid one on purpose.
+            applicationId ? [] : obsoleteInvoiceIds,
         );
 
         const allowedSortBy: Record<string, Prisma.ApplicationInvoiceOrderByWithRelationInput> = {
