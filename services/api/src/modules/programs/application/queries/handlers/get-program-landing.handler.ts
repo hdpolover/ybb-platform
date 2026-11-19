@@ -51,13 +51,28 @@ export class GetProgramLandingHandler implements IQueryHandler<GetProgramLanding
       // institution, profilePictureUrl, nationality} off it, never a scalar
       // of `application` itself, so pulling the full application row (5 JSON
       // columns) per recipient was pure waste.
+      // Award columns are a `select` too: this route is public, so internal
+      // columns (certificateTemplateId, legacyId, audit timestamps) stay out.
       this.prisma.programAward.findMany({
         where: { programId, isActive: true, deletedAt: null },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          category: true,
+          tier: true,
+          tags: true,
+          winnerCount: true,
+          color: true,
+          badgeUrl: true,
+          iconUrl: true,
           recipients: {
             take: 3,
             orderBy: { awardedAt: 'desc' },
-            include: {
+            select: {
+              id: true,
+              awardedAt: true,
+              notes: true,
               application: {
                 select: {
                   participant: {
