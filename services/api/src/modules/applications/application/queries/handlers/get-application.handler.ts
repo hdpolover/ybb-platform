@@ -18,7 +18,7 @@ import { PaymentGrpcClient } from '@modules/payments/infrastructure/services/pay
 import { isRenderableEssayQuestion, coalesceStr } from '../../helpers/application-coalesce.helpers';
 import { isAllowedForCategory } from '@shared/utils/category-scope.util';
 import { resolveApplicationBirthdate } from '@shared/utils/birthdate-resolution';
-import { buildE164Phone, extractPhoneFromPersonalData } from '@shared/utils/phone-e164';
+import { buildE164Phone, extractPhoneFromPersonalData, sanitizePhone } from '@shared/utils/phone-e164';
 
 /**
  * Get Application Handler
@@ -133,16 +133,25 @@ export class GetApplicationHandler {
           pd['emergency_contact_country_code'],
           pd['emergency_country_code'],
         );
+        const phoneNumber =
+          buildE164Phone(participant.phoneCountryCode, participant.phoneNumber)
+          ?? extractPhoneFromPersonalData(pd)
+          ?? null;
+        const emergencyContactPhone =
+          buildE164Phone(
+            emergencyCountryCode,
+            pick(participant.emergencyContactPhone, pd['emergency_contact_phone'], pd['emergency_phone_number']),
+          ) ?? null;
+        // Region only matters for numbers stored without a leading "+".
+        const regionHint = coalesceStr(pd['nationality']) || undefined;
         dto.participant = {
           id: participant.id,
           fullName: participant.fullName,
           nickName: pick(participant.nickName, pd['nickname']),
           email: participant.user?.email ?? '',
           phoneCountryCode: pick(participant.phoneCountryCode, pd['phone_country_code']),
-          phoneNumber:
-            buildE164Phone(participant.phoneCountryCode, participant.phoneNumber)
-            ?? extractPhoneFromPersonalData(pd)
-            ?? null,
+          phoneNumber,
+          phoneValid: phoneValidity(phoneNumber, regionHint),
           // Onboarding only ever collects a birth year, so participant.birthdate
           // is stored as Jan 1 of that year for nearly every row in prod.
           // Prefer the real date the applicant entered on the application form.
@@ -157,11 +166,8 @@ export class GetApplicationHandler {
           currentAddress: pick(participant.currentAddress, pd['current_address']),
           emergencyContactName: pick(pd['emergency_contact_name']),
           emergencyContactCountryCode: emergencyCountryCode,
-          emergencyContactPhone:
-            buildE164Phone(
-              emergencyCountryCode,
-              pick(participant.emergencyContactPhone, pd['emergency_contact_phone'], pd['emergency_phone_number']),
-            ) ?? null,
+          emergencyContactPhone,
+          emergencyContactPhoneValid: phoneValidity(emergencyContactPhone, regionHint),
           emergencyContactRelation: pick(
             participant.emergencyContactRelation,
             pd['emergency_contact_relation'],
@@ -569,4 +575,7 @@ export class GetApplicationHandler {
   }
 }
 
-
+/** null when there is no number, otherwise whether libphonenumber accepts it. */
+function phoneValidity(raw: string | null, regionHint?: string): boolean | null {
+  return raw ? sanitizePhone(raw, regionHint).isValid : null;
+}

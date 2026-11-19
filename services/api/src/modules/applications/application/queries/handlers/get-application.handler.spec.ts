@@ -172,6 +172,45 @@ describe('GetApplicationHandler birthdate resolution', () => {
         resumeUrl: 'https://example.com/cv.pdf',
       });
     });
+
+    describe('phone validity flags', () => {
+      const run = async (pd: Record<string, unknown>) => {
+        applicationRepository.findById.mockResolvedValue(buildApplication(pd));
+        prisma.participant.findUnique.mockResolvedValue(bareParticipant);
+        return (await handler.execute(new GetApplicationQuery('app-1', true))).participant;
+      };
+
+      it('flags valid international numbers as valid', async () => {
+        const p = await run({
+          phone: '+923347354006',
+          emergency_contact_country_code: '+92',
+          emergency_contact_phone: '+923219343709',
+        });
+        expect(p?.phoneValid).toBe(true);
+        expect(p?.emergencyContactPhoneValid).toBe(true);
+      });
+
+      it('flags malformed numbers as invalid without altering the displayed value', async () => {
+        const p = await run({ phone: '+62123', emergency_contact_phone: '+9212' });
+        expect(p?.phoneNumber).toBe('+62123');
+        expect(p?.phoneValid).toBe(false);
+        expect(p?.emergencyContactPhoneValid).toBe(false);
+      });
+
+      it('uses personal_data nationality as region hint for numbers without a country code', async () => {
+        const valid = await run({ phone: '081234567890', nationality: 'ID' });
+        expect(valid?.phoneValid).toBe(true);
+        const noHint = await run({ phone: '081234567890' });
+        expect(noHint?.phoneValid).toBe(false);
+      });
+
+      it('returns null when there is no number', async () => {
+        const p = await run({});
+        expect(p?.phoneNumber).toBeNull();
+        expect(p?.phoneValid).toBeNull();
+        expect(p?.emergencyContactPhoneValid).toBeNull();
+      });
+    });
   });
 
   describe('submissionForm inputType', () => {

@@ -141,6 +141,8 @@ export class ApplicationResponseDto {
     phoneCountryCode?: string | null;
     /** Full international number, country code already included — display as-is. */
     phoneNumber?: string | null;
+    /** libphonenumber validity of phoneNumber; null when no number. */
+    phoneValid?: boolean | null;
     birthdate?: Date | null;
     gender?: string | null;
     nationality?: string | null;
@@ -153,6 +155,8 @@ export class ApplicationResponseDto {
     emergencyContactName?: string | null;
     /** Full international number, country code already included — display as-is. */
     emergencyContactPhone?: string | null;
+    /** libphonenumber validity of emergencyContactPhone; null when no number. */
+    emergencyContactPhoneValid?: boolean | null;
     emergencyContactCountryCode?: string | null;
     emergencyContactRelation?: string | null;
     tshirtSize?: string | null;
