@@ -1,7 +1,6 @@
 // services/api/src/modules/admin-access-requests/admin-access-requests.service.ts
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { randomBytes } from 'crypto';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AdminAccessControlService } from '../admins/application/services/admin-access-control.service';
@@ -26,6 +25,8 @@ const unique = <T>(values: T[]) => Array.from(new Set(values));
 
 @Injectable()
 export class AdminAccessRequestsService {
+  private readonly logger = new Logger(AdminAccessRequestsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: AdminAccessControlService,
@@ -48,6 +49,14 @@ export class AdminAccessRequestsService {
   /** Always resolves the same way for the caller; see the controller for why. */
   async submit(dto: CreateAccessRequestDto, ip: string, userAgent: string): Promise<void> {
     const email = dto.email.trim().toLowerCase();
+    // A pending row for this email wins and is never touched: letting an anonymous caller
+    // overwrite it would let them rewrite a real request (name, programs, note) before review.
+    const existing = await this.prisma.adminAccessRequest.findFirst({
+      where: { email, status: 'pending' },
+      select: { id: true },
+    });
+    if (existing) return;
+
     const requestedIds = unique(dto.programIds);
     const valid = requestedIds.length
       ? await this.prisma.program.findMany({
@@ -55,26 +64,20 @@ export class AdminAccessRequestsService {
           select: { id: true },
         })
       : [];
-    const data = {
-      fullName: dto.fullName.trim(),
-      whatsapp: dto.whatsapp?.trim() || null,
-      division: dto.division,
-      requestedProgramIds: valid.map((p) => p.id),
-      note: dto.note?.trim() || null,
-      ip,
-      userAgent: userAgent.slice(0, 500),
-    };
-
-    const existing = await this.prisma.adminAccessRequest.findFirst({
-      where: { email, status: 'pending' },
-      select: { id: true },
-    });
-    if (existing) {
-      await this.prisma.adminAccessRequest.update({ where: { id: existing.id }, data });
-      return;
-    }
     try {
-      await this.prisma.adminAccessRequest.create({ data: { ...data, email, status: 'pending' } });
+      await this.prisma.adminAccessRequest.create({
+        data: {
+          fullName: dto.fullName.trim(),
+          email,
+          whatsapp: dto.whatsapp?.trim() || null,
+          division: dto.division,
+          requestedProgramIds: valid.map((p) => p.id),
+          note: dto.note?.trim() || null,
+          status: 'pending',
+          ip,
+          userAgent: userAgent.slice(0, 500),
+        },
+      });
     } catch (error) {
       // The partial unique index (one pending row per email) caught a concurrent twin submit.
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return;
@@ -85,7 +88,8 @@ export class AdminAccessRequestsService {
   async list(status: AccessRequestStatus) {
     const rows = await this.prisma.adminAccessRequest.findMany({
       where: { status },
-      orderBy: { createdAt: 'desc' },
+      // Pending oldest first: a flood of junk can never push early real requests past the cap.
+      orderBy: { createdAt: status === 'pending' ? 'asc' : 'desc' },
       take: LIST_LIMIT,
     });
 
@@ -107,8 +111,8 @@ export class AdminAccessRequestsService {
         : [],
       emails.length
         ? this.prisma.user.findMany({
-            where: { OR: emails.map((email) => ({ email: { equals: email, mode: 'insensitive' as const } })), admin: { isNot: null } },
-            select: { email: true, admin: { select: { id: true } } },
+            where: { OR: emails.map((email) => ({ email: { equals: email, mode: 'insensitive' as const } })) },
+            select: { email: true, admin: { select: { id: true } }, brand: { select: { name: true } } },
           })
         : [],
     ]);
@@ -117,7 +121,16 @@ export class AdminAccessRequestsService {
     const safeRoles = new Map(roles.filter((r) => !isPlatformTierRole(r)).map((r) => [r.name, r] as const));
     const programById = new Map(programs.map((p) => [p.id, toProgramOption(p)] as const));
     const reviewerName = new Map(reviewers.map((a) => [a.id, a.fullName] as const));
-    const adminIdByEmail = new Map(users.map((u) => [u.email.toLowerCase(), u.admin?.id ?? null] as const));
+    const adminIdByEmail = new Map<string, string>();
+    const participantBrandsByEmail = new Map<string, Set<string>>();
+    for (const u of users) {
+      const key = u.email.toLowerCase();
+      if (u.admin) {
+        adminIdByEmail.set(key, u.admin.id);
+      } else {
+        participantBrandsByEmail.set(key, (participantBrandsByEmail.get(key) ?? new Set()).add(u.brand.name));
+      }
+    }
 
     const items = rows.map((row) => {
       const division = divisionByKey(row.division);
@@ -139,6 +152,8 @@ export class AdminAccessRequestsService {
         reviewedByName: row.reviewedByAdminId ? (reviewerName.get(row.reviewedByAdminId) ?? null) : null,
         rejectReason: row.rejectReason ?? null,
         existingAdminId: adminIdByEmail.get(row.email.toLowerCase()) ?? null,
+        // Brands where this email already has a (non-deleted) participant account: approving attaches to it.
+        participantBrands: [...(participantBrandsByEmail.get(row.email.toLowerCase()) ?? [])].sort(),
       };
     });
     // { data, total } -> wire { data: items, meta: { total } } (same as GET /admins).
@@ -190,29 +205,49 @@ export class AdminAccessRequestsService {
     const homeBrandId = await this.resolveHomeBrandId(found.find((p) => p.id === programIds[0])?.brandId);
     const existingUserId = await this.findAttachableUserId(request.email, homeBrandId);
 
-    // CreateAdminHandler wants a password; hand it one nobody ever sees. issue() nulls it below.
-    const admin = await this.createAdmin.execute(
-      new CreateAdminCommand(
-        request.email, request.fullName, randomBytes(48).toString('base64url'), reviewerId, role.id, [], programIds,
-        homeBrandId, existingUserId,
-      ),
-    );
-
-    await this.prisma.adminAccessRequest.update({
-      where: { id },
-      data: { status: 'approved', reviewedByAdminId: reviewerId, reviewedAt: new Date(), createdAdminId: admin.id },
+    // Claim first: only one concurrent approve gets count 1, so only one creates the admin.
+    const claimed = await this.prisma.adminAccessRequest.updateMany({
+      where: { id, status: 'pending' },
+      data: { status: 'approved', reviewedByAdminId: reviewerId, reviewedAt: new Date() },
     });
+    if (claimed.count === 0) throw new ConflictException('This access request is not pending.');
 
-    await this.links.issue({
-      userId: admin.userId,
-      email: request.email,
-      fullName: request.fullName,
-      kind: 'invite',
-      roleName: role.name,
-      // An attached participant account keeps its old password otherwise; a new user has none.
-      invalidateCredentials: true,
-    });
-    return { adminId: admin.id };
+    let admin: { id: string; userId: string };
+    try {
+      // password null: the handler leaves the user with no usable credential (an attached
+      // participant account is wiped in the same transaction as the admin row).
+      admin = await this.createAdmin.execute(
+        new CreateAdminCommand(
+          request.email, request.fullName, null, reviewerId, role.id, [], programIds, homeBrandId, existingUserId,
+        ),
+      );
+    } catch (error) {
+      await this.prisma.adminAccessRequest.updateMany({
+        where: { id, status: 'approved', createdAdminId: null },
+        data: { status: 'pending', reviewedByAdminId: null, reviewedAt: null },
+      });
+      throw error;
+    }
+
+    await this.prisma.adminAccessRequest.update({ where: { id }, data: { createdAdminId: admin.id } });
+
+    // The admin exists and cannot be un-created here: a mail failure is reported, not thrown,
+    // so the approver can use "Send password link" instead of retrying into a 409.
+    let emailSent = true;
+    try {
+      await this.links.issue({
+        userId: admin.userId,
+        email: request.email,
+        fullName: request.fullName,
+        kind: 'invite',
+        roleName: role.name,
+      });
+    } catch (error) {
+      emailSent = false;
+      // Never log the event payload: it carries the raw token.
+      this.logger.error(`Invite link failed for new admin ${admin.id}: ${error instanceof Error ? error.message : 'unknown error'}`);
+    }
+    return { adminId: admin.id, roleId: role.id, programIds, emailSent };
   }
 
   /** Brand of the first approved program; with no programs, the brand create-admin defaults to. */

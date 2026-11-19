@@ -64,7 +64,7 @@ export class CreateAdminHandler {
         const resolvedBrandIds = Array.from(new Set(command.brandIds ?? []));
 
         // 2. Hash Password
-        const passwordHash = await bcrypt.hash(command.password, 10);
+        const passwordHash = command.password === null ? null : await bcrypt.hash(command.password, 10);
 
         // 3. Resolve Brand (Admins need a primary brand for the User record, usually system default or first brand)
         // For now, we'll pick the first active brand if brandIds provided, or default
@@ -111,9 +111,23 @@ export class CreateAdminHandler {
 
         // 4. Create User & Admin in Transaction
         return this.prisma.$transaction(async (tx) => {
-            const user = command.existingUserId
-                ? { id: command.existingUserId }
-                : await tx.user.create({
+            let user: { id: string };
+            if (command.existingUserId) {
+                // Attached participant account: its old password must not outlive this commit,
+                // so the credential is killed in the SAME transaction as the admin row. A
+                // pre-registered account with a known password would otherwise be a working
+                // admin login until (and unless) the invite step runs.
+                user = { id: command.existingUserId };
+                await tx.user.update({
+                    where: { id: command.existingUserId },
+                    data: { passwordHash: null, failedLoginAttempts: 0, lockedUntil: null },
+                });
+                await tx.userSession.updateMany({
+                    where: { userId: command.existingUserId, revokedAt: null },
+                    data: { isActive: false, revokedAt: new Date() },
+                });
+            } else {
+                user = await tx.user.create({
                     data: {
                         email: command.email,
                         passwordHash,
@@ -122,6 +136,7 @@ export class CreateAdminHandler {
                         emailVerified: true, // Admins auto-verified?
                     }
                 });
+            }
 
             const admin = await tx.admin.create({
                 data: {

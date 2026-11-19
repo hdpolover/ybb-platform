@@ -11,7 +11,8 @@ import { AdminAccessRequestsService } from './admin-access-requests.service';
 import { CreateAccessRequestDto } from './dto/create-access-request.dto';
 
 const ONE_HOUR = 3600000;
-const SUBMITS_PER_HOUR = 5;
+// Sized for the team submitting from one office NAT right after the announcement.
+const SUBMITS_PER_HOUR = 20;
 
 @ApiTags('admin-access-requests')
 @Controller('admin-access-requests')

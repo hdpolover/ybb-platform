@@ -5,7 +5,8 @@ import { CreateAdminCommand } from '../create-admin.command';
 
 describe('CreateAdminHandler - caller-vetted user (access request approval)', () => {
   const tx = {
-    user: { create: jest.fn().mockResolvedValue({ id: 'new-user' }) },
+    user: { create: jest.fn().mockResolvedValue({ id: 'new-user' }), update: jest.fn().mockResolvedValue({}) },
+    userSession: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     admin: { create: jest.fn().mockResolvedValue({ id: 'admin-1', userId: 'x' }) },
     adminBrand: { createMany: jest.fn() },
     adminProgram: { createMany: jest.fn() },
@@ -18,8 +19,8 @@ describe('CreateAdminHandler - caller-vetted user (access request approval)', ()
     $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
   };
   const handler = new CreateAdminHandler(prisma as never);
-  const cmd = (homeBrandId?: string, existingUserId?: string) =>
-    new CreateAdminCommand('a@ybb.org', 'A', 'pw-pw-pw-pw', 'creator', 'r', [], ['p1'], homeBrandId, existingUserId);
+  const cmd = (homeBrandId?: string, existingUserId?: string, password: string | null = 'pw-pw-pw-pw') =>
+    new CreateAdminCommand('a@ybb.org', 'A', password, 'creator', 'r', [], ['p1'], homeBrandId, existingUserId);
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -31,6 +32,32 @@ describe('CreateAdminHandler - caller-vetted user (access request approval)', ()
     expect(tx.admin.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ userId: 'participant-user', roleId: 'r' }),
     });
+  });
+
+  it('H1: kills the attached account password, lockout and sessions in the SAME transaction as the admin row', async () => {
+    await handler.execute(cmd('brand-1', 'participant-user', null));
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: 'participant-user' },
+      data: { passwordHash: null, failedLoginAttempts: 0, lockedUntil: null },
+    });
+    expect(tx.userSession.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'participant-user', revokedAt: null },
+      data: { isActive: false, revokedAt: expect.any(Date) },
+    });
+    expect(tx.admin.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('H1: a brand-new approved user is created with a null hash, not a random one', async () => {
+    await handler.execute(cmd('brand-7', undefined, null));
+    expect(tx.user.create).toHaveBeenCalledWith({ data: expect.objectContaining({ passwordHash: null }) });
+  });
+
+  it('still hashes a real password for plain POST /admins', async () => {
+    prisma.user.findFirst.mockResolvedValue(null);
+    await handler.execute(cmd());
+    expect(tx.user.create.mock.calls[0][0].data.passwordHash).toMatch(/^\$2[aby]\$/);
   });
 
   it('creates a user in the named home brand even if the email exists in other brands', async () => {

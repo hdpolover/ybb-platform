@@ -1,5 +1,5 @@
 
-import { Controller, Post, Body, Get, Patch, Delete, Param, Query, UseGuards, UnauthorizedException, Put, Req, ConflictException, NotFoundException } from '@nestjs/common';
+import { Controller, Post, Body, Get, Patch, Delete, Param, Query, UseGuards, UnauthorizedException, Put, Req, ConflictException, NotFoundException, BadRequestException, ParseUUIDPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CreateAdminDto } from './dto/create-admin.dto';
@@ -179,13 +179,17 @@ export class AdminsController {
     @UseGuards(AdminScopeGuard)
     @ScopedBy('platform')
     @ApiOperation({ summary: 'Invalidate the admin password and email a single-use set-password link' })
-    @ApiResponse({ status: 200, description: '{ ok: true }' })
+    @ApiResponse({ status: 200, description: '{ ok: true, adminId }' })
     @AuditTrail({ entityType: 'Admin', action: ChangeType.update })
     async sendPasswordLink(
-        @Param('id') id: string,
+        @Param('id', ParseUUIDPipe) id: string,
         @CurrentUser() currentUser: CurrentUserData,
     ) {
         await this.adminAccessControl.assertCanManageAdmins(currentUser);
+        // Every tier, super included: "send me a link" would kill my own session and password.
+        if (id === currentUser.adminId) {
+            throw new BadRequestException('Use your profile to change your own password.');
+        }
         // Same rank rule as editing the admin; self is allowed only if that rule allows it.
         await this.adminAccessControl.assertCanManageAdmin(currentUser, id, 'reset-password');
 
@@ -209,7 +213,7 @@ export class AdminsController {
             roleName: admin.role?.name ?? null,
             invalidateCredentials: true,
         });
-        return { ok: true };
+        return { ok: true, adminId: id };
     }
 
     @Delete(':id')

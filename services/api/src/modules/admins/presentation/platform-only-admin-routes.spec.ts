@@ -130,7 +130,7 @@ const SUITES: Record<string, Suite> = {
         spies: [access.assertCanManageAdmins, access.assertCanManageAdmin],
       };
     },
-    routes: [['post', '/admins/admin-2/send-password-link']],
+    routes: [['post', '/admins/22222222-2222-4222-8222-222222222222/send-password-link']],
   },
   AdminAccessRequestsController: {
     controller: AdminAccessRequestsController,

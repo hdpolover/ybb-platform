@@ -21,7 +21,8 @@ describe('AdminLoginHandler - accounts with no usable password', () => {
     prisma.user.findFirst.mockResolvedValue({ ...baseUser, passwordHash: null });
     const compare = jest.spyOn(bcrypt, 'compare');
 
-    await expect(handler.execute(command())).rejects.toBeInstanceOf(UnauthorizedException);
+    // L2: same message as a wrong password, so a pending invitee is not distinguishable
+    await expect(handler.execute(command())).rejects.toThrow(new UnauthorizedException('Invalid credentials'));
 
     expect(compare).not.toHaveBeenCalled();
     expect(jwt.sign).not.toHaveBeenCalled();

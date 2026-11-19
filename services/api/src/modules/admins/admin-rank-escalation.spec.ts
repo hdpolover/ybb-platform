@@ -4,7 +4,7 @@
 // 2026-11-19: two Super Admins (999), one "Admin" (800, can_manage_admins,
 // admin.manage), Project Manager (level 1 but platform perms, so platform tier),
 // scoped roles below. Rank is tier (super > platform > scoped), then level.
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AdminAccessControlService, AdminTargetAction } from './application/services/admin-access-control.service';
@@ -539,10 +539,20 @@ describe('admin controllers enforce the rank rule before writing', () => {
   });
 
   it('Admin can send a password link to a lower admin: credentials invalidated, kind reset', async () => {
-    await expect(admins.sendPasswordLink(ADMINS.programAdmin.id, asAdmin)).resolves.toEqual({ ok: true });
+    await expect(admins.sendPasswordLink(ADMINS.programAdmin.id, asAdmin)).resolves.toEqual({
+      ok: true,
+      adminId: ADMINS.programAdmin.id,
+    });
     expect(links.issue).toHaveBeenCalledWith(
       expect.objectContaining({ userId: `user-${ADMINS.programAdmin.id}`, kind: 'reset', invalidateCredentials: true }),
     );
+  });
+
+  it.each(['admin', 'superA'] as const)('L3: %s cannot send a password link to themselves (400, every tier)', async (who) => {
+    await expect(admins.sendPasswordLink(ADMINS[who].id, actingAs(who))).rejects.toThrow(
+      new BadRequestException('Use your profile to change your own password.'),
+    );
+    expect(links.issue).not.toHaveBeenCalled();
   });
 
   it('refuses a deactivated admin account (the link would be dead)', async () => {

@@ -58,17 +58,16 @@ describe('AdminAccessRequestsService.submit', () => {
     });
   });
 
-  it('updates the pending request for the same email instead of inserting a duplicate', async () => {
+  it('M3: a second submit for an email with a pending row is a no-op (no update, no insert, no program lookup)', async () => {
     const { prisma, service } = build();
     prisma.adminAccessRequest.findFirst.mockResolvedValue({ id: REQUEST_ID });
 
-    await service.submit(dto({ note: 'new note' }) as never, '1.2.3.4', 'jest');
+    await expect(service.submit(dto({ note: 'overwrite attempt' }) as never, '1.2.3.4', 'jest')).resolves.toBeUndefined();
 
     expect(prisma.adminAccessRequest.findFirst).toHaveBeenCalledWith({ where: { email: 'rani@example.com', status: 'pending' }, select: { id: true } });
     expect(prisma.adminAccessRequest.create).not.toHaveBeenCalled();
-    expect(prisma.adminAccessRequest.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: REQUEST_ID }, data: expect.objectContaining({ note: 'new note' }) }),
-    );
+    expect(prisma.adminAccessRequest.update).not.toHaveBeenCalled();
+    expect(prisma.adminAccessRequest.updateMany).not.toHaveBeenCalled();
   });
 
   it('does not reveal an existing admin: never queries users', async () => {
@@ -126,7 +125,12 @@ describe('AdminAccessRequestsService.list', () => {
     ]);
     prisma.program.findMany.mockResolvedValue([{ id: PROGRAM_A, name: 'IYS 2027', brand: { name: 'IYS' } }]);
     prisma.admin.findMany.mockResolvedValue([{ id: 'admin-0', fullName: 'Boss' }]);
-    prisma.user.findMany.mockResolvedValue([{ email: 'Rani@Example.com', admin: { id: 'admin-9' } }]);
+    prisma.user.findMany.mockResolvedValue([
+      { email: 'Rani@Example.com', admin: { id: 'admin-9' }, brand: { name: 'MEYS' } },
+      { email: 'rani@example.com', admin: null, brand: { name: 'KYS' } },
+      { email: 'RANI@example.com', admin: null, brand: { name: 'IYS' } },
+      { email: 'rani@example.com', admin: null, brand: { name: 'KYS' } },
+    ]);
 
     const [item] = (await service.list('approved')).data;
 
@@ -138,7 +142,7 @@ describe('AdminAccessRequestsService.list', () => {
       divisionLabel: 'Admin / Program Operations', defaultRoleId: 'r-pa', defaultRoleName: 'Program Admin',
       requestedPrograms: [{ id: PROGRAM_A, name: 'IYS 2027', brandName: 'IYS' }], note: null, status: 'approved',
       createdAt: new Date('2026-11-19'), reviewedAt: new Date('2026-11-20'), reviewedByName: 'Boss',
-      rejectReason: null, existingAdminId: 'admin-9',
+      rejectReason: null, existingAdminId: 'admin-9', participantBrands: ['IYS', 'KYS'],
     });
   });
 
@@ -154,6 +158,30 @@ describe('AdminAccessRequestsService.list', () => {
     const items = (await service.list('pending')).data;
 
     expect(items.map((i) => [i.defaultRoleId, i.defaultRoleName])).toEqual([[null, null], [null, null]]);
+  });
+});
+
+describe('AdminAccessRequestsService.list ordering (M2)', () => {
+  it.each([
+    ['pending', 'asc'],
+    ['approved', 'desc'],
+    ['rejected', 'desc'],
+  ] as const)('%s lists createdAt %s', async (status, direction) => {
+    const { prisma, service } = build();
+    await service.list(status);
+    expect(prisma.adminAccessRequest.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { createdAt: direction } }),
+    );
+  });
+
+  it('M6: participantBrands is empty when the email has no participant rows', async () => {
+    const { prisma, service } = build();
+    prisma.adminAccessRequest.findMany.mockResolvedValue([
+      { id: 'a', fullName: 'A', email: 'a@x.co', division: 'other', requestedProgramIds: [], status: 'pending', createdAt: new Date() },
+    ]);
+    const [item] = (await service.list('pending')).data;
+    expect(item.participantBrands).toEqual([]);
+    expect(item.existingAdminId).toBeNull();
   });
 });
 
@@ -212,28 +240,73 @@ describe('AdminAccessRequestsService.approve', () => {
     expect(createAdmin.execute).not.toHaveBeenCalled();
   });
 
-  it('creates the admin with its programs, marks the request, and issues an invite link', async () => {
+  it('claims the request, creates the admin with a NULL password, records it and issues the link', async () => {
     const { prisma, service, createAdmin, links } = ready();
 
-    await expect(service.approve(actor, REQUEST_ID, dto)).resolves.toEqual({ adminId: 'new-admin' });
+    await expect(service.approve(actor, REQUEST_ID, dto)).resolves.toEqual({
+      adminId: 'new-admin', roleId: ROLE_ID, programIds: [PROGRAM_A], emailSent: true,
+    });
 
+    expect(prisma.adminAccessRequest.updateMany).toHaveBeenCalledWith({
+      where: { id: REQUEST_ID, status: 'pending' },
+      data: { status: 'approved', reviewedByAdminId: 'admin-0', reviewedAt: expect.any(Date) },
+    });
     const command = createAdmin.execute.mock.calls[0][0];
     expect(command).toMatchObject({
       email: 'rani@example.com', fullName: 'Rani', createdBy: 'admin-0', roleId: ROLE_ID, programIds: [PROGRAM_A],
-      brandIds: [], homeBrandId: 'brand-1', existingUserId: undefined,
+      brandIds: [], homeBrandId: 'brand-1', existingUserId: undefined, password: null,
     });
-    // never a password anyone knows
-    expect(command.password.length).toBeGreaterThanOrEqual(32);
-    expect(prisma.adminAccessRequest.update).toHaveBeenCalledWith({
-      where: { id: REQUEST_ID },
-      data: expect.objectContaining({
-        status: 'approved', reviewedByAdminId: 'admin-0', createdAdminId: 'new-admin', reviewedAt: expect.any(Date),
-      }),
-    });
+    expect(prisma.adminAccessRequest.update).toHaveBeenCalledWith({ where: { id: REQUEST_ID }, data: { createdAdminId: 'new-admin' } });
+    // issue() only sets the token and emits: the credential was already dealt with in the admin transaction
     expect(links.issue).toHaveBeenCalledWith({
       userId: 'new-user', email: 'rani@example.com', fullName: 'Rani', kind: 'invite', roleName: 'Reviewer',
-      invalidateCredentials: true,
     });
+  });
+
+  it('M4: two concurrent approves create exactly one admin', async () => {
+    const { prisma, service, createAdmin } = ready();
+    prisma.adminAccessRequest.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+
+    const results = await Promise.allSettled([
+      service.approve(actor, REQUEST_ID, dto),
+      service.approve(actor, REQUEST_ID, dto),
+    ]);
+
+    expect(results.map((r) => r.status).sort()).toEqual(['fulfilled', 'rejected']);
+    expect((results.find((r) => r.status === 'rejected') as PromiseRejectedResult).reason).toBeInstanceOf(ConflictException);
+    expect(createAdmin.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('M4: reverts the claim to pending and rethrows when creating the admin fails', async () => {
+    const { prisma, service, links } = ready();
+    const failure = new ConflictException('User with this email already exists.');
+    const { createAdmin } = { createAdmin: (service as unknown as { createAdmin: { execute: jest.Mock } }).createAdmin };
+    createAdmin.execute.mockRejectedValue(failure);
+
+    await expect(service.approve(actor, REQUEST_ID, dto)).rejects.toBe(failure);
+
+    expect(prisma.adminAccessRequest.updateMany).toHaveBeenLastCalledWith({
+      where: { id: REQUEST_ID, status: 'approved', createdAdminId: null },
+      data: { status: 'pending', reviewedByAdminId: null, reviewedAt: null },
+    });
+    expect(links.issue).not.toHaveBeenCalled();
+  });
+
+  it('M4: an emit failure does not undo the approval: emailSent false, nothing thrown', async () => {
+    const { prisma, service, links } = ready();
+    links.issue.mockRejectedValue(new Error('broker down'));
+
+    const result = await service.approve(actor, REQUEST_ID, dto);
+
+    expect(result).toEqual({ adminId: 'new-admin', roleId: ROLE_ID, programIds: [PROGRAM_A], emailSent: false });
+    // not reverted: the admin exists
+    expect(prisma.adminAccessRequest.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('H1: the approve path never hands issue() the job of invalidating the password', async () => {
+    const { service, links } = ready();
+    await service.approve(actor, REQUEST_ID, dto);
+    expect(links.issue.mock.calls[0][0]).not.toHaveProperty('invalidateCredentials');
   });
 
   it('attaches to the participant user already in the first program brand instead of creating one', async () => {
@@ -247,7 +320,7 @@ describe('AdminAccessRequestsService.approve', () => {
       where: { email: { equals: 'rani@example.com', mode: 'insensitive' }, brandId: 'brand-1' },
     }));
     expect(createAdmin.execute.mock.calls[0][0]).toMatchObject({ homeBrandId: 'brand-1', existingUserId: 'participant-user' });
-    expect(links.issue).toHaveBeenCalledWith(expect.objectContaining({ invalidateCredentials: true }));
+    expect(createAdmin.execute.mock.calls[0][0].password).toBeNull();
   });
 
   it('409s when the user in the target brand is deactivated', async () => {
