@@ -110,6 +110,70 @@ describe('GetApplicationHandler birthdate resolution', () => {
     expect(dto.participant?.birthdate).toBeNull();
   });
 
+  describe('participant contact fields across form templates', () => {
+    const bareParticipant = {
+      id: 'participant-1',
+      fullName: 'Abdullah',
+      birthdate: null,
+      phoneCountryCode: null,
+      phoneNumber: null,
+      emergencyContactPhone: '',
+      emergencyContactCountryCode: null,
+      emergencyContactRelation: '',
+      user: { email: 'a@example.com' },
+    };
+
+    it('reads the newer template keys (phone, emergency_contact_*, cv_upload, referral_source) without doubling the country code', async () => {
+      applicationRepository.findById.mockResolvedValue(buildApplication({
+        phone: '+923347354006',
+        phone_country_code: '+92',
+        emergency_contact_name: 'Faqir Muhammad',
+        emergency_contact_relation: 'Grand father',
+        emergency_contact_country_code: '+92',
+        emergency_contact_phone: '+923219343709',
+        cv_upload: 'https://drive.google.com/file/d/x/view',
+        referral_source: 'instagram',
+        occupation: 'Student',
+        account_person_name: 'Abdul Moiz',
+      }));
+      prisma.participant.findUnique.mockResolvedValue(bareParticipant);
+
+      const dto = await handler.execute(new GetApplicationQuery('app-1', true));
+
+      expect(dto.participant).toMatchObject({
+        phoneNumber: '+923347354006',
+        emergencyContactName: 'Faqir Muhammad',
+        emergencyContactRelation: 'Grand father',
+        emergencyContactPhone: '+923219343709',
+        resumeUrl: 'https://drive.google.com/file/d/x/view',
+        knowledgeSource: 'instagram',
+        occupation: 'Student',
+      });
+      expect(dto.sourceAccountName).toBe('Abdul Moiz');
+    });
+
+    it('combines the older split keys (phone_number + phone_country_code, emergency_phone_number, contact_relation)', async () => {
+      applicationRepository.findById.mockResolvedValue(buildApplication({
+        phone_country_code: '+62',
+        phone_number: '081234567890',
+        emergency_country_code: '62',
+        emergency_phone_number: '0811222333',
+        contact_relation: 'Mother',
+        resume_url: 'https://example.com/cv.pdf',
+      }));
+      prisma.participant.findUnique.mockResolvedValue(bareParticipant);
+
+      const dto = await handler.execute(new GetApplicationQuery('app-1', true));
+
+      expect(dto.participant).toMatchObject({
+        phoneNumber: '+6281234567890',
+        emergencyContactPhone: '+62811222333',
+        emergencyContactRelation: 'Mother',
+        resumeUrl: 'https://example.com/cv.pdf',
+      });
+    });
+  });
+
   describe('submissionForm inputType', () => {
     function formField(name: string, type: string, validationRules: unknown) {
       return {

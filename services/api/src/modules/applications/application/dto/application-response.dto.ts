@@ -139,6 +139,7 @@ export class ApplicationResponseDto {
     nickName?: string | null;
     email: string;
     phoneCountryCode?: string | null;
+    /** Full international number, country code already included — display as-is. */
     phoneNumber?: string | null;
     birthdate?: Date | null;
     gender?: string | null;
@@ -150,6 +151,7 @@ export class ApplicationResponseDto {
     currentCountry?: string | null;
     currentAddress?: string | null;
     emergencyContactName?: string | null;
+    /** Full international number, country code already included — display as-is. */
     emergencyContactPhone?: string | null;
     emergencyContactCountryCode?: string | null;
     emergencyContactRelation?: string | null;
@@ -158,6 +160,7 @@ export class ApplicationResponseDto {
     educationLevel?: string | null;
     institution?: string | null;
     major?: string | null;
+    occupation?: string | null;
     organizations?: string | null;
     instagramUsername?: string | null;
     linkedinUrl?: string | null;
