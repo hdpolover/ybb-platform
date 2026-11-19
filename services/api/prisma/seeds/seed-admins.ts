@@ -5,7 +5,13 @@ import * as bcrypt from 'bcrypt';
 export async function seedAdmins() {
   log('🌱 Seeding Admins...');
 
-  const passwordHash = await bcrypt.hash('admin123', 10);
+  // Never hardcode this: the repo is public and a literal here became the live
+  // Super Admin password (rotated 2026-11-19).
+  const seedPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!seedPassword || seedPassword.length < 16) {
+    return error('SEED_ADMIN_PASSWORD (16+ chars) is required to seed admins. Skipping.');
+  }
+  const passwordHash = await bcrypt.hash(seedPassword, 10);
 
   const cysBrand = await prisma.brand.findUnique({ where: { slug: BRANDS.CYS } });
   if (!cysBrand) {
@@ -146,6 +152,18 @@ export async function seedAdmins() {
     const primaryBrand = brandBySlug.get(adminData.primaryBrandSlug);
     if (!primaryBrand) {
       log(`⚠️ Primary brand ${adminData.primaryBrandSlug} not found, skipping ${adminData.email}`);
+      continue;
+    }
+
+    // Bootstrap only: an existing account keeps its password, status, role and
+    // grants. Re-running the seed must never reset a rotated password or
+    // reactivate an admin that was deliberately deactivated.
+    const existing = await prisma.user.findUnique({
+      where: { email_brandId: { email: adminData.email, brandId: primaryBrand.id } },
+      select: { id: true },
+    });
+    if (existing) {
+      log(`⏭️ ${adminData.email} already exists, leaving it untouched`);
       continue;
     }
 
