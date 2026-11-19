@@ -33,13 +33,17 @@ export function formatFollowUpLabel(value: string): string {
   return FOLLOW_UP_LABELS[value] ?? humanizeStatus(value);
 }
 
-/** Whole-unit amount in the invoice currency, e.g. "IDR 264,000" / "$15". */
+/** Amount in the invoice currency, cents only when there are any: "$15", "$15.50", "IDR 264,000". */
 export function formatInvoiceAmount(amount: number, currency: string): string {
+  const value = Number(amount);
+  // Compared in whole cents so float noise (15.000000001) doesn't print ".00".
+  const fractionDigits = Math.round(value * 100) % 100 === 0 ? 0 : 2;
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(value);
 }
 
 export interface CurrencyTotal {
