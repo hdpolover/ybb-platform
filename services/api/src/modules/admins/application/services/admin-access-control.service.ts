@@ -44,6 +44,11 @@ type AdminAccessSnapshot = {
   adminPrograms: Array<{ permissions: unknown }>;
 };
 
+// Permissions that widen scope or grant admin management. Below super tier a
+// caller may only hand these out (via a role) if they already hold them, so a
+// level-800 Admin cannot mint a platform_access / roles.manage sock puppet.
+const PRIVILEGED_PERMISSIONS = ['platform_access', 'platform.manage', 'admin.manage', 'roles.manage'];
+
 @Injectable()
 export class AdminAccessControlService {
   constructor(private readonly prisma: PrismaService) {}
@@ -86,6 +91,7 @@ export class AdminAccessControlService {
     if (getAdminRank({ accessLevel: NEW_ADMIN_ACCESS_LEVEL, role }) >= getAdminRank(actor)) {
       throw new ForbiddenException('You cannot create an administrator at or above your own rank.');
     }
+    this.assertGrantsWithinActor(actor, role);
   }
 
   /**
@@ -133,6 +139,7 @@ export class AdminAccessControlService {
     if (isSuperAdminTier(actor)) return;
 
     const nextRole = isRoleChange ? await this.findRole(changes.roleId) : target.role;
+    if (isRoleChange) this.assertGrantsWithinActor(actor, nextRole);
     const targetRank = Math.max(getAdminRank(target), getAdminRank({ ...target, role: nextRole }));
 
     if (targetRank >= getAdminRank(actor)) {
@@ -157,6 +164,7 @@ export class AdminAccessControlService {
     if (isSuperAdminRole(current) || isSuperAdminRole(next)) {
       throw new ForbiddenException('Only a super admin can create or change a super-admin role.');
     }
+    this.assertGrantsWithinActor(actor, next);
 
     if (!current) return;
 
@@ -203,16 +211,29 @@ export class AdminAccessControlService {
     return admin;
   }
 
-  private hasPermission(access: AdminAccessSnapshot, candidates: string[]): boolean {
-    const permissionSet = new Set(
+  private assertGrantsWithinActor(actor: AdminAccessSnapshot, role: RankedRole): void {
+    const held = this.permissionSet(actor);
+    const missing = normalizePermissions(role?.permissions)
+      .map((permission) => permission.trim().toLowerCase())
+      .filter((permission) => PRIVILEGED_PERMISSIONS.includes(permission) && !held.has(permission));
+    if (missing.length > 0) {
+      throw new ForbiddenException(`You cannot grant permissions you do not hold: ${missing.join(', ')}.`);
+    }
+  }
+
+  private permissionSet(access: AdminAccessSnapshot): Set<string> {
+    return new Set(
       [
         ...normalizePermissions(access.role?.permissions),
         ...normalizePermissions(access.customPermissions),
         ...access.adminBrands.flatMap((assignment) => normalizePermissions(assignment.permissions)),
         ...access.adminPrograms.flatMap((assignment) => normalizePermissions(assignment.permissions)),
-      ].map((permission) => permission.toLowerCase()),
+      ].map((permission) => permission.trim().toLowerCase()),
     );
+  }
 
+  private hasPermission(access: AdminAccessSnapshot, candidates: string[]): boolean {
+    const permissionSet = this.permissionSet(access);
     return candidates.some((candidate) => permissionSet.has(candidate.toLowerCase()));
   }
 }

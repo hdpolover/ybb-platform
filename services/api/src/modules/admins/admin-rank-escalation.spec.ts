@@ -132,6 +132,21 @@ describe('AdminAccessControlService rank rule', () => {
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
+    it('cannot hand out a privileged permission it does not hold (roles.manage, platform.manage)', async () => {
+      await expect(
+        service.assertCanWriteRole(actingAs('admin'), null, { name: 'Ops', permissions: ['roles.manage'] }),
+      ).rejects.toThrow('You cannot grant permissions you do not hold: roles.manage.');
+      await expect(service.assertCanCreateAdmin(actingAs('admin'), ROLES.projectManager.id)).rejects.toThrow(
+        /cannot grant permissions you do not hold: .*platform\.manage/,
+      );
+    });
+
+    it('may still create roles with functional permissions it does not hold itself', async () => {
+      await expect(
+        service.assertCanWriteRole(actingAs('admin'), null, { name: 'Reviewer', permissions: ['review:read', 'documents:read'] }),
+      ).resolves.toBeUndefined();
+    });
+
     it('can create an ordinary admin', async () => {
       await expect(service.assertCanCreateAdmin(actingAs('admin'), ROLES.programAdmin.id)).resolves.toBeUndefined();
     });
