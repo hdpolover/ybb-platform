@@ -217,4 +217,42 @@ describe('PaymentAdminController — category-aware filter in listInvoices', () 
             expect(returnedIds).toContain('current-invoice-id');
         });
     });
+
+    describe('(d) applicationId set: rows only, no program-wide aggregates', () => {
+        const APP_ID = '11111111-1111-4111-8111-111111111111';
+
+        it('skips the obsolete scan, summaries, metrics and facets but returns the rows in the same shape', async () => {
+            const mockPrisma = buildMockPrisma([OBSOLETE_ID], [makeInvoice('inv-1'), makeInvoice('inv-2')]);
+            const controller = await buildController(mockPrisma);
+
+            const result = await controller.listInvoices({ programId: PROGRAM_ID, applicationId: APP_ID });
+
+            expect(mockPrisma.$queryRaw).not.toHaveBeenCalled();
+            expect(mockPrisma.applicationInvoice.groupBy).not.toHaveBeenCalled();
+            expect(mockPrisma.applicationInvoice.aggregate).not.toHaveBeenCalled();
+            expect(mockPrisma.programPricingTier.findMany).not.toHaveBeenCalled();
+            expect(mockPrisma.participantApplication.groupBy).not.toHaveBeenCalled();
+            // Only the row total; none of the follow-up bucket counts.
+            expect(mockPrisma.applicationInvoice.count).toHaveBeenCalledTimes(1);
+
+            expect(result.data.map((inv: { id: string }) => inv.id)).toEqual(['inv-1', 'inv-2']);
+            expect(result.meta.total).toBe(2);
+            expect(result.summary.paid).toEqual({ count: 0, amount: 0 });
+            expect(result.overallSummary.unpaid).toEqual({ count: 0, amount: 0 });
+            expect(result.metrics.totalInvoices).toBe(0);
+            expect(result.filters.tiers).toEqual([]);
+            expect(result.filters.followUpStatuses).toEqual([]);
+        });
+
+        it('allows limit up to 200 for one application, still 100 program-wide', async () => {
+            const mockPrisma = buildMockPrisma([], []);
+            const controller = await buildController(mockPrisma);
+
+            await controller.listInvoices({ programId: PROGRAM_ID, applicationId: APP_ID, limit: '500' });
+            await controller.listInvoices({ programId: PROGRAM_ID, limit: '500' });
+
+            const takes = (mockPrisma.applicationInvoice.findMany as jest.Mock).mock.calls.map(([arg]) => arg.take);
+            expect(takes).toEqual([200, 100]);
+        });
+    });
 });

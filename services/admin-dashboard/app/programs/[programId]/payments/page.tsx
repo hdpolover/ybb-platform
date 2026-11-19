@@ -742,7 +742,7 @@ export default function PaymentsPage({
           icon={<CheckCircle2 className="h-4 w-4 text-indigo-600" />}
           label="Collection Rate"
           value={`${collectionRate.toFixed(1)}%`}
-          sub={`Avg paid ${formatInvoiceAmount(averagePaidAmount, currency)}`}
+          sub={`Avg paid ${formatInvoiceAmount(Math.round(averagePaidAmount), currency)}`}
           color="indigo"
         />
         <StatCard

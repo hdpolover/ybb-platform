@@ -19,11 +19,11 @@ import type { Essay } from "@/app/components/participants/tabs/EssaysTab";
 import type { SubmittedForm } from "@/app/components/participants/tabs/SubmittedFormTab";
 import { ParticipantNavBar } from "@/app/components/participants/ParticipantNavBar";
 import { listApplications, getApplication, createSupportImpersonation, type Application } from "@/src/shared/api-client";
-import { formatDate } from "@/lib/utils";
-import { getExtraFieldsByTab, getFieldDisplayValue, getSubmittedSections } from "@/lib/form-extra-fields";
+import { findFormField, getExtraFieldsByTab, getFieldDisplayValue, getSubmittedSections } from "@/lib/form-extra-fields";
+import { formatCountry, formatFieldValue } from "@/lib/field-value-format";
 import { STATUS_LABEL, humanizeStatus } from "@/lib/application-badges";
 import type { ProfileSummaryFields } from "@/lib/profile-summary";
-import { buildChangeLabels } from "@/lib/edit-history";
+import { buildChangeFields, buildChangeLabels } from "@/lib/edit-history";
 import { Button } from "@/src/ui/button";
 import { Input } from "@/src/ui/input";
 import { Label } from "@/src/ui/label";
@@ -39,34 +39,6 @@ interface ParticipantData extends ProfileHeaderData {
   submitted: SubmittedForm;
 }
 
-const regionNames = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
-
-// Render a stored country value: convert a 2-letter ISO code (e.g. "ID") to a readable name; pass names through.
-function formatCountry(raw: string | null | undefined): string {
-  if (!raw) return "";
-  if (regionNames && /^[A-Z]{2}$/.test(raw)) {
-    try {
-      return regionNames.of(raw) ?? raw;
-    } catch {
-      return raw;
-    }
-  }
-  return raw;
-}
-
-// Humanizes snake_case enum values (e.g. "fully_funded" to "Fully Funded")
-// while leaving real category names (which contain spaces or capitals) untouched.
-function formatCategory(raw: string | null | undefined): string {
-  if (!raw) return "";
-  if (/^[a-z]+(?:_[a-z]+)+$/.test(raw)) {
-    return raw
-      .split("_")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
-  }
-  return raw;
-}
-
 const clean = (v: string | null | undefined): string => v?.trim() || "—";
 
 function mapToParticipantData(app: Application): ParticipantData {
@@ -74,11 +46,16 @@ function mapToParticipantData(app: Application): ParticipantData {
 
   const sections = app.submissionForm?.sections;
   const extras = getExtraFieldsByTab(sections);
+  // Fixed row: the participant column formatted like the program form's field of that name (option label, country, date).
+  const fixed = (raw: string | null | undefined, ...names: string[]): string =>
+    formatFieldValue(raw, findFormField(sections, ...names) ?? { name: names[0] }) || "—";
   // phoneNumber / emergencyContactPhone already carry the country code.
   const phone = clean(p?.phoneNumber);
   // Raw option value ("instagram") -> the form's option label when the form defines one.
   const knowledgeSource =
-    getFieldDisplayValue(sections, "knowledge_source") ?? getFieldDisplayValue(sections, "referral_source") ?? clean(p?.knowledgeSource);
+    getFieldDisplayValue(sections, "knowledge_source") ??
+    getFieldDisplayValue(sections, "referral_source") ??
+    fixed(p?.knowledgeSource, "knowledge_source", "referral_source");
   const location = [p?.originCity, formatCountry(p?.originCountry)].filter(Boolean).join(", ") || "—";
 
   const experiences: { role: string; company: string }[] = (() => {
@@ -124,9 +101,9 @@ function mapToParticipantData(app: Application): ParticipantData {
     personal: {
       fullName: clean(p?.fullName),
       nickname: clean(p?.nickName),
-      gender: clean(p?.gender),
-      birthDate: p?.birthdate ? formatDate(p.birthdate, { day: "numeric", month: "long", year: "numeric" }) : "—",
-      nationality: formatCountry(p?.nationality) || "—",
+      gender: fixed(p?.gender, "gender"),
+      birthDate: fixed(p?.birthdate, "birthdate", "date_of_birth"),
+      nationality: fixed(p?.nationality, "nationality"),
       originAddress: clean(p?.originAddress),
       currentAddress: clean(p?.currentAddress),
       phone,
@@ -134,13 +111,13 @@ function mapToParticipantData(app: Application): ParticipantData {
       emergencyContactName: clean(p?.emergencyContactName),
       emergencyPhone: clean(p?.emergencyContactPhone),
       emergencyPhoneValid: p?.emergencyContactPhoneValid,
-      contactRelation: clean(p?.emergencyContactRelation),
-      shirtSize: clean(p?.tshirtSize),
+      contactRelation: fixed(p?.emergencyContactRelation, "emergency_contact_relation", "contact_relation"),
+      shirtSize: fixed(p?.tshirtSize, "tshirt_size"),
       diseaseHistory: clean(p?.medicalConditions),
       extraFields: extras.personal,
     },
     professional: {
-      educationLevel: clean(p?.educationLevel),
+      educationLevel: fixed(p?.educationLevel, "education_level"),
       institution: clean(p?.institution),
       major: clean(p?.major),
       occupation: clean(p?.occupation),
@@ -151,7 +128,7 @@ function mapToParticipantData(app: Application): ParticipantData {
       extraFields: extras.professional,
     },
     entry: {
-      category: formatCategory(app.applicationCategory) || "—",
+      category: formatFieldValue(app.applicationCategory, { name: "category" }) || "—",
       subtheme: app.subthemeName ?? app.subthemeId ?? "—",
       source: knowledgeSource,
       reference: clean(app.referralCode),
@@ -219,6 +196,8 @@ export default function ParticipantDetailPage() {
       programId,
       applicationId: rawApplication.id,
       changeLabels: buildChangeLabels(rawApplication.submissionForm?.sections, rawApplication.essays),
+      changeFields: buildChangeFields(rawApplication.submissionForm?.sections),
+      participantEmail: rawApplication.participant?.email ?? undefined,
     };
   }, [rawApplication, programId]);
 

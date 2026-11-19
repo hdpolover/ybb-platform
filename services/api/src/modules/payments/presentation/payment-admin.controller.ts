@@ -74,6 +74,33 @@ interface PaymentsByCountryResponse {
     unknownCount: number;
 }
 
+// Payments list page header numbers and filter facets (see loadInvoiceListAggregates).
+interface InvoiceListAggregates {
+    summary: Record<string, { count: number; amount: number }>;
+    overallSummary: Record<string, { count: number; amount: number }>;
+    metrics: {
+        totalInvoices: number;
+        totalAmount: number;
+        paidAmount: number;
+        outstandingAmount: number;
+        collectionRate: number;
+        averagePaidAmount: number;
+    };
+    filters: {
+        tiers: Array<{ id: string; name: string; feeType: string }>;
+        paymentMethods: Array<{ value: string; label: string; count: number }>;
+        currencies: Array<{ value: string; count: number }>;
+        applicationStatuses: Array<{ value: string; count: number }>;
+        invoiceStatuses: Array<{ value: string; count: number }>;
+        followUpStatuses: Array<{ value: string; count: number }>;
+        feeTypes: Array<{ value: string; count: number }>;
+    };
+}
+
+const INVOICE_LIST_MAX_LIMIT = 100;
+// Participant detail Payments tab: one applicant's full history in one page.
+const SINGLE_APPLICATION_INVOICE_MAX_LIMIT = 200;
+
 // notify-payment-issue (audit M154): concurrent publish count per chunk. Bounds
 // how many confirm-channel round trips are in flight at once against a single
 // RabbitMQ channel/connection, while still processing well ahead of one strictly
@@ -169,8 +196,12 @@ export class PaymentAdminController {
         // (e.g. the reporting export) gets the same guarantee even if it skips this.
         resolvePayerTypeFilter(payerType);
 
+        // One application's invoices (participant detail Payments tab): rows only,
+        // none of the program-wide summary/metrics/facet queries below.
+        const isSingleApplication = Boolean(applicationId?.trim());
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
-        const limitNum = Math.min(Math.max(1, parseInt(limit, 10) || 20), 100);
+        const maxLimit = isSingleApplication ? SINGLE_APPLICATION_INVOICE_MAX_LIMIT : INVOICE_LIST_MAX_LIMIT;
+        const limitNum = Math.min(Math.max(1, parseInt(limit, 10) || 20), maxLimit);
         const skip = (pageNum - 1) * limitNum;
         const sortDirection = this.parseSortOrder(sortOrder);
         // cursor key present in query (even empty string) = opt-in to cursor mode
@@ -185,9 +216,11 @@ export class PaymentAdminController {
         // allowed_categories does NOT include the application's current applicationCategory.
         // These arise when a participant switches funding category (self_funded <-> fully_funded).
         // If applicationCategory is null we skip exclusion for that application.
-        const obsoleteRows = await this.readPrisma.$queryRaw<{ id: string }[]>(
-            obsoleteRegistrationFeeInvoiceIdsSql(programId),
-        );
+        // One applicant's history keeps superseded invoices and skips the
+        // aggregates, so it never needs this program-wide scan.
+        const obsoleteRows = isSingleApplication
+            ? []
+            : await this.readPrisma.$queryRaw<{ id: string }[]>(obsoleteRegistrationFeeInvoiceIdsSql(programId));
         const obsoleteInvoiceIds = obsoleteRows.map((r) => r.id);
         const excludeObsolete: Prisma.ApplicationInvoiceWhereInput = buildExcludeObsoleteWhere(obsoleteInvoiceIds);
 
@@ -216,7 +249,7 @@ export class PaymentAdminController {
             },
             // One applicant's history must keep an invoice superseded by a
             // category switch: an admin override keeps the paid one on purpose.
-            applicationId ? [] : obsoleteInvoiceIds,
+            isSingleApplication ? [] : obsoleteInvoiceIds,
         );
 
         const allowedSortBy: Record<string, Prisma.ApplicationInvoiceOrderByWithRelationInput> = {
@@ -231,34 +264,8 @@ export class PaymentAdminController {
         const listWhere = useCursorMode
             ? this.buildCreatedAtCursorWhere(where, decodedCursor, sortDirection)
             : where;
-        const summaryWhere: Prisma.ApplicationInvoiceWhereInput = { application: { programId }, ...excludeObsolete };
-        // Status filter facet counts must reflect the OTHER active filters
-        // (everything except the status filter itself), so each count equals
-        // what selecting that status actually yields in the list. Prevents a
-        // program-wide count (e.g. "Paid (12)") from disagreeing with the
-        // filtered table (e.g. 7 rows).
-        const statusFacetWhere: Prisma.ApplicationInvoiceWhereInput = { ...where };
-        delete statusFacetWhere.status;
-
-        const [
-            invoices,
-            total,
-            summaryRows,
-            overallSummaryRows,
-            statusFacetRows,
-            paidAggregate,
-            totalsAggregate,
-            tiers,
-            paymentMethodOptionsRows,
-            currencyOptionsRows,
-            applicationStatusRows,
-            participantCancelledCount,
-            paymentCancelledIssueCount,
-            paymentFailedCount,
-            manualProofRejectedCount,
-            paymentProcessingStuckCount,
-            paymentMethodCatalog,
-        ] = await Promise.all([
+        const catalogPromise = this.getPaymentMethodCatalog();
+        const [invoices, total, aggregates, paymentMethodCatalog] = await Promise.all([
             this.readPrisma.applicationInvoice.findMany({
                 where: listWhere,
                 include: {
@@ -284,6 +291,73 @@ export class PaymentAdminController {
                 take: useCursorMode ? limitNum + 1 : limitNum,
             }),
             this.readPrisma.applicationInvoice.count({ where }),
+            isSingleApplication
+                ? this.emptyInvoiceListAggregates()
+                : this.loadInvoiceListAggregates(programId, where, excludeObsolete, catalogPromise),
+            // Independent of the DB fan-out above (hits the payment service over
+            // HTTP, not Postgres) — folded into the same Promise.all so it runs
+            // concurrently with the reads instead of sequentially after them.
+            catalogPromise,
+        ]);
+        const hasMore = useCursorMode ? invoices.length > limitNum : pageNum * limitNum < total;
+        const invoiceWindow = useCursorMode ? invoices.slice(0, limitNum) : invoices;
+        await this.enrichInvoicePaymentMethods(invoiceWindow, paymentMethodCatalog);
+        const nextCursor = useCursorMode && hasMore
+            ? this.encodeCreatedAtCursor({
+                id: invoiceWindow[invoiceWindow.length - 1]?.id,
+                createdAt: invoiceWindow[invoiceWindow.length - 1]?.createdAt,
+            })
+            : null;
+
+        return {
+            data: invoiceWindow.map((inv) => this.toInvoiceDto(inv)),
+            meta: {
+                total,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.ceil(total / limitNum),
+                mode: useCursorMode ? 'cursor' : 'offset',
+                cursor: cursorToken,
+                nextCursor,
+                hasMore,
+            },
+            ...aggregates,
+        };
+    }
+
+    /** Program-wide summary, metrics and filter facets for the payments list page. */
+    private async loadInvoiceListAggregates(
+        programId: string,
+        where: Prisma.ApplicationInvoiceWhereInput,
+        excludeObsolete: Prisma.ApplicationInvoiceWhereInput,
+        catalogPromise: Promise<Array<{ value: string; label: string }>>,
+    ): Promise<InvoiceListAggregates> {
+        const summaryWhere: Prisma.ApplicationInvoiceWhereInput = { application: { programId }, ...excludeObsolete };
+        // Status filter facet counts must reflect the OTHER active filters
+        // (everything except the status filter itself), so each count equals
+        // what selecting that status actually yields in the list. Prevents a
+        // program-wide count (e.g. "Paid (12)") from disagreeing with the
+        // filtered table (e.g. 7 rows).
+        const statusFacetWhere: Prisma.ApplicationInvoiceWhereInput = { ...where };
+        delete statusFacetWhere.status;
+
+        const [
+            summaryRows,
+            overallSummaryRows,
+            statusFacetRows,
+            paidAggregate,
+            totalsAggregate,
+            tiers,
+            paymentMethodOptionsRows,
+            currencyOptionsRows,
+            applicationStatusRows,
+            participantCancelledCount,
+            paymentCancelledIssueCount,
+            paymentFailedCount,
+            manualProofRejectedCount,
+            paymentProcessingStuckCount,
+            paymentMethodCatalog,
+        ] = await Promise.all([
             this.readPrisma.applicationInvoice.groupBy({
                 by: ['status'],
                 where,
@@ -385,10 +459,7 @@ export class PaymentAdminController {
                     ...excludeObsolete,
                 },
             }),
-            // Independent of the DB fan-out above (hits the payment service over
-            // HTTP, not Postgres) — folded into the same Promise.all so it runs
-            // concurrently with the reads instead of sequentially after them.
-            this.getPaymentMethodCatalog(),
+            catalogPromise,
         ]);
         // allProblemsCount used to be a 6th DB round trip running an OR across
         // these same 4 buckets (participant-initiated cancellations are
@@ -398,16 +469,6 @@ export class PaymentAdminController {
         // individual counts. Plain JS sum instead of a redundant query.
         const allProblemsCount =
             paymentCancelledIssueCount + paymentFailedCount + manualProofRejectedCount + paymentProcessingStuckCount;
-        const hasMore = useCursorMode ? invoices.length > limitNum : pageNum * limitNum < total;
-        const invoiceWindow = useCursorMode ? invoices.slice(0, limitNum) : invoices;
-        await this.enrichInvoicePaymentMethods(invoiceWindow, paymentMethodCatalog);
-        const nextCursor = useCursorMode && hasMore
-            ? this.encodeCreatedAtCursor({
-                id: invoiceWindow[invoiceWindow.length - 1]?.id,
-                createdAt: invoiceWindow[invoiceWindow.length - 1]?.createdAt,
-            })
-            : null;
-
         const summary = this.initInvoiceSummary();
         const overallSummary = this.initInvoiceSummary();
         for (const row of summaryRows) {
@@ -447,17 +508,6 @@ export class PaymentAdminController {
             }));
 
         return {
-            data: invoiceWindow.map((inv) => this.toInvoiceDto(inv)),
-            meta: {
-                total,
-                page: pageNum,
-                limit: limitNum,
-                totalPages: Math.ceil(total / limitNum),
-                mode: useCursorMode ? 'cursor' : 'offset',
-                cursor: cursorToken,
-                nextCursor,
-                hasMore,
-            },
             summary,
             overallSummary,
             metrics: {
@@ -502,6 +552,31 @@ export class PaymentAdminController {
                         return acc;
                     }, new Map<string, number>()),
                 ).map(([value, count]) => ({ value, count })),
+            },
+        };
+    }
+
+    /** loadInvoiceListAggregates' shape, all zero / empty: one application's tab only reads the rows. */
+    private async emptyInvoiceListAggregates(): Promise<InvoiceListAggregates> {
+        return {
+            summary: this.initInvoiceSummary(),
+            overallSummary: this.initInvoiceSummary(),
+            metrics: {
+                totalInvoices: 0,
+                totalAmount: 0,
+                paidAmount: 0,
+                outstandingAmount: 0,
+                collectionRate: 0,
+                averagePaidAmount: 0,
+            },
+            filters: {
+                tiers: [],
+                paymentMethods: [],
+                currencies: [],
+                applicationStatuses: [],
+                invoiceStatuses: [],
+                followUpStatuses: [],
+                feeTypes: [],
             },
         };
     }
