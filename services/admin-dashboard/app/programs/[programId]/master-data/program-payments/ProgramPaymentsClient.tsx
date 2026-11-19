@@ -43,10 +43,11 @@ const DEFAULT_PAYMENT_INFO_HTML =
 interface PaymentInfoEditorProps {
   programId: string;
   initialHtml: string | null;
+  canEdit: boolean;
   onSaved?: (newHtml: string | null) => void;
 }
 
-function PaymentInfoEditor({ programId, initialHtml, onSaved }: PaymentInfoEditorProps) {
+function PaymentInfoEditor({ programId, initialHtml, canEdit, onSaved }: PaymentInfoEditorProps) {
   const [html, setHtml] = useState<string>(initialHtml ?? "");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -86,7 +87,7 @@ function PaymentInfoEditor({ programId, initialHtml, onSaved }: PaymentInfoEdito
     setHtml(DEFAULT_PAYMENT_INFO_HTML);
   };
 
-  if (!editing) {
+  if (!editing || !canEdit) {
     return (
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -94,13 +95,15 @@ function PaymentInfoEditor({ programId, initialHtml, onSaved }: PaymentInfoEdito
             <h3 className="text-sm font-semibold text-zinc-900">Payment Information</h3>
             <p className="text-xs text-zinc-500">Shown to participants on the payment page.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
-          >
-            Edit
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50"
+            >
+              Edit
+            </button>
+          )}
         </div>
         {initialHtml ? (
           <div
@@ -109,7 +112,7 @@ function PaymentInfoEditor({ programId, initialHtml, onSaved }: PaymentInfoEdito
           />
         ) : (
           <p className="text-sm italic text-zinc-400">
-            Not set — participants will see a built-in default. Click Edit to customize.
+            Not set — participants will see a built-in default.{canEdit ? " Click Edit to customize." : ""}
           </p>
         )}
       </section>
@@ -238,8 +241,7 @@ export function ProgramPaymentsClient({
   programName: string;
 }) {
   const resolvedProgramId = useResolvedProgramId(programId);
-  // payments:read views; the API refuses tier writes without the pricing set.
-  // Payment info (PUT payment-info) has no permission check yet, so it stays open.
+  // payments:read views; the API refuses tier and payment-info writes without the pricing set.
   const canWrite = useProgramWriteAccess(programId, programWritePermissions.pricing);
   const [rows, setRows] = useState<PaymentOptionRow[]>([]);
   const [tiers, setTiers] = useState<PricingTier[]>([]);
@@ -339,6 +341,7 @@ export function ProgramPaymentsClient({
       <PaymentInfoEditor
         programId={resolvedProgramId}
         initialHtml={paymentInfoHtml}
+        canEdit={canWrite}
         onSaved={setPaymentInfoHtml}
       />
 

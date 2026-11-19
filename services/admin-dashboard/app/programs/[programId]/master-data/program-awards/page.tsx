@@ -24,7 +24,7 @@ export default function ProgramAwardsPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms } = useAuth();
   const programId = useResolvedProgramId(params.programId);
-  // content:read views; the API refuses writes without the content set (awards controller has no check yet, so this mirrors the menu rule).
+  // content:read views; the API (program-awards controller) refuses writes without the content set.
   const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.content);
   const [awards, setAwards] = useState<ProgramAward[]>([]);
   const [loading, setLoading] = useState(true);

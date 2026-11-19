@@ -42,8 +42,8 @@ function normalizeRichText(value: string): string | undefined {
 }
 
 export function PreviewSettingsTab({ programId }: { programId: string }) {
-  // submission form read views; the API refuses writes without the submissionForm set.
-  const canWrite = useProgramWriteAccess(programId, programWritePermissions.submissionForm);
+  // Saves through PUT programs/:id, which the API gates with the programConfig set.
+  const canWrite = useProgramWriteAccess(programId, programWritePermissions.programConfig);
   const [termsAndConditions, setTermsAndConditions] = useState("");
   const [checklistItems, setChecklistItems] = useState<string[]>([]);
   const [newItem, setNewItem] = useState("");

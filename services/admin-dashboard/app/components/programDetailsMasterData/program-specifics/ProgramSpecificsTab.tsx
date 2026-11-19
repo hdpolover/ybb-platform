@@ -30,6 +30,8 @@ import { PaymentInfoSheet } from "../landing-content/PaymentInfoSheet";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 import { sanitizeHtml } from "@/lib/sanitize-html";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 export interface ProgramSpecificsData {
   schedule: {
@@ -132,6 +134,10 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
   const [copyLandingOpen, setCopyLandingOpen] = useState(false);
   const [copyContactTemplateOpen, setCopyContactTemplateOpen] = useState(false);
   const [copyLandingTemplateOpen, setCopyLandingTemplateOpen] = useState(false);
+  // PUT contact / landing-content / partners-canva-url and the copy routes need
+  // program:write; payment-info takes the pricing set.
+  const canEdit = useProgramWriteAccess(programId, programWritePermissions.programConfig);
+  const canEditPricing = useProgramWriteAccess(programId, programWritePermissions.pricing);
   const lc = data.landingContent;
 
   const benefitsGroupCount = lc.benefits?.groups?.length ?? 0;
@@ -341,7 +347,7 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
           </div>
           <div className="flex items-center gap-3">
             <PhoneIcon className="hidden h-6 w-6 text-blue-400 md:block" />
-            <div className="flex items-center gap-2">
+            {canEdit && <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setCopyContactOpen(true)}
@@ -357,7 +363,7 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
                 Copy from template
               </button>
               <ProgramContactSheet programId={programId} initial={data.contact} onSaved={onDataChanged} />
-            </div>
+            </div>}
           </div>
         </div>
         <dl className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
@@ -392,6 +398,7 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
           </div>
           <div className="flex items-center gap-3">
             <GlobeAltIcon className="hidden h-6 w-6 text-blue-400 md:block" />
+            {canEdit && <>
             <button
               type="button"
               onClick={() => setCopyLandingOpen(true)}
@@ -406,6 +413,7 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
             >
               Copy from template
             </button>
+            </>}
           </div>
         </div>
 
@@ -415,7 +423,7 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
             icon={Gift}
             isEmpty={benefitsGroupCount === 0}
             emptyDescription="Add audience groups and benefit items to show on the landing page."
-            action={<BenefitsSheet programId={programId} brandId={brandId} initial={lc.benefits} onSaved={onDataChanged} />}
+            action={canEdit && <BenefitsSheet programId={programId} brandId={brandId} initial={lc.benefits} onSaved={onDataChanged} />}
           >
             <p className="text-xs text-zinc-500">{benefitsGroupCount} group(s) configured.</p>
           </LandingContentCard>
@@ -425,7 +433,7 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
             icon={Sparkles}
             isEmpty={featuresCount === 0}
             emptyDescription="Add feature highlights to show on the landing page."
-            action={<FeaturesSheet programId={programId} initial={lc.features} onSaved={onDataChanged} />}
+            action={canEdit && <FeaturesSheet programId={programId} initial={lc.features} onSaved={onDataChanged} />}
           >
             <p className="text-xs text-zinc-500">{featuresCount} feature(s) configured.</p>
           </LandingContentCard>
@@ -435,7 +443,7 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
             icon={Megaphone}
             isEmpty={!lc.promo_cta?.title}
             emptyDescription="Set up the promo call-to-action shown on the landing page."
-            action={<PromoCtaSheet programId={programId} initial={lc.promo_cta} onSaved={onDataChanged} />}
+            action={canEdit && <PromoCtaSheet programId={programId} initial={lc.promo_cta} onSaved={onDataChanged} />}
           >
             <p className="text-xs text-zinc-500">{lc.promo_cta?.title}</p>
           </LandingContentCard>
@@ -445,7 +453,7 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
             icon={BookOpen}
             isEmpty={!lc.further_information?.title}
             emptyDescription="Add the guidebook / further information call-to-action."
-            action={<FurtherInformationSheet programId={programId} brandId={brandId} initial={lc.further_information} onSaved={onDataChanged} />}
+            action={canEdit && <FurtherInformationSheet programId={programId} brandId={brandId} initial={lc.further_information} onSaved={onDataChanged} />}
           >
             <p className="text-xs text-zinc-500">{lc.further_information?.title}</p>
           </LandingContentCard>
@@ -455,7 +463,7 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
             icon={Film}
             isEmpty={!lc.moments_shorts?.title}
             emptyDescription="Add the short-video highlights section shown on the landing page."
-            action={<MomentsShortsSheet programId={programId} initial={lc.moments_shorts} onSaved={onDataChanged} />}
+            action={canEdit && <MomentsShortsSheet programId={programId} initial={lc.moments_shorts} onSaved={onDataChanged} />}
           >
             <p className="text-xs text-zinc-500">{lc.moments_shorts?.title}</p>
           </LandingContentCard>
@@ -465,7 +473,7 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
             icon={CreditCard}
             isEmpty={paymentInfoItemCount === 0}
             emptyDescription="Add payment schedule and selection process cards."
-            action={<PaymentInfoSheet programId={programId} initial={lc.payment_info} onSaved={onDataChanged} />}
+            action={canEditPricing && <PaymentInfoSheet programId={programId} initial={lc.payment_info} onSaved={onDataChanged} />}
           >
             <p className="text-xs text-zinc-500">{paymentInfoItemCount} item(s) configured.</p>
           </LandingContentCard>
@@ -475,7 +483,7 @@ export function ProgramSpecificsTab({ data, programId, brandId, onDataChanged }:
             icon={Presentation}
             isEmpty={!data.partnersCanvaUrl}
             emptyDescription="Add a Canva embed for this program, shown on the Partners page labelled with the program name."
-            action={<ProgramPartnersCanvaSheet programId={programId} initial={data.partnersCanvaUrl} onSaved={onDataChanged} />}
+            action={canEdit && <ProgramPartnersCanvaSheet programId={programId} initial={data.partnersCanvaUrl} onSaved={onDataChanged} />}
           >
             <p className="truncate text-xs text-zinc-500">{data.partnersCanvaUrl}</p>
           </LandingContentCard>
