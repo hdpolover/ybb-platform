@@ -244,7 +244,6 @@ describe('admin application routes are scoped to the application\'s programme', 
     handler: unknown;
     send: (server: Parameters<typeof request>[0]) => request.Test;
   }> = [
-    { name: 'POST /applications', handler: CreateApplicationHandler, send: (s) => request(s).post('/applications').send({ participantId: UUID, programId: UUID }) },
     { name: 'GET /applications/:id', handler: GetApplicationHandler, send: (s) => request(s).get('/applications/app-1') },
     { name: 'PUT /applications/:id', handler: UpdateApplicationHandler, send: (s) => request(s).put('/applications/app-1').send({}) },
     { name: 'POST /applications/:id/switch-category', handler: SwitchApplicationCategoryHandler, send: (s) => request(s).post('/applications/app-1/switch-category').send({ targetCategory: 'self_funded' }) },
@@ -273,6 +272,20 @@ describe('admin application routes are scoped to the application\'s programme', 
 
     const res = await send(app.getHttpServer());
     expect(res.status).toBe(404);
+    expect(target.execute).not.toHaveBeenCalled();
+  });
+
+  it('POST /applications: 403 for any non-platform admin, even inside their programme', async () => {
+    const target = { execute: jest.fn().mockResolvedValue({ id: 'app-1' }) };
+    app = await bootstrap(
+      buildReadPrisma({ adminProgramId: UUID, applicationProgramId: UUID }),
+      { execute: jest.fn() },
+      noop,
+      [[CreateApplicationHandler, target]],
+    );
+
+    const res = await request(app.getHttpServer()).post('/applications').send({ participantId: UUID, programId: UUID });
+    expect(res.status).toBe(403);
     expect(target.execute).not.toHaveBeenCalled();
   });
 

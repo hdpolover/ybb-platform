@@ -102,7 +102,9 @@ function buildDraft(method: ProgramPaymentMethod): MethodDraft {
 
 export default function PaymentMethodsPage() {
   const params = useParams<{ programId: string }>();
-  const { accessiblePrograms, adminProfile } = useAuth();
+  const { accessiblePrograms, adminProfile, accessConfig } = useAuth();
+  // The shared master feeds every program; the API restricts writes to platform admins.
+  const canEditShared = accessConfig.canAccessPlatform;
   const program = accessiblePrograms.find(
     (p) => p.programId === params.programId || p.programSlug === params.programId,
   );
@@ -262,14 +264,16 @@ export default function PaymentMethodsPage() {
             <button type="button" onClick={fetchMethods} className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-medium text-zinc-600 hover:bg-zinc-50">
               <ArrowPathIcon className="h-3.5 w-3.5" />Refresh
             </button>
-            <button
-              type="button"
-              onClick={() => setShowCreateShared(true)}
-              title="Creates a shared payment method visible to ALL programs"
-              className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100"
-            >
-              <PlusIcon className="h-3.5 w-3.5" />Add Shared Method
-            </button>
+            {canEditShared && (
+              <button
+                type="button"
+                onClick={() => setShowCreateShared(true)}
+                title="Creates a shared payment method visible to ALL programs"
+                className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100"
+              >
+                <PlusIcon className="h-3.5 w-3.5" />Add Shared Method
+              </button>
+            )}
             <button
               type="button"
               onClick={handleSaveAll}
@@ -310,7 +314,11 @@ export default function PaymentMethodsPage() {
         {!loading && methods.length === 0 && (
           <EmptyState
             title="No shared payment methods yet"
-            description="Use the 'Add Shared Method' button above to create one, then enable it for this program."
+            description={
+              canEditShared
+                ? "Use the 'Add Shared Method' button above to create one, then enable it for this program."
+                : "Ask a platform admin to add a shared payment method, then enable it for this program."
+            }
           />
         )}
 
@@ -326,8 +334,8 @@ export default function PaymentMethodsPage() {
                 editSharedLoading={editSharedLoadingId === m.id}
                 onChange={(patch) => updateDraft(m.id, patch)}
                 onFieldChange={(field, patch) => updateFieldDraft(m.id, field, patch)}
-                onEditShared={() => openEditShared(m.id)}
-                onDeleteShared={() => setDeleteSharedTarget({ id: m.id, label: m.display_name || m.name })}
+                onEditShared={canEditShared ? () => openEditShared(m.id) : undefined}
+                onDeleteShared={canEditShared ? () => setDeleteSharedTarget({ id: m.id, label: m.display_name || m.name }) : undefined}
               />
             ))}
           </div>
@@ -387,8 +395,9 @@ function MethodRow({
   editSharedLoading: boolean;
   onChange: (patch: Partial<MethodDraft>) => void;
   onFieldChange: (field: "description" | "instructions" | "adminInstructions", patch: Partial<FieldDraft>) => void;
-  onEditShared: () => void;
-  onDeleteShared: () => void;
+  /** Omitted for non-platform admins: the shared master is platform-only. */
+  onEditShared?: () => void;
+  onDeleteShared?: () => void;
 }) {
   const label = method.display_name || method.name || "";
   const isManual = normalizePaymentMethodType(method.type) === "MANUAL";
@@ -505,6 +514,7 @@ function MethodRow({
         <div className="space-y-2 rounded-md border border-zinc-100 bg-zinc-50/60 p-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Shared Account Details</p>
+            {onEditShared && onDeleteShared && (
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
@@ -523,6 +533,7 @@ function MethodRow({
                 <TrashIcon className="h-3 w-3" />Delete
               </button>
             </div>
+            )}
           </div>
           {isManual ? (
             <dl className="space-y-1 text-[11px] text-zinc-600">

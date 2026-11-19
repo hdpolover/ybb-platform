@@ -368,10 +368,12 @@ export class ApplicationsController {
     @Req() req: { user?: { adminId?: string } },
   ): Promise<ApplicationResponseDto> {
     this.logger.log(`Creating application for participant ${dto.participantId} in program ${dto.programId}`);
-    // The body programId IS the target here (there is no row yet to read it from).
+    // Platform-only: the body's participantId is not tied to the admin's brand,
+    // so a scoped admin could pull another brand's participant into their
+    // programme and read their record back. The dashboard never calls this.
     const scope = await getRequestAdminScope(this.readPrisma, req);
     if (scope.kind !== 'platform') {
-      await assertProgramAccess(this.readPrisma, scope, dto.programId);
+      throw new ForbiddenException('This action is restricted to platform administrators.');
     }
 
     const command = new CreateApplicationCommand(
