@@ -3,9 +3,13 @@ import { describe, expect, it } from "vitest";
 import { formatCountry, formatDateValue, formatFieldValue, humanizeOptionCode } from "./field-value-format";
 
 describe("formatCountry", () => {
-  it("turns ISO alpha-2 codes into English names, any case", () => {
+  it("turns upper-case ISO alpha-2 codes into English names", () => {
     expect(formatCountry("PK")).toBe("Pakistan");
-    expect(formatCountry("id")).toBe("Indonesia");
+  });
+
+  it("leaves lower-case two-letter free text alone (na = N/A, not Namibia)", () => {
+    expect(formatCountry("na")).toBe("na");
+    expect(formatCountry("id")).toBe("id");
   });
 
   it("keeps names, unknown codes and blanks as-is", () => {
@@ -43,6 +47,13 @@ describe("humanizeOptionCode", () => {
     expect(humanizeOptionCode("my older sister")).toBe("my older sister");
     expect(humanizeOptionCode("Universitas Indonesia")).toBe("Universitas Indonesia");
     expect(humanizeOptionCode("https://x.com/a_b")).toBe("https://x.com/a_b");
+  });
+});
+
+describe("formatFieldValue free text", () => {
+  it("does not humanize a name-listed field the form types as text", () => {
+    expect(formatFieldValue("friend", { name: "knowledge_source", type: "text" })).toBe("friend");
+    expect(formatFieldValue("bachelors", { name: "education_level" })).toBe("Bachelors");
   });
 });
 

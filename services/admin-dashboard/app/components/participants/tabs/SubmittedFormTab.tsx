@@ -5,7 +5,7 @@ import React, { useMemo } from "react";
 import { ClipboardList, ExternalLink } from "lucide-react";
 import type { SubmittedSection } from "@/lib/form-extra-fields";
 import type { FieldFormatShape } from "@/lib/field-value-format";
-import { originalValuesByKey } from "@/lib/edit-history";
+import { EMPTY_VALUE, originalValuesByKey } from "@/lib/edit-history";
 import { EmptyState } from "@/src/admin/empty-state";
 import { InfoField } from "../InfoField";
 import { useEditHistory } from "./EditHistoryTab";
@@ -27,12 +27,21 @@ interface SubmittedFormTabProps {
 /** Mounted only while the tab is open; shares the Edit History query, so the history is fetched at most once. */
 export function SubmittedFormTab({ data, applicationId, changeFields }: SubmittedFormTabProps) {
   // Pending or failed history: the form still renders, just without the "edited" notes.
-  const { data: history } = useEditHistory(applicationId);
+  const { data: history, isError } = useEditHistory(applicationId);
   const originals = useMemo(
     () => (history ? originalValuesByKey(history, changeFields) : NO_ORIGINALS),
     [history, changeFields],
   );
-  return <SubmittedFormView data={data} originals={originals} />;
+  return (
+    <>
+      {isError && (
+        <p className="mb-4 text-xs text-amber-700">
+          Couldn&apos;t load the edit history, so admin edits are not marked below. See the Edit History tab.
+        </p>
+      )}
+      <SubmittedFormView data={data} originals={originals} />
+    </>
+  );
 }
 
 /** Read-only, faithful copy of the program form: unanswered fields stay visible, unlike the per-tab extras. */
@@ -66,7 +75,9 @@ export function SubmittedFormView({
           <div className="grid grid-cols-1 gap-x-8 gap-y-6 md:grid-cols-2">
             {section.fields.map((f) => {
               const original = originals.get(f.key);
-              const note = original === undefined ? undefined : <EditedNote original={original} />;
+              // An edit reverted to the submitted value leaves nothing to flag.
+              const reverted = original !== undefined && original === (f.value || EMPTY_VALUE);
+              const note = original === undefined || reverted ? undefined : <EditedNote original={original} />;
               return f.value === "" ? (
                 <InfoField key={f.name} label={f.label} value={NOT_ANSWERED} warning={note} />
               ) : (

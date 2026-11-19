@@ -21,7 +21,8 @@ const OPTION_NAMES: ReadonlySet<string> = new Set([
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
 const OPTION_CODE_RE = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
 const SIZE_CODE_RE = /^\d?x{0,3}[sml]$/i;
-const COUNTRY_CODE_RE = /^[A-Za-z]{2}$/;
+// Uppercase only: stored codes are ISO upper-case, and lowercase "na"/"no" in free text means N/A, not Namibia/Norway.
+const COUNTRY_CODE_RE = /^[A-Z]{2}$/;
 const COUNTRY_NAME_RE = /(?:^|_)country$/i;
 
 const regionNames =
@@ -34,7 +35,7 @@ export function formatCountry(raw: string | null | undefined): string {
   const value = (raw ?? "").trim();
   if (!regionNames || !COUNTRY_CODE_RE.test(value)) return value;
   try {
-    return regionNames.of(value.toUpperCase()) ?? value;
+    return regionNames.of(value) ?? value;
   } catch {
     return value;
   }
@@ -67,7 +68,8 @@ function isCountry(f: FieldFormatShape): boolean {
 }
 
 function isOptionField(f: FieldFormatShape): boolean {
-  return (f.options?.length ?? 0) > 0 || OPTION_TYPES.has((f.type ?? "").toLowerCase()) || OPTION_NAMES.has(f.name.toLowerCase());
+  // The name list only stands in when the form doesn't type the field; a text question stays free text.
+  return (f.options?.length ?? 0) > 0 || OPTION_TYPES.has((f.type ?? "").toLowerCase()) || (!f.type && OPTION_NAMES.has(f.name.toLowerCase()));
 }
 
 /** One stored value as an admin should read it. Unknown shapes fall through unchanged. */
