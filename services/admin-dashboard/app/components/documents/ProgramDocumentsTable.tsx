@@ -105,7 +105,7 @@ function formatTierPrice(tier: ProgramPricingTierOption): string | undefined {
 
 export function ProgramDocumentsTable({ programId }: { programId: string }) {
   const resolvedProgramId = useResolvedProgramId(programId);
-  // documents:write / content:write / program:write; the API refuses template writes otherwise.
+  // documents:write / program:write; the API refuses template writes otherwise.
   const canWrite = useProgramWriteAccess(programId, programWritePermissions.documents);
   const { accessiblePrograms, adminProfile } = useAuth();
   const program = accessiblePrograms.find(

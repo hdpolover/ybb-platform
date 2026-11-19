@@ -55,7 +55,7 @@ function formatBytes(bytes?: number): string {
 export default function ProgramGuidelinesPage() {
   const params = useParams<{ programId: string }>();
   const resolvedProgramId = useResolvedProgramId(params.programId);
-  // documents:write / content:write / program:write; the API refuses resource writes otherwise.
+  // documents:write / program:write; the API refuses resource writes otherwise.
   const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.documents);
   const { accessiblePrograms, adminProfile } = useAuth();
   const program = accessiblePrograms.find(

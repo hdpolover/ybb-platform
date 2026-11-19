@@ -25,7 +25,7 @@ export default function LoaTemplatePage() {
   const params = useParams<{ programId: string }>();
   const programId = params.programId;
   const resolvedProgramId = useResolvedProgramId(programId);
-  // documents:write / content:write / program:write; the API refuses template and batch writes otherwise.
+  // documents:write / program:write; the API refuses template and batch writes otherwise.
   const canWrite = useProgramWriteAccess(programId, programWritePermissions.documents);
 
   // Template status — drives both the banner and the smart default tab.
