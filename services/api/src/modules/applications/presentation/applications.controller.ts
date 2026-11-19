@@ -43,6 +43,9 @@ import { ReviewApplicationHandler } from '../application/commands/handlers/revie
 import { WithdrawApplicationHandler } from '../application/commands/handlers/withdraw-application.handler';
 import { SwitchApplicationCategoryHandler } from '../application/commands/handlers/switch-application-category.handler';
 import { CreateRegistrationPaymentIntentHandler } from '../application/commands/handlers/create-registration-payment-intent.handler';
+import { GetApplicationEditHistoryHandler } from '../application/queries/handlers/get-application-edit-history.handler';
+import { GetApplicationEditHistoryQuery } from '../application/queries/get-application-edit-history.query';
+import { ApplicationEditHistoryEntryDto } from '../application/dto/application-edit-history-response.dto';
 import { AdminUpdateSubmissionHandler } from '../application/commands/handlers/admin-update-submission.handler';
 import { AdminUpdateSubmissionCommand } from '../application/commands/admin-update-submission.command';
 
@@ -186,6 +189,7 @@ export class ApplicationsController {
     private readonly registrationFeeMismatchesHandler: RegistrationFeeMismatchesHandler,
     private readonly reviewDocumentHandler: ReviewDocumentHandler,
     private readonly getDocumentReviewQueueHandler: GetDocumentReviewQueueHandler,
+    private readonly getApplicationEditHistoryHandler: GetApplicationEditHistoryHandler,
   ) { }
 
   /**
@@ -845,6 +849,26 @@ export class ApplicationsController {
     );
 
     return this.adminUpdateSubmissionHandler.execute(command);
+  }
+
+  /**
+   * Admin: edit history of one application (newest first, max 100).
+   * Scope: same programme-scope rule as review(); the PATCH submission-data
+   * route above carries no such check, but history exposes old PII values so
+   * a programme-scoped admin may only read applications of their programmes.
+   */
+  @Get(':id/edit-history')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Admin: list submission edit history of an application' })
+  @ApiResponse({ status: 200, description: 'Edit history, newest first (max 100)' })
+  @ApiResponse({ status: 404, description: 'Application not found or not in scope' })
+  async getEditHistory(
+    @Param('id') id: string,
+    @Req() req: { user?: { adminId?: string } },
+  ): Promise<ApplicationEditHistoryEntryDto[]> {
+    await this.assertCanReviewApplication(req, id);
+    return this.getApplicationEditHistoryHandler.execute(new GetApplicationEditHistoryQuery(id));
   }
 
   @Post(':id/payment-intent')

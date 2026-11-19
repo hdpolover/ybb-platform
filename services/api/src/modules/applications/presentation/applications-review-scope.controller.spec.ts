@@ -30,6 +30,7 @@ import { AdminUpdateSubmissionHandler } from '../application/commands/handlers/a
 import { GetApplicationHandler } from '../application/queries/handlers/get-application.handler';
 import { ListApplicationsHandler } from '../application/queries/handlers/list-applications.handler';
 import { ExportApplicationsHandler } from '../application/queries/handlers/export-applications.handler';
+import { GetApplicationEditHistoryHandler } from '../application/queries/handlers/get-application-edit-history.handler';
 import { GetApplicationReviewHandler } from '../application/queries/handlers/get-application-review.handler';
 import { UpsertApplicationReviewHandler } from '../application/commands/handlers/upsert-application-review.handler';
 import { RegistrationFeeMismatchesHandler } from '../application/queries/handlers/registration-fee-mismatches.handler';
@@ -73,7 +74,11 @@ function buildReadPrisma(opts: { adminProgramId: string; applicationProgramId: s
   };
 }
 
-async function bootstrap(readPrisma: unknown, reviewHandler: { execute: jest.Mock }) {
+async function bootstrap(
+  readPrisma: unknown,
+  reviewHandler: { execute: jest.Mock },
+  editHistoryHandler: { execute: jest.Mock } | typeof noop = noop,
+) {
   const module: TestingModule = await Test.createTestingModule({
     controllers: [ApplicationsController],
     providers: [
@@ -95,6 +100,7 @@ async function bootstrap(readPrisma: unknown, reviewHandler: { execute: jest.Moc
       { provide: RegistrationFeeMismatchesHandler, useValue: noop },
       { provide: ReviewDocumentHandler, useValue: noop },
       { provide: GetDocumentReviewQueueHandler, useValue: noop },
+      { provide: GetApplicationEditHistoryHandler, useValue: editHistoryHandler },
     ],
   })
     .overrideGuard(JwtAuthGuard)
@@ -187,5 +193,38 @@ describe('POST /applications/:id/review is scoped to the application\'s programm
       .expect(200);
 
     expect(reviewHandler.execute).toHaveBeenCalled();
+  });
+});
+
+describe('GET /applications/:id/edit-history is scoped to the application\'s programme', () => {
+  let app: INestApplication;
+
+  afterEach(async () => {
+    if (app) await app.close();
+  });
+
+  it('refuses an admin outside the application\'s programme without reaching the handler', async () => {
+    const history = { execute: jest.fn() };
+    app = await bootstrap(
+      buildReadPrisma({ adminProgramId: 'program-A', applicationProgramId: 'program-B' }),
+      { execute: jest.fn() },
+      history,
+    );
+
+    await request(app.getHttpServer()).get('/applications/app-1/edit-history').expect(404);
+    expect(history.execute).not.toHaveBeenCalled();
+  });
+
+  it('passes the handler plain array through for an in-scope admin', async () => {
+    const history = { execute: jest.fn().mockResolvedValue([{ id: 'h1' }]) };
+    app = await bootstrap(
+      buildReadPrisma({ adminProgramId: 'program-A', applicationProgramId: 'program-A' }),
+      { execute: jest.fn() },
+      history,
+    );
+
+    const res = await request(app.getHttpServer()).get('/applications/app-1/edit-history').expect(200);
+    expect(res.body).toEqual([{ id: 'h1' }]);
+    expect(history.execute).toHaveBeenCalledWith(expect.objectContaining({ applicationId: 'app-1' }));
   });
 });
