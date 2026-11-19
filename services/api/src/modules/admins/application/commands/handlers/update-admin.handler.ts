@@ -73,13 +73,14 @@ export class UpdateAdminHandler {
             throw new BadRequestException('One or more selected programs were not found.');
         }
 
-        const manualBrandIds = updates.brandIds !== undefined
-            ? updates.brandIds
-            : admin.adminBrands.map((assignment) => assignment.brandId);
-        const nextBrandIds = Array.from(new Set([
-            ...manualBrandIds,
-            ...programs.map((program) => program.brandId),
-        ]));
+        // Brand rows come only from brandIds the caller sent. Adding the brands of the
+        // assigned programs here silently turned an 'assigned' admin into brand_scope
+        // over every program, user and payment of that brand.
+        const nextBrandIds = Array.from(new Set(
+            updates.brandIds !== undefined
+                ? updates.brandIds
+                : admin.adminBrands.map((assignment) => assignment.brandId),
+        ));
 
         const assignmentRoleName = nextRole?.name ?? 'Admin';
         const assignmentPermissions = normalizePermissions(nextRole?.permissions);
@@ -107,7 +108,7 @@ export class UpdateAdminHandler {
             }
 
             // Update Brands
-            if (updates.brandIds !== undefined || updates.programIds !== undefined || updates.roleId !== undefined) {
+            if (updates.brandIds !== undefined || updates.roleId !== undefined) {
                 await tx.adminBrand.deleteMany({
                     where: { adminId: id }
                 });
