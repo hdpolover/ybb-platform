@@ -8,7 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { ADMIN_PERMISSION_KEY, AdminPermissionGuard } from '@shared/guards/admin-permission.guard';
-import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
+import { ADMIN_SCOPE_KEY, AdminScopeGuard } from '@shared/guards/admin-scope.guard';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { ProgramsController } from '../programs.controller';
 import { ProgramExchangeRateController } from '../program-exchange-rate.controller';
@@ -20,7 +20,7 @@ type Handler = (...args: never[]) => unknown;
 
 const PROGRAM_CONFIG = ['program:write'];
 const PRICING = ['payments:write', 'program:write'];
-const SUBMISSION_FORM = ['program:write', 'applications:write'];
+const SUBMISSION_FORM = ['program:write'];
 const REVIEW = ['review:write', 'applications:write'];
 
 const P = ProgramsController.prototype;
@@ -31,7 +31,6 @@ const routes: Array<[string, Handler, object, string, string[]]> = [
   ['PUT programs/:id/partners-canva-url', P.updatePartnersCanvaUrl, ProgramsController, 'id', PROGRAM_CONFIG],
   ['PUT programs/:id/landing-content', P.updateLandingContent, ProgramsController, 'id', PROGRAM_CONFIG],
   ['POST programs/:id/branding', P.updateBranding, ProgramsController, 'id', PROGRAM_CONFIG],
-  ['DELETE programs/:id', P.delete, ProgramsController, 'id', PROGRAM_CONFIG],
   ['POST programs/:id/publish', P.publish, ProgramsController, 'id', PROGRAM_CONFIG],
   ['POST programs/:id/unpublish', P.unpublish, ProgramsController, 'id', PROGRAM_CONFIG],
   ['PUT programs/:programId/exchange-rate', ProgramExchangeRateController.prototype.updateExchangeRate, ProgramExchangeRateController, 'programId', PRICING],
@@ -92,6 +91,36 @@ describe('program-keyed admin writes need a role permission (real AdminPermissio
   it.each(routes)('%s: a platform_access admin without the permission passes', async (_name, handler, cls, param) => {
     prismaRead.admin.findUnique.mockResolvedValue(PLATFORM_ACCESS_ADMIN);
     await expect(guard.canActivate(contextFor(handler, cls, { [param]: 'prog-b' }))).resolves.toBe(true);
+  });
+});
+
+describe('DELETE programs/:id is platform-only (real AdminScopeGuard)', () => {
+  const prismaRead = { admin: { findUnique: jest.fn() }, program: { findUnique: jest.fn() } };
+  const guard = new AdminScopeGuard(new Reflector(), prismaRead as unknown as PrismaReadService);
+  const contextFor = (): ExecutionContext => {
+    const request = { user: { adminId: 'admin-1' }, params: { id: 'prog-a' } };
+    return {
+      getHandler: () => P.delete,
+      getClass: () => ProgramsController,
+      switchToHttp: () => ({ getRequest: () => request }),
+    } as unknown as ExecutionContext;
+  };
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('is @ScopedBy platform with no program permission to satisfy instead', () => {
+    expect(Reflect.getMetadata(ADMIN_SCOPE_KEY, P.delete)).toEqual({ target: 'platform', paramName: 'id' });
+    expect(Reflect.getMetadata(ADMIN_PERMISSION_KEY, P.delete)).toBeUndefined();
+  });
+
+  it('403 for a scoped admin holding program:write on that program', async () => {
+    prismaRead.admin.findUnique.mockResolvedValue(withRole(['program:write']));
+    await expect(guard.canActivate(contextFor())).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('a platform admin passes', async () => {
+    prismaRead.admin.findUnique.mockResolvedValue(PLATFORM_ACCESS_ADMIN);
+    await expect(guard.canActivate(contextFor())).resolves.toBe(true);
   });
 });
 
