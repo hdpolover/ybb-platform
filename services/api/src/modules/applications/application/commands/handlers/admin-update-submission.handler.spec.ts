@@ -363,6 +363,24 @@ describe('AdminUpdateSubmissionHandler', () => {
       );
     });
 
+    it('syncs a `nickname` form field (not only `nick_name`) to the participant column', async () => {
+      const { prisma, updateParticipant } = buildPrismaMock();
+      const handler = makeHandler(prisma);
+
+      const command = new AdminUpdateSubmissionCommand(
+        'app-uuid-1',
+        'admin-user-id',
+        'Nickname fix',
+        { nickname: 'Janie' },
+      );
+
+      await handler.execute(command);
+
+      expect(updateParticipant).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ nickName: 'Janie' }) }),
+      );
+    });
+
     it('does not re-check the participant patch path, which already has its own DTO-level MaxLength', async () => {
       // Sanity check: an oversized value supplied via `participant.fullName` is
       // caught the same way (same helper, same field), so both entry points

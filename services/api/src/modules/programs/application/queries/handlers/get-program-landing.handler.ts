@@ -72,7 +72,6 @@ export class GetProgramLandingHandler implements IQueryHandler<GetProgramLanding
             select: {
               id: true,
               awardedAt: true,
-              notes: true,
               application: {
                 select: {
                   participant: {
@@ -115,7 +114,6 @@ export class GetProgramLandingHandler implements IQueryHandler<GetProgramLanding
       recipients: award.recipients.map(r => ({
         id: r.id,
         awardedAt: r.awardedAt,
-        notes: r.notes,
         participant: {
           name: r.application.participant.fullName,
           institution: r.application.participant.institution,

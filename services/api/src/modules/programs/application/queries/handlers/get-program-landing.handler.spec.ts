@@ -50,7 +50,7 @@ describe('GetProgramLandingHandler', () => {
     );
     expect(args.select.certificateTemplateId).toBeUndefined();
     expect(args.select.legacyId).toBeUndefined();
-    expect(Object.keys(args.select.recipients.select).sort()).toEqual(['application', 'awardedAt', 'id', 'notes']);
+    expect(Object.keys(args.select.recipients.select).sort()).toEqual(['application', 'awardedAt', 'id']);
   });
 
   it('flattens recipients to the public participant shape', async () => {
