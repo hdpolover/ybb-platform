@@ -200,12 +200,7 @@ function EmergencyContactContent({
     );
   }
 
-  const emergencyPhone = [
-    participant.emergencyContactCountryCode,
-    participant.emergencyContactPhone,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const emergencyPhone = participant.emergencyContactPhone ?? "";
 
   return (
     <section className="@container min-w-0">

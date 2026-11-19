@@ -16,7 +16,7 @@ import type { Miscellaneous } from "@/app/components/participants/tabs/Miscellan
 import type { Essay } from "@/app/components/participants/tabs/EssaysTab";
 import { listApplications, getApplication, createSupportImpersonation, type Application } from "@/src/shared/api-client";
 import { formatDate } from "@/lib/utils";
-import { getMiscExtraFields } from "@/lib/misc-extra-fields";
+import { getExtraFieldsByTab, getFieldDisplayValue } from "@/lib/form-extra-fields";
 import { Button } from "@/src/ui/button";
 import { Input } from "@/src/ui/input";
 import { Label } from "@/src/ui/label";
@@ -59,10 +59,17 @@ function formatCategory(raw: string | null | undefined): string {
   return raw;
 }
 
+const clean = (v: string | null | undefined): string => v?.trim() || "—";
+
 function mapToParticipantData(app: Application): ParticipantData {
   const p = app.participant;
 
-  const phone = [p?.phoneCountryCode, p?.phoneNumber].filter(Boolean).join(" ") || "—";
+  const sections = app.submissionForm?.sections;
+  const extras = getExtraFieldsByTab(sections);
+  // phoneNumber / emergencyContactPhone already carry the country code.
+  const phone = clean(p?.phoneNumber);
+  // Raw option value ("instagram") -> the form's option label when the form defines one.
+  const knowledgeSource = getFieldDisplayValue(sections, "knowledge_source") ?? clean(p?.knowledgeSource);
   const location = [p?.originCity, formatCountry(p?.originCountry)].filter(Boolean).join(", ") || "—";
 
   const experiences: { role: string; company: string }[] = (() => {
@@ -73,7 +80,7 @@ function mapToParticipantData(app: Application): ParticipantData {
       return [];
     } catch {
       return app.experiences
-        ? app.experiences.split("\n").filter(Boolean).map((l) => ({ role: l, company: "" }))
+        ? app.experiences.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => ({ role: l, company: "" }))
         : [];
     }
   })();
@@ -85,7 +92,7 @@ function mapToParticipantData(app: Application): ParticipantData {
       if (Array.isArray(parsed)) return parsed;
       return [app.achievements];
     } catch {
-      return app.achievements ? app.achievements.split("\n").filter(Boolean) : [];
+      return app.achievements ? app.achievements.split("\n").map((l) => l.trim()).filter(Boolean) : [];
     }
   })();
 
@@ -97,44 +104,55 @@ function mapToParticipantData(app: Application): ParticipantData {
     email: p?.email ?? "—",
     phone,
     location,
+    status: app.status,
+    applicationCategory: app.applicationCategory,
+    createdAt: app.createdAt,
+    updatedAt: app.updatedAt,
+    registrationPaymentStatus: app.registrationPaymentStatus,
+    programPaymentStatus: app.programPaymentStatus,
+    fundingDecision: app.fundingDecision,
     personal: {
-      fullName: p?.fullName ?? "—",
-      nickname: p?.nickName ?? "—",
-      gender: p?.gender ?? "—",
+      fullName: clean(p?.fullName),
+      nickname: clean(p?.nickName),
+      gender: clean(p?.gender),
       birthDate: p?.birthdate ? formatDate(p.birthdate, { day: "numeric", month: "long", year: "numeric" }) : "—",
       nationality: formatCountry(p?.nationality) || "—",
-      originAddress: p?.originAddress ?? "—",
-      currentAddress: p?.currentAddress ?? "—",
+      originAddress: clean(p?.originAddress),
+      currentAddress: clean(p?.currentAddress),
       phone,
-      emergencyContactName: p?.emergencyContactName ?? "—",
-      emergencyPhone: [p?.emergencyContactCountryCode, p?.emergencyContactPhone].filter(Boolean).join(" ") || "—",
-      contactRelation: p?.emergencyContactRelation ?? "—",
-      shirtSize: p?.tshirtSize ?? "—",
-      diseaseHistory: p?.medicalConditions ?? "—",
+      emergencyContactName: clean(p?.emergencyContactName),
+      emergencyPhone: clean(p?.emergencyContactPhone),
+      contactRelation: clean(p?.emergencyContactRelation),
+      shirtSize: clean(p?.tshirtSize),
+      diseaseHistory: clean(p?.medicalConditions),
+      extraFields: extras.personal,
     },
     professional: {
-      educationLevel: p?.educationLevel ?? "—",
-      institution: p?.institution ?? "—",
-      major: p?.major ?? "—",
-      organization: p?.organizations ?? "—",
+      educationLevel: clean(p?.educationLevel),
+      institution: clean(p?.institution),
+      major: clean(p?.major),
+      occupation: clean(p?.occupation),
+      organization: clean(p?.organizations),
       experience: experiences,
       achievements: achievementsList,
-      cvFileName: p?.resumeUrl ? p.resumeUrl.split("/").pop() ?? p.resumeUrl : "—",
+      resume: p?.resumeUrl?.trim() ?? "",
+      extraFields: extras.professional,
     },
     entry: {
       category: formatCategory(app.applicationCategory) || "—",
       subtheme: app.subthemeName ?? app.subthemeId ?? "—",
-      source: p?.knowledgeSource ?? "—",
-      reference: app.referralCode ?? "—",
+      source: knowledgeSource,
+      reference: clean(app.referralCode),
+      extraFields: extras.entry,
     },
     misc: {
-      instagram: p?.instagramUsername ? `https://instagram.com/${p.instagramUsername.replace(/^@/, "")}` : "—",
-      knowledgeSource: p?.knowledgeSource ?? "—",
-      sourceAccount: app.sourceAccountName ?? "—",
-      twibbon: app.twibbonLink ?? "—",
-      requirementLink: app.requirementLink ?? "—",
-      referralCode: p?.referralCode ?? "—",
-      extraFields: getMiscExtraFields(app.submissionForm?.sections),
+      instagram: p?.instagramUsername?.trim() ?? "",
+      knowledgeSource,
+      sourceAccount: clean(app.sourceAccountName),
+      twibbon: clean(app.twibbonLink),
+      requirementLink: clean(app.requirementLink),
+      referralCode: clean(p?.referralCode),
+      extraFields: extras.misc,
     },
     essays: app.essays ?? [],
   };

@@ -686,6 +686,7 @@ export type Application = {
     nickName?: string | null;
     email: string;
     phoneCountryCode?: string | null;
+    /** Full international number; the country code is already included. */
     phoneNumber?: string | null;
     birthdate?: string | null;
     gender?: string | null;
@@ -697,6 +698,7 @@ export type Application = {
     currentCountry?: string | null;
     currentAddress?: string | null;
     emergencyContactName?: string | null;
+    /** Full international number; the country code is already included. */
     emergencyContactPhone?: string | null;
     emergencyContactCountryCode?: string | null;
     emergencyContactRelation?: string | null;
@@ -706,6 +708,7 @@ export type Application = {
     institution?: string | null;
     major?: string | null;
     organizations?: string | null;
+    occupation?: string | null;
     instagramUsername?: string | null;
     linkedinUrl?: string | null;
     portfolioUrl?: string | null;
