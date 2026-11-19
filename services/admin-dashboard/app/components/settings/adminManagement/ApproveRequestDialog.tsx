@@ -3,7 +3,6 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,9 +12,12 @@ import {
   DialogTitle,
 } from "@/src/ui/dialog";
 import { Button } from "@/src/ui/button";
-import { Select } from "@/src/ui/select";
-import { ProgramMultiSelect } from "@/src/admin/components/program-multi-select";
-import { isPlatformTierRole } from "@/lib/access-requests";
+import {
+  AmberNotice,
+  PLATFORM_ROLE_WARNING,
+  RoleAndProgramsFields,
+  participantAccountWarning,
+} from "./AdminAccessFields";
 import {
   approveAccessRequest,
   type AccessRequest,
@@ -26,11 +28,8 @@ import {
 export const APPROVE_EMAIL_FAILED_MESSAGE =
   "Approved, but the invite email failed. Use Send password link on their row.";
 
-export function participantAccountWarning(brands: string[]): string {
-  return `This email already has a participant account (${brands.join(", ")}). Approving may turn that account into the admin account and reset its password; they'll set a new one from the invite email.`;
-}
-
-export const PLATFORM_ROLE_WARNING = "This role can see every brand and/or manage admins.";
+// Re-exported: the warnings live with the fields both dialogs share.
+export { PLATFORM_ROLE_WARNING, participantAccountWarning };
 
 export function ApproveRequestDialog({
   request,
@@ -56,9 +55,6 @@ export function ApproveRequestDialog({
     for (const requested of request.requestedPrograms) byId.set(requested.id, requested);
     return [...byId.values()];
   }, [programs, request.requestedPrograms]);
-
-  const selectedRole = roles.find((role) => role.id === roleId);
-  const showPlatformWarning = selectedRole ? isPlatformTierRole(selectedRole) : false;
 
   async function handleApprove() {
     setPending(true);
@@ -90,50 +86,19 @@ export function ApproveRequestDialog({
 
         <div className="space-y-4">
           {request.participantBrands.length > 0 ? (
-            <p
-              role="alert"
-              className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
-            >
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-              {participantAccountWarning(request.participantBrands)}
-            </p>
+            <AmberNotice>{participantAccountWarning(request.participantBrands)}</AmberNotice>
           ) : null}
 
-          <Select
-            id="approve-role"
-            label="Role"
-            value={roleId}
-            onChange={(e) => setRoleId(e.target.value)}
+          <RoleAndProgramsFields
+            idPrefix="approve"
+            roles={roles}
+            roleId={roleId}
+            onRoleChange={setRoleId}
+            programs={programOptions}
+            programIds={programIds}
+            onProgramIdsChange={setProgramIds}
             disabled={pending}
-          >
-            <option value="">Select a role</option>
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </Select>
-
-          {showPlatformWarning ? (
-            <p
-              role="alert"
-              className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
-            >
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-              {PLATFORM_ROLE_WARNING}
-            </p>
-          ) : null}
-
-          <div>
-            <span className="mb-1 block text-sm font-medium text-zinc-700">Programs</span>
-            <ProgramMultiSelect
-              label="Programs"
-              programs={programOptions}
-              value={programIds}
-              onChange={setProgramIds}
-              disabled={pending}
-            />
-          </div>
+          />
 
           {error ? (
             <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">

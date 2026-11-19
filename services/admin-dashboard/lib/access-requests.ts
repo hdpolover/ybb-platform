@@ -12,6 +12,8 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Mirrors ResetPasswordDto in services/api (auth/presentation/dto/reset-password.dto.ts).
 const PASSWORD_PATTERN = /^(?=.*[A-Z])(?=.*[a-z])(?=.*[\d\W]).+$/;
 
+export const isValidEmail = (email: string): boolean => EMAIL_PATTERN.test(email.trim());
+
 export type AccessRequestDraft = {
   fullName: string;
   email: string;
@@ -75,11 +77,15 @@ export function isPlatformTierRole(role: { name: string; permissions: string[] }
   return config.canAccessPlatform || config.canManageAdmins;
 }
 
-/** Send-password-link follows the existing edit/deactivate gate (canManageAdmins), minus your own row (it would log you out). */
+/**
+ * Send-password-link follows the existing edit/deactivate gate (canManageAdmins), minus your own row
+ * (it would log you out) and minus inactive admins (the API answers 409: the link would be dead).
+ */
 export function canSendPasswordLink(
   accessConfig: Pick<AdminAccessConfig, "canManageAdmins">,
   actorAdminId: string | undefined,
   targetAdminId: string,
+  targetIsActive = true,
 ): boolean {
-  return accessConfig.canManageAdmins && actorAdminId !== targetAdminId;
+  return accessConfig.canManageAdmins && actorAdminId !== targetAdminId && targetIsActive;
 }

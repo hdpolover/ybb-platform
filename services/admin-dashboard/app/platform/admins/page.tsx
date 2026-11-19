@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   PlusIcon,
   MagnifyingGlassIcon,
@@ -20,15 +20,16 @@ import {
   SendPasswordLinkDialog,
   type PasswordLinkTarget,
 } from "../../components/settings/adminManagement/SendPasswordLinkDialog";
+import { InviteAdminDialog } from "../../components/settings/adminManagement/InviteAdminDialog";
 import { canSendPasswordLink } from "@/lib/access-requests";
 import {
   listAdmins,
-  createAdmin,
   updateAdmin,
   deleteAdmin,
   getPendingAccessRequestCount,
+  listAdminRoles,
+  type AdminRole,
   type Admin,
-  type CreateAdminInput,
 } from "../../../src/shared/api-client";
 import { formatDate } from "@/lib/utils";
 import { EnglishInput } from "@/src/ui/english-input";
@@ -44,103 +45,6 @@ function statusBadge(isActive: boolean) {
     <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-600">
       Inactive
     </span>
-  );
-}
-
-// ── Create Modal ─────────────────────────────────────────────────────────────
-
-function CreateAdminModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [form, setForm] = useState<CreateAdminInput>({ email: "", fullName: "", password: "" });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    try {
-      await createAdmin(form);
-      onCreated();
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create admin");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-900">Add Administrator</h2>
-          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600">
-            <XMarkIcon className="h-5 w-5" />
-          </button>
-        </div>
-        {error && (
-          <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>
-        )}
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-zinc-700">Full Name</label>
-            <EnglishInput
-              required
-              type="text"
-              restrictMode="name"
-              value={form.fullName}
-              onChange={(e) => setForm((p) => ({ ...p, fullName: e.target.value }))}
-              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-zinc-700">Email</label>
-            <input
-              required
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
-              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-zinc-700">
-              Password (min 8 chars)
-            </label>
-            <input
-              required
-              minLength={8}
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-              className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-zinc-200 px-3 py-1.5 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
-            >
-              {loading ? "Creating…" : "Create Admin"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }
 
@@ -236,7 +140,12 @@ function EditAdminModal({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function AdminsPage() {
-  const { adminProfile, accessConfig } = useAuth();
+  const { adminProfile, accessConfig, accessiblePrograms } = useAuth();
+  const [roles, setRoles] = useState<AdminRole[]>([]);
+  const invitePrograms = useMemo(
+    () => accessiblePrograms.map((p) => ({ id: p.programId, name: p.programName, brandName: p.brandName })),
+    [accessiblePrograms],
+  );
   const [pendingCount, setPendingCount] = useState(0);
   const [linkTarget, setLinkTarget] = useState<PasswordLinkTarget | null>(null);
   const canManageAdmins = accessConfig.canManageAdmins;
@@ -278,6 +187,13 @@ export default function AdminsPage() {
     } catch {
       // The badge is a hint; the Access requests tab reports its own load errors.
     }
+  }, [canManageAdmins]);
+
+  useEffect(() => {
+    if (!canManageAdmins) return;
+    listAdminRoles()
+      .then(setRoles)
+      .catch(() => setRoles([]));
   }, [canManageAdmins]);
 
   useEffect(() => {
@@ -351,7 +267,7 @@ export default function AdminsPage() {
               className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 font-semibold text-white shadow-sm transition hover:bg-blue-600"
             >
               <PlusIcon className="h-3.5 w-3.5" />
-              Add Administrator
+              Invite Administrator
             </button>
             <button
               type="button"
@@ -438,7 +354,7 @@ export default function AdminsPage() {
                         >
                           <PencilSquareIcon className="h-3.5 w-3.5" />
                         </button>
-                        {canSendPasswordLink(accessConfig, adminProfile?.id, admin.id) && (
+                        {canSendPasswordLink(accessConfig, adminProfile?.id, admin.id, admin.user?.isActive ?? false) && (
                           <button
                             type="button"
                             onClick={() => setLinkTarget({ id: admin.id, fullName: admin.fullName })}
@@ -498,7 +414,12 @@ export default function AdminsPage() {
 
       {/* Modals */}
       {showCreate && (
-        <CreateAdminModal onClose={() => setShowCreate(false)} onCreated={fetchAdmins} />
+        <InviteAdminDialog
+          roles={roles}
+          programs={invitePrograms}
+          onClose={() => setShowCreate(false)}
+          onInvited={fetchAdmins}
+        />
       )}
       {editTarget && (
         <EditAdminModal

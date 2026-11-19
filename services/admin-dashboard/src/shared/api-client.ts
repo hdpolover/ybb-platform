@@ -1041,6 +1041,19 @@ export function rejectAccessRequest(id: string, reason?: string): Promise<unknow
   });
 }
 
+export type InviteAdminInput = { fullName: string; email: string; roleId: string; programIds: string[] };
+export type InviteAdminResult = ApproveAccessRequestResult;
+export type InviteCheckResult = { existingAdminId: string | null; participantBrands: string[] };
+
+/** Creates the admin with no password and emails a single-use set-password link. */
+export function inviteAdmin(input: InviteAdminInput): Promise<InviteAdminResult> {
+  return request<InviteAdminResult>("/admins/invite", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function checkAdminInvite(email: string): Promise<InviteCheckResult> {
+  return request<InviteCheckResult>(`/admins/invite-check?${new URLSearchParams({ email })}`);
+}
+
 export function sendAdminPasswordLink(id: string): Promise<{ ok: true; adminId: string }> {
   return request<{ ok: true; adminId: string }>(`/admins/${id}/send-password-link`, { method: "POST" });
 }

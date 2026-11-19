@@ -478,7 +478,7 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
                             }}
                             tone="purple"
                           />
-                          {canSendPasswordLink(accessConfig, adminProfile?.id, source.id) ? (
+                          {canSendPasswordLink(accessConfig, adminProfile?.id, source.id, source.user.isActive) ? (
                             <ActionButton
                               label="Send link"
                               onClick={() => setLinkTarget({ id: source.id, fullName: source.fullName })}
