@@ -16,6 +16,8 @@ import {
 } from "@heroicons/react/24/solid";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import {
   listDocumentTemplates,
   createDocumentTemplate,
@@ -103,6 +105,8 @@ function formatTierPrice(tier: ProgramPricingTierOption): string | undefined {
 
 export function ProgramDocumentsTable({ programId }: { programId: string }) {
   const resolvedProgramId = useResolvedProgramId(programId);
+  // documents:write / content:write / program:write; the API refuses template writes otherwise.
+  const canWrite = useProgramWriteAccess(programId, programWritePermissions.documents);
   const { accessiblePrograms, adminProfile } = useAuth();
   const program = accessiblePrograms.find(
     (p) => p.programId === programId || p.programSlug === programId,
@@ -160,14 +164,16 @@ export function ProgramDocumentsTable({ programId }: { programId: string }) {
             <ArrowPathIcon className="h-3.5 w-3.5" />
             Refresh
           </button>
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-blue-600"
-            onClick={() => { setEditTarget(null); setSheetOpen(true); }}
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            Add Document
-          </button>
+          {canWrite && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm hover:bg-blue-600"
+              onClick={() => { setEditTarget(null); setSheetOpen(true); }}
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              Add Document
+            </button>
+          )}
         </div>
       </div>
 
@@ -198,7 +204,7 @@ export function ProgramDocumentsTable({ programId }: { programId: string }) {
                 <td colSpan={6} className="px-3 py-10">
                   <EmptyState
                     title="No documents found"
-                    description="Add a document to get started."
+                    description={canWrite ? "Add a document to get started." : "No documents have been added yet."}
                   />
                 </td>
               </tr>
@@ -267,22 +273,26 @@ export function ProgramDocumentsTable({ programId }: { programId: string }) {
                         <EyeIcon className="h-4 w-4" />
                       </a>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => { setEditTarget(row); setSheetOpen(true); }}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
-                      title="Edit"
-                    >
-                      <PencilSquareIcon className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteTarget(row)}
-                      className="flex h-7 w-7 items-center justify-center rounded-md border border-red-100 bg-white text-red-400 shadow-sm hover:bg-red-50"
-                      title="Delete"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
+                    {canWrite && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => { setEditTarget(row); setSheetOpen(true); }}
+                          className="flex h-7 w-7 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-700 shadow-sm hover:bg-zinc-50"
+                          title="Edit"
+                        >
+                          <PencilSquareIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(row)}
+                          className="flex h-7 w-7 items-center justify-center rounded-md border border-red-100 bg-white text-red-400 shadow-sm hover:bg-red-50"
+                          title="Delete"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -292,7 +302,7 @@ export function ProgramDocumentsTable({ programId }: { programId: string }) {
       </div>
 
       <DocumentSheet
-        open={sheetOpen}
+        open={canWrite && sheetOpen}
         programId={resolvedProgramId}
         userId={userId}
         brandId={brandId}

@@ -144,8 +144,9 @@ export default function PaymentsPage({
 }) {
   const { programId } = use(params);
   const { accessiblePrograms } = useAuth();
-  // payments:read views; payment help emails need payments:write (API-enforced).
-  const canWritePayments = useProgramWriteAccess(programId, programWritePermissions.payments);
+  // payments:read views; payment help emails (the only bulk action, so it also
+  // owns the select column) need payments:write or support:write (API-enforced).
+  const canSendPaymentHelp = useProgramWriteAccess(programId, programWritePermissions.paymentHelp);
   const canSubmitApplication = useProgramWriteAccess(programId, programWritePermissions.applicationSubmit);
 
   const program = useMemo(
@@ -979,7 +980,7 @@ export default function PaymentsPage({
           />
         </div>
 
-        {canWritePayments && selectedIds.size > 0 && (
+        {canSendPaymentHelp && selectedIds.size > 0 && (
           <div className="flex items-center justify-between gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2.5">
             <span className="text-xs font-medium text-blue-800">
               {selectedIds.size} selected
@@ -999,15 +1000,17 @@ export default function PaymentsPage({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-10">
-                <input
-                  type="checkbox"
-                  checked={allOnPageSelected}
-                  onChange={toggleSelectAllOnPage}
-                  aria-label="Select all invoices on this page"
-                  className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
-                />
-              </TableHead>
+              {canSendPaymentHelp && (
+                <TableHead className="w-10">
+                  <input
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    onChange={toggleSelectAllOnPage}
+                    aria-label="Select all invoices on this page"
+                    className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </TableHead>
+              )}
               <TableHead>Invoice</TableHead>
               <TableHead>Participant</TableHead>
               <TableHead>Tier / Fee Type</TableHead>
@@ -1021,29 +1024,31 @@ export default function PaymentsPage({
           <TableBody>
             {loading && (
               <TableRow>
-                <TableCell colSpan={9} className="py-10 text-center text-zinc-400">
+                <TableCell colSpan={canSendPaymentHelp ? 9 : 8} className="py-10 text-center text-zinc-400">
                   <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                 </TableCell>
               </TableRow>
             )}
             {!loading && invoices.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="py-10 text-center text-sm text-zinc-400">
+                <TableCell colSpan={canSendPaymentHelp ? 9 : 8} className="py-10 text-center text-sm text-zinc-400">
                   No invoices found.
                 </TableCell>
               </TableRow>
             )}
             {!loading && invoices.map((inv) => (
               <TableRow key={inv.id}>
-                <TableCell>
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(inv.id)}
-                    onChange={() => toggleSelectOne(inv.id)}
-                    aria-label={`Select invoice ${inv.id}`}
-                    className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
-                  />
-                </TableCell>
+                {canSendPaymentHelp && (
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(inv.id)}
+                      onChange={() => toggleSelectOne(inv.id)}
+                      aria-label={`Select invoice ${inv.id}`}
+                      className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </TableCell>
+                )}
                 <TableCell className="min-w-[170px]">
                   <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-500">
                     <span>{inv.id.slice(0, 8)}…{inv.id.slice(-4)}</span>
@@ -1139,7 +1144,7 @@ export default function PaymentsPage({
                           icon: Copy,
                           onClick: () => handleCopyInvoiceId(inv.id),
                         },
-                        ...(canWritePayments
+                        ...(canSendPaymentHelp
                           ? [
                               {
                                 label: notifyingIds.has(inv.id) ? "Sending…" : "Send payment help email",

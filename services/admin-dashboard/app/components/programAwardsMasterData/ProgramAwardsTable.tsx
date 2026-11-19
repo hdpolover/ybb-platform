@@ -7,6 +7,7 @@ import type { ProgramAward } from "@/src/shared/api-client";
 interface ProgramAwardsTableProps {
   awards: ProgramAward[];
   togglingId: string | null;
+  canWrite: boolean;
   onEdit: (award: ProgramAward) => void;
   onDelete: (award: ProgramAward) => void;
   onToggleActive: (award: ProgramAward) => void;
@@ -14,7 +15,7 @@ interface ProgramAwardsTableProps {
 
 const COLUMNS = ["Order", "Name", "Category", "Tier", "Winners", "Tags", "Status", "Actions"];
 
-export function ProgramAwardsTable({ awards, togglingId, onEdit, onDelete, onToggleActive }: ProgramAwardsTableProps) {
+export function ProgramAwardsTable({ awards, togglingId, canWrite, onEdit, onDelete, onToggleActive }: ProgramAwardsTableProps) {
   return (
     <div className="overflow-x-auto rounded-md border border-zinc-200">
       <table className="min-w-full text-left text-[11px]">
@@ -49,6 +50,7 @@ export function ProgramAwardsTable({ awards, togglingId, onEdit, onDelete, onTog
                   : <span className="text-zinc-400">—</span>}
               </td>
               <td className="px-3 py-2">
+                {canWrite ? (
                 <button
                   type="button"
                   onClick={() => onToggleActive(award)}
@@ -63,12 +65,18 @@ export function ProgramAwardsTable({ awards, togglingId, onEdit, onDelete, onTog
                   {award.isActive ? <CheckCircleIcon className="h-3 w-3" /> : <XCircleIcon className="h-3 w-3" />}
                   {award.isActive ? "Active" : "Inactive"}
                 </button>
+                ) : (
+                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${award.isActive ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-100 text-zinc-600"}`}>
+                    {award.isActive ? <CheckCircleIcon className="h-3 w-3" /> : <XCircleIcon className="h-3 w-3" />}
+                    {award.isActive ? "Active" : "Inactive"}
+                  </span>
+                )}
               </td>
               <td className="px-3 py-2 text-right">
-                <div className="flex items-center justify-end gap-1">
+                {canWrite && <div className="flex items-center justify-end gap-1">
                   <button type="button" aria-label={`Edit ${award.name}`} onClick={() => onEdit(award)} className="rounded-md border border-zinc-200 p-1 text-zinc-500 hover:bg-zinc-50"><PencilSquareIcon className="h-3.5 w-3.5" /></button>
                   <button type="button" aria-label={`Delete ${award.name}`} onClick={() => onDelete(award)} className="rounded-md border border-red-100 p-1 text-red-400 hover:bg-red-50"><TrashIcon className="h-3.5 w-3.5" /></button>
-                </div>
+                </div>}
               </td>
             </tr>
           ))}

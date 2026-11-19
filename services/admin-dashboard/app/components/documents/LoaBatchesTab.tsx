@@ -36,6 +36,8 @@ import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 
 interface LoaBatchesTabProps {
   programId: string;
+  /** Create / edit / release / delete batches. Defaults to true; the page passes the admin's real access. */
+  canWrite?: boolean;
   /**
    * Whether the program has an ACTIVE letter_of_acceptance template.
    * `null` while unknown/loading — the Release action is only blocked once
@@ -64,6 +66,7 @@ interface BatchRowProps {
   onViewDelivery: (batch: LoaBatch) => void;
   toggling: boolean;
   hasActiveTemplate?: boolean | null;
+  canWrite: boolean;
 }
 
 /**
@@ -120,6 +123,7 @@ function BatchRow({
   onViewDelivery,
   toggling,
   hasActiveTemplate,
+  canWrite,
 }: BatchRowProps) {
   const isReleased = !!batch.releasedAt;
   // Only block once we positively know there's no active template — `null`
@@ -159,6 +163,7 @@ function BatchRow({
           {isReleased ? "Released" : "Draft"}
         </Badge>
       </TableCell>
+      {canWrite && (
       <TableCell>
         <div className="flex items-center gap-2">
           {blockRelease ? (
@@ -189,13 +194,14 @@ function BatchRow({
           </Button>
         </div>
       </TableCell>
+      )}
     </TableRow>
   );
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesChange }: LoaBatchesTabProps) {
+export function LoaBatchesTab({ programId, canWrite = true, hasActiveTemplate = null, onBatchesChange }: LoaBatchesTabProps) {
   const resolvedProgramId = useResolvedProgramId(programId);
   const [batches, setBatches] = useState<LoaBatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -350,10 +356,12 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
         <p className="text-sm text-zinc-500">
           Manage release batches to control which participants can download their Invitation Letter.
         </p>
-        <Button size="sm" onClick={handleNewBatch}>
-          <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
-          New Batch
-        </Button>
+        {canWrite && (
+          <Button size="sm" onClick={handleNewBatch}>
+            <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+            New Batch
+          </Button>
+        )}
       </div>
 
       {/* Silent-exclusion blind spot: applicants no released batch covers */}
@@ -395,8 +403,12 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
         <EmptyState
           icon={CalendarRange}
           title="No release batches yet"
-          description="Create a batch to define a payment date window and release Invitation Letters for eligible participants."
-          action={{ label: "Create First Batch", onClick: handleNewBatch }}
+          description={
+            canWrite
+              ? "Create a batch to define a payment date window and release Invitation Letters for eligible participants."
+              : "No release batches have been created for this program."
+          }
+          action={canWrite ? { label: "Create First Batch", onClick: handleNewBatch } : undefined}
         />
       )}
 
@@ -411,7 +423,7 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
               <TableHead>Downloaded</TableHead>
               <TableHead>Email Delivery</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Actions</TableHead>
+              {canWrite && <TableHead>Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -426,6 +438,7 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
                 onViewDelivery={setDeliveryTarget}
                 toggling={togglingId === batch.id}
                 hasActiveTemplate={hasActiveTemplate}
+                canWrite={canWrite}
               />
             ))}
           </TableBody>
@@ -433,7 +446,7 @@ export function LoaBatchesTab({ programId, hasActiveTemplate = null, onBatchesCh
       )}
 
       {/* Create / Edit dialog */}
-      {dialogOpen && (
+      {canWrite && dialogOpen && (
         <LoaBatchDialog
           programId={resolvedProgramId}
           batch={editingBatch}

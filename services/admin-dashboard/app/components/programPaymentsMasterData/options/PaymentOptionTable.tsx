@@ -40,12 +40,14 @@ export function ProgramPaymentsTable({
   onRefresh,
   programId,
   programUsdInIdr,
+  canWrite,
 }: {
   data: PaymentOptionRow[];
   currentSearch: string;
   onRefresh?: () => void;
   programId?: string;
   programUsdInIdr: number | null;
+  canWrite: boolean;
 }) {
   const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
   const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
@@ -57,21 +59,25 @@ export function ProgramPaymentsTable({
           <p className="text-sm text-zinc-500">Configure payment options, funding types, and their active periods.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setCopyFromProgramOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-          >
-            <span>Copy from program</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setCopyFromTemplateOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-          >
-            <span>Copy from template</span>
-          </button>
-          <AddPaymentOptionAction programId={programId} programUsdInIdr={programUsdInIdr} onSaved={onRefresh} />
+          {canWrite && (
+            <>
+              <button
+                type="button"
+                onClick={() => setCopyFromProgramOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              >
+                <span>Copy from program</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCopyFromTemplateOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              >
+                <span>Copy from template</span>
+              </button>
+              <AddPaymentOptionAction programId={programId} programUsdInIdr={programUsdInIdr} onSaved={onRefresh} />
+            </>
+          )}
         </div>
       </div>
 
@@ -175,8 +181,12 @@ export function ProgramPaymentsTable({
                   <td className="px-6 py-4 align-top text-right">
                     <div className="inline-flex items-center justify-end gap-2">
                       <ManagePeriodsAction optionId={row._id} />
-                      <EditPaymentOptionAction option={row} programUsdInIdr={programUsdInIdr} onSaved={onRefresh} />
-                      <DeletePaymentOptionAction id={row._id} onDeleted={onRefresh} />
+                      {canWrite && (
+                        <>
+                          <EditPaymentOptionAction option={row} programUsdInIdr={programUsdInIdr} onSaved={onRefresh} />
+                          <DeletePaymentOptionAction id={row._id} onDeleted={onRefresh} />
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

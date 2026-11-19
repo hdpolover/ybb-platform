@@ -15,6 +15,8 @@ import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import { CategoryScopeBadge, CATEGORY_SCOPE_OPTIONS } from "@/app/components/submissionsMasterData/CategoryScopeBadge";
 import { CopyFromTemplateDialog } from "@/app/components/shared/copy-from-program/CopyFromTemplateDialog";
 import { CopyFromProgramDialog } from "@/app/components/shared/copy-from-program/CopyFromProgramDialog";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
@@ -303,6 +305,8 @@ function EssayGuidelineModal({
 
 export function SubmissionEssaysTable({ programId }: { programId: string }) {
   const resolvedProgramId = useResolvedProgramId(programId);
+  // submission form read views; the API refuses writes without the submissionForm set.
+  const canWrite = useProgramWriteAccess(programId, programWritePermissions.submissionForm);
   const [data, setData] = useState<SubmissionEssayRow[]>([]);
   const [copyTemplateOpen, setCopyTemplateOpen] = useState(false);
   const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
@@ -604,35 +608,39 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              setGuidelineErrorMessage(null);
-              setIsGuidelineModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-          >
-            <PencilSquareIcon className="h-4 w-4" />
-            <span>Essay Guidelines</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setCopyTemplateOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-          >
-            <span>Copy from Template</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setCopyFromProgramOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-          >
-            <span>Copy from Program</span>
-          </button>
-          <button type="button" onClick={openCreateModal} className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600">
-            <PlusIcon className="h-4 w-4" />
-            <span>Add Essay</span>
-          </button>
+          {canWrite && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setGuidelineErrorMessage(null);
+                  setIsGuidelineModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              >
+                <PencilSquareIcon className="h-4 w-4" />
+                <span>Essay Guidelines</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCopyTemplateOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              >
+                <span>Copy from Template</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCopyFromProgramOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              >
+                <span>Copy from Program</span>
+              </button>
+              <button type="button" onClick={openCreateModal} className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600">
+                <PlusIcon className="h-4 w-4" />
+                <span>Add Essay</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -701,23 +709,25 @@ export function SubmissionEssaysTable({ programId }: { programId: string }) {
                       </span>
                     </td>
                     <td className="px-6 py-4 align-top text-right">
-                      <div className="inline-flex items-center justify-end gap-2">
-                        <button 
-                          type="button" 
-                          onClick={() => openEditModal(row)} 
-                          className="flex h-8 w-8 items-center justify-center rounded-md bg-amber-50 text-amber-600 transition hover:bg-amber-100 hover:text-amber-700"
-                        >
-                          <PencilSquareIcon className="h-4 w-4" />
-                        </button>
-                        <button 
-                          type="button" 
-                          onClick={() => void handleDelete(row)}
-                          disabled={deletingId === row.id}
-                          className="flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition hover:bg-rose-100 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </div>
+                      {canWrite && (
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <button 
+                            type="button" 
+                            onClick={() => openEditModal(row)} 
+                            className="flex h-8 w-8 items-center justify-center rounded-md bg-amber-50 text-amber-600 transition hover:bg-amber-100 hover:text-amber-700"
+                          >
+                            <PencilSquareIcon className="h-4 w-4" />
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => void handleDelete(row)}
+                            disabled={deletingId === row.id}
+                            className="flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition hover:bg-rose-100 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))

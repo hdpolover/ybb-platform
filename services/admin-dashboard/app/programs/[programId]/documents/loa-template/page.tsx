@@ -10,6 +10,8 @@ import { LoaTemplateEditor } from "@/app/components/documents/LoaTemplateEditor"
 import { LoaBatchesTab } from "@/app/components/documents/LoaBatchesTab";
 import { LoaStatusTable } from "@/app/components/documents/LoaStatusTable";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import {
   listDocumentTemplates,
   getLoaBatches,
@@ -23,6 +25,8 @@ export default function LoaTemplatePage() {
   const params = useParams<{ programId: string }>();
   const programId = params.programId;
   const resolvedProgramId = useResolvedProgramId(programId);
+  // documents:write / content:write / program:write; the API refuses template and batch writes otherwise.
+  const canWrite = useProgramWriteAccess(programId, programWritePermissions.documents);
 
   // Template status — drives both the banner and the smart default tab.
   // `null` means "unknown yet" (still loading).
@@ -144,13 +148,14 @@ export default function LoaTemplatePage() {
         <TabsContent value="batches">
           <LoaBatchesTab
             programId={programId}
+            canWrite={canWrite}
             hasActiveTemplate={hasActiveTemplate}
             onBatchesChange={handleBatchesChange}
           />
         </TabsContent>
 
         <TabsContent value="template">
-          <LoaTemplateEditor programId={programId} onTemplateChange={handleTemplateChange} />
+          <LoaTemplateEditor programId={programId} canWrite={canWrite} onTemplateChange={handleTemplateChange} />
         </TabsContent>
 
         <TabsContent value="downloads">

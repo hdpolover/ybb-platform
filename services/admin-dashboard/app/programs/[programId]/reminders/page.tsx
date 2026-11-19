@@ -32,6 +32,8 @@ import { ConfirmDialog } from "@/src/admin/confirm-dialog";
 import { FilterSelect } from "@/src/ui/select";
 import { FilterPanel } from "@/src/ui/filter-panel";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import { ReminderAudienceCard } from "@/app/components/reminders/ReminderAudienceCard";
 import { ReminderDialog } from "@/app/components/reminders/ReminderDialog";
 import { ReminderDeliveryDialog } from "@/app/components/reminders/ReminderDeliveryDialog";
@@ -123,6 +125,9 @@ function DeliveryCell({
 export default function ProgramRemindersPage() {
   const params = useParams<{ programId: string }>();
   const resolvedProgramId = useResolvedProgramId(params.programId);
+  // The menu admits announcements:write and payments:write too; the API only
+  // lets participants:write or program:write create, edit or cancel.
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.reminders);
 
   const [reminders, setReminders] = useState<ParticipantReminder[]>([]);
   const [total, setTotal] = useState(0);
@@ -274,10 +279,12 @@ export default function ProgramRemindersPage() {
         title="Reminders"
         description="Draft a reminder, see exactly who will receive it, and pick when it goes out. Nothing sends automatically."
         actions={
-          <Button size="sm" onClick={handleNew}>
-            <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
-            New Reminder
-          </Button>
+          canWrite ? (
+            <Button size="sm" onClick={handleNew}>
+              <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+              New Reminder
+            </Button>
+          ) : undefined
         }
       />
 
@@ -343,12 +350,16 @@ export default function ProgramRemindersPage() {
           description={
             hasActiveFilters
               ? "Try clearing the search or status filter."
-              : "Draft a message to an audience of participants, then pick a send time."
+              : canWrite
+                ? "Draft a message to an audience of participants, then pick a send time."
+                : "Reminders for this program will appear here."
           }
           action={
             hasActiveFilters
               ? { label: "Clear filters", onClick: clearFilters }
-              : { label: "Create First Reminder", onClick: handleNew }
+              : canWrite
+                ? { label: "Create First Reminder", onClick: handleNew }
+                : undefined
           }
         />
       )}
@@ -362,7 +373,7 @@ export default function ProgramRemindersPage() {
               <TableHead>Audience</TableHead>
               <TableHead>Email Delivery</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Actions</TableHead>
+              {canWrite && <TableHead>Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -388,26 +399,28 @@ export default function ProgramRemindersPage() {
                       {STATUS_LABEL[reminder.status]}
                     </Badge>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEdit(reminder)}
-                        disabled={!editable}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => setCancelTarget(reminder)}
-                        disabled={!editable}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </TableCell>
+                  {canWrite && (
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEdit(reminder)}
+                          disabled={!editable}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => setCancelTarget(reminder)}
+                          disabled={!editable}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}

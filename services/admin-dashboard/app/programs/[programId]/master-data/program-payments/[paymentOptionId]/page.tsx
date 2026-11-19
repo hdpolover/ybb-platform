@@ -18,6 +18,7 @@ export default async function PaymentPeriodsPage({
 
   return (
     <PeriodPageClient
+      programId={resolvedParams.programId}
       programName={programName}
       tierId={resolvedParams.paymentOptionId}
     />

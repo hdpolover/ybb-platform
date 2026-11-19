@@ -18,6 +18,8 @@ import { computeRegistrationDateWarnings } from "@/lib/registration-date-warning
 import { RichTextEditor } from "@/src/admin/components/rich-text-editor";
 import { sanitizeHtml } from "@/lib/sanitize-html";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 
 /**
  * A tier is "likely backfilled" when its idrPrice exactly matches what the
@@ -236,6 +238,9 @@ export function ProgramPaymentsClient({
   programName: string;
 }) {
   const resolvedProgramId = useResolvedProgramId(programId);
+  // payments:read views; the API refuses tier writes without the pricing set.
+  // Payment info (PUT payment-info) has no permission check yet, so it stays open.
+  const canWrite = useProgramWriteAccess(programId, programWritePermissions.pricing);
   const [rows, setRows] = useState<PaymentOptionRow[]>([]);
   const [tiers, setTiers] = useState<PricingTier[]>([]);
   const [programUsdInIdr, setProgramUsdInIdr] = useState<number | null>(null);
@@ -447,6 +452,7 @@ export function ProgramPaymentsClient({
             onRefresh={load}
             programId={resolvedProgramId}
             programUsdInIdr={programUsdInIdr}
+            canWrite={canWrite}
           />
         )}
       </section>

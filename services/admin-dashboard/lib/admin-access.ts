@@ -135,6 +135,12 @@ export const programWritePermissions = {
   announcements: ["announcements:write", "content:write", "program:write"],
   payments: ["payments:write"],
   resendReceipt: ["payments:write", "support:write"],
+  // notify-payment-issue: support staff send payment help without payments:write.
+  paymentHelp: ["payments:write", "support:write"],
+  // Per-program payment method overlay (payment-admin controller).
+  programPaymentConfig: ["payments:write", "program:write"],
+  fundingDecision: ["review:write", "applications:write"],
+  reminders: ["participants:write", "program:write"],
   applicationEdit: ["applications:write"],
   applicationSubmit: ["applications:write", "payments:write"],
   // program-content-access.util.ts CONTENT_WRITE_PERMISSIONS, admin-media and
