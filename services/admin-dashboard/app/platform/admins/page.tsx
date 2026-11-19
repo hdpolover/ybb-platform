@@ -281,6 +281,7 @@ export default function AdminsPage() {
   }, [canManageAdmins]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount for the tab badge
     void refreshPendingCount();
   }, [refreshPendingCount]);
 

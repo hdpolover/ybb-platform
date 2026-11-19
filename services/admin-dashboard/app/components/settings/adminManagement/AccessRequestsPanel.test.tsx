@@ -24,6 +24,7 @@ const base = {
   reviewedAt: null,
   reviewedByName: null,
   rejectReason: null,
+  participantBrands: [],
 };
 const PENDING = { ...base, id: "r1", fullName: "New Person", email: "new@example.com", status: "pending", existingAdminId: null };
 const EXISTING = { ...base, id: "r2", fullName: "Old Hand", email: "old@example.com", status: "pending", existingAdminId: "admin-9" };

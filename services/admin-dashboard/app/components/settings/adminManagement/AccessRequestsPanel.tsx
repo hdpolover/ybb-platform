@@ -57,6 +57,7 @@ export function AccessRequestsPanel({ onChanged }: { onChanged: () => void }) {
   }, [status]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount/filter change; load() sets loading first
     void load();
   }, [load]);
 

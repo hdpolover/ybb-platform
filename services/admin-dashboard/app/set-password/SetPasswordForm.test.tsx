@@ -34,16 +34,34 @@ describe("SetPasswordForm", () => {
   beforeEach(() => {
     setPasswordWithToken.mockReset();
     rejectWith = null;
+    window.history.replaceState(null, "", "/set-password?token=tok");
   });
 
-  it("shows the invalid-link state when the token is missing", () => {
-    render(<SetPasswordForm token={null} />);
-    expect(screen.getByText(INVALID)).toBeInTheDocument();
+  it("reads the token client-side and strips it from the URL", async () => {
+    render(<SetPasswordForm />);
+    expect(await screen.findByLabelText("New password")).toBeInTheDocument();
+    expect(window.location.search).toBe("");
+    expect(window.location.pathname).toBe("/set-password");
+  });
+
+  it("still submits the token after the URL was stripped", async () => {
+    render(<SetPasswordForm />);
+    await screen.findByLabelText("New password");
+    submit("Valid1234", "Valid1234");
+    expect(await screen.findByText("Password set. You can sign in now.")).toBeInTheDocument();
+    expect(setPasswordWithToken).toHaveBeenCalledWith("tok", "Valid1234");
+  });
+
+  it("shows the invalid-link state when the token is missing", async () => {
+    window.history.replaceState(null, "", "/set-password");
+    render(<SetPasswordForm />);
+    expect(await screen.findByText(INVALID)).toBeInTheDocument();
     expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
   });
 
   it("rejects weak or mismatched passwords before calling the API", async () => {
-    render(<SetPasswordForm token="tok" />);
+    render(<SetPasswordForm />);
+    await screen.findByLabelText("New password");
     submit("weak", "weak");
     expect(await screen.findByRole("alert")).toHaveTextContent(/at least 8 characters/);
     submit("Valid1234", "Different1234");
@@ -52,7 +70,8 @@ describe("SetPasswordForm", () => {
   });
 
   it("sets the password and links to /login", async () => {
-    render(<SetPasswordForm token="tok" />);
+    render(<SetPasswordForm />);
+    await screen.findByLabelText("New password");
     submit("Valid1234", "Valid1234");
 
     expect(await screen.findByText("Password set. You can sign in now.")).toBeInTheDocument();
@@ -63,7 +82,8 @@ describe("SetPasswordForm", () => {
   it("falls to the invalid-link state when the API answers 400", async () => {
     const { ApiError } = await import("@/src/shared/api-client");
     rejectWith = new ApiError("Invalid token", 400);
-    render(<SetPasswordForm token="tok" />);
+    render(<SetPasswordForm />);
+    await screen.findByLabelText("New password");
     submit("Valid1234", "Valid1234");
 
     expect(await screen.findByText(INVALID)).toBeInTheDocument();

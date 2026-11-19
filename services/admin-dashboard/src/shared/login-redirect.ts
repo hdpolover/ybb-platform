@@ -20,13 +20,14 @@ export function redirectToLogin(reason?: LoginRedirectReason): void {
     return;
   }
 
-  ["access_token", "refresh_token", "admin_auth_session"].forEach((key) =>
-    window.localStorage.removeItem(key),
-  );
-
+  // Before clearing the session: a stray 401 on a public page must not log an admin out of this browser.
   if (isPublicPath(window.location.pathname)) {
     return;
   }
+
+  ["access_token", "refresh_token", "admin_auth_session"].forEach((key) =>
+    window.localStorage.removeItem(key),
+  );
 
   const loginUrl = new URL("/login", window.location.origin);
   if (reason) {

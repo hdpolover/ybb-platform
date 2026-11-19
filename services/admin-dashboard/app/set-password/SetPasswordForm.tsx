@@ -1,7 +1,7 @@
 // services/admin-dashboard/app/set-password/SetPasswordForm.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/src/ui/button";
@@ -12,13 +12,27 @@ import { ApiError, setPasswordWithToken } from "@/src/shared/api-client";
 
 const INVALID_LINK_MESSAGE = "This link is invalid or expired; ask your supervisor for a new one.";
 
-export default function SetPasswordForm({ token }: { token: string | null }) {
+export default function SetPasswordForm() {
+  // undefined = not read yet (avoids flashing the invalid state before the effect runs).
+  const [token, setToken] = useState<string | null | undefined>(undefined);
+  const tokenRead = useRef(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [linkInvalid, setLinkInvalid] = useState(false);
   const [pending, setPending] = useState(false);
   const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    // Ref guard: StrictMode re-runs effects, and by then the query string is already stripped.
+    if (tokenRead.current) return;
+    tokenRead.current = true;
+    const params = new URLSearchParams(window.location.search);
+    setToken(params.get("token"));
+    if (window.location.search) window.history.replaceState(null, "", window.location.pathname);
+  }, []);
+
+  if (token === undefined) return null;
 
   if (!token || linkInvalid) {
     return (

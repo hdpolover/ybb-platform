@@ -23,6 +23,13 @@ import {
   type AdminRole,
 } from "@/src/shared/api-client";
 
+export const APPROVE_EMAIL_FAILED_MESSAGE =
+  "Approved, but the invite email failed. Use Send password link on their row.";
+
+export function participantAccountWarning(brands: string[]): string {
+  return `This email already has a participant account (${brands.join(", ")}). Approving may turn that account into the admin account and reset its password; they'll set a new one from the invite email.`;
+}
+
 export const PLATFORM_ROLE_WARNING = "This role can see every brand and/or manage admins.";
 
 export function ApproveRequestDialog({
@@ -57,8 +64,9 @@ export function ApproveRequestDialog({
     setPending(true);
     setError(null);
     try {
-      await approveAccessRequest(request.id, { roleId, programIds });
-      toast.success("Approved. Invite email sent.");
+      const result = await approveAccessRequest(request.id, { roleId, programIds });
+      if (result.emailSent === false) toast.warning(APPROVE_EMAIL_FAILED_MESSAGE);
+      else toast.success("Approved. Invite email sent.");
       onApproved();
       onClose();
     } catch (err) {
@@ -81,6 +89,16 @@ export function ApproveRequestDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {request.participantBrands.length > 0 ? (
+            <p
+              role="alert"
+              className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
+            >
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              {participantAccountWarning(request.participantBrands)}
+            </p>
+          ) : null}
+
           <Select
             id="approve-role"
             label="Role"

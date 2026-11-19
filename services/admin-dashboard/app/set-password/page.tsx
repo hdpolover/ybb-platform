@@ -4,9 +4,7 @@ import SetPasswordForm from "./SetPasswordForm";
 
 export const metadata: Metadata = { title: "Set password - YBB Admin" };
 
-type SetPasswordPageProps = { searchParams: Promise<{ token?: string }> };
-
-export default async function SetPasswordPage({ searchParams }: SetPasswordPageProps) {
-  const { token } = await searchParams;
-  return <SetPasswordForm token={token ?? null} />;
+// The token is read client-side on purpose: reading searchParams here would put it in server access logs and the RSC payload.
+export default function SetPasswordPage() {
+  return <SetPasswordForm />;
 }

@@ -957,6 +957,16 @@ export type AccessRequest = {
   reviewedByName: string | null;
   rejectReason: string | null;
   existingAdminId: string | null;
+  /** Names of brands where this email already has a participant account. */
+  participantBrands: string[];
+};
+
+export type ApproveAccessRequestResult = {
+  adminId: string;
+  roleId: string;
+  programIds: string[];
+  /** False when the account was created but the invite email could not be sent. */
+  emailSent: boolean;
 };
 
 /** Unauthenticated call for the public request-access / set-password pages: no bearer token, no login redirect. */
@@ -1006,8 +1016,8 @@ export function getPendingAccessRequestCount(): Promise<{ count: number }> {
 export function approveAccessRequest(
   id: string,
   input: { roleId: string; programIds: string[] },
-): Promise<{ adminId: string }> {
-  return request<{ adminId: string }>(`/admin/access-requests/${id}/approve`, {
+): Promise<ApproveAccessRequestResult> {
+  return request<ApproveAccessRequestResult>(`/admin/access-requests/${id}/approve`, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -1020,8 +1030,8 @@ export function rejectAccessRequest(id: string, reason?: string): Promise<unknow
   });
 }
 
-export function sendAdminPasswordLink(id: string): Promise<{ ok: true }> {
-  return request<{ ok: true }>(`/admins/${id}/send-password-link`, { method: "POST" });
+export function sendAdminPasswordLink(id: string): Promise<{ ok: true; adminId: string }> {
+  return request<{ ok: true; adminId: string }>(`/admins/${id}/send-password-link`, { method: "POST" });
 }
 
 export function listAdminRoles(params?: {
