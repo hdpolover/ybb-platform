@@ -44,6 +44,7 @@ import { CACHE_KEYS, CACHE_TTL } from '@shared/constants/cache-keys';
 import { AuditTrail } from '../../../shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
 import { ClientIp } from '@shared/decorators/client-ip.decorator';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 
 @ApiTags('Users')
 @Controller('users')
@@ -193,6 +194,9 @@ export class UsersController {
   }
 
   @Post()
+  @UseGuards(AdminScopeGuard)
+  // A bare account in any brand grants a scoped admin nothing to manage; platform only.
+  @ScopedBy('platform')
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Create New User' })
   @ApiResponse({ status: 201, description: 'User successfully created', type: UserResponseDto })
@@ -201,8 +205,7 @@ export class UsersController {
     @CurrentUser() actor: CurrentUserData,
     @Body() dto: CreateUserDto,
   ): Promise<UserResponseDto> {
-    // The body's brandId is the tenant the new account lands in, so a scoped
-    // admin may only name one of their own brands (403 otherwise).
+    // The route is platform-only above; this stays as a second check on the body's brandId.
     await resolveUsersScope(this.prismaRead, actor, dto.brandId);
 
     const command = new CreateUserCommand(

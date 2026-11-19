@@ -31,6 +31,21 @@ import { AuditCleanupService } from '@modules/audit/audit-cleanup.service';
 import { DeletionRequestsController } from '@modules/users/presentation/deletion-requests.controller';
 import { ListDeletionRequestsHandler } from '@modules/users/application/queries/handlers/list-deletion-requests.handler';
 import { ReviewDeletionRequestHandler } from '@modules/users/application/commands/handlers/review-deletion-request.handler';
+import { UsersController } from '@modules/users/presentation/users.controller';
+import { CreateUserHandler } from '@modules/users/application/commands/handlers/create-user.handler';
+import { GetUserHandler } from '@modules/users/application/queries/handlers/get-user.handler';
+import { GetUsersHandler } from '@modules/users/application/queries/handlers/get-users.handler';
+import { GetUserPreferencesHandler } from '@modules/users/application/queries/handlers/get-user-preferences.handler';
+import { UpdateUserPreferencesHandler } from '@modules/users/application/commands/handlers/update-user-preferences.handler';
+import { ListUserNotificationsHandler } from '@modules/users/application/queries/handlers/list-user-notifications.handler';
+import { MarkNotificationReadHandler } from '@modules/users/application/commands/handlers/mark-notification-read.handler';
+import { ListUserActivityLogsHandler } from '@modules/users/application/queries/handlers/list-user-activity-logs.handler';
+import { ListUserSecurityLogsHandler } from '@modules/users/application/queries/handlers/list-user-security-logs.handler';
+import { CreateDeletionRequestHandler } from '@modules/users/application/commands/handlers/create-deletion-request.handler';
+import { CancelDeletionRequestHandler } from '@modules/users/application/commands/handlers/cancel-deletion-request.handler';
+import { ActivateUserHandler } from '@modules/users/application/commands/handlers/activate-user.handler';
+import { DeactivateUserHandler } from '@modules/users/application/commands/handlers/deactivate-user.handler';
+import { CacheService } from '@shared/infrastructure/cache/cache.service';
 
 const reached = () => jest.fn().mockRejectedValue(new ImATeapotException('reached'));
 
@@ -55,6 +70,16 @@ const PERSONAS = {
     role: { name: 'Program Admin', permissions: ['program:read', 'participants:read'] },
     adminBrands: [],
     adminPrograms: [{ programId: 'program-1', permissions: [] }],
+  },
+  // A program row carrying a platform permission scopes that program; it must not make the admin platform.
+  assignedWithPlatformRow: {
+    accessLevel: 3,
+    canManageAdmins: false,
+    canAssignRoles: false,
+    customPermissions: null,
+    role: { name: 'Program Admin', permissions: ['program:read', 'participants:read'] },
+    adminBrands: [],
+    adminPrograms: [{ programId: 'program-1', permissions: ['platform_access', 'admin.manage', 'platform.*'] }],
   },
   platform: {
     accessLevel: 1,
@@ -157,6 +182,28 @@ const SUITES: Record<string, Suite> = {
       ['patch', '/admin/deletion-requests/request-1/review'],
     ],
   },
+  // Only POST /users is platform-only; the rest of the controller stays scoped.
+  UsersController: {
+    controller: UsersController,
+    build: () => {
+      const create = { execute: reached() };
+      const others = [
+        GetUserHandler, GetUsersHandler, GetUserPreferencesHandler, UpdateUserPreferencesHandler,
+        ListUserNotificationsHandler, MarkNotificationReadHandler, ListUserActivityLogsHandler,
+        ListUserSecurityLogsHandler, CreateDeletionRequestHandler, CancelDeletionRequestHandler,
+        ActivateUserHandler, DeactivateUserHandler,
+      ].map((provide) => ({ provide, useValue: {} }));
+      return {
+        providers: [
+          { provide: CreateUserHandler, useValue: create },
+          { provide: CacheService, useValue: {} },
+          ...others,
+        ],
+        spies: [create.execute],
+      };
+    },
+    routes: [['post', '/users']],
+  },
 };
 
 async function bootstrap(suite: Suite, persona: Persona) {
@@ -200,7 +247,7 @@ describe.each(Object.entries(SUITES))('%s is platform only', (_name, suite) => {
     app = undefined;
   });
 
-  describe.each(['brandScoped', 'assigned'] as const)('a %s admin', (persona) => {
+  describe.each(['brandScoped', 'assigned', 'assignedWithPlatformRow'] as const)('a %s admin', (persona) => {
     it.each(suite.routes)('is refused %s %s with 403 before the route runs', async (method, path) => {
       const booted = await bootstrap(suite, persona);
       app = booted.app;

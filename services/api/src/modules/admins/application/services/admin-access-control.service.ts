@@ -259,8 +259,8 @@ export class AdminAccessControlService {
     return new Set([
       ...this.lowerPermissions(access.role?.permissions),
       ...this.lowerPermissions(access.customPermissions),
-      // Brand rows grant nothing below platform tier, so they don't raise the grant ceiling either.
-      ...access.adminPrograms.flatMap((assignment) => this.lowerPermissions(assignment.permissions)),
+      // Assignment rows (brand or program) scope access inside one program; they neither
+      // grant admin management nor raise the ceiling for what a role may hand out.
     ]);
   }
 

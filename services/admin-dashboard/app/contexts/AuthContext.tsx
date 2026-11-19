@@ -264,7 +264,10 @@ function isAccessTokenExpiringSoon(accessToken: string): boolean {
   return getRefreshDelay(accessToken) <= 0;
 }
 
-function computeAccessConfig(profile: AdminProfile | null): AdminAccessConfig {
+// Exported for tests. Platform status comes only from the role and admin-level
+// permissions, never from per-program assignment rows (same rule as the API's
+// getAdminProgramAccessScope).
+export function computeAccessConfig(profile: AdminProfile | null): AdminAccessConfig {
   if (!profile) {
     return {
       isSuperAdmin: false,
@@ -279,8 +282,6 @@ function computeAccessConfig(profile: AdminProfile | null): AdminAccessConfig {
     [
       ...profile.permissions,
       ...profile.customPermissions,
-      // Brand rows grant nothing (owner policy 2026-11-19); the API ignores them too.
-      ...profile.assignedPrograms.flatMap((program) => program.permissions),
     ].map((permission) => permission.toLowerCase()),
   );
 
