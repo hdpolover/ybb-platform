@@ -24,7 +24,6 @@ import {
   getAdmin,
   listAdminRoles,
   listAdmins,
-  resetAdminPassword,
   updateAdmin,
   type Admin,
   type AdminRole as ApiAdminRole,
@@ -104,14 +103,10 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [passwordOpen, setPasswordOpen] = useState(false);
   const [selectedAdmin, setSelectedAdmin] = useState<Admin | null>(null);
   const [form, setForm] = useState<AdminFormState>(defaultFormState);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [password, setPassword] = useState("");
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [resettingPassword, setResettingPassword] = useState(false);
 
   const canManageAdmins = accessConfig.canManageAdmins;
 
@@ -265,28 +260,6 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
     }
   };
 
-  const handleResetPassword = async () => {
-    if (!selectedAdmin) return;
-
-    setResettingPassword(true);
-    setPasswordError(null);
-
-    try {
-      if (password.trim().length < 8) {
-        throw new Error("Password must be at least 8 characters.");
-      }
-
-      await resetAdminPassword(selectedAdmin.id, password);
-      toast.success("Password reset.");
-      setPassword("");
-      setPasswordOpen(false);
-    } catch (resetError) {
-      setPasswordError(resetError instanceof Error ? resetError.message : "Failed to reset password.");
-    } finally {
-      setResettingPassword(false);
-    }
-  };
-
   if (!canManageAdmins) {
     return (
       <section className="rounded-md border border-zinc-200 bg-white px-5 py-10 text-center text-sm text-zinc-600 shadow-sm">
@@ -304,7 +277,7 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
           </div>
           <h1 className="text-base font-semibold text-zinc-900 md:text-lg">Administrator Management</h1>
           <p className="text-xs text-zinc-500 md:text-sm">
-            Invite program admins by email, assign roles, reset passwords, and control which programs they can access.
+            Invite program admins by email, assign roles, send password links, and control which programs they can access.
           </p>
           <p className="text-[11px] text-zinc-400 md:text-xs">
             Currently viewing administrators for: <span className="font-medium">{programName}</span>
@@ -450,16 +423,6 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
                         <div className="flex items-center justify-end gap-1.5">
                           <ActionButton label="View" onClick={() => void openDetailDrawer(source)} tone="blue" />
                           <ActionButton label="Edit" onClick={() => void openEditDrawer(source)} tone="amber" />
-                          <ActionButton
-                            label="Password"
-                            onClick={() => {
-                              setSelectedAdmin(source);
-                              setPassword("");
-                              setPasswordError(null);
-                              setPasswordOpen(true);
-                            }}
-                            tone="purple"
-                          />
                           {canSendPasswordLink(accessConfig, adminProfile?.id, source.id, source.user.isActive) ? (
                             <ActionButton
                               label="Send link"
@@ -634,48 +597,6 @@ export function AdminManagement({ programId, programName }: AdminManagementProps
         ) : null}
       </DrawerShell>
 
-      <DrawerShell
-        open={passwordOpen}
-        onClose={() => {
-          setPasswordOpen(false);
-          setPassword("");
-          setPasswordError(null);
-        }}
-        title="Reset password"
-        description={selectedAdmin ? `Set a new password for ${selectedAdmin.fullName}.` : undefined}
-        error={passwordError}
-        locked={resettingPassword}
-        footer={
-          <>
-            <button
-              type="button"
-              className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-              onClick={() => setPasswordOpen(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-blue-500 bg-blue-500 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
-              onClick={() => void handleResetPassword()}
-              disabled={resettingPassword}
-            >
-              {resettingPassword ? "Saving..." : "Reset password"}
-            </button>
-          </>
-        }
-      >
-        <div>
-          <label className="mb-1 block text-sm font-medium text-zinc-700">New password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="Minimum 8 characters"
-            className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-          />
-        </div>
-      </DrawerShell>
       <SendPasswordLinkDialog target={linkTarget} onClose={() => setLinkTarget(null)} />
       {inviteOpen ? (
         <InviteAdminDialog
@@ -728,16 +649,14 @@ function ActionButton({
 }: {
   label: string;
   onClick: () => void;
-  tone: "blue" | "amber" | "purple" | "rose";
+  tone: "blue" | "amber" | "rose";
 }) {
   const toneClass =
     tone === "blue"
       ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
       : tone === "amber"
         ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-        : tone === "purple"
-          ? "border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100"
-          : "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100";
+        : "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100";
 
   return (
     <button

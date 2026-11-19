@@ -33,8 +33,6 @@ import {
     CreateSupportImpersonationDto,
     UpdateSupportAccessConfigDto,
 } from './dto/support-access.dto';
-import { ResetAdminPasswordDto } from './dto/reset-admin-password.dto';
-import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 import { ClientIp } from '@shared/decorators/client-ip.decorator';
 
@@ -162,48 +160,6 @@ export class AdminsController {
         if (!adminId) throw new UnauthorizedException('Admin access required');
         const command = new UpdateAdminCommand(id, dto, adminId);
         return this.updateAdminHandler.execute(command);
-    }
-
-    @Post(':id/reset-password')
-    @ApiOperation({ summary: 'Reset Admin Password' })
-    @ApiResponse({ status: 200, description: 'Admin password reset successfully' })
-    async resetPassword(
-        @Param('id') id: string,
-        @Body() dto: ResetAdminPasswordDto,
-        @CurrentUser() currentUser: CurrentUserData,
-    ) {
-        await this.adminAccessControl.assertCanManageAdmins(currentUser);
-        await this.adminAccessControl.assertCanManageAdmin(currentUser, id, 'reset-password');
-
-        const admin = await this.prisma.admin.findUnique({
-            where: { id },
-            include: {
-                user: {
-                    select: { id: true },
-                },
-            },
-        });
-
-        if (!admin?.user?.id) {
-            throw new UnauthorizedException('Admin access required');
-        }
-
-        await this.prisma.user.update({
-            where: { id: admin.user.id },
-            data: {
-                passwordHash: await bcrypt.hash(dto.password, 10),
-                failedLoginAttempts: 0,
-                // Clear the lock too, matching the self-service path in
-                // reset-password.handler.ts. An authorised operator resetting
-                // an admin's password intends to restore access; clearing the
-                // streak but leaving lockedUntil set means they hand back a
-                // working password that still cannot log in, with nothing to
-                // say why. The two credential-reset paths must not disagree.
-                lockedUntil: null,
-            },
-        });
-
-        return { message: 'Admin password reset successfully' };
     }
 
     @Post(':id/send-password-link')
