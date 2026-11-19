@@ -24,6 +24,7 @@ import { ReviewDocumentHandler } from './application/commands/handlers/review-do
 import { GetApplicationHandler } from './application/queries/handlers/get-application.handler';
 import { ListApplicationsHandler } from './application/queries/handlers/list-applications.handler';
 import { ExportApplicationsHandler } from './application/queries/handlers/export-applications.handler';
+import { GetApplicationEditHistoryHandler } from './application/queries/handlers/get-application-edit-history.handler';
 import { GetApplicationReviewHandler } from './application/queries/handlers/get-application-review.handler';
 import { RegistrationFeeMismatchesHandler } from './application/queries/handlers/registration-fee-mismatches.handler';
 import { GetDocumentReviewQueueHandler } from './application/queries/handlers/get-document-review-queue.handler';
@@ -70,6 +71,7 @@ import { CacheModule } from '@shared/infrastructure/cache/cache.module';
     ListApplicationsHandler,
     ExportApplicationsHandler,
     GetApplicationReviewHandler,
+    GetApplicationEditHistoryHandler,
     RegistrationFeeMismatchesHandler,
     GetDocumentReviewQueueHandler,
 
