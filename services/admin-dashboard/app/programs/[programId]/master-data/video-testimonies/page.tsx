@@ -23,7 +23,7 @@ export default function VideoTestimonialsPage() {
   const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
   const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
 
-  const program = accessiblePrograms.find((p) => p.programId === params.programId);
+  const program = accessiblePrograms.find((p) => p.programId === resolvedProgramId);
   const programName = program?.programName ?? "Selected Program";
   const brandId = program?.brandId ?? "";
 

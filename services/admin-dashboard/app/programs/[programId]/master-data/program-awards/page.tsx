@@ -32,7 +32,7 @@ export default function ProgramAwardsPage() {
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const programName =
-    accessiblePrograms.find((p) => p.programId === params.programId)?.programName ?? "Selected Program";
+    accessiblePrograms.find((p) => p.programId === programId)?.programName ?? "Selected Program";
 
   const load = useCallback(async () => {
     if (!programId) return;
