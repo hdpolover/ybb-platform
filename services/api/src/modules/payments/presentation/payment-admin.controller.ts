@@ -951,6 +951,7 @@ export class PaymentAdminController {
     }
 
     @Post('invoices/:id/verify')
+    @AuditTrail({ entityType: 'ApplicationInvoice', action: ChangeType.status_change, bodyFields: ['action', 'reason'] })
     @ApiOperation({ summary: 'Verify manual payment (approve/reject)' })
     async verifyInvoice(
         @Param('id') id: string,
@@ -1494,6 +1495,7 @@ export class PaymentAdminController {
     }
 
     @Patch('invoices/:id/status')
+    @AuditTrail({ entityType: 'ApplicationInvoice', action: ChangeType.status_change, bodyFields: ['status', 'reason', 'manualOverride', 'overrideReason'] })
     @ApiOperation({ summary: 'Update invoice status (manual transfer/admin override)' })
     async updateInvoiceStatus(
         @Param('id') id: string,

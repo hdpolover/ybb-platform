@@ -1,3 +1,5 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import {
   BadRequestException,
   Body,
@@ -105,6 +107,7 @@ export class AdminRolesController {
   }
 
   @Post()
+  @AuditTrail({ entityType: 'AdminRole', action: ChangeType.create })
   @ApiOperation({ summary: 'Create admin role' })
   @ApiResponse({ status: 201, description: 'Admin role created successfully' })
   async createRole(
@@ -153,6 +156,7 @@ export class AdminRolesController {
   }
 
   @Patch(':id')
+  @AuditTrail({ entityType: 'AdminRole', action: ChangeType.update })
   @ApiOperation({ summary: 'Update admin role' })
   @ApiResponse({ status: 200, description: 'Admin role updated successfully' })
   async updateRole(
@@ -246,6 +250,7 @@ export class AdminRolesController {
   }
 
   @Delete(':id')
+  @AuditTrail({ entityType: 'AdminRole', action: ChangeType.delete })
   @ApiOperation({ summary: 'Delete admin role' })
   @ApiResponse({ status: 200, description: 'Admin role deleted successfully' })
   async deleteRole(

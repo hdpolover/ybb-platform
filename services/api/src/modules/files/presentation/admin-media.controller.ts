@@ -1,3 +1,5 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import {
   BadRequestException,
   Controller,
@@ -167,6 +169,7 @@ export class AdminMediaController {
   }
 
   @Post()
+  @AuditTrail({ entityType: 'ProgramMedia', action: ChangeType.create, idParam: 'programId' })
   @ApiOperation({ summary: 'Upload a media asset to the program media library' })
   @ApiParam({ name: 'programId', description: 'Program UUID' })
   @ApiConsumes('multipart/form-data')
@@ -218,6 +221,7 @@ export class AdminMediaController {
   }
 
   @Delete(':fileId')
+  @AuditTrail({ entityType: 'ProgramMedia', action: ChangeType.delete, idParam: 'fileId' })
   @ApiOperation({ summary: 'Delete a program media asset' })
   @ApiParam({ name: 'programId', description: 'Program UUID' })
   @ApiParam({ name: 'fileId', description: 'File UUID' })

@@ -299,7 +299,7 @@ export class AuditTrailInterceptor implements NestInterceptor {
         }
 
         const request = context.switchToHttp().getRequest();
-        const { entityType, action, riskLevel, idParam, selectFields } = metadata;
+        const { entityType, action, riskLevel, idParam, selectFields, bodyFields } = metadata;
         const effectiveSelectFields = this.getEffectiveSelectFields(entityType, selectFields);
 
         // Extract entity ID from route params
@@ -364,6 +364,14 @@ export class AuditTrailInterceptor implements NestInterceptor {
                         if (afterState && effectiveSelectFields) {
                             afterState = this.pickSelectedFields(afterState, effectiveSelectFields);
                         }
+                    }
+
+                    if (bodyFields?.length) {
+                        const requested = this.pickSelectedFields(
+                            request.body ?? {},
+                            Object.fromEntries(bodyFields.map((field) => [field, true])),
+                        );
+                        afterState = { ...(afterState ?? {}), request: requested };
                     }
 
                     // Write the log entry asynchronously

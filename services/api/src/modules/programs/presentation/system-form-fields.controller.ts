@@ -1,3 +1,5 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import {
   Body,
   Controller,
@@ -49,6 +51,7 @@ export class SystemFormFieldsController {
   }
 
   @Post()
+  @AuditTrail({ entityType: 'SystemFormFieldDefinition', action: ChangeType.create })
   @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Create a system form field (super-admin only)' })
   create(@Body() dto: CreateSystemFormFieldDto) {
@@ -56,6 +59,7 @@ export class SystemFormFieldsController {
   }
 
   @Patch(':id')
+  @AuditTrail({ entityType: 'SystemFormFieldDefinition', action: ChangeType.update })
   @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Update a system form field (super-admin only)' })
   update(
@@ -66,6 +70,7 @@ export class SystemFormFieldsController {
   }
 
   @Delete(':id')
+  @AuditTrail({ entityType: 'SystemFormFieldDefinition', action: ChangeType.delete })
   @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Soft-delete a system form field (super-admin only)',

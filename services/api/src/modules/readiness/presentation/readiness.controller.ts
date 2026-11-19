@@ -1,4 +1,6 @@
 // services/api/src/modules/readiness/presentation/readiness.controller.ts
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -52,6 +54,7 @@ export class ReadinessController {
   }
 
   @Post('overrides')
+  @AuditTrail({ entityType: 'ReadinessOverride', action: ChangeType.create })
   @Roles(UserRole.SUPER_ADMIN)
   @ScopedBy('platform')
   @ApiOperation({ summary: 'Override a readiness blocker, with an audited reason' })

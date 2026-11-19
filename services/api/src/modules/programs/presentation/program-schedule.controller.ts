@@ -1,3 +1,5 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
@@ -70,6 +72,7 @@ export class ProgramScheduleController {
   }
 
   @Post(':id/timeline')
+  @AuditTrail({ entityType: 'ProgramTimeline', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -87,6 +90,7 @@ export class ProgramScheduleController {
   }
 
   @Put('timeline/:itemId')
+  @AuditTrail({ entityType: 'ProgramTimeline', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -102,6 +106,7 @@ export class ProgramScheduleController {
   }
 
   @Delete('timeline/:itemId')
+  @AuditTrail({ entityType: 'ProgramTimeline', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -125,6 +130,7 @@ export class ProgramScheduleController {
   }
 
   @Post(':id/schedules')
+  @AuditTrail({ entityType: 'ProgramSchedule', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -141,6 +147,7 @@ export class ProgramScheduleController {
   }
 
   @Put('schedules/:itemId')
+  @AuditTrail({ entityType: 'ProgramSchedule', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -156,6 +163,7 @@ export class ProgramScheduleController {
   }
 
   @Delete('schedules/:itemId')
+  @AuditTrail({ entityType: 'ProgramSchedule', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()

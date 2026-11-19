@@ -1,3 +1,5 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { Controller, Delete, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { QueueMonitoringService } from '../infrastructure/monitoring/queue-monitoring.service';
@@ -15,6 +17,7 @@ export class QueueController {
   constructor(private readonly queueMonitoringService: QueueMonitoringService) {}
 
   @Delete('purge')
+  @AuditTrail({ entityType: 'MessageQueue', action: ChangeType.bulk_update })
   @ApiOperation({ summary: 'Purge non-critical queues — reporting + notifications (Admin only)' })
   @ApiResponse({ status: 200, description: 'Queues purged' })
   async purgeQueues() {

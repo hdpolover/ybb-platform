@@ -1,4 +1,6 @@
 // services/api/src/modules/programs/presentation/program-copy.controller.ts
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { BadRequestException, Body, Controller, ForbiddenException, Get, NotFoundException, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@modules/auth/infrastructure/guards/jwt-auth.guard';
@@ -74,6 +76,7 @@ export class ProgramCopyController {
   // copier writes to). Source-program reads stay unscoped: copying across
   // programs is intended. Class-level guards run first, so request.user is set.
   @Post(':programId/copy/:entityKey')
+  @AuditTrail({ entityType: 'Program', action: ChangeType.bulk_update, idParam: 'programId' })
   @UseGuards(AdminScopeGuard)
   @ScopedBy('program', 'programId')
   @ApiOperation({ summary: 'Copy one entity type from another program into this program (append or replace).' })
@@ -130,6 +133,7 @@ export class ProgramCopyController {
   }
 
   @Post(':programId/copy/:entityKey/apply-template')
+  @AuditTrail({ entityType: 'Program', action: ChangeType.bulk_update, idParam: 'programId' })
   @UseGuards(AdminScopeGuard)
   @ScopedBy('program', 'programId')
   @ApiOperation({ summary: 'Apply a saved content template into this program (append or replace).' })
@@ -184,6 +188,7 @@ export class ProgramCopyController {
   // program's brand (ProgramsController.create -> assertBrandAccess), and both
   // pass assertProgramAccess for the program they just created.
   @Post(':id/clone-from')
+  @AuditTrail({ entityType: 'Program', action: ChangeType.bulk_update })
   @UseGuards(AdminScopeGuard)
   @ScopedBy('program', 'id')
   @ApiOperation({ summary: 'Clone selected content types from a sibling program into this one, in one transaction.' })

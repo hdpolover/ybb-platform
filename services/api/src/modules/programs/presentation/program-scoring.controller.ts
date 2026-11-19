@@ -1,4 +1,6 @@
 // services/api/src/modules/programs/presentation/program-scoring.controller.ts
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import {
   Controller,
   Get,
@@ -100,6 +102,7 @@ export class ProgramScoringController {
   // The rubric is program configuration, so it also needs program:write:
   // a reviewer (review:write) scores against it but must not change it.
   @Put(':programId/scoring-rubrics/:stage')
+  @AuditTrail({ entityType: 'ScoringSchema', action: ChangeType.update, idParam: 'programId' })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'programId')

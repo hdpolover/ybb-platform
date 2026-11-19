@@ -1,3 +1,5 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { Controller, Get, Param, Patch, Query, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ListDeletionRequestsHandler } from '../application/queries/handlers/list-deletion-requests.handler';
@@ -42,6 +44,7 @@ export class DeletionRequestsController {
   }
 
   @Patch(':id/review')
+  @AuditTrail({ entityType: 'AccountDeletionRequest', action: ChangeType.status_change })
   @ApiOperation({ summary: 'Review Deletion Request (Admin)' })
   @ApiResponse({ status: 200, description: 'Request reviewed successfully', type: DeletionRequestResponseDto })
   async review(

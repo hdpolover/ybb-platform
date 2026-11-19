@@ -961,6 +961,7 @@ export class ApplicationsController {
   }
 
   @Put(':applicationId/review')
+  @AuditTrail({ entityType: 'ApplicationReview', action: ChangeType.update, idParam: 'applicationId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Create or update an application review (scoring rubric) for a stage (admin)' })

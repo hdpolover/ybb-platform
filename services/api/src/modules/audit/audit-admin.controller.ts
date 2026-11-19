@@ -1,3 +1,4 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import {
     Controller,
     Get,
@@ -377,6 +378,7 @@ export class AuditAdminController {
      * Trigger manual cleanup of audit logs older than 30 days.
      */
     @Delete('cleanup')
+    @AuditTrail({ entityType: 'DataChangeLog', action: ChangeType.delete })
     @ApiOperation({ summary: 'Cleanup Old Audit Logs (Admin)', operationId: 'cleanupAuditLogs' })
     @ApiResponse({ status: 200, description: 'Cleanup result with deleted count' })
     async cleanup(@CurrentUser() currentUser: CurrentUserData) {

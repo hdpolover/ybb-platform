@@ -1,3 +1,5 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { Controller, Get, Post, Delete, Body, Param, UseGuards, NotFoundException, Req } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
@@ -37,6 +39,7 @@ export class ProgramParticipationController {
   ) {}
 
   @Post()
+  @AuditTrail({ entityType: 'ProgramParticipationInfo', action: ChangeType.update })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'programId')
@@ -75,6 +78,7 @@ export class ProgramParticipationController {
   }
 
   @Delete(':id')
+  @AuditTrail({ entityType: 'ProgramParticipationInfo', action: ChangeType.delete })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()

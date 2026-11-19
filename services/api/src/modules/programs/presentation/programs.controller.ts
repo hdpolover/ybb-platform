@@ -240,6 +240,7 @@ export class ProgramsController {
   }
 
   @Put(':id/payment-info')
+  @AuditTrail({ entityType: 'Program', action: ChangeType.update })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
@@ -267,6 +268,7 @@ export class ProgramsController {
   }
 
   @Put(':id/contact')
+  @AuditTrail({ entityType: 'Program', action: ChangeType.update })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
@@ -285,6 +287,7 @@ export class ProgramsController {
   }
 
   @Put(':id/partners-canva-url')
+  @AuditTrail({ entityType: 'Program', action: ChangeType.update })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
@@ -307,6 +310,7 @@ export class ProgramsController {
   }
 
   @Put(':id/landing-content')
+  @AuditTrail({ entityType: 'Program', action: ChangeType.update })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
@@ -356,6 +360,7 @@ export class ProgramsController {
   }
 
   @Post(':id/branding')
+  @AuditTrail({ entityType: 'Program', action: ChangeType.update })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')

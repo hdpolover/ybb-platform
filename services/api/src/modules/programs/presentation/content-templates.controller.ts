@@ -1,4 +1,6 @@
 // services/api/src/modules/programs/presentation/content-templates.controller.ts
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -34,6 +36,7 @@ export class ContentTemplatesController {
   }
 
   @Post()
+  @AuditTrail({ entityType: 'ContentTemplate', action: ChangeType.create })
   @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: "Create a content template by exporting a program's current content (super-admin only)." })
   create(@Body() dto: CreateContentTemplateDto) {
@@ -41,6 +44,7 @@ export class ContentTemplatesController {
   }
 
   @Patch(':id')
+  @AuditTrail({ entityType: 'ContentTemplate', action: ChangeType.update })
   @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: "Update a content template's name/description/isDefault (super-admin only). Payload is immutable after creation." })
   update(@Param('id') id: string, @Body() dto: UpdateContentTemplateDto) {
@@ -48,6 +52,7 @@ export class ContentTemplatesController {
   }
 
   @Delete(':id')
+  @AuditTrail({ entityType: 'ContentTemplate', action: ChangeType.delete })
   @Roles(UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: 'Soft-delete a content template (super-admin only).' })
   remove(@Param('id') id: string) {
