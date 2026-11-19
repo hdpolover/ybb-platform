@@ -18,6 +18,7 @@ import { UserRole } from '@core/entities/user.entity';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 import { ChangeType } from '@prisma/client';
 
 type UpdatePartnershipEnquiryStatusDto = {
@@ -31,8 +32,11 @@ type UpdatePartnershipEnquiryDto = {
 
 @ApiTags('Partnerships')
 @Controller('admin/programs/:programId/partnership-enquiries')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
 @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+// Every route carries :programId and every query below pins rows to it, so the
+// programme check alone scopes the child enquiry ids too.
+@ScopedBy('program', 'programId')
 @ApiBearerAuth()
 export class PartnershipsAdminController {
   constructor(private readonly prisma: PrismaService) {}

@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/infrastructure/guards/roles.guard';
 import { Roles } from '../auth/application/decorators/roles.decorator';
 import { UserRole } from '../../core/entities/user.entity';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 
 @ApiTags('Newsletter')
 @Controller('newsletter')
@@ -30,8 +31,10 @@ export class NewsletterController {
   }
 
   @Get('subscribers')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  // Subscribers carry no brand, so the list is every brand's PII at once.
+  @ScopedBy('platform')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get list of active subscribers (Admin only)' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Paginated list of subscribers' })
