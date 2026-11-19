@@ -110,6 +110,16 @@ describe('assertProgramPermission', () => {
     await expect(check(admin({ role: { name: 'Super Admin', permissions: [] } }))).resolves.toBeUndefined();
   });
 
+  // The prod "Admin" role carries platform_access but none of the grant-all
+  // permissions; platform-tier admins must not be narrowed by permission checks.
+  it.each([
+    ['platform_access', admin({ role: { name: 'Admin', permissions: ['platform_access'] } })],
+    ['admin.manage', admin({ customPermissions: ['admin.manage'] })],
+    ['access level 5', admin({ accessLevel: 5 })],
+  ])('passes a platform-tier admin (%s) that lacks the permission', async (_label, row) => {
+    await expect(check(row, ['review:write'])).resolves.toBeUndefined();
+  });
+
   it('accepts any one of several required permissions', async () => {
     const row = admin({ customPermissions: ['content:write'] });
     await expect(check(row, ['program:write', 'content:write'])).resolves.toBeUndefined();

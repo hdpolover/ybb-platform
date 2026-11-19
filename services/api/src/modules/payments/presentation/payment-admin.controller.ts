@@ -32,6 +32,7 @@ import { FileServiceClient } from '@modules/files/infrastructure/clients/file-se
 import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { assertProgramAccess, getRequestAdminScope, orNotFound } from '@shared/guards/admin-scope.guard';
+import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
 import { ChangeType, PaymentStatus, Prisma } from '@prisma/client';
 
 import { CacheService } from '@shared/infrastructure/cache/cache.service';
@@ -106,6 +107,14 @@ const SINGLE_APPLICATION_INVOICE_MAX_LIMIT = 200;
 // RabbitMQ channel/connection, while still processing well ahead of one strictly
 // sequential await per invoice. See notifyPaymentIssue below.
 const NOTIFY_PAYMENT_ISSUE_BATCH_SIZE = 50;
+
+// Money-moving and participant-mailing actions need payments:write;
+// payments:read (Digital Marketing, Program Admin) only views. The per-program
+// method overlay is program configuration, so program:write also counts there.
+const PAYMENT_WRITE_PERMISSIONS = ['payments:write'];
+const PROGRAM_PAYMENT_CONFIG_PERMISSIONS = ['payments:write', 'program:write'];
+// Resending a paid invoice's receipt to its own participant is a support reply.
+const RESEND_RECEIPT_PERMISSIONS = ['payments:write', 'support:write'];
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -953,7 +962,7 @@ export class PaymentAdminController {
             throw new HttpException('Reason is required for rejection', 400);
         }
         if (!this.isValidUUID(id)) throw new HttpException('Invoice not found', 404);
-        await this.assertCanAccessInvoices(user, [id]);
+        await this.assertCanAccessInvoices(user, [id], PAYMENT_WRITE_PERMISSIONS);
 
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id },
@@ -1223,7 +1232,7 @@ export class PaymentAdminController {
         @Body() body: NotifyPaymentIssueDto,
         @CurrentUser() user: CurrentUserData,
     ): Promise<{ sent: number; skipped: { invoiceId: string; reason: string }[] }> {
-        await this.assertCanAccessInvoices(user, body.invoiceIds);
+        await this.assertCanAccessInvoices(user, body.invoiceIds, PAYMENT_WRITE_PERMISSIONS);
         const invoices = await this.prisma.applicationInvoice.findMany({
             where: { id: { in: body.invoiceIds } },
             select: {
@@ -1373,7 +1382,7 @@ export class PaymentAdminController {
         @Body() body: ResendReceiptDto,
         @CurrentUser() user: CurrentUserData,
     ): Promise<{ sent: boolean; email: string }> {
-        await this.assertCanAccessInvoices(user, [body.invoiceId]);
+        await this.assertCanAccessInvoices(user, [body.invoiceId], RESEND_RECEIPT_PERMISSIONS);
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id: body.invoiceId },
             select: {
@@ -1500,7 +1509,7 @@ export class PaymentAdminController {
             throw new HttpException('Invalid payment status', 400);
         }
         if (!this.isValidUUID(id)) throw new HttpException('Invoice not found', 404);
-        await this.assertCanAccessInvoices(user, [id]);
+        await this.assertCanAccessInvoices(user, [id], PAYMENT_WRITE_PERMISSIONS);
 
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id },
@@ -2029,7 +2038,7 @@ export class PaymentAdminController {
     ) {
         if (!this.isValidUUID(programId)) throw new HttpException('Invalid program id', 400);
         if (!this.isValidUUID(methodId)) throw new HttpException('Invalid payment method id', 400);
-        await this.assertCanAccessProgram(user, programId);
+        await this.assertCanAccessProgram(user, programId, PROGRAM_PAYMENT_CONFIG_PERMISSIONS);
         try {
             const { data } = await this.paymentServiceClient.put(
                 `/api/v1/programs/${programId}/payment-methods/${methodId}`,
@@ -2067,7 +2076,7 @@ export class PaymentAdminController {
         @CurrentUser() user?: CurrentUserData,
     ) {
         if (!this.isValidUUID(programId)) throw new HttpException('Invalid program id', 400);
-        await this.assertCanAccessProgram(user, programId);
+        await this.assertCanAccessProgram(user, programId, PROGRAM_PAYMENT_CONFIG_PERMISSIONS);
         try {
             const { data } = await this.paymentServiceClient.put(
                 `/api/v1/programs/${programId}/payment-methods`,
@@ -2508,17 +2517,29 @@ export class PaymentAdminController {
     // Runs before any Go payment-service call and outside the try/handleError
     // blocks (handleError would turn these into a 500).
 
-    private async assertCanAccessProgram(user: CurrentUserData | undefined, programId: string): Promise<void> {
+    private async assertCanAccessProgram(
+        user: CurrentUserData | undefined,
+        programId: string,
+        requiredPermissions?: readonly string[],
+    ): Promise<void> {
         const scope = await getRequestAdminScope(this.readPrisma, { user });
         if (scope.kind !== 'platform') {
             await assertProgramAccess(this.readPrisma, scope, programId);
+            if (requiredPermissions) {
+                await assertProgramPermission(this.readPrisma, user, programId, requiredPermissions);
+            }
         }
     }
 
     // Ids that match no row are left to the route's own not-found/skip handling.
     // Ownership is read from the PRIMARY, the same place every route acts on: a
     // lagging replica would miss a fresh invoice, skip its check and fail open.
-    private async assertCanAccessInvoices(user: CurrentUserData | undefined, invoiceIds: string[]): Promise<void> {
+    // requiredPermissions: in scope but lacking them answers 403 (after the 404).
+    private async assertCanAccessInvoices(
+        user: CurrentUserData | undefined,
+        invoiceIds: string[],
+        requiredPermissions?: readonly string[],
+    ): Promise<void> {
         const scope = await getRequestAdminScope(this.readPrisma, { user });
         if (scope.kind === 'platform') return;
 
@@ -2530,6 +2551,9 @@ export class PaymentAdminController {
         for (const programId of new Set(rows.map((row) => row.application?.programId))) {
             if (!programId) throw notFound();
             await orNotFound(() => assertProgramAccess(this.readPrisma, scope, programId), notFound);
+            if (requiredPermissions) {
+                await assertProgramPermission(this.readPrisma, user, programId, requiredPermissions);
+            }
         }
     }
 

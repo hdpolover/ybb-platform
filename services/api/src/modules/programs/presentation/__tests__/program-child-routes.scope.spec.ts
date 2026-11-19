@@ -5,11 +5,12 @@
 // any programme's participation info, exchange rate and announcements by id.
 // Driven against the REAL scope resolver and AdminScopeGuard; only Prisma and
 // the downstream handlers are faked.
-import { ExecutionContext, NotFoundException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
+import { AdminPermissionGuard } from '@shared/guards/admin-permission.guard';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { ProgramParticipationController } from '../program-participation.controller';
@@ -21,11 +22,11 @@ const BRAND_ADMIN = {
   canManageAdmins: false,
   canAssignRoles: false,
   customPermissions: [],
-  role: { name: 'News Writer', permissions: [] },
+  role: { name: 'News Writer', permissions: ['announcements:write'] },
   adminBrands: [{ brandId: 'brand-a', permissions: [] }],
   adminPrograms: [],
 };
-const ASSIGNED_ADMIN = { ...BRAND_ADMIN, role: { name: 'Program Admin', permissions: [] }, adminBrands: [], adminPrograms: [{ programId: 'prog-a', permissions: [] }] };
+const ASSIGNED_ADMIN = { ...BRAND_ADMIN, role: { name: 'Program Admin', permissions: ['program:write'] }, adminBrands: [], adminPrograms: [{ programId: 'prog-a', permissions: [] }] };
 const PLATFORM_ADMIN = { ...BRAND_ADMIN, accessLevel: 10, role: { name: 'super admin', permissions: ['*'] }, adminBrands: [] };
 
 function makePrismaRead() {
@@ -197,5 +198,82 @@ describe('child-entity admin routes resolve the owning program from the row', ()
       await announcements.list('prog-b', {} as never, req(), ADMIN_USER);
       expect(isAdminArg()).toBe(true);
     });
+  });
+});
+
+// --- Role permissions on announcement writes ---------------------------------
+
+describe('announcement writes need announcements:write (or content:write / program:write)', () => {
+  const prismaRead = makePrismaRead();
+  const handler = () => ({ execute: jest.fn().mockResolvedValue('reached') });
+  const handlers = { list: handler(), get: handler(), create: handler(), update: handler(), delete: handler() };
+  const announcements = new ProgramAnnouncementsController(
+    handlers.list as never,
+    handlers.get as never,
+    handlers.create as never,
+    handlers.update as never,
+    handlers.delete as never,
+    prismaRead as unknown as PrismaReadService,
+  );
+  const permissionGuard = new AdminPermissionGuard(new Reflector(), prismaRead as unknown as PrismaReadService);
+  const req = () => ({ user: { id: 'user-1', userId: 'user-1', adminId: 'admin-1' } }) as never;
+
+  // Prod Digital Marketing: in the brand, announcements:read only.
+  const READ_ONLY_ADMIN = { ...BRAND_ADMIN, role: { name: 'Digital Marketing', permissions: ['announcements:read'] } };
+  // Prod "Admin" role shape: platform tier through platform_access, no grant-all.
+  const PLATFORM_ACCESS_ADMIN = { ...BRAND_ADMIN, accessLevel: 1, role: { name: 'Admin', permissions: ['platform_access'] }, adminBrands: [] };
+
+  const rowRoutes: Array<[string, () => Promise<unknown>, () => jest.Mock]> = [
+    ['PUT programs/announcements/:itemId', () => announcements.update('row-1', {} as never, req()), () => handlers.update.execute],
+    ['DELETE programs/announcements/:itemId', () => announcements.delete('row-1', req()), () => handlers.delete.execute],
+  ];
+
+  function createContext() {
+    const request = { user: { adminId: 'admin-1' }, params: { id: 'prog-a' } };
+    return {
+      getHandler: () => ProgramAnnouncementsController.prototype.create,
+      getClass: () => ProgramAnnouncementsController,
+      switchToHttp: () => ({ getRequest: () => request }),
+    } as unknown as ExecutionContext;
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prismaRead.programAnnouncement.findUnique.mockResolvedValue({ programId: 'prog-a' });
+  });
+
+  it('POST programs/:id/announcements: AdminPermissionGuard is mounted', () => {
+    expect(Reflect.getMetadata(GUARDS_METADATA, ProgramAnnouncementsController.prototype.create)).toContain(AdminPermissionGuard);
+  });
+
+  it('POST programs/:id/announcements: 403 for an in-scope admin with announcements:read only', async () => {
+    prismaRead.admin.findUnique.mockResolvedValue(READ_ONLY_ADMIN);
+    await expect(permissionGuard.canActivate(createContext())).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it.each([
+    ['announcements:write (News Writer)', BRAND_ADMIN],
+    ['program:write (Program Admin)', ASSIGNED_ADMIN],
+    ['platform_access (Admin)', PLATFORM_ACCESS_ADMIN],
+  ])('POST programs/:id/announcements: passes with %s', async (_label, row) => {
+    prismaRead.admin.findUnique.mockResolvedValue(row);
+    await expect(permissionGuard.canActivate(createContext())).resolves.toBe(true);
+  });
+
+  it.each(rowRoutes)('%s: 403 for an in-scope admin with announcements:read only, nothing runs', async (_name, call, probe) => {
+    prismaRead.admin.findUnique.mockResolvedValue(READ_ONLY_ADMIN);
+    await expect(call()).rejects.toBeInstanceOf(ForbiddenException);
+    expect(probe()).not.toHaveBeenCalled();
+  });
+
+  it.each(rowRoutes)('%s: a platform_access admin without the permission passes', async (_name, call, probe) => {
+    prismaRead.admin.findUnique.mockResolvedValue(PLATFORM_ACCESS_ADMIN);
+    await expect(call()).resolves.toBe('reached');
+    expect(probe()).toHaveBeenCalledTimes(1);
+  });
+
+  it('GET programs/announcements/:itemId stays open to announcements:read', async () => {
+    prismaRead.admin.findUnique.mockResolvedValue(READ_ONLY_ADMIN);
+    await expect(announcements.getOne('row-1', req())).resolves.toBe('reached');
   });
 });

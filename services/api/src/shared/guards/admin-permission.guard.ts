@@ -9,7 +9,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
-import { AdminAccessLike, isSuperAdmin, normalizePermissions } from '@shared/admin-access-response';
+import { AdminAccessLike, getAdminProgramAccessScope, normalizePermissions } from '@shared/admin-access-response';
 
 export const ADMIN_PERMISSION_KEY = 'adminProgramPermission';
 
@@ -45,7 +45,7 @@ const FORBIDDEN_MESSAGE = 'You do not have permission to perform this action on 
  */
 export async function assertProgramPermission(
   prisma: PrismaReadService,
-  user: CurrentUserData,
+  user: Pick<CurrentUserData, 'adminId'> | undefined,
   programId: string,
   anyOf: readonly string[],
 ): Promise<void> {
@@ -74,9 +74,12 @@ export async function assertProgramPermission(
     throw new ForbiddenException(FORBIDDEN_MESSAGE);
   }
 
+  // Platform tier (super admins, but also access level >= 5, platform_access,
+  // admin.manage) passes every check, as AdminScopeGuard already lets it
+  // through every scope check; permissions only narrow brand/program admins.
   // Same cast, for the same reason, as resolveRevenueAccessScope: the classifier
   // never reads the nested brand/program summaries its parameter type asks for.
-  if (isSuperAdmin(admin as unknown as AdminAccessLike)) {
+  if (getAdminProgramAccessScope(admin as unknown as AdminAccessLike) === 'platform') {
     return;
   }
 

@@ -38,9 +38,12 @@ const ASSIGNED_ADMIN = {
     customPermissions: null,
     role: null,
     adminBrands: [],
-    adminPrograms: [{ programId: MINE }],
+    adminPrograms: [{ programId: MINE, permissions: ['payments:write'] }],
 };
 const PLATFORM_ADMIN = { ...ASSIGNED_ADMIN, accessLevel: 5, adminPrograms: [] };
+// In scope, but payments:read only (prod Digital Marketing / Program Admin).
+const READ_ONLY_ADMIN = { ...ASSIGNED_ADMIN, adminPrograms: [{ programId: MINE, permissions: ['payments:read'] }] };
+const withGrant = (permissions: string[]) => ({ ...ASSIGNED_ADMIN, adminPrograms: [{ programId: MINE, permissions }] });
 
 async function build(opts: { admin: object; invoiceProgramIds?: string[] }) {
     const readPrisma = {
@@ -219,5 +222,48 @@ describe('admin/payments global payment-method master is platform-only', () => {
         const b = await build({ admin: PLATFORM_ADMIN });
         await call(b).catch(() => undefined);
         expect(probe(b)).toHaveBeenCalled();
+    });
+});
+
+const WRITE_INVOICE_ROUTES = new Set(['POST invoices/:id/verify', 'PATCH invoices/:id/status', 'POST notify-payment-issue', 'POST resend-receipt']);
+const invoiceWriteRoutes = invoiceRoutes.filter((route) => WRITE_INVOICE_ROUTES.has(route.name));
+const programWriteRoutes = programRoutes.filter((route) => route.name.startsWith('PUT '));
+
+describe('admin/payments write routes require a write permission on the programme', () => {
+    it.each(invoiceWriteRoutes)('$name: 403 for an in-scope admin with payments:read only', async ({ call, probe }) => {
+        const b = await build({ admin: READ_ONLY_ADMIN, invoiceProgramIds: [MINE] });
+        await expect(call(b)).rejects.toBeInstanceOf(ForbiddenException);
+        expect(probe(b)).not.toHaveBeenCalled();
+        expect(b.paymentServiceClient.post).not.toHaveBeenCalled();
+    });
+
+    it.each(programWriteRoutes)('$name: 403 for an in-scope admin with payments:read only', async ({ call, probe }) => {
+        const b = await build({ admin: READ_ONLY_ADMIN });
+        await expect(call(b, MINE)).rejects.toBeInstanceOf(ForbiddenException);
+        expect(probe(b)).not.toHaveBeenCalled();
+    });
+
+    it.each(programWriteRoutes)('$name: program:write also passes (method overlay is programme config)', async ({ call, probe }) => {
+        const b = await build({ admin: withGrant(['program:write']) });
+        await call(b, MINE).catch(() => undefined);
+        expect(probe(b)).toHaveBeenCalled();
+    });
+
+    it('resend-receipt also passes on support:write', async () => {
+        const b = await build({ admin: withGrant(['support:write']), invoiceProgramIds: [MINE] });
+        await b.controller.resendReceipt({ invoiceId: INVOICE_ID }, USER).catch(() => undefined);
+        expect(b.prisma.applicationInvoice.findUnique).toHaveBeenCalled();
+    });
+
+    it.each(invoiceWriteRoutes)('$name: a platform admin without the permission passes', async ({ call, probe }) => {
+        const b = await build({ admin: PLATFORM_ADMIN, invoiceProgramIds: [THEIRS] });
+        await call(b).catch(() => undefined);
+        expect(probe(b)).toHaveBeenCalled();
+    });
+
+    it('read routes stay open to payments:read', async () => {
+        const b = await build({ admin: READ_ONLY_ADMIN, invoiceProgramIds: [MINE] });
+        await b.controller.getInvoice(INVOICE_ID, USER).catch(() => undefined);
+        expect(b.prisma.applicationInvoice.findUnique).toHaveBeenCalled();
     });
 });
