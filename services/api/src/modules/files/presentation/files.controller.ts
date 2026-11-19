@@ -89,7 +89,7 @@ const MEDIA_CATEGORY_BUCKETS = ['image', 'document', 'logo', 'banner', 'certific
  * decides public-ness from the last path segment, so an unlisted name such as
  * 'thumbnail' or 'x/gallery' would publish a file through the any-write floor.
  */
-const ADMIN_ALLOWED_UPLOAD_BUCKETS: readonly string[] = [...ADMIN_UPLOAD_BUCKETS, ...MEDIA_CATEGORY_BUCKETS, 'resources'];
+export const ADMIN_ALLOWED_UPLOAD_BUCKETS: readonly string[] = [...ADMIN_UPLOAD_BUCKETS, ...MEDIA_CATEGORY_BUCKETS, 'resources'];
 
 /**
  * What an admin must hold to upload into a program. Both the asset_type and the

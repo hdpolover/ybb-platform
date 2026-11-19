@@ -47,11 +47,14 @@ describe('admin rank', () => {
     },
   );
 
-  it.each(['*', 'admin.*', 'Platform.*'])('ranks the %s permission as super-admin tier wherever it is held', (permission) => {
+  it.each(['*', 'admin.*', 'Platform.*'])('ranks the %s permission as super-admin tier on role, custom or program grants', (permission) => {
     expect(isSuperAdminTier({ accessLevel: 1, role: { name: 'X', permissions: [permission] } })).toBe(true);
     expect(isSuperAdminTier({ accessLevel: 1, customPermissions: [permission] })).toBe(true);
-    expect(isSuperAdminTier({ accessLevel: 1, adminBrands: [{ permissions: [permission] }] })).toBe(true);
     expect(isSuperAdminTier({ accessLevel: 1, adminPrograms: [{ permissions: [permission] }] })).toBe(true);
+  });
+
+  it.each(['*', 'admin.*', 'Platform.*'])('ignores %s on a brand row (brand rows grant nothing below platform)', (permission) => {
+    expect(isSuperAdminTier({ accessLevel: 1, adminBrands: [{ permissions: [permission] }] })).toBe(false);
   });
 
   it('ranks the prod Admin (800, admin.manage, both flags) in the platform tier, below super admin', () => {

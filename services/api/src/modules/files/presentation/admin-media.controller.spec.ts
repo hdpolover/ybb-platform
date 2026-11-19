@@ -291,6 +291,17 @@ describe('AdminMediaController — uploadMedia / deleteMedia brand+identity deri
         });
     });
 
+    it('uploadMedia rejects a bucket outside the upload allow-list before any storage call', async () => {
+        mockPrismaRead.admin.findUnique.mockResolvedValue(mockAdmin({ accessLevel: 10 }));
+
+        for (const bucket of ['thumbnail', 'x/gallery', '../documents']) {
+            await expect(controller.uploadMedia(PROGRAM_ID, file, platformAdminUser, 'banner', bucket)).rejects.toBeInstanceOf(
+                BadRequestException,
+            );
+        }
+        expect(mockStorageService.uploadFile).not.toHaveBeenCalled();
+    });
+
     it('uploadMedia stamps the PROGRAM brand and the JWT user, not body-supplied values', async () => {
         mockPrismaRead.admin.findUnique.mockResolvedValue(mockAdmin({ accessLevel: 10 }));
 
