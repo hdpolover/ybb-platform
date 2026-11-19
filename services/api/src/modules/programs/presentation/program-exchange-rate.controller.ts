@@ -16,6 +16,7 @@ import {
     ExchangeRateHistoryResponseDto,
 } from './dto/exchange-rate.dto';
 import { Public } from '@shared/decorators/public.decorator';
+import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
 
 interface AuthenticatedRequest extends ExpressRequest {
     user: { id: string; userId: string; email: string; brandId: string };
@@ -39,8 +40,9 @@ export class ProgramExchangeRateController {
     }
 
     @Put()
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('program', 'programId')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Update exchange rate for a program (Admin only)' })
     @ApiResponse({ status: 200, type: ExchangeRateResponseDto })
@@ -60,8 +62,9 @@ export class ProgramExchangeRateController {
     }
 
     @Get('history')
-    @UseGuards(JwtAuthGuard, RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    @ScopedBy('program', 'programId')
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Get exchange rate change history for a program' })
     @ApiResponse({ status: 200, type: ExchangeRateHistoryResponseDto })
