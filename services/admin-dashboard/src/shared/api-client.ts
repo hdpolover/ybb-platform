@@ -1533,7 +1533,7 @@ export function updateProgramTestimonial(
     type?: string;
     videoUrl?: string;
     isActive?: boolean;
-    brandId?: string;
+    // No brandId: the API refuses moving a testimonial to another brand on update.
     category?: string;
     alumniYear?: number | null;
   },

@@ -455,7 +455,7 @@ function TestimonialSheet({
       }
       const resolvedAlumniYear = alumniYear === "" ? null : alumniYear;
       if (isEdit && item) {
-        await updateProgramTestimonial(item.id, { name, role, company, testimonial, brandId, category, alumniYear: resolvedAlumniYear, ...(avatarUrl ? { avatarUrl } : {}) });
+        await updateProgramTestimonial(item.id, { name, role, company, testimonial, category, alumniYear: resolvedAlumniYear, ...(avatarUrl ? { avatarUrl } : {}) });
       } else {
         await createProgramTestimonial(programId, { name, role, company, testimonial, brandId, category, alumniYear: resolvedAlumniYear, ...(avatarUrl ? { avatarUrl } : {}) });
       }
