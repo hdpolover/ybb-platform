@@ -212,7 +212,7 @@ export class HomeStrategy implements ILandingPageStrategy {
             // Also used by the program_awards section further below — merged here
             // to avoid a duplicate program.findFirst with the identical where/orderBy.
             awards: {
-              where: { isActive: true },
+              where: { isActive: true, deletedAt: null },
               orderBy: { order: 'asc' }
             }
           },

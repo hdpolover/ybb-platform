@@ -52,7 +52,7 @@ export class GetProgramLandingHandler implements IQueryHandler<GetProgramLanding
       // of `application` itself, so pulling the full application row (5 JSON
       // columns) per recipient was pure waste.
       this.prisma.programAward.findMany({
-        where: { programId, isActive: true },
+        where: { programId, isActive: true, deletedAt: null },
         include: {
           recipients: {
             take: 3,
