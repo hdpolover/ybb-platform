@@ -18,6 +18,8 @@ import {
   type ProgramSupportTicketSummary,
 } from "@/src/shared/api-client";
 import { useAuth } from "@/app/contexts/AuthContext";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import { Skeleton } from "@/src/ui/skeleton";
 import { FilterSelect } from "@/src/ui/select";
 import { FilterField } from "@/src/ui/filter-grid";
@@ -64,6 +66,7 @@ export default function SupportTicketsPage() {
     [accessiblePrograms, params.programId],
   );
   const programId = selectedProgram?.programId ?? params.programId;
+  const canWrite = useProgramWriteAccess(programId, programWritePermissions.support);
   const programName = selectedProgram?.programName ?? "Selected Program";
   const isAssignedProgramAdmin = assignedPrograms.some(
     (program) => program.programId === programId,
@@ -600,6 +603,7 @@ export default function SupportTicketsPage() {
                       ? `/programs/${params.programId}/participants/${selectedTicket.participant.id}`
                       : null
                   }
+                  canWrite={canWrite}
                 />
               </div>
               <div className="flex-1 overflow-y-auto p-4">
@@ -609,13 +613,15 @@ export default function SupportTicketsPage() {
                   originalAttachments={originalAttachments}
                 />
               </div>
-              <div className="flex-shrink-0 border-t border-zinc-200 p-4">
-                <ReplyComposer
-                  onSend={handleSendReply}
-                  isSending={sendingReply}
-                  isUploading={uploadingAttachments}
-                />
-              </div>
+              {canWrite && (
+                <div className="flex-shrink-0 border-t border-zinc-200 p-4">
+                  <ReplyComposer
+                    onSend={handleSendReply}
+                    isSending={sendingReply}
+                    isUploading={uploadingAttachments}
+                  />
+                </div>
+              )}
             </div>
           ) : null}
         </div>

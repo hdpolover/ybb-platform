@@ -29,6 +29,8 @@ interface TicketDetailHeaderProps {
   setLocalTicket: (updater: (prev: ProgramSupportTicketDetail) => ProgramSupportTicketDetail) => void;
   /** Deep link to the participant's detail page, when available. */
   participantHref?: string | null;
+  /** False without support:write: the API refuses status changes and deletes. */
+  canWrite?: boolean;
 }
 
 export function TicketDetailHeader({
@@ -43,6 +45,7 @@ export function TicketDetailHeader({
   localTicket,
   setLocalTicket,
   participantHref,
+  canWrite = true,
 }: TicketDetailHeaderProps) {
   const statusCfg = STATUS_CONFIG[localTicket.status];
   const priorityCfg = PRIORITY_CONFIG[localTicket.priority];
@@ -102,6 +105,7 @@ export function TicketDetailHeader({
         </div>
 
         {/* Delete button */}
+        {canWrite && (
         <div className="flex items-center gap-2">
           {showDeleteConfirm ? (
             <div className="flex items-center gap-1.5">
@@ -132,8 +136,10 @@ export function TicketDetailHeader({
             </button>
           )}
         </div>
+        )}
       </div>
 
+      <fieldset disabled={!canWrite} className="m-0 min-w-0 space-y-3 border-0 p-0">
       {/* Status + Priority row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="space-y-1">
@@ -272,17 +278,21 @@ export function TicketDetailHeader({
         </div>
       ) : null}
 
+      </fieldset>
+
       {/* Save button */}
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={isSaving}
-          className="rounded-md bg-blue-500 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
-        >
-          {isSaving ? "Saving..." : "Save Changes"}
-        </button>
-      </div>
+      {canWrite && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving}
+            className="rounded-md bg-blue-500 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+          >
+            {isSaving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

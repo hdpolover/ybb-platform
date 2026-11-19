@@ -134,9 +134,12 @@ const menuPermissionRules: Record<string, string[]> = {
 export const programWritePermissions = {
   announcements: ["announcements:write", "content:write", "program:write"],
   payments: ["payments:write"],
-  resendReceipt: ["payments:write", "support:write"],
+  // Receipt resend and payment-help mail are support replies; program:write runs the programme.
+  resendReceipt: ["payments:write", "support:write", "program:write"],
   // notify-payment-issue: support staff send payment help without payments:write.
-  paymentHelp: ["payments:write", "support:write"],
+  paymentHelp: ["payments:write", "support:write", "program:write"],
+  // Support ticket reply, status change and delete (admin-support-tickets.controller.ts).
+  support: ["support:write"],
   // Per-program payment method overlay (payment-admin controller).
   programPaymentConfig: ["payments:write", "program:write"],
   fundingDecision: ["review:write", "applications:write"],
@@ -149,7 +152,8 @@ export const programWritePermissions = {
   content: ["content:write", "program:write"],
   gallery: ["media:write", "content:write", "program:write"],
   partners: ["partnerships:write", "content:write", "program:write"],
-  documents: ["documents:write", "content:write", "program:write"],
+  // LOA templates, batches, signatures and resources are official documents, not content.
+  documents: ["documents:write", "program:write"],
   pricing: ["payments:write", "program:write"],
   // Form fields, essays, categories and subthemes are program configuration.
   submissionForm: ["program:write"],

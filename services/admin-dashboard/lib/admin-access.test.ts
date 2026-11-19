@@ -29,7 +29,14 @@ describe("programWritePermissions against prod roles", () => {
     ["newsWriter", "content", true],
     ["newsWriter", "media", true],
     ["newsWriter", "gallery", true],
-    ["newsWriter", "documents", true],
+    // LOA documents are official documents: a News Writer no longer releases or signs them.
+    ["newsWriter", "documents", false],
+    ["programAdmin", "documents", true],
+    ["digitalMarketing", "support", true],
+    ["newsWriter", "support", false],
+    ["reviewer", "support", false],
+    ["programAdmin", "support", false],
+    ["programAdmin", "resendReceipt", true],
     ["newsWriter", "programConfig", false],
     ["newsWriter", "ambassadors", false],
     ["newsWriter", "reminders", false],
@@ -65,7 +72,7 @@ describe("programWritePermissions against prod roles", () => {
     ["programAdmin", "fundingDecision", true],
     ["programAdmin", "ambassadors", true],
     ["programAdmin", "reminders", true],
-    ["programAdmin", "paymentHelp", false],
+    ["programAdmin", "paymentHelp", true],
   ] as const)("%s may %s: %s", (role, action, expected) => {
     expect(can(role, action)).toBe(expected);
   });
