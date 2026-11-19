@@ -52,10 +52,11 @@ export async function assertProgramContentAccess(
   actor: CurrentUserData,
   programId: string,
   requiredPermissions?: readonly string[],
-): Promise<void> {
+): Promise<{ id: string; brandId: string; name: string }> {
   const scope = await resolveRevenueAccessScope(prismaRead, actor);
-  await assertProgramAccess(prismaRead, scope, programId);
+  const program = await assertProgramAccess(prismaRead, scope, programId);
   if (requiredPermissions && scope.kind !== 'platform') {
     await assertProgramPermission(prismaRead, actor, programId, requiredPermissions);
   }
+  return program;
 }

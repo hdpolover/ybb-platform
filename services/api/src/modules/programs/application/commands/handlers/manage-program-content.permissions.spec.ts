@@ -5,7 +5,7 @@
 // storage or Prisma write; a holder of the set and the platform tier pass the
 // check. Only the persistence edges are faked; the scope and permission checks
 // run for real against a fake PrismaReadService.
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
@@ -93,18 +93,20 @@ const inScopeAdmin = (permissions: string[]) => ({
 });
 const PLATFORM_ACCESS_ADMIN = { ...inScopeAdmin(['platform_access']), adminPrograms: [] };
 
-// Testimonials and team members can belong to a brand with no program: those
-// branches only checked brand scope, so any brand admin could write them.
+// Testimonials and team members can belong to a brand with no program; those
+// rows are brand-level, so only the platform tier may write them.
 const BRAND_ID = 'brand-1';
 const brandAdmin = (permissions: string[]) => ({ ...inScopeAdmin(permissions), accessLevel: 3, adminBrands: [{ brandId: BRAND_ID, permissions: [] }], adminPrograms: [] });
 const brandDto = { brandId: BRAND_ID } as never;
-const brandCases: Array<[string, Case[2], () => unknown]> = [
-    ['CreateProgramTestimonialHandler', CreateProgramTestimonialHandler, () => new CreateProgramTestimonialCommand(brandDto, 'user-1', actor)],
-    ['UpdateProgramTestimonialHandler', UpdateProgramTestimonialHandler, () => new UpdateProgramTestimonialCommand('row-1', {} as never, 'user-1', actor)],
-    ['DeleteProgramTestimonialHandler', DeleteProgramTestimonialHandler, () => new DeleteProgramTestimonialCommand('row-1', 'user-1', actor)],
-    ['CreateProgramTeamHandler', CreateProgramTeamHandler, () => new CreateProgramTeamCommand(brandDto, 'user-1', actor)],
-    ['UpdateProgramTeamHandler', UpdateProgramTeamHandler, () => new UpdateProgramTeamCommand('row-1', {} as never, 'user-1', actor)],
-    ['DeleteProgramTeamHandler', DeleteProgramTeamHandler, () => new DeleteProgramTeamCommand('row-1', 'user-1', actor)],
+// Create refuses with 403 (assertBrandAccess); update/delete fold the scope
+// refusal into the row's own 404 (orNotFound), so "not yours" reads as missing.
+const brandCases: Array<[string, Case[2], () => unknown, typeof ForbiddenException | typeof NotFoundException]> = [
+    ['CreateProgramTestimonialHandler', CreateProgramTestimonialHandler, () => new CreateProgramTestimonialCommand(brandDto, 'user-1', actor), ForbiddenException],
+    ['UpdateProgramTestimonialHandler', UpdateProgramTestimonialHandler, () => new UpdateProgramTestimonialCommand('row-1', {} as never, 'user-1', actor), NotFoundException],
+    ['DeleteProgramTestimonialHandler', DeleteProgramTestimonialHandler, () => new DeleteProgramTestimonialCommand('row-1', 'user-1', actor), NotFoundException],
+    ['CreateProgramTeamHandler', CreateProgramTeamHandler, () => new CreateProgramTeamCommand(brandDto, 'user-1', actor), ForbiddenException],
+    ['UpdateProgramTeamHandler', UpdateProgramTeamHandler, () => new UpdateProgramTeamCommand('row-1', {} as never, 'user-1', actor), NotFoundException],
+    ['DeleteProgramTeamHandler', DeleteProgramTeamHandler, () => new DeleteProgramTeamCommand('row-1', 'user-1', actor), NotFoundException],
 ];
 
 describe('content handlers refuse a missing write permission before any write', () => {
@@ -179,20 +181,29 @@ describe('content handlers refuse a missing write permission before any write', 
             row = { id: 'row-1', programId: null, brandId: BRAND_ID };
         });
 
-        it.each(brandCases)('%s: a brand admin without the content set gets 403, nothing written', async (_name, HandlerCtor, command) => {
+        it.each(brandCases)('%s: a brand admin without the content set is refused, nothing written', async (_name, HandlerCtor, command, refusal) => {
             prismaRead.admin.findUnique.mockResolvedValue(brandAdmin(['applications:write', 'announcements:write']));
             const handler = await build(HandlerCtor);
-            await expect(handler.execute(command())).rejects.toBeInstanceOf(ForbiddenException);
+            await expect(handler.execute(command())).rejects.toBeInstanceOf(refusal);
             expect(writesMade()).toEqual([]);
         });
 
-        it.each(brandCases)('%s: content:write on the brand and the platform tier pass the check', async (_name, HandlerCtor, command) => {
-            for (const admin of [brandAdmin(['content:write']), PLATFORM_ACCESS_ADMIN]) {
+        // Brand-level rows are platform-only (owner policy 2026-11-19): neither a
+        // brand row nor an assigned programme in that brand reaches them.
+        it.each(brandCases)('%s: content:write via a brand row or a programme in the brand is still refused', async (_name, HandlerCtor, command, refusal) => {
+            for (const admin of [brandAdmin(['content:write']), inScopeAdmin(['content:write'])]) {
                 prismaRead.admin.findUnique.mockResolvedValue(admin);
                 const handler = await build(HandlerCtor);
-                const outcome = await handler.execute(command()).catch((error: unknown) => error);
-                expect(outcome).not.toBeInstanceOf(ForbiddenException);
+                await expect(handler.execute(command())).rejects.toBeInstanceOf(refusal);
             }
+            expect(writesMade()).toEqual([]);
+        });
+
+        it.each(brandCases)('%s: the platform tier passes the check', async (_name, HandlerCtor, command) => {
+            prismaRead.admin.findUnique.mockResolvedValue(PLATFORM_ACCESS_ADMIN);
+            const handler = await build(HandlerCtor);
+            const outcome = await handler.execute(command()).catch((error: unknown) => error);
+            expect(outcome).not.toBeInstanceOf(ForbiddenException);
         });
     });
 });

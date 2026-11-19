@@ -38,6 +38,7 @@ import { isPrivateCategoryKey } from '@shared/utils/private-file-key';
 import { mapWithConcurrency } from '@shared/utils/map-with-concurrency';
 import { multerLimits } from '@common/constants';
 import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
+import { ADMIN_ALLOWED_UPLOAD_BUCKETS } from './files.controller';
 
 // Write-level twin of the dashboard's "media-library" menu rule
 // (services/admin-dashboard/lib/admin-access.ts programWritePermissions.media).
@@ -180,6 +181,11 @@ export class AdminMediaController {
     @Body('bucket') bucket = 'gallery',
   ) {
     if (!file) throw new BadRequestException('No file provided');
+    // Same exact-match allow-list as files/upload-url: the file service derives
+    // public-ness from the folder name, so a free-form bucket could pick it.
+    if (!ADMIN_ALLOWED_UPLOAD_BUCKETS.includes(bucket)) {
+      throw new BadRequestException(`Bucket "${bucket}" is not allowed`);
+    }
     this.logger.log(`Uploading media for program ${programId}: ${file.originalname}`);
     // Identity and brand are server-derived, never read off the request body.
     // Both `brand_id` and `user_id` used to be taken from the body, so an

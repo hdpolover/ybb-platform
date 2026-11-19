@@ -17,7 +17,7 @@ export class GetUsersHandler {
     const skip = query.skip ?? 0;
     const take = query.take ?? 10;
 
-    const users = await this.userRepository.findAll(query.brandId, skip, take, query.role);
+    const users = await this.userRepository.findAll(query.brandId, skip, take, query.role, query.programIds);
     return this.enrichWithRoles(users);
   }
 

@@ -16,8 +16,9 @@ import {
 } from '@modules/stats/revenue/utils/revenue-access.util';
 
 /**
- * The caller's admin scope: platform (unrestricted), brand_scope (limited to
- * their admin_brands rows) or assigned (limited to their admin_programs rows).
+ * The caller's admin scope: platform (unrestricted) or assigned (limited to
+ * their admin_programs rows). admin_brands rows grant nothing; see
+ * AdminProgramAccessScope for the policy.
  *
  * Deliberately the SAME shape and the SAME resolver the revenue/media endpoints
  * already use (revenue-access.util), which in turn wraps
@@ -70,14 +71,11 @@ export async function getRequestAdminScope(
   return request.adminScope;
 }
 
-/** Throws unless the caller may act on this brand. Platform scope always passes;
- * 'assigned' scope carries no brand-level grant at all and never passes. */
-export function assertBrandAccess(scope: AdminScope, brandId: string): void {
+/** Throws unless the caller may act on this brand as a whole. Only platform
+ * scope passes: a brand row grants nothing, and an assigned programme in the
+ * brand reaches that programme, not the brand. */
+export function assertBrandAccess(scope: AdminScope, _brandId: string): void {
   if (scope.kind === 'platform') {
-    return;
-  }
-
-  if (scope.kind === 'brand_scope' && scope.allowedBrandIds?.includes(brandId)) {
     return;
   }
 

@@ -506,12 +506,9 @@ export class CreateProgramTestimonialDto {
     alumniYear?: number;
 }
 
+// No brandId: a testimonial cannot be moved to another brand's landing on update
+// (the scope and permission checks run against the row's current brand).
 export class UpdateProgramTestimonialDto {
-    @ApiProperty({ required: false })
-    @IsUUID()
-    @IsOptional()
-    brandId?: string;
-
     @ApiProperty({ required: false })
     @IsString()
     @IsOptional()

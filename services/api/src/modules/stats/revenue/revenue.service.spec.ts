@@ -54,7 +54,7 @@ describe('RevenueService', () => {
   };
   const mockExcelService = { streamExcelRows: jest.fn() };
 
-  const platformScope: RevenueAccessScope = { kind: 'platform', allowedBrandIds: null, allowedProgramIds: null };
+  const platformScope: RevenueAccessScope = { kind: 'platform', allowedProgramIds: null };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({

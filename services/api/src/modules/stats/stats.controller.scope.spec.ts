@@ -48,7 +48,7 @@ describe('StatsController admin routes scope enforcement (real AdminScopeGuard)'
     );
   });
 
-  it.each(programRoutes)("%s: brand-scoped admin gets 404 on another brand's program", async (_n, handler) => {
+  it.each(programRoutes)("%s: brand-row-only admin gets 404 on another brand's program", async (_n, handler) => {
     prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
     await expect(guard.canActivate(contextFor(handler, { programId: 'prog-b' }))).rejects.toThrow(NotFoundException);
   });
@@ -58,11 +58,15 @@ describe('StatsController admin routes scope enforcement (real AdminScopeGuard)'
     await expect(guard.canActivate(contextFor(handler, { programId: 'prog-b' }))).rejects.toThrow(NotFoundException);
   });
 
-  it.each(programRoutes)('%s: in-scope brand and assigned admins pass', async (_n, handler) => {
-    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
-    await expect(guard.canActivate(contextFor(handler, { programId: 'prog-a' }))).resolves.toBe(true);
+  it.each(programRoutes)('%s: assigned admin passes on their own program', async (_n, handler) => {
     prismaRead.admin.findUnique.mockResolvedValue(ASSIGNED_ADMIN);
     await expect(guard.canActivate(contextFor(handler, { programId: 'prog-a' }))).resolves.toBe(true);
+  });
+
+  // brand rows grant nothing (owner policy 2026-11-19)
+  it.each(programRoutes)('%s: brand-row-only admin gets 404 even on a program in their brand', async (_n, handler) => {
+    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+    await expect(guard.canActivate(contextFor(handler, { programId: 'prog-a' }))).rejects.toThrow(NotFoundException);
   });
 
   it.each(programRoutes)('%s: platform admin passes on any program', async (_n, handler) => {

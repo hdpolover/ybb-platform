@@ -135,9 +135,9 @@ describe('AdminMediaController — listMedia', () => {
         );
     });
 
-    it('allows a brand-scoped admin to list media for a program in their own brand', async () => {
+    it('allows an admin assigned to the program to list its media', async () => {
         mockPrismaRead.admin.findUnique.mockResolvedValue(
-            mockAdmin({ adminBrands: [{ brandId: PROGRAM_BRAND_ID, permissions: null }] }),
+            mockAdmin({ adminPrograms: [{ programId: PROGRAM_ID, permissions: null }] }),
         );
         mockFileServiceClient.listProgramMedia.mockResolvedValue({ files: [], total: 0 });
 
@@ -148,7 +148,17 @@ describe('AdminMediaController — listMedia', () => {
         );
     });
 
-    it('rejects a brand-scoped admin from listing media for a program outside their brand', async () => {
+    // brand rows grant nothing (owner policy 2026-11-19)
+    it('rejects a brand-row-only admin from listing media even for a program in their own brand', async () => {
+        mockPrismaRead.admin.findUnique.mockResolvedValue(
+            mockAdmin({ adminBrands: [{ brandId: PROGRAM_BRAND_ID, permissions: null }] }),
+        );
+
+        await expect(controller.listMedia(PROGRAM_ID, brandScopedAdminUser)).rejects.toThrow(NotFoundException);
+        expect(mockFileServiceClient.listProgramMedia).not.toHaveBeenCalled();
+    });
+
+    it('rejects a brand-row-only admin from listing media for a program outside their brand', async () => {
         mockPrismaRead.admin.findUnique.mockResolvedValue(
             mockAdmin({ adminBrands: [{ brandId: 'some-other-brand', permissions: null }] }),
         );
@@ -279,6 +289,17 @@ describe('AdminMediaController — uploadMedia / deleteMedia brand+identity deri
             name: 'Test Program',
             deletedAt: null,
         });
+    });
+
+    it('uploadMedia rejects a bucket outside the upload allow-list before any storage call', async () => {
+        mockPrismaRead.admin.findUnique.mockResolvedValue(mockAdmin({ accessLevel: 10 }));
+
+        for (const bucket of ['thumbnail', 'x/gallery', '../documents']) {
+            await expect(controller.uploadMedia(PROGRAM_ID, file, platformAdminUser, 'banner', bucket)).rejects.toBeInstanceOf(
+                BadRequestException,
+            );
+        }
+        expect(mockStorageService.uploadFile).not.toHaveBeenCalled();
     });
 
     it('uploadMedia stamps the PROGRAM brand and the JWT user, not body-supplied values', async () => {

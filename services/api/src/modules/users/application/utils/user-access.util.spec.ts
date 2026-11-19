@@ -1,8 +1,9 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
-import { resolveUsersBrandFilter, assertCanChangeUserStatus } from './user-access.util';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { resolveUsersScope, assertUserInScope, assertCanChangeUserStatus } from './user-access.util';
 
-// Shapes resolveRevenueAccessScope reads: accessLevel/role/adminBrands decide
-// whether the caller is platform, brand-scoped, or program-assigned.
+// Shapes resolveRevenueAccessScope reads: accessLevel/role/permissions decide
+// platform vs program-assigned. adminBrands is deliberately present on the
+// brand-row persona: under the 2026-11-19 policy it must grant nothing.
 const platformAdmin = {
     accessLevel: 5,
     canManageAdmins: true,
@@ -12,130 +13,111 @@ const platformAdmin = {
     adminBrands: [],
     adminPrograms: [],
 };
-const brandAdmin = (brandIds: string[]) => ({
-    accessLevel: 2,
-    canManageAdmins: false,
-    canAssignRoles: false,
-    customPermissions: [],
-    role: { name: 'admin', permissions: [] },
-    adminBrands: brandIds.map((brandId) => ({ brandId, permissions: [] })),
-    adminPrograms: [],
-});
 
-const assignedAdmin = (programIds: string[]) => ({
+const assignedAdmin = (programIds: string[], brandIds: string[] = []) => ({
     accessLevel: 1,
     canManageAdmins: false,
     canAssignRoles: false,
     customPermissions: [],
     role: { name: 'reviewer', permissions: [] },
-    adminBrands: [],
+    adminBrands: brandIds.map((brandId) => ({ brandId, permissions: [] })),
     adminPrograms: programIds.map((programId) => ({ programId, permissions: [] })),
 });
 
-const makePrisma = (admin: unknown, programBrandIds: string[] = []) => ({
+// programs: the admin's assigned programmes as the DB returns them (id + brand).
+const makePrisma = (admin: unknown, programs: Array<{ id: string; brandId: string }> = [], userCount = 0) => ({
     admin: { findUnique: jest.fn().mockResolvedValue(admin), findFirst: jest.fn() },
-    program: { findMany: jest.fn().mockResolvedValue(programBrandIds.map((brandId) => ({ brandId }))) },
+    program: { findMany: jest.fn().mockResolvedValue(programs) },
+    user: { count: jest.fn().mockResolvedValue(userCount) },
 }) as never;
 
 const actor = { userId: 'user-1', email: 'a@b.c', brandId: 'brand-1', adminId: 'admin-1' };
 
-describe('resolveUsersBrandFilter', () => {
-    it('lets a brand admin act on a brand they own', async () => {
-        const prisma = makePrisma(brandAdmin(['brand-1', 'brand-2']));
-
-        await expect(resolveUsersBrandFilter(prisma, actor, 'brand-2')).resolves.toBe('brand-2');
-    });
-
-    // A brand-scope admin can legitimately own several brands, so a naive
-    // "brandId === caller.brandId" check would lock real admins out.
-    it('honours every brand a multi-brand admin owns, not just their token brand', async () => {
-        const prisma = makePrisma(brandAdmin(['brand-1', 'brand-9']));
-
-        await expect(resolveUsersBrandFilter(prisma, actor, 'brand-9')).resolves.toBe('brand-9');
-    });
-
-    it('refuses a brand the caller does not own', async () => {
-        const prisma = makePrisma(brandAdmin(['brand-1']));
-
-        await expect(resolveUsersBrandFilter(prisma, actor, 'brand-other')).rejects.toThrow(ForbiddenException);
-    });
-
-    // THE hole: `where.brandId = undefined` is "no condition" to Prisma, so simply
-    // OMITTING the parameter returned every user in every brand. No id to guess.
-    // Any equality-based fix that only rejects mismatches leaves this open.
-    // THE hole: `where.brandId = undefined` is "no condition" to Prisma, so
-    // simply OMITTING the parameter returned every user in every brand. No id to
-    // guess. A scoped admin must therefore never come back with null - either a
-    // concrete brand, or an error. Never "no filter".
-    it('never resolves to an unscoped filter for a non-platform admin', async () => {
-        const single = await resolveUsersBrandFilter(makePrisma(brandAdmin(['brand-1'])), actor, undefined);
-        expect(single).toBe('brand-1');
-
-        await expect(
-            resolveUsersBrandFilter(makePrisma(brandAdmin(['brand-1', 'brand-2'])), actor, undefined),
-        ).rejects.toThrow(BadRequestException);
-        await expect(
-            resolveUsersBrandFilter(makePrisma(assignedAdmin([]), []), actor, undefined),
-        ).rejects.toThrow(ForbiddenException);
-    });
-
-    // The platform users page deliberately lists across brands.
+describe('resolveUsersScope', () => {
     it('allows a platform admin to list across every brand', async () => {
-        const prisma = makePrisma(platformAdmin);
-
-        await expect(resolveUsersBrandFilter(prisma, actor, undefined)).resolves.toBeNull();
+        await expect(resolveUsersScope(makePrisma(platformAdmin), actor, undefined)).resolves.toEqual({
+            brandId: null,
+            programIds: null,
+        });
+        await expect(resolveUsersScope(makePrisma(platformAdmin), actor, 'brand-9')).resolves.toEqual({
+            brandId: 'brand-9',
+            programIds: null,
+        });
     });
 
-    // The regression this exists to prevent. A program-scoped admin ('assigned'
-    // scope: adminPrograms populated, adminBrands empty) manages the participants
-    // of their assigned programs and the Users pages have always allowed it. The
-    // first version of this helper handed their brandId straight to
-    // assertBrandAccess, whose docblock says 'assigned' never passes - so they
-    // got a 403 with the parameter and a 400 without it. No way through.
-    it('lets a program-scoped admin act on the brand of a program they are assigned to', async () => {
-        const prisma = makePrisma(assignedAdmin(['program-1']), ['brand-7']);
+    it('scopes an assigned admin to the applicants of their programmes in that brand', async () => {
+        const prisma = makePrisma(assignedAdmin(['program-1', 'program-2']), [
+            { id: 'program-1', brandId: 'brand-7' },
+            { id: 'program-2', brandId: 'brand-8' },
+        ]);
 
-        await expect(resolveUsersBrandFilter(prisma, actor, 'brand-7')).resolves.toBe('brand-7');
+        await expect(resolveUsersScope(prisma, actor, 'brand-7')).resolves.toEqual({
+            brandId: 'brand-7',
+            programIds: ['program-1'],
+        });
     });
 
-    it('still refuses a program-scoped admin a brand none of their programs belong to', async () => {
-        const prisma = makePrisma(assignedAdmin(['program-1']), ['brand-7']);
+    it('infers the brand when the admin has programmes in exactly one', async () => {
+        const prisma = makePrisma(assignedAdmin(['program-1']), [{ id: 'program-1', brandId: 'brand-7' }]);
 
-        await expect(resolveUsersBrandFilter(prisma, actor, 'brand-other')).rejects.toThrow(ForbiddenException);
+        await expect(resolveUsersScope(prisma, actor)).resolves.toEqual({ brandId: 'brand-7', programIds: ['program-1'] });
     });
 
-    // Avoids a 400 the frontend would have to learn to dodge: with one brand
-    // there is nothing to disambiguate.
-    it('infers the brand when a scoped admin has exactly one and sent none', async () => {
-        expect(await resolveUsersBrandFilter(makePrisma(assignedAdmin(['program-1']), ['brand-7']), actor)).toBe('brand-7');
-        expect(await resolveUsersBrandFilter(makePrisma(brandAdmin(['brand-3'])), actor)).toBe('brand-3');
+    it('refuses a brand none of their programmes belong to', async () => {
+        const prisma = makePrisma(assignedAdmin(['program-1']), [{ id: 'program-1', brandId: 'brand-7' }]);
+
+        await expect(resolveUsersScope(prisma, actor, 'brand-other')).rejects.toThrow(ForbiddenException);
     });
 
-    it('still refuses to run unscoped for a multi-brand admin who sent none', async () => {
-        const prisma = makePrisma(brandAdmin(['brand-1', 'brand-2']));
+    it('refuses the brand of a brand row when no programme is assigned there', async () => {
+        const prisma = makePrisma(assignedAdmin([], ['brand-1']), []);
 
-        await expect(resolveUsersBrandFilter(prisma, actor, undefined)).rejects.toThrow(BadRequestException);
+        await expect(resolveUsersScope(prisma, actor, 'brand-1')).rejects.toThrow(ForbiddenException);
+        await expect(resolveUsersScope(prisma, actor)).rejects.toThrow(ForbiddenException);
     });
 
-    it('refuses an admin with no assignments at all rather than running unscoped', async () => {
-        const prisma = makePrisma(assignedAdmin([]), []);
+    it('still refuses to run unscoped for an admin with programmes in several brands', async () => {
+        const prisma = makePrisma(assignedAdmin(['program-1', 'program-2']), [
+            { id: 'program-1', brandId: 'brand-1' },
+            { id: 'program-2', brandId: 'brand-2' },
+        ]);
 
-        await expect(resolveUsersBrandFilter(prisma, actor, undefined)).rejects.toThrow(ForbiddenException);
+        await expect(resolveUsersScope(prisma, actor, undefined)).rejects.toThrow(BadRequestException);
     });
 
     it('fails closed when the caller has no admin record at all', async () => {
-        const prisma = makePrisma(null);
+        await expect(resolveUsersScope(makePrisma(null), actor, 'brand-1')).rejects.toThrow(ForbiddenException);
+    });
+});
 
-        await expect(resolveUsersBrandFilter(prisma, actor, 'brand-1')).rejects.toThrow(ForbiddenException);
+describe('assertUserInScope', () => {
+    const notFound = () => new NotFoundException('User u not found');
+
+    it('passes a platform scope without a lookup', async () => {
+        const prisma = makePrisma(platformAdmin);
+        await expect(assertUserInScope(prisma, { brandId: null, programIds: null }, 'u', notFound)).resolves.toBeUndefined();
+        expect((prisma as any).user.count).not.toHaveBeenCalled();
     });
 
-    // An extra programme grant must not escalate into brand-wide user management.
-    it('keeps a brand admin with an extra programme grant at their own brands', async () => {
-        const admin = { ...brandAdmin(['brand-1']), adminPrograms: [{ programId: 'program-x', permissions: [] }] };
-        const prisma = makePrisma(admin, ['brand-x']);
+    it('404s a user with no application in the scoped programmes', async () => {
+        const prisma = makePrisma(null, [], 0);
+        await expect(
+            assertUserInScope(prisma, { brandId: 'brand-7', programIds: ['program-1'] }, 'u', notFound),
+        ).rejects.toThrow(NotFoundException);
+        expect((prisma as any).user.count).toHaveBeenCalledWith({
+            where: {
+                id: 'u',
+                brandId: 'brand-7',
+                participant: { applications: { some: { programId: { in: ['program-1'] }, deletedAt: null } } },
+            },
+        });
+    });
 
-        await expect(resolveUsersBrandFilter(prisma, actor, 'brand-1')).resolves.toBe('brand-1');
-        await expect(resolveUsersBrandFilter(prisma, actor, 'brand-x')).rejects.toThrow(ForbiddenException);
+    it('passes an applicant to a scoped programme', async () => {
+        const prisma = makePrisma(null, [], 1);
+        await expect(
+            assertUserInScope(prisma, { brandId: 'brand-7', programIds: ['program-1'] }, 'u', notFound),
+        ).resolves.toBeUndefined();
     });
 });
 

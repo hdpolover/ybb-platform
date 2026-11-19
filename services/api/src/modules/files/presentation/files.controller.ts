@@ -81,6 +81,16 @@ const ADMIN_UPLOAD_BUCKETS: readonly string[] = [
   'programs/thumbnails',
 ];
 
+// The media page sends its asset-type category as the bucket (media/page.tsx).
+const MEDIA_CATEGORY_BUCKETS = ['image', 'document', 'logo', 'banner', 'certificate', 'other'] as const;
+
+/**
+ * Every bucket an admin route may name, matched exactly: the file service
+ * decides public-ness from the last path segment, so an unlisted name such as
+ * 'thumbnail' or 'x/gallery' would publish a file through the any-write floor.
+ */
+export const ADMIN_ALLOWED_UPLOAD_BUCKETS: readonly string[] = [...ADMIN_UPLOAD_BUCKETS, ...MEDIA_CATEGORY_BUCKETS, 'resources'];
+
 /**
  * What an admin must hold to upload into a program. Both the asset_type and the
  * bucket (where the file actually lands) are checked, each against its own
@@ -110,15 +120,16 @@ const MEDIA_UPLOAD_PERMISSIONS = CONTENT_WRITE_PERMISSIONS.gallery; // admin-med
 const PAYMENT_CONFIG_UPLOAD_PERMISSIONS = ['payments:write', 'program:write'];
 // Every public bucket defaults to the media set (the media library lists them,
 // and they are world readable); the media page also uses its category as the
-// bucket. Only the private buckets (avatars, documents) and unknown names fall
-// through to the any-write floor; the asset_type check still applies there.
+// bucket. Only the private buckets (avatars, documents) fall through to the
+// any-write floor (unlisted names never get here, see assertUploadBucket); the
+// asset_type check still applies there.
 const ADMIN_UPLOAD_PERMISSIONS_BY_BUCKET: Readonly<Record<string, readonly string[]>> = {
   ...Object.fromEntries(
     ADMIN_UPLOAD_BUCKETS.filter((bucket) => !(PARTICIPANT_UPLOAD_BUCKETS as readonly string[]).includes(bucket)).map(
       (bucket) => [bucket, MEDIA_UPLOAD_PERMISSIONS],
     ),
   ),
-  ...Object.fromEntries(['image', 'document', 'logo', 'banner', 'certificate', 'other'].map((bucket) => [bucket, MEDIA_UPLOAD_PERMISSIONS])),
+  ...Object.fromEntries(MEDIA_CATEGORY_BUCKETS.map((bucket) => [bucket, MEDIA_UPLOAD_PERMISSIONS])),
   announcements: ANNOUNCEMENT_UPLOAD_PERMISSIONS,
   partners: CONTENT_WRITE_PERMISSIONS.partners,
   sponsors: CONTENT_WRITE_PERMISSIONS.partners,
@@ -180,15 +191,14 @@ export class FilesController {
       throw new NotFoundException(`Program ${programId} not found`);
     }
 
-    // Same-brand upload (the overwhelming common case for both participants and
-    // single-brand admins) — always allowed, no extra scope lookup needed.
-    if (program.brandId === user.brandId) {
+    // Same-brand upload by a participant — always allowed, no extra scope lookup
+    // needed. Not for admins: a home brand grants an admin no programme.
+    if (!user.adminId && program.brandId === user.brandId) {
       return program.brandId;
     }
 
-    // Cross-brand upload: only an admin with actual access to that program/brand
-    // (platform admin, or brand_scope/assigned admin granted this program) may do
-    // this. Reuses the same admin access classifier the revenue endpoints use
+    // Otherwise only an admin with actual access to that program (platform admin,
+    // or one explicitly assigned to it) may do this. Reuses the same admin access classifier the revenue endpoints use
     // (services/api/src/modules/stats/revenue/utils/revenue-access.util.ts) instead
     // of inventing a second notion of "who can touch this brand".
     if (!user.adminId) {
@@ -197,6 +207,17 @@ export class FilesController {
     const scope = await resolveRevenueAccessScope(this.prismaRead, user);
     await assertProgramAccess(this.prismaRead, scope, programId);
     return program.brandId;
+  }
+
+  // `bucket` decides the storage path AND whether the object is world readable:
+  // the file service serves a set of buckets as PUBLIC CATEGORIES without
+  // presigned auth (see upload_file_handler.py). Participants get only the two
+  // buckets their own flows use, admins the listed ones, each matched exactly.
+  private assertUploadBucket(user: CurrentUserData, bucket: string): void {
+    const allowed = user.adminId ? ADMIN_ALLOWED_UPLOAD_BUCKETS : PARTICIPANT_UPLOAD_BUCKETS;
+    if (!allowed.includes(bucket)) {
+      throw new BadRequestException(`Unsupported upload bucket: ${bucket}`);
+    }
   }
 
   // Participants (no adminId) and uploads not filed against a program are untouched.
@@ -473,16 +494,9 @@ export class FilesController {
       const userId = user.userId;
       const isAdmin = Boolean(user.adminId);
 
-      // `bucket` decides the storage path AND whether the object is world
-      // readable: the file service treats a set of buckets as PUBLIC
-      // CATEGORIES served without presigned auth (see upload_file_handler.py).
       // Taken verbatim off the body, a participant could upload a passport scan
       // to `bucket=gallery` and publish it, or write into brand asset paths.
-      // Participants get only the two buckets their own flows use.
-      const allowed = isAdmin ? ADMIN_UPLOAD_BUCKETS : PARTICIPANT_UPLOAD_BUCKETS;
-      if (!allowed.includes(bucket)) {
-        throw new BadRequestException(`Unsupported upload bucket: ${bucket}`);
-      }
+      this.assertUploadBucket(user, bucket);
 
       // A participant may only ever file an upload against their OWN participant
       // record, so it is read from the authenticated user rather than believed
@@ -615,10 +629,13 @@ export class FilesController {
   ): Promise<CreateUploadUrlResponse> {
     // Return raw data; the global TransformInterceptor wraps it as
     // `{ statusCode, message, data }`. Wrapping here would double-envelope.
+    const bucket = dto.bucket ?? 'documents';
+    this.assertUploadBucket(user, bucket);
     const brandId = await this.resolveUploadBrandId(dto.program_id, user);
-    await this.assertAdminUploadPermission(user, dto.program_id, dto.asset_type, dto.bucket ?? 'documents');
+    await this.assertAdminUploadPermission(user, dto.program_id, dto.asset_type, bucket);
     const scopedRequest: CreateUploadUrlRequest = {
       ...dto,
+      bucket,
       user_id: user.userId,
       brand_id: brandId,
     };
@@ -675,8 +692,12 @@ export class FilesController {
     try {
       this.logger.log(`Generating presigned upload URL for: ${dto.filename} (user ${user.userId}, brand ${user.brandId})`);
 
+      // Defaulted to 'documents' like the other upload routes (was 'uploads',
+      // which no caller sent and which is not an allowed bucket).
+      const bucket = dto.bucket || 'documents';
+      this.assertUploadBucket(user, bucket);
       const uploadBrandId = await this.resolveUploadBrandId(dto.program_id, user);
-      await this.assertAdminUploadPermission(user, dto.program_id, undefined, dto.bucket || 'uploads');
+      await this.assertAdminUploadPermission(user, dto.program_id, undefined, bucket);
       const result = await this.fileGrpcClient.getPresignedUploadUrl({
           filename: dto.filename,
           content_type: dto.content_type,
@@ -686,7 +707,7 @@ export class FilesController {
           // brand — a program-scoped upload must be stamped with the PROGRAM's brand.
           user_id: user.userId,
           brand_id: uploadBrandId,
-          bucket: dto.bucket || 'uploads',
+          bucket,
           program_id: dto.program_id,
           participant_id: dto.participant_id,
           size: dto.size

@@ -49,6 +49,15 @@ type AdminProgramAssignmentLike = {
 /**
  * The kinds of programme access an admin can have.
  *
+ * Owner policy (2026-11-19): a non-platform admin reaches a programme ONLY
+ * through an explicit admin_programs row; a supervisor adds each new edition by
+ * hand. Brand rows (admin_brands) grant nothing: no programmes, no users, no
+ * permissions, no brand-level routes. Brand-level features stay platform-only,
+ * except where a route explicitly accepts an assigned programme inside that
+ * brand (LOA signatures, assertBrandPermission). There is deliberately no
+ * 'brand_scope' kind any more, so nothing can derive programme access from a
+ * brand.
+ *
  * NAMED, and exported, on purpose. It was written inline in three places, and
  * an inline union cannot be enumerated — which is how the `'assigned'` persona
  * came to have no test fixture anywhere, and how PR #149 shipped an admin
@@ -56,7 +65,7 @@ type AdminProgramAssignmentLike = {
  * test/utils/admin-scope-fixtures.ts: it is keyed by this type, so adding a
  * fourth kind here is a COMPILE error until a fixture exists for it.
  */
-export type AdminProgramAccessScope = 'assigned' | 'brand_scope' | 'platform';
+export type AdminProgramAccessScope = 'assigned' | 'platform';
 
 export type AdminAccessLike = {
   accessLevel: number;
@@ -108,7 +117,6 @@ function buildPermissionSet(admin: AdminAccessLike): Set<string> {
   const values = [
     ...normalizePermissions(admin.role?.permissions),
     ...normalizePermissions(admin.customPermissions),
-    ...admin.adminBrands.flatMap((assignment) => normalizePermissions(assignment.permissions)),
     ...admin.adminPrograms.flatMap((assignment) => normalizePermissions(assignment.permissions)),
   ].map((permission) => permission.toLowerCase());
 
@@ -165,10 +173,6 @@ export function getAdminProgramAccessScope(
     return 'platform';
   }
 
-  if (admin.adminBrands.length > 0) {
-    return 'brand_scope';
-  }
-
   return 'assigned';
 }
 
@@ -200,7 +204,7 @@ export function mapAdminProgramAssignment(
 export function buildAccessiblePrograms(params: {
   availablePrograms: ProgramSummaryLike[];
   assignments: AdminProgramAssignmentLike[];
-  unassignedAccessType: 'brand_scope' | 'platform';
+  unassignedAccessType: 'platform';
 }): AdminProgramSummary[] {
   const assignmentByProgramId = new Map(
     params.assignments.map((assignment) => [assignment.programId, assignment]),

@@ -1012,6 +1012,30 @@ describe('ManageProgramContentHandlers', () => {
                 expect(repo.createTestimonial).not.toHaveBeenCalled();
             });
 
+            it('CreateProgramTestimonialHandler files a program-scoped row on the program brand, not a client-sent brandId', async () => {
+                prismaRead = {
+                    ...outOfScope(),
+                    admin: {
+                        findUnique: jest.fn().mockResolvedValue({
+                            accessLevel: 1, canManageAdmins: false, canAssignRoles: false, customPermissions: [],
+                            role: { name: 'news writer', permissions: ['content:write'] },
+                            adminBrands: [],
+                            adminPrograms: [{ programId: 'prog-1', permissions: ['content:write'] }],
+                        }),
+                    },
+                } as never;
+                repo.createTestimonial = jest.fn().mockResolvedValue({ id: 't-1' });
+                const handler = await build(CreateProgramTestimonialHandler);
+
+                await handler.execute(new CreateProgramTestimonialCommand(
+                    { programId: 'prog-1', brandId: 'someone-elses-brand', name: 'Alum', testimonial: 'Great' } as never,
+                    'user-1',
+                    actor,
+                ));
+
+                expect(repo.createTestimonial).toHaveBeenCalledWith(expect.objectContaining({ programId: 'prog-1', brandId: 'brand-x' }));
+            });
+
             it('UpdateProgramTestimonialHandler refuses, resolving the programme from the target row', async () => {
                 prismaRead = outOfScope();
                 repo.findTestimonialById = jest.fn().mockResolvedValue({ id: 'test-1', programId: 'prog-1', brandId: null });
@@ -2148,8 +2172,9 @@ describe('ManageProgramContentHandlers', () => {
                 }),
             },
         });
-        // 'brand_scope' - granted brand-x only, with content:write there. Used by Team's brand-only branch.
-        const brandScope = (grantedBrandId: string) => ({
+        // An admin_brands row and nothing else. Brand rows grant nothing (owner
+        // policy 2026-11-19), so this is classified 'assigned' with no programmes.
+        const brandRowOnlyScope = (grantedBrandId: string) => ({
             admin: {
                 findUnique: jest.fn().mockResolvedValue({
                     accessLevel: 1,
@@ -2458,8 +2483,22 @@ describe('ManageProgramContentHandlers', () => {
 
             // The dual-scope branch, same shape as testimonials: a team member
             // with no programId at all, only a brandId.
-            it('CreateProgramTeamHandler refuses a brand-only member outside the caller brand grant', async () => {
-                prismaRead = brandScope('brand-other');
+            it.each(['brand-e', 'brand-other'])(
+                'CreateProgramTeamHandler refuses a brand-only member for a brand-row-only admin (row on %s); brand rows grant nothing (owner policy 2026-11-19)',
+                async (grantedBrandId) => {
+                    prismaRead = brandRowOnlyScope(grantedBrandId);
+                    const handler = await build(CreateProgramTeamHandler);
+
+                    await expect(
+                        handler.execute(new CreateProgramTeamCommand({ brandId: 'brand-e', name: 'Jo', role: 'Coordinator' } as never, 'user-1', actor)),
+                    ).rejects.toThrow();
+
+                    expect(repo.createTeam).not.toHaveBeenCalled();
+                },
+            );
+
+            it('CreateProgramTeamHandler refuses a brand-only member for an assigned (non-platform) admin', async () => {
+                prismaRead = outOfScope();
                 const handler = await build(CreateProgramTeamHandler);
 
                 await expect(
@@ -2469,8 +2508,8 @@ describe('ManageProgramContentHandlers', () => {
                 expect(repo.createTeam).not.toHaveBeenCalled();
             });
 
-            it('CreateProgramTeamHandler creates a brand-only member when the caller HAS that brand grant', async () => {
-                prismaRead = brandScope('brand-e');
+            it('CreateProgramTeamHandler creates a brand-only member for a platform admin', async () => {
+                prismaRead = platformScope();
                 const handler = await build(CreateProgramTeamHandler);
                 repo.createTeam.mockResolvedValue({ id: 'team-1', brandId: 'brand-e' });
 

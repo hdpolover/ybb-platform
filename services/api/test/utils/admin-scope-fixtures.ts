@@ -35,13 +35,6 @@ export const ADMIN_SCOPE_FIXTURES: Record<AdminProgramAccessScope, AdminAccessLi
     adminPrograms: [],
   },
 
-  // Holds at least one brand grant, so its scope is those brands.
-  brand_scope: {
-    accessLevel: 2,
-    adminBrands: [{ brandId: 'brand-1' } as never],
-    adminPrograms: [],
-  },
-
   // THE PERSONA THAT HAD NO FIXTURE. No brand grant at all — its reach is
   // derived from the programmes it is individually assigned to. Anything that
   // asks "which brands may this admin touch?" by reading adminBrands gets an

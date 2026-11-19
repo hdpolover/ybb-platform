@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, Patch, Headers } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, Patch, Headers, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { CreateUserHandler } from '../application/commands/handlers/create-user.handler';
 import { GetUserHandler } from '../application/queries/handlers/get-user.handler';
@@ -34,7 +34,7 @@ import { ActivateUserCommand } from '../application/commands/activate-user.comma
 import { DeactivateUserCommand } from '../application/commands/deactivate-user.command';
 import { CurrentUser, CurrentUserData } from '../../../shared/decorators/current-user.decorator';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
-import { resolveUsersBrandFilter, assertCanChangeUserStatus } from '../application/utils/user-access.util';
+import { resolveUsersScope, assertUserInScope, assertCanChangeUserStatus } from '../application/utils/user-access.util';
 import { JwtAuthGuard } from '../../auth/infrastructure/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/infrastructure/guards/roles.guard';
 import { Roles } from '../../auth/application/decorators/roles.decorator';
@@ -203,7 +203,7 @@ export class UsersController {
   ): Promise<UserResponseDto> {
     // The body's brandId is the tenant the new account lands in, so a scoped
     // admin may only name one of their own brands (403 otherwise).
-    await resolveUsersBrandFilter(this.prismaRead, actor, dto.brandId);
+    await resolveUsersScope(this.prismaRead, actor, dto.brandId);
 
     const command = new CreateUserCommand(
       dto.brandId,
@@ -223,8 +223,9 @@ export class UsersController {
     @Param('id') id: string,
     @Query('brandId') brandId?: string,
   ): Promise<UserResponseDto> {
-    const scopedBrandId = await resolveUsersBrandFilter(this.prismaRead, actor, brandId);
-    const query = new GetUserQuery(id, scopedBrandId ?? undefined);
+    const scope = await resolveUsersScope(this.prismaRead, actor, brandId);
+    await assertUserInScope(this.prismaRead, scope, id, () => new NotFoundException(`User with id ${id} not found`));
+    const query = new GetUserQuery(id, scope.brandId ?? undefined);
     return this.getUserHandler.execute(query);
   }
 
@@ -245,13 +246,27 @@ export class UsersController {
   ): Promise<UserResponseDto[]> {
     // Resolved BEFORE the cache read below. If this check moved into the
     // handler, a warm cache entry would be returned without it ever running.
-    const scopedBrandId = await resolveUsersBrandFilter(this.prismaRead, actor, brandId);
+    const scope = await resolveUsersScope(this.prismaRead, actor, brandId);
 
     const skipNum = skip ? parseInt(skip, 10) : 0;
     const takeNum = take ? parseInt(take, 10) : 20;
 
+    const query = new GetUsersQuery(
+      scope.brandId ?? undefined,
+      skipNum,
+      takeNum,
+      role,
+      scope.programIds ?? undefined,
+    );
+
+    // The list cache is keyed by brand, not programme set, so a programme-scoped
+    // read must never touch it: it would serve or seed the whole-brand list.
+    if (scope.programIds) {
+      return this.getUsersHandler.execute(query);
+    }
+
     // Cache key includes role now
-    const cacheKey = CACHE_KEYS.USER_LIST(scopedBrandId, skipNum, takeNum, role);
+    const cacheKey = CACHE_KEYS.USER_LIST(scope.brandId, skipNum, takeNum, role);
 
     try {
       const cached = await this.cacheService.get<UserResponseDto[]>(cacheKey);
@@ -262,12 +277,6 @@ export class UsersController {
       // ignore cache error
     }
 
-    const query = new GetUsersQuery(
-      scopedBrandId ?? undefined,
-      skipNum,
-      takeNum,
-      role,
-    );
     const result = await this.getUsersHandler.execute(query);
 
     try {
@@ -290,9 +299,10 @@ export class UsersController {
     @Param('id') id: string,
     @Query('brandId') brandId?: string,
   ): Promise<UserResponseDto> {
-    const scopedBrandId = await resolveUsersBrandFilter(this.prismaRead, actor, brandId);
-    await assertCanChangeUserStatus(this.prismaRead, actor, id, scopedBrandId);
-    return this.activateUserHandler.execute(new ActivateUserCommand(id, scopedBrandId ?? undefined));
+    const scope = await resolveUsersScope(this.prismaRead, actor, brandId);
+    await assertUserInScope(this.prismaRead, scope, id, () => new NotFoundException(`User ${id} not found.`));
+    await assertCanChangeUserStatus(this.prismaRead, actor, id, scope.brandId);
+    return this.activateUserHandler.execute(new ActivateUserCommand(id, scope.brandId ?? undefined));
   }
 
   @Patch(':id/deactivate')
@@ -306,8 +316,9 @@ export class UsersController {
     @Param('id') id: string,
     @Query('brandId') brandId?: string,
   ): Promise<UserResponseDto> {
-    const scopedBrandId = await resolveUsersBrandFilter(this.prismaRead, actor, brandId);
-    await assertCanChangeUserStatus(this.prismaRead, actor, id, scopedBrandId);
-    return this.deactivateUserHandler.execute(new DeactivateUserCommand(id, scopedBrandId ?? undefined));
+    const scope = await resolveUsersScope(this.prismaRead, actor, brandId);
+    await assertUserInScope(this.prismaRead, scope, id, () => new NotFoundException(`User ${id} not found.`));
+    await assertCanChangeUserStatus(this.prismaRead, actor, id, scope.brandId);
+    return this.deactivateUserHandler.execute(new DeactivateUserCommand(id, scope.brandId ?? undefined));
   }
 }

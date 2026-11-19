@@ -102,15 +102,13 @@ export class SignatureAdminController {
     }
 
     /**
-     * Brand grant, or a program grant in that brand. The LOA editor that manages these is
-     * per program, so any non-platform admin with an explicit program grant (an 'assigned'
-     * admin, or a brand_scope admin's extra programs outside their brands) may use the
-     * signatures of the brand that owns that program (assertBrandAccess alone would lock
+     * A program grant in that brand (brand rows grant nothing). The LOA editor that manages
+     * these is per program, so a non-platform admin with an explicit program grant may use
+     * the signatures of the brand that owns that program (assertBrandAccess alone would lock
      * them out).
      */
     private async assertSignatureBrandAccess(scope: AdminScope, brandId: string): Promise<void> {
         if (scope.kind === 'platform') return;
-        if (scope.kind === 'brand_scope' && scope.allowedBrandIds?.includes(brandId)) return;
 
         const ownedPrograms = await this.readPrisma.program.count({
             where: { id: { in: scope.allowedProgramIds ?? [] }, brandId, deletedAt: null },

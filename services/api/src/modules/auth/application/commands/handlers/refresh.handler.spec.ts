@@ -206,7 +206,7 @@ describe('RefreshHandler - rotation is a guarded updateMany, not find-then-updat
     expect(accessTokenPayload.roles).toEqual([]);
   });
 
-  it('computes roles the way login.handler.ts does: admin + matching brand roleInBrand', async () => {
+  it('computes roles the way login.handler.ts does: admin only, a brand roleInBrand is not added', async () => {
     prisma.userSession.findFirst.mockResolvedValue({
       ...fullSession,
       user: {
@@ -224,6 +224,6 @@ describe('RefreshHandler - rotation is a guarded updateMany, not find-then-updat
     await handler.execute('presented-refresh-token');
 
     const accessTokenPayload = jwtService.sign.mock.calls[0][0] as { roles: string[] };
-    expect(accessTokenPayload.roles).toEqual(['admin', 'coordinator']);
+    expect(accessTokenPayload.roles).toEqual(['admin']);
   });
 });

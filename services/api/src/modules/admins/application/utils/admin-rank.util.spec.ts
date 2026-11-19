@@ -47,11 +47,14 @@ describe('admin rank', () => {
     },
   );
 
-  it.each(['*', 'admin.*', 'Platform.*'])('ranks the %s permission as super-admin tier wherever it is held', (permission) => {
+  it.each(['*', 'admin.*', 'Platform.*'])('ranks the %s permission as super-admin tier on role, custom or program grants', (permission) => {
     expect(isSuperAdminTier({ accessLevel: 1, role: { name: 'X', permissions: [permission] } })).toBe(true);
     expect(isSuperAdminTier({ accessLevel: 1, customPermissions: [permission] })).toBe(true);
-    expect(isSuperAdminTier({ accessLevel: 1, adminBrands: [{ permissions: [permission] }] })).toBe(true);
     expect(isSuperAdminTier({ accessLevel: 1, adminPrograms: [{ permissions: [permission] }] })).toBe(true);
+  });
+
+  it.each(['*', 'admin.*', 'Platform.*'])('ignores %s on a brand row (brand rows grant nothing below platform)', (permission) => {
+    expect(isSuperAdminTier({ accessLevel: 1, adminBrands: [{ permissions: [permission] }] })).toBe(false);
   });
 
   it('ranks the prod Admin (800, admin.manage, both flags) in the platform tier, below super admin', () => {
@@ -77,7 +80,7 @@ describe('admin rank', () => {
     ['canAssignRoles', { accessLevel: 1, canAssignRoles: true }],
     ['platform_access', { accessLevel: 1, customPermissions: ['platform_access'] }],
     ['platform.manage', { accessLevel: 1, role: { name: 'X', permissions: ['platform.manage'] } }],
-    ['admin.manage', { accessLevel: 1, adminBrands: [{ permissions: ['admin.manage'] }] }],
+    ['admin.manage', { accessLevel: 1, adminPrograms: [{ permissions: ['admin.manage'] }] }],
   ])('puts %s in the platform tier, as the scope classifier does', (_label, admin) => {
     expect(getAdminRank(admin)).toBeGreaterThanOrEqual(1000);
     expect(getAdminRank(admin)).toBeLessThan(SUPER_ADMIN_RANK);

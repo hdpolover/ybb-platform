@@ -179,19 +179,27 @@ describe('ApplicationsController GET /applications scoreStatus filter', () => {
 describe('ApplicationsController GET /applications admin scope', () => {
   let app: INestApplication;
   const mockListApplicationsHandler = { execute: jest.fn() };
-  // Admin assigned to exactly one brand, mirroring an admin_brands row.
-  const brandScopedAdmin = {
-    admin: {
-      findUnique: jest.fn().mockResolvedValue({
-        accessLevel: 1,
-        canManageAdmins: false,
-        canAssignRoles: false,
-        customPermissions: [],
-        role: { name: 'admin', permissions: [] },
-        adminBrands: [{ brandId: 'brand-mine', permissions: [] }],
-        adminPrograms: [],
-      }),
-    },
+  const adminRow = (overrides: Record<string, unknown>) => ({
+    accessLevel: 1,
+    canManageAdmins: false,
+    canAssignRoles: false,
+    customPermissions: [],
+    role: { name: 'admin', permissions: [] },
+    adminBrands: [],
+    adminPrograms: [],
+    ...overrides,
+  });
+  // Explicit admin_programs row: the only way a non-platform admin reaches a program.
+  const assignedAdminRow = adminRow({ adminPrograms: [{ programId: 'prog-mine', permissions: [] }] });
+  // admin_brands row only: grants nothing (owner policy 2026-11-19).
+  const brandRowOnlyAdminRow = adminRow({ adminBrands: [{ brandId: 'brand-mine', permissions: [] }] });
+  const programRows: Record<string, { id: string; brandId: string; name: string; deletedAt: null }> = {
+    'prog-mine': { id: 'prog-mine', brandId: 'brand-mine', name: 'Mine', deletedAt: null },
+    'prog-theirs': { id: 'prog-theirs', brandId: 'brand-theirs', name: 'Theirs', deletedAt: null },
+  };
+  const scopedAdmin = {
+    admin: { findUnique: jest.fn() },
+    program: { findUnique: jest.fn(async ({ where }: { where: { id: string } }) => programRows[where.id] ?? null) },
     participantApplication: { findMany: jest.fn().mockResolvedValue([]) },
   };
 
@@ -200,7 +208,7 @@ describe('ApplicationsController GET /applications admin scope', () => {
       controllers: [ApplicationsController],
       providers: buildProviders({
         listApplicationsHandler: mockListApplicationsHandler,
-        readPrisma: brandScopedAdmin,
+        readPrisma: scopedAdmin,
       }),
     })
       .overrideGuard(JwtAuthGuard)
@@ -228,27 +236,44 @@ describe('ApplicationsController GET /applications admin scope', () => {
   beforeEach(() => {
     mockListApplicationsHandler.execute.mockClear();
     mockListApplicationsHandler.execute.mockResolvedValue({ applications: [], total: 0 });
+    scopedAdmin.admin.findUnique.mockResolvedValue(assignedAdminRow);
   });
 
-  it('rejects a brandId the caller is not assigned to', async () => {
+  it('rejects a brandId filter for a non-platform admin (brand filters are platform-only)', async () => {
     await request(app.getHttpServer())
       .get('/applications')
       .query({ brandId: 'brand-theirs' })
       .expect(403);
+    await request(app.getHttpServer()).get('/applications').query({ brandId: 'brand-mine' }).expect(403);
 
     expect(mockListApplicationsHandler.execute).not.toHaveBeenCalled();
   });
 
-  it('rejects an unfiltered listing rather than serving every brand', async () => {
+  it('rejects an unfiltered listing rather than serving every program', async () => {
     await request(app.getHttpServer()).get('/applications').expect(403);
 
     expect(mockListApplicationsHandler.execute).not.toHaveBeenCalled();
   });
 
-  it('passes the caller’s own brandId straight through', async () => {
-    await request(app.getHttpServer()).get('/applications').query({ brandId: 'brand-mine' }).expect(200);
+  it('rejects a programId the caller is not assigned to', async () => {
+    await request(app.getHttpServer()).get('/applications').query({ programId: 'prog-theirs' }).expect(404);
+
+    expect(mockListApplicationsHandler.execute).not.toHaveBeenCalled();
+  });
+
+  it('passes the caller’s assigned programId straight through', async () => {
+    await request(app.getHttpServer()).get('/applications').query({ programId: 'prog-mine' }).expect(200);
 
     const query = mockListApplicationsHandler.execute.mock.calls[0][0];
-    expect(query.filters.brandId).toBe('brand-mine');
+    expect(query.filters.programId).toBe('prog-mine');
+  });
+
+  // brand rows grant nothing (owner policy 2026-11-19)
+  it('refuses a brand-row-only admin even for a program in their own brand', async () => {
+    scopedAdmin.admin.findUnique.mockResolvedValue(brandRowOnlyAdminRow);
+    await request(app.getHttpServer()).get('/applications').query({ programId: 'prog-mine' }).expect(404);
+    await request(app.getHttpServer()).get('/applications').query({ brandId: 'brand-mine' }).expect(403);
+
+    expect(mockListApplicationsHandler.execute).not.toHaveBeenCalled();
   });
 });

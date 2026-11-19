@@ -10,7 +10,7 @@ describe('admin scope fixtures', () => {
     // If the classifier gains a fourth kind, the Record type stops
     // ADMIN_SCOPE_FIXTURES compiling long before this runs — this assertion is
     // the runtime half, catching a kind removed or renamed rather than added.
-    expect(ADMIN_SCOPE_KINDS.sort()).toEqual(['assigned', 'brand_scope', 'platform']);
+    expect(ADMIN_SCOPE_KINDS.sort()).toEqual(['assigned', 'platform']);
   });
 
   it.each(ADMIN_SCOPE_KINDS)('the %s fixture really classifies as that kind', kind => {
@@ -25,5 +25,11 @@ describe('admin scope fixtures', () => {
     // brand would test nothing.
     expect(ADMIN_SCOPE_FIXTURES.assigned.adminBrands).toHaveLength(0);
     expect(ADMIN_SCOPE_FIXTURES.assigned.adminPrograms.length).toBeGreaterThan(0);
+  });
+
+  it('classifies a brand row with no platform grant as assigned, never brand-wide', () => {
+    // Owner policy 2026-11-19: brand rows grant no programme access.
+    const withBrandRow = { ...ADMIN_SCOPE_FIXTURES.assigned, adminBrands: [{ brandId: 'brand-1', permissions: ['*'] } as never] };
+    expect(getAdminProgramAccessScope(withBrandRow)).toBe('assigned');
   });
 });

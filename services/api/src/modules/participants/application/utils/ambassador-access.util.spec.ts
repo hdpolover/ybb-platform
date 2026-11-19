@@ -55,17 +55,18 @@ describe('resolveAmbassadorProgramScope', () => {
         await expect(resolveAmbassadorProgramScope(makePrisma(platformAdmin), actor)).resolves.toBeNull();
     });
 
-    it('expands a brand admin to every programme in their brands', async () => {
+    // Brand rows grant nothing (owner policy 2026-11-19): no brand expands to its programmes.
+    it('never expands a brand row into the programmes of that brand', async () => {
         const prisma = makePrisma(brandAdmin(['brand-1', 'brand-2']), { brandPrograms: ['p1', 'p2', 'p3'] });
 
-        await expect(resolveAmbassadorProgramScope(prisma, actor)).resolves.toEqual(['p1', 'p2', 'p3']);
+        await expect(resolveAmbassadorProgramScope(prisma, actor)).resolves.toEqual([]);
     });
 
-    it('adds a brand admin\'s explicit programme grants outside their brands', async () => {
+    it('keeps an admin with a brand row at exactly their explicit programme grants', async () => {
         const admin = { ...brandAdmin(['brand-1']), adminPrograms: [{ programId: 'p-extra', permissions: [] }] };
         const prisma = makePrisma(admin, { brandPrograms: ['p1'] });
 
-        await expect(resolveAmbassadorProgramScope(prisma, actor)).resolves.toEqual(['p1', 'p-extra']);
+        await expect(resolveAmbassadorProgramScope(prisma, actor)).resolves.toEqual(['p-extra']);
     });
 
     it('returns a program-scoped admin their own programme list', async () => {
@@ -99,12 +100,12 @@ describe('assertAmbassadorAccess', () => {
         await expect(assertAmbassadorAccess(prisma, actor, 'amb-1')).resolves.toBeUndefined();
     });
 
-    it('lets a brand admin act on an ambassador in one of their brands programmes', async () => {
+    it('404s a brand-row admin on an ambassador in a programme of that brand they are not assigned to', async () => {
         const prisma = makePrisma(brandAdmin(['brand-1']), {
             brandPrograms: ['prog-1'], ambassador: { programId: 'prog-1' },
         });
 
-        await expect(assertAmbassadorAccess(prisma, actor, 'amb-1')).resolves.toBeUndefined();
+        await expect(assertAmbassadorAccess(prisma, actor, 'amb-1')).rejects.toThrow(NotFoundException);
     });
 
     // 404 rather than 403 on purpose: a 403 confirms the id exists, which turns

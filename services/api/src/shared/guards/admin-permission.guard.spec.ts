@@ -87,19 +87,22 @@ describe('assertProgramPermission', () => {
     await expect(check(row)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it("passes on a grant attached to this program's brand", async () => {
+  // Brand rows grant nothing (owner policy 2026-11-19), even on this program's own brand.
+  it("does not count a grant attached to this program's brand", async () => {
     const row = admin({ adminBrands: [{ brandId: BRAND_ID, permissions: ['program:write'] }] });
-    await expect(check(row)).resolves.toBeUndefined();
-  });
-
-  it('does not borrow a grant attached to a different brand', async () => {
-    const row = admin({ adminBrands: [{ brandId: 'brand-other', permissions: ['program:write'] }] });
     await expect(check(row)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('skips the program lookup when the admin has no brand grants', async () => {
-    const prisma = buildPrisma(admin({ role: { name: 'admin', permissions: ['program:write'] } }));
-    await assertProgramPermission(prisma as never, USER, PROGRAM_ID, ['program:write']);
+  it('passes on a grant attached to this program', async () => {
+    const row = admin({ adminPrograms: [{ programId: PROGRAM_ID, permissions: ['program:write'] }] });
+    await expect(check(row)).resolves.toBeUndefined();
+  });
+
+  it('never looks up the program, so no brand can be consulted', async () => {
+    const prisma = buildPrisma(admin({ adminBrands: [{ brandId: BRAND_ID, permissions: ['program:write'] }] }));
+    await expect(assertProgramPermission(prisma as never, USER, PROGRAM_ID, ['program:write'])).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
     expect(prisma.program.findUnique).not.toHaveBeenCalled();
   });
 
@@ -189,10 +192,10 @@ describe('assertBrandPermission', () => {
     await expect(checkBrand(admin({ role: { name: 'admin', permissions: ['documents:write'] } })).result).resolves.toBeUndefined();
   });
 
-  it('passes on a grant on this brand, refuses one on another brand', async () => {
-    const grant = (brandId: string) => admin({ adminBrands: [{ brandId, permissions: ['content:write'] }] });
-    await expect(checkBrand(grant(BRAND_ID)).result).resolves.toBeUndefined();
-    await expect(checkBrand(grant('brand-other')).result).rejects.toBeInstanceOf(ForbiddenException);
+  // Brand rows grant nothing (owner policy 2026-11-19): only a program grant in the brand counts.
+  it('does not count a grant on the brand row itself', async () => {
+    const row = admin({ adminBrands: [{ brandId: BRAND_ID, permissions: ['content:write'] }] });
+    await expect(checkBrand(row).result).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('passes on a grant on a program in this brand, refuses one on a program elsewhere', async () => {

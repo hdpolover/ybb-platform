@@ -1,8 +1,9 @@
 // services/api/src/modules/email-templates/presentation/email-template-scope.controller.spec.ts
 //
 // /admin/email-templates carried only @Roles(ADMIN, SUPER_ADMIN), so a
-// brand-scoped admin could list, read, rewrite or delete any brand's (or the
-// global fallback) templates by id. Driven through the HTTP stack so the check
+// scoped admin could list, read, rewrite or delete any brand's (or the
+// global fallback) templates by id. Non-platform admins reach templates only
+// through programmes they are explicitly assigned; brand rows grant nothing. Driven through the HTTP stack so the check
 // is proven to run before the service is reached.
 import { Test } from '@nestjs/testing';
 import { ExecutionContext, INestApplication, NotFoundException, ValidationPipe } from '@nestjs/common';
@@ -35,8 +36,11 @@ const programs: Record<string, { id: string; brandId: string; name: string; dele
 };
 
 const admins = {
-  // News Writer shape: brand_scope over brand A only.
+  // News Writer shape: an admin_brands row for brand A and no admin_programs rows.
+  // Brand rows grant nothing (owner policy 2026-11-19).
   brandA: { accessLevel: 1, adminBrands: [{ brandId: BRAND_A, permissions: [] }], adminPrograms: [] },
+  // Explicit program assignment: the only way a non-platform admin reaches a program.
+  assignedA: { accessLevel: 1, adminBrands: [], adminPrograms: [{ programId: PROG_A, permissions: [] }] },
   platform: { accessLevel: 800, adminBrands: [], adminPrograms: [] },
 };
 
@@ -102,26 +106,27 @@ describe('/admin/email-templates is scoped to the admin\'s brands/programmes', (
     if (app) await app.close();
   });
 
-  describe('brand-scoped admin (brand A)', () => {
+  describe('assigned admin (programme A)', () => {
     beforeEach(async () => {
       service = buildService();
-      app = await bootstrap('brandA', service);
+      app = await bootstrap('assignedA', service);
     });
 
-    it('lists its own brand and programme', async () => {
-      await request(app.getHttpServer()).get(`/admin/email-templates?brandId=${BRAND_A}`).expect(200);
+    it('lists its own programme, but brand-keyed listing is platform-only', async () => {
       await request(app.getHttpServer()).get(`/admin/email-templates?programId=${PROG_A}`).expect(200);
-      expect(service.findAll).toHaveBeenCalledTimes(2);
+      expect(service.findAll).toHaveBeenCalledTimes(1);
+      await request(app.getHttpServer()).get(`/admin/email-templates?brandId=${BRAND_A}`).expect(403);
+      expect(service.findAll).toHaveBeenCalledTimes(1);
     });
 
-    it('cannot list another brand, another brand\'s programme, or everything', async () => {
+    it('cannot list another brand, an unassigned programme, or everything', async () => {
       await request(app.getHttpServer()).get(`/admin/email-templates?brandId=${BRAND_B}`).expect(403);
       await request(app.getHttpServer()).get(`/admin/email-templates?programId=${PROG_B}`).expect(404);
       await request(app.getHttpServer()).get('/admin/email-templates').expect(403);
       expect(service.findAll).not.toHaveBeenCalled();
     });
 
-    it('reads/updates/deletes its own template', async () => {
+    it('reads/updates/deletes a template under its own programme', async () => {
       await request(app.getHttpServer()).get(`/admin/email-templates/${TPL_A}`).expect(200);
       await request(app.getHttpServer()).put(`/admin/email-templates/${TPL_A}`).send({ name: 'x' }).expect(200);
       await request(app.getHttpServer()).delete(`/admin/email-templates/${TPL_A}`).expect(200);
@@ -138,13 +143,13 @@ describe('/admin/email-templates is scoped to the admin\'s brands/programmes', (
       expect(service.delete).not.toHaveBeenCalled();
     });
 
-    it('creates under its own brand/programme only', async () => {
-      await request(app.getHttpServer()).post('/admin/email-templates').send({ ...newTemplate, brandId: BRAND_A }).expect(201);
+    it('creates under its own programme only', async () => {
       await request(app.getHttpServer()).post('/admin/email-templates').send({ ...newTemplate, programId: PROG_A }).expect(201);
-      expect(service.create).toHaveBeenCalledTimes(2);
+      expect(service.create).toHaveBeenCalledTimes(1);
     });
 
-    it('cannot create globally, under another brand, or pair its programme with another brand', async () => {
+    it('cannot create brand-level, globally, under another brand, or pair its programme with another brand', async () => {
+      await request(app.getHttpServer()).post('/admin/email-templates').send({ ...newTemplate, brandId: BRAND_A }).expect(403);
       await request(app.getHttpServer()).post('/admin/email-templates').send(newTemplate).expect(403);
       await request(app.getHttpServer()).post('/admin/email-templates').send({ ...newTemplate, brandId: BRAND_B }).expect(403);
       await request(app.getHttpServer()).post('/admin/email-templates').send({ ...newTemplate, programId: PROG_B }).expect(404);
@@ -152,6 +157,30 @@ describe('/admin/email-templates is scoped to the admin\'s brands/programmes', (
         .post('/admin/email-templates')
         .send({ ...newTemplate, programId: PROG_A, brandId: BRAND_B })
         .expect(403);
+      expect(service.create).not.toHaveBeenCalled();
+    });
+  });
+
+  // brand rows grant nothing (owner policy 2026-11-19)
+  describe('brand-row-only admin (brand A, no programme assignment)', () => {
+    beforeEach(async () => {
+      service = buildService();
+      app = await bootstrap('brandA', service);
+    });
+
+    it('is refused its own brand and its own brand\'s programme on every route, nothing reaches the service', async () => {
+      const server = app.getHttpServer();
+      await request(server).get(`/admin/email-templates?brandId=${BRAND_A}`).expect(403);
+      await request(server).get(`/admin/email-templates?programId=${PROG_A}`).expect(404);
+      await request(server).get('/admin/email-templates').expect(403);
+      await request(server).get(`/admin/email-templates/${TPL_A}`).expect(404);
+      await request(server).put(`/admin/email-templates/${TPL_A}`).send({ name: 'x' }).expect(404);
+      await request(server).delete(`/admin/email-templates/${TPL_A}`).expect(404);
+      await request(server).post('/admin/email-templates').send({ ...newTemplate, brandId: BRAND_A }).expect(403);
+      await request(server).post('/admin/email-templates').send({ ...newTemplate, programId: PROG_A }).expect(404);
+      expect(service.findAll).not.toHaveBeenCalled();
+      expect(service.update).not.toHaveBeenCalled();
+      expect(service.delete).not.toHaveBeenCalled();
       expect(service.create).not.toHaveBeenCalled();
     });
   });

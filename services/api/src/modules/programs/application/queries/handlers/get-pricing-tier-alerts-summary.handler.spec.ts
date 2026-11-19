@@ -25,7 +25,6 @@ describe('GetPricingTierAlertsSummaryHandler', () => {
         // the scope to "platform" (no restriction) and assert on the query it builds.
         jest.spyOn(revenueAccessUtil, 'resolveRevenueAccessScope').mockResolvedValue({
             kind: 'platform',
-            allowedBrandIds: null,
             allowedProgramIds: null,
         });
     });

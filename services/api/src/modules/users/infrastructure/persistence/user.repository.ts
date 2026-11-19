@@ -59,11 +59,15 @@ export class UserRepository implements IUserRepository {
     return user ? UserMapper.toDomain(user) : null;
   }
 
-  async findAll(brandId?: string, skip?: number, take?: number, role?: string): Promise<User[]> {
+  async findAll(brandId?: string, skip?: number, take?: number, role?: string, programIds?: string[]): Promise<User[]> {
     const where: Prisma.UserWhereInput = {
       // See findById: an undefined brandId is "every brand", so it is spread in
       // deliberately rather than assigned and silently dropped.
       ...(brandId ? { brandId } : {}),
+      // In AND so the role filter below (which also sets `participant`) cannot overwrite it.
+      ...(programIds
+        ? { AND: [{ participant: { applications: { some: { programId: { in: programIds }, deletedAt: null } } } }] }
+        : {}),
       deletedAt: null,
     };
 

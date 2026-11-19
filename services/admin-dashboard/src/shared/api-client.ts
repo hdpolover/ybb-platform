@@ -356,7 +356,7 @@ export type Admin = {
     logoUrl?: string | null;
     role: string | null;
     permissions: string[];
-    accessType: "assigned" | "brand_scope" | "platform";
+    accessType: "assigned" | "platform";
   }>;
   accessLevel: number | null;
   canManageAdmins: boolean;
@@ -1533,7 +1533,7 @@ export function updateProgramTestimonial(
     type?: string;
     videoUrl?: string;
     isActive?: boolean;
-    brandId?: string;
+    // No brandId: the API refuses moving a testimonial to another brand on update.
     category?: string;
     alumniYear?: number | null;
   },

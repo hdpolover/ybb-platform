@@ -8,6 +8,9 @@ import {
   PreviewDocumentTemplateDto,
   CreateProgramPricingTierDto,
   UpdateProgramPricingTierDto,
+  CreateProgramTestimonialDto,
+  UpdateProgramTestimonialDto,
+  UpdateProgramTeamDto,
 } from './create-update-program-content.dto';
 
 /**
@@ -198,4 +201,24 @@ describe('UpdateProgramPricingTierDto.usdPrice must be a whole dollar amount', (
 
         expect(errors.find((e) => e.property === 'usdPrice')).toBeUndefined();
     });
+});
+
+// The global ValidationPipe runs whitelist + forbidNonWhitelisted (main.ts), so a
+// property missing from an update DTO is a 400, never a silent pass-through.
+describe('testimonial and team updates cannot move a row to another brand', () => {
+  const PIPE = { whitelist: true, forbidNonWhitelisted: true };
+  const BRAND = '4f1c2b9e-8a7d-4e3f-9b2a-1c0d5e6f7a8b';
+
+  it.each([
+    ['UpdateProgramTestimonialDto', UpdateProgramTestimonialDto],
+    ['UpdateProgramTeamDto', UpdateProgramTeamDto],
+  ] as const)('%s rejects brandId', async (_name, Dto) => {
+    const errors = await validate(plainToInstance(Dto, { name: 'Jo', brandId: BRAND }), PIPE);
+    expect(errors.map((error) => error.property)).toEqual(['brandId']);
+  });
+
+  it('create still takes brandId for a brand-level testimonial', async () => {
+    const errors = await validate(plainToInstance(CreateProgramTestimonialDto, { name: 'Jo', testimonial: 'Great', brandId: BRAND }), PIPE);
+    expect(errors.map((error) => error.property)).not.toContain('brandId');
+  });
 });
