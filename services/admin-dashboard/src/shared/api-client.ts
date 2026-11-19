@@ -366,15 +366,6 @@ export type Admin = {
   updatedAt: string;
 };
 
-export type CreateAdminInput = {
-  email: string;
-  fullName: string;
-  password: string;
-  roleId?: string;
-  brandIds?: string[];
-  programIds?: string[];
-};
-
 export type UpdateAdminInput = {
   fullName?: string;
   roleId?: string;
@@ -896,13 +887,6 @@ export function listAdmins(params?: {
 
 export function getAdmin(id: string): Promise<Admin> {
   return request<Admin>(`/admins/${id}`);
-}
-
-export function createAdmin(input: CreateAdminInput): Promise<Admin> {
-  return request<Admin>("/admins", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
 }
 
 export function updateAdmin(id: string, input: UpdateAdminInput): Promise<Admin> {

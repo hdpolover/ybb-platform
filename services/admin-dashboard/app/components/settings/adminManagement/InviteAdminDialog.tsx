@@ -34,18 +34,21 @@ const CHECK_DEBOUNCE_MS = 300;
 export function InviteAdminDialog({
   roles,
   programs,
+  initialProgramIds = [],
   onClose,
   onInvited,
 }: {
   roles: AdminRole[];
   programs: AccessRequestProgram[];
+  /** Programs ticked when the dialog opens (e.g. the program whose settings page it was opened from). */
+  initialProgramIds?: string[];
   onClose: () => void;
   onInvited: () => void;
 }) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [roleId, setRoleId] = useState("");
-  const [programIds, setProgramIds] = useState<string[]>([]);
+  const [programIds, setProgramIds] = useState<string[]>(initialProgramIds);
   const [check, setCheck] = useState<InviteCheckResult | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
