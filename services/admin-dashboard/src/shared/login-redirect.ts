@@ -9,7 +9,7 @@ export function getLoginRedirectMessage(reason: string | null): string | null {
 }
 
 // Pages that work without a session; a stale token must not bounce visitors off them.
-const PUBLIC_PATHS = ["/request-access", "/set-password"];
+const PUBLIC_PATHS = ["/request-access", "/set-password", "/forgot-password"];
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));

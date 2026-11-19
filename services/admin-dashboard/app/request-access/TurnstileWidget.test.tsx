@@ -22,6 +22,7 @@ describe("TurnstileWidget", () => {
     await waitFor(() => expect(api.render).toHaveBeenCalledTimes(1));
     const options = api.render.mock.calls[0][1];
     expect(options.sitekey).toBe("k");
+    expect(options.theme).toBe("light");
     options.callback("tok");
     expect(onToken).toHaveBeenCalledWith("tok");
 

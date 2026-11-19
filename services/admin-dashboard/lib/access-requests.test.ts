@@ -5,6 +5,7 @@ import {
   groupProgramsByBrand,
   isPlatformTierRole,
   validateAccessRequest,
+  validateChangePassword,
   validateNewPassword,
 } from "./access-requests";
 
@@ -43,6 +44,16 @@ describe("validateNewPassword", () => {
 
   it("requires the confirmation to match", () => {
     expect(validateNewPassword("Valid1234", "Valid12345")).toMatch(/do not match/);
+  });
+});
+
+describe("validateChangePassword", () => {
+  it("needs a current password, a valid new one, and a different one", () => {
+    expect(validateChangePassword("", "NewPassw0rd!", "NewPassw0rd!")).toMatch(/current password/);
+    expect(validateChangePassword("Old1", "short", "short")).toMatch(/at least 8/);
+    expect(validateChangePassword("OldPassw0rd!", "A1a".repeat(50), "A1a".repeat(50))).toMatch(/at most 128/);
+    expect(validateChangePassword("Same-pass1", "Same-pass1", "Same-pass1")).toMatch(/different/);
+    expect(validateChangePassword("OldPassw0rd!", "NewPassw0rd!", "NewPassw0rd!")).toBeNull();
   });
 });
 

@@ -7,6 +7,7 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/request-access")).toBe(true);
     expect(isPublicPath("/set-password")).toBe(true);
     expect(isPublicPath("/set-password/")).toBe(true);
+    expect(isPublicPath("/forgot-password")).toBe(true);
   });
 
   it("does not match lookalikes or protected pages", () => {
