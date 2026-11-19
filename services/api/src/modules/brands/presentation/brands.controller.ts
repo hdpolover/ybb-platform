@@ -431,6 +431,8 @@ export class BrandsController {
         @CurrentUser() user: CurrentUserData,
     ): Promise<BrandAdminResponseDto> {
         await this.adminAccessControl.assertCanManageAdmins(user);
+        // Same rank rule as /admins/:id: nobody edits grants of an admin they don't outrank.
+        await this.adminAccessControl.assertCanManageAdmin(user, dto.adminId, 'update');
         return this.commandBus.execute(
             new AssignBrandAdminCommand(id, dto.adminId, dto.roleInBrand, user.userId),
         );
@@ -453,6 +455,7 @@ export class BrandsController {
         @CurrentUser() user: CurrentUserData,
     ): Promise<{ message: string }> {
         await this.adminAccessControl.assertCanManageAdmins(user);
+        await this.adminAccessControl.assertCanManageAdmin(user, adminId, 'update');
         return this.commandBus.execute(new RemoveBrandAdminCommand(id, adminId));
     }
 }
