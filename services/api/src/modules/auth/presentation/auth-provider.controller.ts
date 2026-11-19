@@ -1,3 +1,5 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { Controller, Post, Body, Put, Param, Delete, UseGuards, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateAuthProviderDto } from './dto/create-auth-provider.dto';
@@ -30,6 +32,7 @@ export class AuthProviderController {
   ) {}
 
   @Post()
+  @AuditTrail({ entityType: 'AuthProvider', action: ChangeType.create })
   @ApiOperation({ summary: 'Create Authentication Provider (Admin)' })
   @ApiResponse({ status: 201, description: 'Provider created successfully' })
   async create(@Body() dto: CreateAuthProviderDto) {
@@ -52,6 +55,7 @@ export class AuthProviderController {
   }
 
   @Put(':id')
+  @AuditTrail({ entityType: 'AuthProvider', action: ChangeType.update })
   @ApiOperation({ summary: 'Update Authentication Provider (Admin)' })
   @ApiResponse({ status: 200, description: 'Provider updated successfully' })
   async update(@Param('id') id: string, @Body() dto: UpdateAuthProviderDto) {
@@ -60,6 +64,7 @@ export class AuthProviderController {
   }
 
   @Delete(':id')
+  @AuditTrail({ entityType: 'AuthProvider', action: ChangeType.delete })
   @ApiOperation({ summary: 'Delete Authentication Provider (Admin)' })
   @ApiResponse({ status: 200, description: 'Provider deleted successfully' })
   async delete(@Param('id') id: string) {

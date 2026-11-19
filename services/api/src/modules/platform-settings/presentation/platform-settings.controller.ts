@@ -1,4 +1,6 @@
 // services/api/src/modules/platform-settings/presentation/platform-settings.controller.ts
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { Body, Controller, Get, Put, Request, UseGuards } from '@nestjs/common';
 import { Request as ExpressRequest } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -32,6 +34,7 @@ export class PlatformSettingsController {
   }
 
   @Put('impact-stats')
+  @AuditTrail({ entityType: 'PlatformSetting', action: ChangeType.update })
   @ApiOperation({ summary: 'Update organisation-wide impact stats' })
   async updateImpactStats(@Body() dto: ImpactStatsDto, @Request() req: AuthenticatedRequest) {
     return this.impactStatsService.update(dto, req.user.id);

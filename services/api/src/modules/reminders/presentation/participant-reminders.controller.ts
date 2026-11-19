@@ -1,4 +1,6 @@
 // src/modules/reminders/presentation/participant-reminders.controller.ts
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import {
   Body,
   Controller,
@@ -120,6 +122,7 @@ export class ParticipantRemindersController {
   }
 
   @Post(':programId/reminders')
+  @AuditTrail({ entityType: 'ParticipantReminder', action: ChangeType.create, idParam: 'programId' })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'programId')
@@ -137,6 +140,7 @@ export class ParticipantRemindersController {
   }
 
   @Put(':programId/reminders/:id')
+  @AuditTrail({ entityType: 'ParticipantReminder', action: ChangeType.update })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'programId')
@@ -154,6 +158,7 @@ export class ParticipantRemindersController {
   }
 
   @Post(':programId/reminders/:id/cancel')
+  @AuditTrail({ entityType: 'ParticipantReminder', action: ChangeType.status_change })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'programId')

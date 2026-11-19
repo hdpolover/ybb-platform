@@ -1,3 +1,5 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Request as ExpressRequest } from 'express';
@@ -82,6 +84,7 @@ export class ProgramPeopleController {
   }
 
   @Post(':id/speakers')
+  @AuditTrail({ entityType: 'ProgramSpeaker', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -102,6 +105,7 @@ export class ProgramPeopleController {
   }
 
   @Put('speakers/:itemId')
+  @AuditTrail({ entityType: 'ProgramSpeaker', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -120,6 +124,7 @@ export class ProgramPeopleController {
   }
 
   @Delete('speakers/:itemId')
+  @AuditTrail({ entityType: 'ProgramSpeaker', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -143,6 +148,7 @@ export class ProgramPeopleController {
   }
 
   @Post(':id/team')
+  @AuditTrail({ entityType: 'ProgramTeam', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -163,6 +169,7 @@ export class ProgramPeopleController {
   }
 
   @Put('team/:itemId')
+  @AuditTrail({ entityType: 'ProgramTeam', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -181,6 +188,7 @@ export class ProgramPeopleController {
   }
 
   @Delete('team/:itemId')
+  @AuditTrail({ entityType: 'ProgramTeam', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -204,6 +212,7 @@ export class ProgramPeopleController {
   }
 
   @Post(':id/partners')
+  @AuditTrail({ entityType: 'ProgramPartner', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -224,6 +233,7 @@ export class ProgramPeopleController {
   }
 
   @Put('partners/:itemId')
+  @AuditTrail({ entityType: 'ProgramPartner', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -242,6 +252,7 @@ export class ProgramPeopleController {
   }
 
   @Delete('partners/:itemId')
+  @AuditTrail({ entityType: 'ProgramPartner', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()

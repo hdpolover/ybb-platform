@@ -384,6 +384,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/requirements')
+  @AuditTrail({ entityType: 'ProgramRequirement', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -401,6 +402,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Put('requirements/:itemId')
+  @AuditTrail({ entityType: 'ProgramRequirement', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -412,6 +414,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Delete('requirements/:itemId')
+  @AuditTrail({ entityType: 'ProgramRequirement', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -461,6 +464,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/essays')
+  @AuditTrail({ entityType: 'ProgramEssay', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -478,6 +482,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Put('essays/:itemId')
+  @AuditTrail({ entityType: 'ProgramEssay', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -489,6 +494,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Delete('essays/:itemId')
+  @AuditTrail({ entityType: 'ProgramEssay', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -500,6 +506,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Put(':id/essay-guidelines')
+  @AuditTrail({ entityType: 'Program', action: ChangeType.update })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
@@ -532,6 +539,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/participation-categories')
+  @AuditTrail({ entityType: 'ProgramParticipationCategory', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -549,6 +557,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Put('participation-categories/:itemId')
+  @AuditTrail({ entityType: 'ProgramParticipationCategory', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -560,6 +569,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Delete('participation-categories/:itemId')
+  @AuditTrail({ entityType: 'ProgramParticipationCategory', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -585,6 +595,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/subthemes')
+  @AuditTrail({ entityType: 'ProgramSubtheme', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -602,6 +613,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Put('subthemes/:itemId')
+  @AuditTrail({ entityType: 'ProgramSubtheme', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -613,6 +625,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Delete('subthemes/:itemId')
+  @AuditTrail({ entityType: 'ProgramSubtheme', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -633,6 +646,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Post(':id/form-fields')
+  @AuditTrail({ entityType: 'ApplicationFormField', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ScopedBy('program', 'id')
@@ -646,6 +660,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Put('form-fields/:itemId')
+  @AuditTrail({ entityType: 'ApplicationFormField', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -658,6 +673,7 @@ export class ProgramApplicationConfigController {
   }
 
   @Delete('form-fields/:itemId')
+  @AuditTrail({ entityType: 'ApplicationFormField', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()

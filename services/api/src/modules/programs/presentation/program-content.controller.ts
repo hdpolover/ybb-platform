@@ -1,3 +1,5 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { Controller, Get, Param, Put, Post, Delete, Body, UseGuards, Request, Response, StreamableFile, UseInterceptors, UploadedFile, Query } from '@nestjs/common';
 import { Request as ExpressRequest, Response as ExpressResponse } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -132,6 +134,7 @@ export class ProgramContentController {
   }
 
   @Post(':id/gallery')
+  @AuditTrail({ entityType: 'ProgramGallery', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -165,6 +168,7 @@ export class ProgramContentController {
   }
 
   @Put('gallery/:itemId')
+  @AuditTrail({ entityType: 'ProgramGallery', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -183,6 +187,7 @@ export class ProgramContentController {
   }
 
   @Delete('gallery/:itemId')
+  @AuditTrail({ entityType: 'ProgramGallery', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -206,6 +211,7 @@ export class ProgramContentController {
   }
 
   @Post(':id/testimonials')
+  @AuditTrail({ entityType: 'ProgramTestimonial', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -223,6 +229,7 @@ export class ProgramContentController {
   }
 
   @Put('testimonials/:itemId')
+  @AuditTrail({ entityType: 'ProgramTestimonial', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -238,6 +245,7 @@ export class ProgramContentController {
   }
 
   @Delete('testimonials/:itemId')
+  @AuditTrail({ entityType: 'ProgramTestimonial', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -261,6 +269,7 @@ export class ProgramContentController {
   }
 
   @Post(':id/faqs')
+  @AuditTrail({ entityType: 'ProgramFaq', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -277,6 +286,7 @@ export class ProgramContentController {
   }
 
   @Put('faqs/:itemId')
+  @AuditTrail({ entityType: 'ProgramFaq', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -292,6 +302,7 @@ export class ProgramContentController {
   }
 
   @Delete('faqs/:itemId')
+  @AuditTrail({ entityType: 'ProgramFaq', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -315,6 +326,7 @@ export class ProgramContentController {
   }
 
   @Post(':id/resources')
+  @AuditTrail({ entityType: 'ProgramResource', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -334,6 +346,7 @@ export class ProgramContentController {
   }
 
   @Put('resources/:itemId')
+  @AuditTrail({ entityType: 'ProgramResource', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -352,6 +365,7 @@ export class ProgramContentController {
   }
 
   @Delete('resources/:itemId')
+  @AuditTrail({ entityType: 'ProgramResource', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -382,6 +396,7 @@ export class ProgramContentController {
   }
 
   @Post(':id/document-templates')
+  @AuditTrail({ entityType: 'DocumentTemplate', action: ChangeType.create })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -444,6 +459,7 @@ export class ProgramContentController {
   }
 
   @Put('document-templates/:itemId')
+  @AuditTrail({ entityType: 'DocumentTemplate', action: ChangeType.update, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -462,6 +478,7 @@ export class ProgramContentController {
   }
 
   @Delete('document-templates/:itemId')
+  @AuditTrail({ entityType: 'DocumentTemplate', action: ChangeType.delete, idParam: 'itemId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -536,6 +553,7 @@ export class ProgramContentController {
   }
 
   @Post(':programId/loa-batches')
+  @AuditTrail({ entityType: 'LoaReleaseBatch', action: ChangeType.create, idParam: 'programId' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -559,6 +577,7 @@ export class ProgramContentController {
   }
 
   @Put(':programId/loa-batches/:id')
+  @AuditTrail({ entityType: 'LoaReleaseBatch', action: ChangeType.update })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -582,6 +601,7 @@ export class ProgramContentController {
   }
 
   @Post(':programId/loa-batches/:id/release')
+  @AuditTrail({ entityType: 'LoaReleaseBatch', action: ChangeType.status_change })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -595,6 +615,7 @@ export class ProgramContentController {
   }
 
   @Post(':programId/loa-batches/:id/unrelease')
+  @AuditTrail({ entityType: 'LoaReleaseBatch', action: ChangeType.status_change })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
@@ -608,6 +629,7 @@ export class ProgramContentController {
   }
 
   @Delete(':programId/loa-batches/:id')
+  @AuditTrail({ entityType: 'LoaReleaseBatch', action: ChangeType.delete })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()

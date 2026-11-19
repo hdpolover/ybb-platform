@@ -1,3 +1,5 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import { Controller, Post, Query, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { UseGuards } from '@nestjs/common';
@@ -23,6 +25,7 @@ export class PaymentReconciliationController {
     constructor(private readonly reconciliationService: PaymentReconciliationService) {}
 
     @Post('reconcile')
+    @AuditTrail({ entityType: 'PaymentReconciliation', action: ChangeType.bulk_update })
     @ApiOperation({
         summary: 'Reconcile processing invoices against the payment service (Super Admin)',
     })

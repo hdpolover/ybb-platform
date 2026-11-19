@@ -1,3 +1,5 @@
+import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
+import { ChangeType } from '@prisma/client';
 import {
   Controller, Get, Post, Patch, Delete,
   Param, Body, Query, UseGuards,
@@ -101,6 +103,7 @@ export class SystemAnnouncementsController {
     }
 
     @Post('admin')
+    @AuditTrail({ entityType: 'SystemAnnouncement', action: ChangeType.create })
     @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
     @ScopedBy('platform')
@@ -117,6 +120,7 @@ export class SystemAnnouncementsController {
     }
 
     @Patch('admin/:id')
+    @AuditTrail({ entityType: 'SystemAnnouncement', action: ChangeType.update })
     @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
     @ScopedBy('platform')
@@ -134,6 +138,7 @@ export class SystemAnnouncementsController {
     }
 
     @Delete('admin/:id')
+    @AuditTrail({ entityType: 'SystemAnnouncement', action: ChangeType.delete })
     @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
     @ScopedBy('platform')
@@ -150,6 +155,7 @@ export class SystemAnnouncementsController {
     }
 
     @Post('admin/:id/publish')
+    @AuditTrail({ entityType: 'SystemAnnouncement', action: ChangeType.status_change })
     @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
     @ScopedBy('platform')
