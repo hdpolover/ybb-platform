@@ -70,6 +70,20 @@ describe('EmailService fallback subjects', () => {
       expect(html).not.toContain("You've been given access");
     });
 
+    it('self-requested reset: says you asked for it, expires in 1 hour, and the current password still works', async () => {
+      const { svc, send } = withAdminUrl('https://admin.example.com');
+      await svc.sendAdminPasswordLinkEmail('a@ybb.org', {
+        name: 'A', token: 't', kind: 'reset', roleName: 'Reviewer', expiresInHours: 1, selfRequested: true,
+      });
+
+      const [, subject, html] = send.mock.calls[0] as [string, string, string];
+      expect(subject).toBe('Reset your YBB admin dashboard password');
+      expect(html).toContain('You asked to reset the password for your YBB admin dashboard account');
+      expect(html).toContain('expires in 1 hour and can be used once');
+      expect(html).toContain('Your current password still works');
+      expect(html).not.toContain('A new password is required');
+    });
+
     it('falls back to localhost only when ADMIN_DASHBOARD_URL is unset', async () => {
       const { svc, send } = withAdminUrl(undefined);
       await svc.sendAdminPasswordLinkEmail('a@ybb.org', { name: 'A', token: 't', kind: 'invite' });

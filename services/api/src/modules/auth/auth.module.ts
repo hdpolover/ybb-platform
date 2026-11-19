@@ -4,6 +4,9 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './presentation/auth.controller';
+import { AdminPasswordController } from './presentation/admin-password.controller';
+import { AdminPasswordService } from './application/services/admin-password.service';
+import { AdminPasswordLinkService } from '../admins/application/services/admin-password-link.service';
 import { LoginHandler } from './application/commands/handlers/login.handler';
 import { RegisterHandler } from './application/commands/handlers/register.handler';
 import { LogoutHandler } from './application/commands/handlers/logout.handler';
@@ -59,7 +62,7 @@ import { MetricsCoreModule } from '@shared/infrastructure/monitoring/metrics-cor
     // consumer-monitoring-fanout.spec.ts.
     MetricsCoreModule,
   ],
-  controllers: [AuthController, AuthProviderController],
+  controllers: [AuthController, AdminPasswordController, AuthProviderController],
   providers: [
     LoginHandler,
     RegisterHandler,
@@ -86,6 +89,9 @@ import { MetricsCoreModule } from '@shared/infrastructure/monitoring/metrics-cor
     TokenBlacklistService,
     FirebaseAuthService,
     AuthLoggingService,
+    // Stateless; AdminsModule imports AuthModule, so it cannot be imported back without a cycle.
+    AdminPasswordLinkService,
+    AdminPasswordService,
   ],
   exports: [
     JwtAuthGuard,

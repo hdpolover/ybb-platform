@@ -102,7 +102,12 @@ export default function LoginPageClient({ redirectMessage }: LoginPageClientProp
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-medium text-zinc-700">Password</label>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-medium text-zinc-700">Password</label>
+                      <Link href="/forgot-password" className="text-xs font-medium text-blue-600 underline-offset-2 hover:underline">
+                        Forgot password?
+                      </Link>
+                    </div>
                     <input
                       type="password"
                       placeholder="Enter password"

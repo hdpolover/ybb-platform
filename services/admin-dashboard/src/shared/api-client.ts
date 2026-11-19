@@ -996,6 +996,26 @@ export function setPasswordWithToken(token: string, password: string): Promise<u
   });
 }
 
+/** Signed-in admin changes their own password; the API signs every other session out. 400 = wrong current password. */
+export function changeOwnPassword(currentPassword: string, newPassword: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>("/auth/admin/change-password", {
+    method: "POST",
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+/** Always resolves `{ submitted: true }` whether or not the email is an admin (the API never says). */
+export function requestAdminPasswordReset(
+  email: string,
+  turnstileToken?: string | null,
+): Promise<{ submitted: true }> {
+  return publicRequest<{ submitted: true }>("/auth/admin/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+    ...(turnstileToken ? { headers: { "x-turnstile-token": turnstileToken } } : {}),
+  });
+}
+
 export async function listAccessRequests(status: AccessRequestStatus): Promise<AccessRequest[]> {
   const result = await request<AccessRequest[] | { items?: AccessRequest[] }>(
     `/admin/access-requests?status=${status}`,

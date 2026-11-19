@@ -1,6 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, MinLength, Matches } from 'class-validator';
 
+// Kept in sync with ybb-program-next/lib/auth/passwordRules.ts. See the note
+// on RegisterDto.password for why the previous pattern was replaced.
+export const PASSWORD_PATTERN = /^(?=.*[A-Z])(?=.*[a-z])(?=.*[\d\W]).+$/;
+export const PASSWORD_PATTERN_MESSAGE = 'Password must contain uppercase, lowercase, number/special character';
+
 export class ResetPasswordDto {
   @ApiProperty({ description: 'Password reset token received via email' })
   @IsString()
@@ -11,10 +16,6 @@ export class ResetPasswordDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(8)
-  // Kept in sync with ybb-program-next/lib/auth/passwordRules.ts. See the note
-  // on RegisterDto.password for why the previous pattern was replaced.
-  @Matches(/^(?=.*[A-Z])(?=.*[a-z])(?=.*[\d\W]).+$/, {
-    message: 'Password must contain uppercase, lowercase, number/special character',
-  })
+  @Matches(PASSWORD_PATTERN, { message: PASSWORD_PATTERN_MESSAGE })
   password: string;
 }

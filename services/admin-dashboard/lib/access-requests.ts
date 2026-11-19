@@ -46,6 +46,18 @@ export function validateNewPassword(password: string, confirm: string): string |
   return null;
 }
 
+// Matches AdminChangePasswordDto: bcrypt reads 72 bytes, the API caps the input at 128 chars.
+export const PASSWORD_MAX = 128;
+
+export function validateChangePassword(current: string, next: string, confirm: string): string | null {
+  if (!current) return "Enter your current password.";
+  if (next.length > PASSWORD_MAX) return `Password must be at most ${PASSWORD_MAX} characters.`;
+  const problem = validateNewPassword(next, confirm);
+  if (problem) return problem;
+  if (next === current) return "New password must be different from the current one.";
+  return null;
+}
+
 export function groupProgramsByBrand(
   programs: AccessRequestProgram[],
 ): Array<{ brandName: string; programs: AccessRequestProgram[] }> {

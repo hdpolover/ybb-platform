@@ -1,5 +1,5 @@
 // services/api/src/modules/admins/application/services/admin-password-link.service.spec.ts
-import { AdminPasswordLinkService, ADMIN_PASSWORD_LINK_TTL_MS } from './admin-password-link.service';
+import { AdminPasswordLinkService, ADMIN_PASSWORD_LINK_TTL_MS, ADMIN_SELF_RESET_TTL_MS } from './admin-password-link.service';
 import { hashToken } from '@shared/utils/hash-token.util';
 
 describe('AdminPasswordLinkService', () => {
@@ -28,6 +28,21 @@ describe('AdminPasswordLinkService', () => {
     expect(ttl).toBeLessThanOrEqual(ADMIN_PASSWORD_LINK_TTL_MS + 5000);
     expect(ADMIN_PASSWORD_LINK_TTL_MS).toBe(72 * 60 * 60 * 1000);
     expect(emitted).toMatchObject({ email: 'a@b.co', kind: 'invite', roleName: 'Reviewer', brand: { name: 'YBB Platform' } });
+  });
+
+  it('honours a shorter ttl and tells the mail it is self-requested and how long it lives', async () => {
+    const before = Date.now();
+    await service.issue({ userId: 'u1', email: 'a@b.co', fullName: 'A', kind: 'reset', roleName: null, ttlMs: ADMIN_SELF_RESET_TTL_MS, selfRequested: true });
+
+    const ttl = prisma.user.update.mock.calls[0][0].data.passwordResetExpires.getTime() - before;
+    expect(ttl).toBeGreaterThanOrEqual(ADMIN_SELF_RESET_TTL_MS - 1000);
+    expect(ttl).toBeLessThanOrEqual(ADMIN_SELF_RESET_TTL_MS + 5000);
+    expect(producer.emit.mock.calls[0][1]).toMatchObject({ expiresInHours: 1, selfRequested: true });
+  });
+
+  it('defaults the mail to 72 hours, not self-requested', async () => {
+    await service.issue({ userId: 'u1', email: 'a@b.co', fullName: 'A', kind: 'invite', roleName: 'x' });
+    expect(producer.emit.mock.calls[0][1]).toMatchObject({ expiresInHours: 72, selfRequested: false });
   });
 
   it('invalidates the password, clears lockout and revokes sessions when asked to', async () => {

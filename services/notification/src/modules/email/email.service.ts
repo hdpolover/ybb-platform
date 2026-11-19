@@ -1007,6 +1007,8 @@ export class EmailService {
       token: string;
       kind: 'invite' | 'reset';
       roleName?: string;
+      expiresInHours?: number;
+      selfRequested?: boolean;
       brand?: unknown;
     },
   ) {
@@ -1014,16 +1016,23 @@ export class EmailService {
       this.configService.get<string>('ADMIN_DASHBOARD_URL') || 'http://localhost:3001'
     ).replace(/\/$/, '');
     const isInvite = data.kind === 'invite';
+    // Events from an API build that predates these fields were all 72h links.
+    const expiresInHours = data.expiresInHours ?? 72;
     const html = await this.compileTemplate('admin-password-link', {
       name: data.name,
       roleName: data.roleName,
       isInvite,
+      selfRequested: !isInvite && data.selfRequested === true,
+      expiresInHours,
+      singleHour: expiresInHours === 1,
       setPasswordUrl: `${baseUrl}/set-password?token=${encodeURIComponent(data.token)}`,
       brand: data.brand,
     });
     const subject = isInvite
       ? 'You now have access to the YBB admin dashboard'
-      : 'Set a new password for the YBB admin dashboard';
+      : data.selfRequested
+        ? 'Reset your YBB admin dashboard password'
+        : 'Set a new password for the YBB admin dashboard';
     return this.sendRawEmail(to, subject, html);
   }
 

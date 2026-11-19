@@ -203,6 +203,20 @@ export class AuthLoggingService {
     });
   }
 
+  async logPasswordChange(userId: string, ipAddress: string = '0.0.0.0', userAgent: string = 'unknown') {
+    await this.prisma.userSecurityLog.create({
+      data: {
+        userId,
+        eventType: 'PASSWORD_CHANGE',
+        eventStatus: 'SUCCESS',
+        eventDescription: 'Password changed by the signed-in user; other sessions revoked',
+        ipAddress,
+        userAgent,
+        riskLevel: RiskLevel.medium,
+      },
+    });
+  }
+
   async logPasswordReset(userId: string, ipAddress: string = '0.0.0.0', userAgent: string = 'unknown') {
     const agentInfo = this.parseUserAgent(userAgent);
     await this.prisma.userActivityLog.create({

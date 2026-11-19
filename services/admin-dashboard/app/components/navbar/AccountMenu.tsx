@@ -3,11 +3,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useRouter } from "next/navigation";
+import { ChangePasswordDialog } from "./ChangePasswordDialog";
 
 export function AccountMenu() {
   const { adminProfile, logout } = useAuth();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const handleSignOut = () => {
@@ -114,6 +116,28 @@ export function AccountMenu() {
               </svg>
               <span>Admin Management</span>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(false);
+                setIsPasswordDialogOpen(true);
+              }}
+              className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[13px] hover:bg-zinc-50"
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 20 20"
+                className="h-4 w-4 text-zinc-500"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 2a4 4 0 0 0-4 4v2H5.5A1.5 1.5 0 0 0 4 9.5v7A1.5 1.5 0 0 0 5.5 18h9a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 14.5 8H14V6a4 4 0 0 0-4-4Zm2.5 6V6a2.5 2.5 0 0 0-5 0v2Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span>Change password</span>
+            </button>
           </nav>
 
           <div className="mt-1 border-t border-zinc-100" />
@@ -137,6 +161,8 @@ export function AccountMenu() {
           </button>
         </div>
       )}
+
+      <ChangePasswordDialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen} />
     </div>
   );
 }
