@@ -183,6 +183,53 @@ describe('TurnstileGuard', () => {
   });
 });
 
+describe('TurnstileGuard @TurnstileEnforced route', () => {
+  // Flag off (dry-run) deployment, so only the route marker can make it enforce.
+  const ctx = (headers: Record<string, string> = {}, enforced = true) => {
+    const handler = () => undefined;
+    if (enforced) Reflect.defineMetadata('turnstile:enforced', true, handler);
+    return {
+      switchToHttp: () => ({ getRequest: () => ({ headers, method: 'POST', path: '/x', ip: '10.0.0.1' }) }),
+      getHandler: () => handler,
+    } as unknown as ExecutionContext;
+  };
+
+  it('403s a missing token with the flag off', async () => {
+    const { guard, verify } = mkGuard(DRY_RUN);
+    await expect(guard.canActivate(ctx())).rejects.toBeInstanceOf(ForbiddenException);
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  it('403s an invalid token with the flag off', async () => {
+    const { guard } = mkGuard(DRY_RUN, jest.fn().mockResolvedValue(false));
+    await expect(guard.canActivate(ctx({ 'x-turnstile-token': 'bad' }))).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('passes a valid token with the flag off', async () => {
+    const { guard, verify } = mkGuard(DRY_RUN);
+    await expect(guard.canActivate(ctx({ 'x-turnstile-token': 'ok' }))).resolves.toBe(true);
+    expect(verify).toHaveBeenCalledWith('ok', '10.0.0.1');
+  });
+
+  it('keeps the 503 when siteverify is unreachable', async () => {
+    const { guard } = mkGuard(DRY_RUN, jest.fn().mockRejectedValue(new ServiceUnavailableException()));
+    await expect(guard.canActivate(ctx({ 'x-turnstile-token': 't' }))).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('does not block when no secret is configured', async () => {
+    const { guard, verify } = mkGuard({});
+    await expect(guard.canActivate(ctx())).resolves.toBe(true);
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  it('leaves a route without the marker in dry-run with the flag off', async () => {
+    const { guard } = mkGuard(DRY_RUN);
+    await expect(guard.canActivate(ctx({}, false))).resolves.toBe(true);
+  });
+});
+
 describe('TurnstileGuard body token fallback', () => {
   const ctxWithBody = (body: unknown, headers: Record<string, string> = {}) =>
     ({

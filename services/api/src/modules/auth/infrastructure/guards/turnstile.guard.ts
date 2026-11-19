@@ -15,6 +15,10 @@ const ADMIN_BYPASS_KEY = 'turnstile:adminBypass';
 /** Lets a live, unrevoked admin access token skip the challenge on this route only. */
 export const TurnstileAdminBypass = () => SetMetadata(ADMIN_BYPASS_KEY, true);
 
+const ENFORCED_KEY = 'turnstile:enforced';
+/** Enforces the challenge on this route whenever a secret is configured, regardless of AUTH_TURNSTILE_ENFORCE. */
+export const TurnstileEnforced = () => SetMetadata(ENFORCED_KEY, true);
+
 const headerValue = (value: string | string[] | undefined): string | undefined =>
   (Array.isArray(value) ? value[0] : value) || undefined;
 
@@ -28,6 +32,9 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
  * Rollout is a flag: with AUTH_TURNSTILE_ENFORCE !== 'true' (or no secret) the
  * guard never blocks. A token that IS sent is still verified and a failure is
  * logged, which is the dry-run signal before enforcement is switched on.
+ *
+ * A route marked @TurnstileEnforced() skips the flag and enforces whenever a secret
+ * is configured (the flag stays the rollout switch for the portal routes only).
  *
  * Runs after the global throttler (global guards go first), so a flood is
  * throttled before it costs a siteverify call.
@@ -46,8 +53,10 @@ export class TurnstileGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest();
+    const routeEnforced = this.reflector.get<boolean>(ENFORCED_KEY, context.getHandler()) === true;
     const enforce =
-      this.config.get<string>('AUTH_TURNSTILE_ENFORCE') === 'true' && this.turnstile.isConfigured();
+      (routeEnforced || this.config.get<string>('AUTH_TURNSTILE_ENFORCE') === 'true') &&
+      this.turnstile.isConfigured();
     // Header first. A route whose DTO declares `turnstileToken` (admin access request form) may send it in the body.
     const bodyToken = typeof req.body?.turnstileToken === 'string' ? req.body.turnstileToken || undefined : undefined;
     const token = headerValue(req.headers?.[TURNSTILE_HEADER]) ?? bodyToken;

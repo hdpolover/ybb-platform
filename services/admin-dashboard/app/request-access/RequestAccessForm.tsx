@@ -1,7 +1,7 @@
 // services/admin-dashboard/app/request-access/RequestAccessForm.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/src/ui/button";
@@ -11,11 +11,15 @@ import { PublicCardShell } from "@/src/admin/components/public-card-shell";
 import { ProgramMultiSelect } from "@/src/admin/components/program-multi-select";
 import { NAME_MAX, NOTE_MAX, validateAccessRequest } from "@/lib/access-requests";
 import {
+  ApiError,
   getAccessRequestOptions,
+  getTurnstileSiteKey,
   submitAccessRequest,
   type AccessRequestOptions,
 } from "@/src/shared/api-client";
+import TurnstileWidget, { type TurnstileWidgetHandle } from "./TurnstileWidget";
 
+const CHALLENGE_FAILED_MESSAGE = "We couldn't verify you're human. Reload the page and try again.";
 const SUCCESS_MESSAGE = "Request sent. You'll get an email once a supervisor approves it.";
 
 function FieldError({ id, message }: { id: string; message?: string }) {
@@ -39,6 +43,23 @@ export default function RequestAccessForm() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
+  // undefined = still fetching the key; null = none available (widget can't run).
+  const [siteKey, setSiteKey] = useState<string | null | undefined>(undefined);
+  const [token, setToken] = useState<string | null>(null);
+  const [widgetFailed, setWidgetFailed] = useState(false);
+  const widget = useRef<TurnstileWidgetHandle>(null);
+  // Without a widget the API decides (it refuses and we show the error), so don't trap the user.
+  const challengeUnavailable = siteKey === null || widgetFailed;
+
+  useEffect(() => {
+    let active = true;
+    getTurnstileSiteKey()
+      .then((key) => active && setSiteKey(key))
+      .catch(() => active && setSiteKey(null));
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -61,17 +82,24 @@ export default function RequestAccessForm() {
     setPending(true);
     setSubmitError(null);
     try {
-      await submitAccessRequest({
-        fullName: fullName.trim(),
-        email: email.trim(),
-        ...(whatsapp.trim() ? { whatsapp: whatsapp.trim() } : {}),
-        division,
-        programIds,
-        ...(note.trim() ? { note: note.trim() } : {}),
-      });
+      await submitAccessRequest(
+        {
+          fullName: fullName.trim(),
+          email: email.trim(),
+          ...(whatsapp.trim() ? { whatsapp: whatsapp.trim() } : {}),
+          division,
+          programIds,
+          ...(note.trim() ? { note: note.trim() } : {}),
+        },
+        token,
+      );
       setSent(true);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Something went wrong. Please try again.");
+      // Tokens are single-use: any failure burns this one, so get a fresh challenge.
+      setToken(null);
+      widget.current?.reset();
+      if (error instanceof ApiError && error.status === 403) setSubmitError(CHALLENGE_FAILED_MESSAGE);
+      else setSubmitError(error instanceof Error ? error.message : "Something went wrong. Please try again.");
     } finally {
       setPending(false);
     }
@@ -196,13 +224,29 @@ export default function RequestAccessForm() {
           </div>
         </div>
 
+        {siteKey ? (
+          <TurnstileWidget
+            ref={widget}
+            siteKey={siteKey}
+            onToken={(value) => {
+              setToken(value);
+              setWidgetFailed(false);
+            }}
+            onExpire={() => setToken(null)}
+            onError={() => {
+              setToken(null);
+              setWidgetFailed(true);
+            }}
+          />
+        ) : null}
+
         {submitError ? (
           <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
             {submitError}
           </p>
         ) : null}
 
-        <Button type="submit" className="w-full" loading={pending} disabled={pending || !options}>
+        <Button type="submit" className="w-full" loading={pending} disabled={pending || !options || (!token && !challengeUnavailable)}>
           {pending ? "Sending..." : "Send request"}
         </Button>
 
