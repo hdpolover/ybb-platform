@@ -157,7 +157,11 @@ describe('child-entity admin routes resolve the owning program from the row', ()
 
   it.each(routes)('%s: scoped admins pass on a row in their own program', async (_name, call, probe) => {
     rowIn('prog-a');
-    prismaRead.admin.findUnique.mockResolvedValue(BRAND_ADMIN);
+    // Holds the write permission of every route here; the 403 cases live below.
+    prismaRead.admin.findUnique.mockResolvedValue({
+      ...BRAND_ADMIN,
+      role: { name: 'Program Admin', permissions: ['announcements:write', 'program:write'] },
+    });
     await expect(call()).resolves.toBe('reached');
     prismaRead.admin.findUnique.mockResolvedValue(ASSIGNED_ADMIN);
     await expect(call()).resolves.toBe('reached');

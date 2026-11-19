@@ -17,6 +17,8 @@ import {
 } from './dto/exchange-rate.dto';
 import { Public } from '@shared/decorators/public.decorator';
 import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
+import { AdminPermissionGuard, RequiresProgramPermission } from '@shared/guards/admin-permission.guard';
+import { CONTENT_WRITE_PERMISSIONS } from '../application/utils/program-content-access.util';
 
 interface AuthenticatedRequest extends ExpressRequest {
     user: { id: string; userId: string; email: string; brandId: string };
@@ -40,9 +42,10 @@ export class ProgramExchangeRateController {
     }
 
     @Put()
-    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard, AdminPermissionGuard)
     @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
     @ScopedBy('program', 'programId')
+    @RequiresProgramPermission([...CONTENT_WRITE_PERMISSIONS.pricing])
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Update exchange rate for a program (Admin only)' })
     @ApiResponse({ status: 200, type: ExchangeRateResponseDto })

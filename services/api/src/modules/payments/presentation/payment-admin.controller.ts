@@ -108,13 +108,14 @@ const SINGLE_APPLICATION_INVOICE_MAX_LIMIT = 200;
 // sequential await per invoice. See notifyPaymentIssue below.
 const NOTIFY_PAYMENT_ISSUE_BATCH_SIZE = 50;
 
-// Money-moving and participant-mailing actions need payments:write;
+// Money-moving actions need payments:write;
 // payments:read (Digital Marketing, Program Admin) only views. The per-program
 // method overlay is program configuration, so program:write also counts there.
 const PAYMENT_WRITE_PERMISSIONS = ['payments:write'];
 const PROGRAM_PAYMENT_CONFIG_PERMISSIONS = ['payments:write', 'program:write'];
-// Resending a paid invoice's receipt to its own participant is a support reply.
-const RESEND_RECEIPT_PERMISSIONS = ['payments:write', 'support:write'];
+// Mailing a participant about their own invoice (resending a paid receipt, a
+// payment-help email) is a support reply, not a money move.
+const PARTICIPANT_PAYMENT_SUPPORT_PERMISSIONS = ['payments:write', 'support:write'];
 
 @ApiTags('Admin Payments')
 @Controller('admin/payments')
@@ -1232,7 +1233,7 @@ export class PaymentAdminController {
         @Body() body: NotifyPaymentIssueDto,
         @CurrentUser() user: CurrentUserData,
     ): Promise<{ sent: number; skipped: { invoiceId: string; reason: string }[] }> {
-        await this.assertCanAccessInvoices(user, body.invoiceIds, PAYMENT_WRITE_PERMISSIONS);
+        await this.assertCanAccessInvoices(user, body.invoiceIds, PARTICIPANT_PAYMENT_SUPPORT_PERMISSIONS);
         const invoices = await this.prisma.applicationInvoice.findMany({
             where: { id: { in: body.invoiceIds } },
             select: {
@@ -1382,7 +1383,7 @@ export class PaymentAdminController {
         @Body() body: ResendReceiptDto,
         @CurrentUser() user: CurrentUserData,
     ): Promise<{ sent: boolean; email: string }> {
-        await this.assertCanAccessInvoices(user, [body.invoiceId], RESEND_RECEIPT_PERMISSIONS);
+        await this.assertCanAccessInvoices(user, [body.invoiceId], PARTICIPANT_PAYMENT_SUPPORT_PERMISSIONS);
         const invoice = await this.prisma.applicationInvoice.findUnique({
             where: { id: body.invoiceId },
             select: {

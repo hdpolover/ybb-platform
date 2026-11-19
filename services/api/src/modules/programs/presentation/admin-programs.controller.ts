@@ -18,6 +18,7 @@ import { Roles } from '@modules/auth/application/decorators/roles.decorator';
 import { UserRole } from '@core/entities/user.entity';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 import { AdminScopeGuard, ScopedBy } from '@shared/guards/admin-scope.guard';
+import { AdminPermissionGuard, RequiresProgramPermission } from '@shared/guards/admin-permission.guard';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { CacheInvalidate } from '@shared/decorators/cache-invalidate.decorator';
 import { ApplicationCategory, ApplicationStatus, ChangeType } from '@prisma/client';
@@ -50,8 +51,11 @@ export class AdminProgramsController {
    * the WHERE clause filters on; there is no second programId in the body.
    */
   @Post(':programId/applications/funding-decision')
-  @UseGuards(AdminScopeGuard)
+  @UseGuards(AdminScopeGuard, AdminPermissionGuard)
   @ScopedBy('program', 'programId')
+  // A selection result is a review outcome: same set as REVIEW_WRITE_PERMISSIONS
+  // in applications.controller.ts.
+  @RequiresProgramPermission(['review:write', 'applications:write'], 'programId')
   @HttpCode(HttpStatus.OK)
   @CacheInvalidate(['application:list:*'])
   @AuditTrail({ entityType: 'Program', action: ChangeType.bulk_update, idParam: 'programId' })
