@@ -2,12 +2,14 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { toast } from "sonner";
 import { ShieldCheck, Pencil } from "lucide-react";
 import { ProfileHeader, type ProfileHeaderData } from "@/app/components/participants/ProfileHeader";
-import { ParticipantProfileTabs } from "@/app/components/participants/ParticipantProfileTabs";
+import { ParticipantProfileTabs, type ParticipantRemoteTabsContext } from "@/app/components/participants/ParticipantProfileTabs";
+import { editHistoryQueryKey } from "@/app/components/participants/tabs/EditHistoryTab";
 import { EditSubmissionDrawer } from "@/app/components/participants/EditSubmissionDrawer";
 import type { PersonalDetails } from "@/app/components/participants/tabs/PersonalDetailsTab";
 import type { ProfessionalProfile } from "@/app/components/participants/tabs/ProfessionalProfileTab";
@@ -21,6 +23,7 @@ import { formatDate } from "@/lib/utils";
 import { getExtraFieldsByTab, getFieldDisplayValue, getSubmittedSections } from "@/lib/form-extra-fields";
 import { STATUS_LABEL, humanizeStatus } from "@/lib/application-badges";
 import type { ProfileSummaryFields } from "@/lib/profile-summary";
+import { buildChangeLabels } from "@/lib/edit-history";
 import { Button } from "@/src/ui/button";
 import { Input } from "@/src/ui/input";
 import { Label } from "@/src/ui/label";
@@ -171,6 +174,7 @@ export default function ParticipantDetailPage() {
   const params = useParams<{ programId: string; accountId: string }>();
   const { programId: programIdParam, accountId } = params;
   const { accessiblePrograms, accessConfig } = useAuth();
+  const queryClient = useQueryClient();
 
   const programId = useMemo(() => {
     const p = accessiblePrograms.find(
@@ -207,6 +211,15 @@ export default function ParticipantDetailPage() {
       major: participant.professional.major,
     };
   }, [participant, rawApplication, accessiblePrograms, programId]);
+
+  const remoteTabs = useMemo<ParticipantRemoteTabsContext | null>(() => {
+    if (!rawApplication) return null;
+    return {
+      programId,
+      applicationId: rawApplication.id,
+      changeLabels: buildChangeLabels(rawApplication.submissionForm?.sections, rawApplication.essays),
+    };
+  }, [rawApplication, programId]);
 
   useEffect(() => {
     if (!programId || !accountId) return;
@@ -248,6 +261,8 @@ export default function ParticipantDetailPage() {
       const full = await getApplication(apps[0].id);
       setParticipant(mapToParticipantData(full));
       setRawApplication(full);
+      // Refetches the Edit History tab if it is open; if it was loaded earlier, marks it stale for the next open.
+      void queryClient.invalidateQueries({ queryKey: editHistoryQueryKey(full.id) });
       toast.success("Submission updated successfully.");
     } catch {
       toast.error("Failed to reload participant data.");
@@ -386,10 +401,10 @@ export default function ParticipantDetailPage() {
         {error && (
           <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
         )}
-        {participant && summary && (
+        {participant && summary && remoteTabs && (
           <>
             <ProfileHeader data={participant} summary={summary} />
-            <ParticipantProfileTabs data={participant} />
+            <ParticipantProfileTabs data={participant} remote={remoteTabs} />
           </>
         )}
       </div>

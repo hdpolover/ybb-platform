@@ -2088,6 +2088,21 @@ export function getApplication(id: string): Promise<Application> {
   return request<Application>(`/applications/${id}?includeRelations=true`);
 }
 
+/** Mirrors ApplicationEditHistoryEntryDto. `key` is "personalData.<field>", "essayAnswers.<field|essayId>", "participant.fullName" or "application.<column>". */
+export type ApplicationEditHistoryEntry = {
+  id: string;
+  editedAt: string;
+  reason: string | null;
+  /** null when the editing user no longer resolves. */
+  editor: { id: string; name: string; email: string } | null;
+  changes: Array<{ key: string; old: unknown; new: unknown }>;
+};
+
+/** Admin submission edits, newest first, at most 100. 404 for program-scoped admins outside the application's program. */
+export function getApplicationEditHistory(id: string): Promise<ApplicationEditHistoryEntry[]> {
+  return request<ApplicationEditHistoryEntry[]>(`/applications/${id}/edit-history`);
+}
+
 export type AdminUpdateSubmissionPayload = {
   personalData?: Record<string, unknown>;
   essayAnswers?: Record<string, unknown>;
@@ -3655,6 +3670,8 @@ export type InvoiceFilterOptions = {
 
 export async function listProgramInvoices(params: {
   programId: string;
+  /** Only this application's invoices. */
+  applicationId?: string;
   page?: number;
   limit?: number;
   status?: string;
@@ -3689,6 +3706,7 @@ export async function listProgramInvoices(params: {
   filters: InvoiceFilterOptions;
 }> {
   const q = new URLSearchParams({ programId: params.programId });
+  if (params.applicationId) q.set("applicationId", params.applicationId);
   if (params.page) q.set("page", String(params.page));
   if (params.limit) q.set("limit", String(params.limit));
   if (params.status) q.set("status", params.status);

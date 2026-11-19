@@ -22,7 +22,6 @@ import {
   notifyPaymentIssue,
   getPaymentsByCountry,
   type InvoiceListItem,
-  type InvoiceStatus,
   type InvoiceSummary,
   type PaginatedMeta,
   type InvoiceMetrics,
@@ -57,6 +56,8 @@ import {
   TableRow,
 } from "@/src/ui/table";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import { formatFollowUpLabel, formatInvoiceAmount } from "@/lib/invoice-badges";
+import { FollowUpPill, InvoiceStatusPill } from "@/app/components/payments/InvoicePills";
 
 const SORT_OPTIONS: Array<{ value: "createdAt" | "paidAt" | "amount" | "updatedAt"; label: string }> = [
   { value: "updatedAt", label: "Recently Updated" },
@@ -64,30 +65,6 @@ const SORT_OPTIONS: Array<{ value: "createdAt" | "paidAt" | "amount" | "updatedA
   { value: "paidAt", label: "Newest Payment" },
   { value: "amount", label: "Highest Amount" },
 ];
-
-const STATUS_CLASS: Record<InvoiceStatus, string> = {
-  paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  unpaid: "bg-amber-50 text-amber-700 border-amber-200",
-  processing: "bg-blue-50 text-blue-700 border-blue-200",
-  failed: "bg-red-50 text-red-700 border-red-200",
-  cancelled: "bg-zinc-100 text-zinc-700 border-zinc-300",
-  refunded: "bg-purple-50 text-purple-700 border-purple-200",
-};
-
-const FOLLOW_UP_CLASS: Record<string, string> = {
-  participant_cancelled: "bg-zinc-100 text-zinc-700 border-zinc-300",
-  payment_cancelled_issue: "bg-rose-50 text-rose-700 border-rose-200",
-  payment_failed: "bg-red-50 text-red-700 border-red-200",
-  manual_proof_rejected: "bg-orange-50 text-orange-700 border-orange-200",
-  // `all_problems` is a filter-only bucket (matches any problem status) — it
-  // is never a real per-row `followUpStatus` value, so no pill style needed.
-  payment_processing_stuck: "bg-amber-50 text-amber-700 border-amber-200",
-};
-
-const FOLLOW_UP_LABELS: Record<string, string> = {
-  payment_processing_stuck: "Processing (stuck)",
-  all_problems: "All Problems",
-};
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const REGION_NAMES = typeof Intl !== "undefined" ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
@@ -136,14 +113,6 @@ const paymentsFilterParsers = {
   pageSize: parseAsInteger.withDefault(20).withOptions({ clearOnDefault: true }),
 };
 
-function formatCurrency(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
 function formatLabel(value: string | null | undefined) {
   if (!value) return "—";
   return value
@@ -164,29 +133,6 @@ function formatCountryName(value: string | null | undefined) {
     }
   }
   return formatLabel(raw);
-}
-
-function StatusPill({ status }: { status: string }) {
-  const cls = STATUS_CLASS[status as InvoiceStatus] ?? "bg-zinc-50 text-zinc-600 border-zinc-200";
-  return (
-    <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium capitalize ${cls}`}>
-      {status}
-    </span>
-  );
-}
-
-function formatFollowUpLabel(value: string): string {
-  return FOLLOW_UP_LABELS[value] ?? formatLabel(value);
-}
-
-function FollowUpPill({ status }: { status: InvoiceListItem["followUpStatus"] }) {
-  if (!status) return null;
-  const cls = FOLLOW_UP_CLASS[status] ?? "bg-zinc-50 text-zinc-600 border-zinc-200";
-  return (
-    <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${cls}`}>
-      {formatFollowUpLabel(status)}
-    </span>
-  );
 }
 
 export default function PaymentsPage({
@@ -774,21 +720,21 @@ export default function PaymentsPage({
         <StatCard
           icon={<DollarSign className="h-4 w-4 text-emerald-600" />}
           label="Total Collected"
-          value={formatCurrency(paidAmount, currency)}
+          value={formatInvoiceAmount(paidAmount, currency)}
           sub={`${paidCount} paid invoice${paidCount !== 1 ? "s" : ""}`}
           color="emerald"
         />
         <StatCard
           icon={<CircleDollarSign className="h-4 w-4 text-blue-600" />}
           label="Total Invoiced"
-          value={formatCurrency(totalAmount, currency)}
+          value={formatInvoiceAmount(totalAmount, currency)}
           sub={`${totalInvoices} invoices`}
           color="blue"
         />
         <StatCard
           icon={<Clock className="h-4 w-4 text-amber-600" />}
           label="Outstanding"
-          value={formatCurrency(outstandingAmount, currency)}
+          value={formatInvoiceAmount(outstandingAmount, currency)}
           sub={`${pendingCount} pending`}
           color="amber"
         />
@@ -796,7 +742,7 @@ export default function PaymentsPage({
           icon={<CheckCircle2 className="h-4 w-4 text-indigo-600" />}
           label="Collection Rate"
           value={`${collectionRate.toFixed(1)}%`}
-          sub={`Avg paid ${formatCurrency(averagePaidAmount, currency)}`}
+          sub={`Avg paid ${formatInvoiceAmount(averagePaidAmount, currency)}`}
           color="indigo"
         />
         <StatCard
@@ -1145,7 +1091,7 @@ export default function PaymentsPage({
                   <div className="text-xs text-zinc-400">{formatLabel(inv.pricingTier.feeType)}</div>
                 </TableCell>
                 <TableCell className="text-sm font-medium">
-                  {formatCurrency(inv.amount, inv.currency)}
+                  {formatInvoiceAmount(inv.amount, inv.currency)}
                 </TableCell>
                 <TableCell className="text-sm text-zinc-500">
                   {inv.paymentMethod ?? "Not recorded"}
@@ -1163,7 +1109,7 @@ export default function PaymentsPage({
                 </TableCell>
                 <TableCell>
                   <div className="space-y-1">
-                    <StatusPill status={inv.status} />
+                    <InvoiceStatusPill status={inv.status} />
                     <FollowUpPill status={inv.followUpStatus} />
                   </div>
                 </TableCell>

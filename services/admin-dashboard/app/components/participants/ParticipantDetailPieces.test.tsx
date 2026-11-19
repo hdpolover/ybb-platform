@@ -57,7 +57,7 @@ describe("SubmittedFormTab", () => {
 
 describe("ParticipantProfileTabs", () => {
   it("opens the tab named in ?tab= and switches on click", () => {
-    render(<ParticipantProfileTabs data={tabsData} />, {
+    render(<ParticipantProfileTabs data={tabsData} remote={{ programId: "p", applicationId: "a", changeLabels: new Map() }} />, {
       wrapper: withNuqsTestingAdapter({ searchParams: "?tab=submitted" }),
     });
     expect(screen.getByText("No submitted form")).toBeInTheDocument();

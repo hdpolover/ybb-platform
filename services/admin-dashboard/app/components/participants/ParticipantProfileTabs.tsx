@@ -8,6 +8,8 @@ import { EntryInformationTab, EntryInformation } from "./tabs/EntryInformationTa
 import { MiscellaneousTab, Miscellaneous } from "./tabs/MiscellaneousTab";
 import { EssaysTab, Essay } from "./tabs/EssaysTab";
 import { SubmittedFormTab, SubmittedForm } from "./tabs/SubmittedFormTab";
+import { PaymentsTab } from "./tabs/PaymentsTab";
+import { EditHistoryTab } from "./tabs/EditHistoryTab";
 
 const TABS = [
   { id: "personal", label: "Personal Details" },
@@ -15,6 +17,8 @@ const TABS = [
   { id: "entry", label: "Entry Information" },
   { id: "misc", label: "Miscellaneous" },
   { id: "essays", label: "Essays" },
+  { id: "payments", label: "Payments" },
+  { id: "history", label: "Edit History" },
   { id: "submitted", label: "As Submitted" },
 ] as const;
 
@@ -32,11 +36,20 @@ export interface ParticipantTabsData {
   submitted: SubmittedForm;
 }
 
-interface ParticipantProfileTabsProps {
-  data: ParticipantTabsData;
+/** Inputs for the tabs that fetch their own data on first open. */
+export interface ParticipantRemoteTabsContext {
+  programId: string;
+  applicationId: string;
+  /** buildChangeLabels(...) for the Edit History tab. */
+  changeLabels: ReadonlyMap<string, string>;
 }
 
-export function ParticipantProfileTabs({ data }: ParticipantProfileTabsProps) {
+interface ParticipantProfileTabsProps {
+  data: ParticipantTabsData;
+  remote: ParticipantRemoteTabsContext;
+}
+
+export function ParticipantProfileTabs({ data, remote }: ParticipantProfileTabsProps) {
   const [activeTab, setActiveTab] = useQueryState("tab", tabParser);
 
   return (
@@ -69,6 +82,10 @@ export function ParticipantProfileTabs({ data }: ParticipantProfileTabsProps) {
         {activeTab === "entry" && <EntryInformationTab data={data.entry} />}
         {activeTab === "misc" && <MiscellaneousTab data={data.misc} />}
         {activeTab === "essays" && <EssaysTab data={{ essays: data.essays }} />}
+        {activeTab === "payments" && <PaymentsTab programId={remote.programId} applicationId={remote.applicationId} />}
+        {activeTab === "history" && (
+          <EditHistoryTab applicationId={remote.applicationId} changeLabels={remote.changeLabels} />
+        )}
         {activeTab === "submitted" && <SubmittedFormTab data={data.submitted} />}
       </div>
     </div>
