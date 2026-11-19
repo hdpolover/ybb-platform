@@ -54,7 +54,7 @@ export default function ProgramFaqsPage() {
   const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
 
   const programName =
-    accessiblePrograms.find((p) => p.programId === params.programId)?.programName ?? "Selected Program";
+    accessiblePrograms.find((p) => p.programId === resolvedProgramId)?.programName ?? "Selected Program";
 
   const load = useCallback(async () => {
     if (!resolvedProgramId) return;

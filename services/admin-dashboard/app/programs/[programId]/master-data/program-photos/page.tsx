@@ -26,7 +26,7 @@ export default function ProgramPhotosPage() {
   const params = useParams<{ programId: string }>();
   const { accessiblePrograms, adminProfile } = useAuth();
   const resolvedProgramId = useResolvedProgramId(params.programId);
-  const program = accessiblePrograms.find((p) => p.programId === params.programId);
+  const program = accessiblePrograms.find((p) => p.programId === resolvedProgramId);
   const brandId = program?.brandId ?? "";
   const userId = adminProfile?.userId ?? "";
   const [items, setItems] = useState<ProgramGalleryItem[]>([]);
@@ -39,7 +39,7 @@ export default function ProgramPhotosPage() {
   const [copyFromProgramOpen, setCopyFromProgramOpen] = useState(false);
   const [copyFromTemplateOpen, setCopyFromTemplateOpen] = useState(false);
 
-  const programName = accessiblePrograms.find((p) => p.programId === params.programId)?.programName ?? "Selected Program";
+  const programName = program?.programName ?? "Selected Program";
 
   const fetchItems = useCallback(async () => {
     if (!resolvedProgramId) return;
