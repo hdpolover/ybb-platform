@@ -20,6 +20,9 @@ import {
 } from "@/src/shared/api-client";
 import { formatDateTime } from "@/lib/utils";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
+import { EmptyState } from "@/src/admin/empty-state";
 import {
   dateTimeLocalToIsoString,
   getProgramAnnouncementStatus,
@@ -59,6 +62,26 @@ const TARGET_AUDIENCE_OPTIONS = [
 ];
 
 export function ProgramAnnouncementEditor({ mode }: { mode: EditorMode }) {
+  const router = useRouter();
+  const params = useParams<{ programId: string; id?: string }>();
+  // announcements:read alone can reach this URL; the API refuses the uploads and the save.
+  const canWrite = useProgramWriteAccess(params.programId, programWritePermissions.announcements);
+  if (canWrite) return <AnnouncementEditorForm mode={mode} />;
+  const backHref = params.id
+    ? `/programs/${params.programId}/announcements/${params.id}`
+    : `/programs/${params.programId}/announcements`;
+  return (
+    <main className="rounded-xl border border-zinc-200 bg-white shadow-sm">
+      <EmptyState
+        title="View-only access"
+        description="Your role can view announcements for this program but not create or edit them."
+        action={{ label: "Back to announcements", onClick: () => router.push(backHref) }}
+      />
+    </main>
+  );
+}
+
+function AnnouncementEditorForm({ mode }: { mode: EditorMode }) {
   const router = useRouter();
   const params = useParams<{ programId: string; id?: string }>();
   const { accessiblePrograms, adminProfile } = useAuth();

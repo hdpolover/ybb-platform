@@ -111,9 +111,10 @@ export default function PaymentDetailPage({
 }) {
   const { programId, paymentId } = use(params);
   // payments:read (Digital Marketing, Program Admin) views; the API refuses
-  // verify/status/notify without payments:write.
+  // verify/status without payments:write.
   const canWritePayments = useProgramWriteAccess(programId, programWritePermissions.payments);
   const canResendReceipt = useProgramWriteAccess(programId, programWritePermissions.resendReceipt);
+  const canSendPaymentHelp = useProgramWriteAccess(programId, programWritePermissions.paymentHelp);
   const canSubmitApplication = useProgramWriteAccess(programId, programWritePermissions.applicationSubmit);
 
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
@@ -157,7 +158,6 @@ export default function PaymentDetailPage({
   const paymentMethodValue = formatPaymentMethod(invoice?.paymentMethod ?? null);
   const proofUrl = extractProofUrl(txn) ?? attempts.map((attempt) => extractProofUrl(attempt)).find(Boolean) ?? null;
   const isManualTransfer = isManualTransferPayment(invoice?.paymentMethod ?? null, txn);
-  const showPaymentControls = Boolean(invoice) && (canWritePayments || canResendReceipt);
   // Gate the payment-help email on genuine payment problems: failed/processing
   // invoices always qualify; a cancelled invoice only qualifies when the
   // follow-up status marks it as an issue-driven cancellation, not a
@@ -168,6 +168,12 @@ export default function PaymentDetailPage({
         invoice.status === "processing" ||
         (invoice.status === "cancelled" && invoice.followUpStatus === "payment_cancelled_issue")),
   );
+  // Only render the card when it will hold a control this role may use.
+  const showPaymentControls =
+    Boolean(invoice) &&
+    (canWritePayments ||
+      (canResendReceipt && invoice?.status === "paid") ||
+      (canSendPaymentHelp && isProblemInvoice));
   const looksLikeInvoiceId =
     /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(
       paymentId,
@@ -690,18 +696,20 @@ export default function PaymentDetailPage({
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">
-                    {isManualTransfer ? "Manual Transfer Review" : "Payment Controls"}
+                    {!canWritePayments ? "Participant Emails" : isManualTransfer ? "Manual Transfer Review" : "Payment Controls"}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <p className="text-xs text-zinc-500">
-                    {isManualTransfer
-                      ? "Update invoice status after checking transfer proof."
-                      : needsReview
-                        ? "This gateway transaction is waiting for admin review. You can verify it here or apply a manual override."
-                        : "Use these controls when you need to sync or override the invoice status."}
-                  </p>
-                  {canWritePayments && isProblemInvoice && invoice && (
+                  {canWritePayments && (
+                    <p className="text-xs text-zinc-500">
+                      {isManualTransfer
+                        ? "Update invoice status after checking transfer proof."
+                        : needsReview
+                          ? "This gateway transaction is waiting for admin review. You can verify it here or apply a manual override."
+                          : "Use these controls when you need to sync or override the invoice status."}
+                    </p>
+                  )}
+                  {canSendPaymentHelp && isProblemInvoice && invoice && (
                     <NotifyParticipantButton
                       email={invoice.participant.email ?? "the participant"}
                       invoiceId={invoice.id}
