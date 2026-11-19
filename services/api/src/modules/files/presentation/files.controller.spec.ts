@@ -129,6 +129,7 @@ describe('FilesController — requestUploadUrl (brand attribution)', () => {
     let mockPrisma: { program: { findUnique: jest.Mock } };
     let mockPrismaRead: { admin: { findUnique: jest.Mock }; program: { findUnique: jest.Mock } };
     let mockFileServiceClient: { createUploadUrl: jest.Mock };
+    let mockFileGrpcClient: { getPresignedUploadUrl: jest.Mock };
 
     const PROGRAM_ID = 'prog-1';
     const PROGRAM_BRAND_ID = 'brand-program-owner';
@@ -160,12 +161,13 @@ describe('FilesController — requestUploadUrl (brand attribution)', () => {
                 expires_in_seconds: 600,
             }),
         };
+        mockFileGrpcClient = { getPresignedUploadUrl: jest.fn().mockResolvedValue({ upload_url: 'u' }) };
 
         const module: TestingModule = await Test.createTestingModule({
             controllers: [FilesController],
             providers: [
                 { provide: FileServiceClient, useValue: mockFileServiceClient },
-                { provide: FileGrpcClient, useValue: {} },
+                { provide: FileGrpcClient, useValue: mockFileGrpcClient },
                 { provide: StorageService, useValue: {} },
                 { provide: MetricsService, useValue: { fileUploadsTotal: { inc: jest.fn() } } },
                 { provide: PrismaService, useValue: mockPrisma },
@@ -280,6 +282,7 @@ describe('FilesController — requestUploadUrl (brand attribution)', () => {
 
         beforeEach(() => {
             mockPrisma.program.findUnique.mockResolvedValue({ id: PROGRAM_ID, brandId: JWT_HOME_BRAND_ID, deletedAt: null });
+            mockPrismaRead.program.findUnique.mockResolvedValue({ id: PROGRAM_ID, brandId: JWT_HOME_BRAND_ID, name: 'P', deletedAt: null });
         });
 
         it.each([
@@ -341,11 +344,81 @@ describe('FilesController — requestUploadUrl (brand attribution)', () => {
             expect(mockFileServiceClient.createUploadUrl).toHaveBeenCalled();
         });
 
+        // The home brand grants an admin nothing: assigned to PROGRAM_ID only, a
+        // sibling programme of the same brand is out of scope even with media:write.
+        it('an admin assigned to one programme cannot upload into a sibling programme of the same brand', async () => {
+            const SIBLING_ID = 'prog-sibling';
+            mockPrisma.program.findUnique.mockResolvedValue({ id: SIBLING_ID, brandId: JWT_HOME_BRAND_ID, deletedAt: null });
+            mockPrismaRead.program.findUnique.mockResolvedValue({ id: SIBLING_ID, brandId: JWT_HOME_BRAND_ID, name: 'S', deletedAt: null });
+            mockPrismaRead.admin.findUnique.mockResolvedValue(scopedAdmin(['media:write']));
+
+            await expect(
+                controller.requestUploadUrl({ ...baseDto, program_id: SIBLING_ID, asset_type: 'gallery', bucket: 'gallery' }, adminUser),
+            ).rejects.toBeInstanceOf(NotFoundException);
+            await expect(
+                controller.getPresignedUploadUrl({ ...baseDto, program_id: SIBLING_ID, bucket: 'gallery' }, adminUser),
+            ).rejects.toBeInstanceOf(NotFoundException);
+            expect(mockFileServiceClient.createUploadUrl).not.toHaveBeenCalled();
+            expect(mockFileGrpcClient.getPresignedUploadUrl).not.toHaveBeenCalled();
+        });
+
         it('a participant (no adminId) uploading into their program needs no permission lookup', async () => {
             const participant = { userId: 'user-p', email: 'p@x.com', brandId: JWT_HOME_BRAND_ID };
             await controller.requestUploadUrl({ ...baseDto, program_id: PROGRAM_ID, asset_type: 'support-attachment' }, participant);
             expect(mockPrismaRead.admin.findUnique).not.toHaveBeenCalled();
             expect(mockFileServiceClient.createUploadUrl).toHaveBeenCalled();
+        });
+    });
+
+    // The file service makes a file public by its last path segment, so an
+    // unlisted bucket ('thumbnail', 'x/gallery') would publish through the
+    // any-write floor. Both presign routes take only exact, listed buckets.
+    describe('bucket allow-list on upload-url and presigned-upload-url', () => {
+        const admin = { userId: 'admin-1', email: 'a@x.com', brandId: JWT_HOME_BRAND_ID, adminId: 'admin-1' };
+        const participant = { userId: 'user-p', email: 'p@x.com', brandId: JWT_HOME_BRAND_ID };
+        const routes = [
+            ['upload-url', (dto: Record<string, unknown>, user: never) => controller.requestUploadUrl({ ...baseDto, ...dto }, user)],
+            ['presigned-upload-url', (dto: Record<string, unknown>, user: never) => controller.getPresignedUploadUrl({ ...baseDto, ...dto }, user)],
+        ] as const;
+        const issued = () => mockFileServiceClient.createUploadUrl.mock.calls.length + mockFileGrpcClient.getPresignedUploadUrl.mock.calls.length;
+
+        beforeEach(() => {
+            mockPrismaRead.admin.findUnique.mockResolvedValue({
+                accessLevel: 10, canManageAdmins: false, canAssignRoles: false, customPermissions: null, role: null, adminBrands: [], adminPrograms: [],
+            });
+        });
+
+        it.each(routes.flatMap(([name, call]) =>
+            ['thumbnail', 'x/gallery', '../documents', 'gallery/', 'uploads', 'brands\\logos'].map((bucket) => [name, bucket, call] as const),
+        ))('%s: an admin naming bucket %s gets 400, nothing issued', async (_name, bucket, call) => {
+            await expect(call({ bucket }, admin as never)).rejects.toBeInstanceOf(BadRequestException);
+            expect(issued()).toBe(0);
+        });
+
+        it.each(routes.flatMap(([name, call]) => ['gallery', 'brands/logos', 'thumbnail'].map((bucket) => [name, bucket, call] as const)))(
+            '%s: a participant naming bucket %s gets 400, nothing issued',
+            async (_name, bucket, call) => {
+                await expect(call({ bucket }, participant as never)).rejects.toBeInstanceOf(BadRequestException);
+                expect(issued()).toBe(0);
+            },
+        );
+
+        it.each(routes.flatMap(([name, call]) =>
+            ['documents', 'avatars', 'gallery', 'image', 'certificate', 'resources', 'payment_methods', 'brands', 'brands/logos', 'brands/banners'].map(
+                (bucket) => [name, bucket, call] as const,
+            ),
+        ))('%s: the dashboard bucket %s still works for an admin', async (_name, bucket, call) => {
+            await call({ bucket }, admin as never);
+            expect(issued()).toBe(1);
+        });
+
+        it.each(routes)('%s: a participant still uploads to documents and avatars, and the default is documents', async (_name, call) => {
+            await call({ bucket: 'documents' }, participant as never);
+            await call({ bucket: 'avatars' }, participant as never);
+            await call({}, participant as never);
+            expect(issued()).toBe(3);
+            const defaulted = [...mockFileServiceClient.createUploadUrl.mock.calls, ...mockFileGrpcClient.getPresignedUploadUrl.mock.calls].at(-1)?.[0];
+            expect(defaulted).toEqual(expect.objectContaining({ bucket: 'documents' }));
         });
     });
 });
