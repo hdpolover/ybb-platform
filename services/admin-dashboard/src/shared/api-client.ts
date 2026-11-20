@@ -19,6 +19,7 @@ import {
   shouldRefreshAdminProfileForMutation,
 } from "@/src/shared/admin-profile-refresh";
 import type { ReadinessSummaryRow } from "@/lib/readiness-summary";
+import type { DeletionInsights } from "@/lib/deletion-insights";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -4740,6 +4741,12 @@ export function listAdminSecurityEvents(
   return requestPaginated<AdminSecurityEvent>(
     `/admin/audit-logs/admin-security-events?${buildSecurityEventsQuery(filters, { page, limit })}`,
   );
+}
+
+export function getDeletionInsights(params: { status?: string; page: number; limit: number }): Promise<DeletionInsights> {
+  const q = new URLSearchParams({ page: String(params.page), limit: String(params.limit) });
+  if (params.status) q.set("status", params.status);
+  return request<DeletionInsights>(`/admin/deletion-requests/insights?${q.toString()}`);
 }
 
 // ─── Scoring Rubrics ─────────────────────────────────────────────────────────
