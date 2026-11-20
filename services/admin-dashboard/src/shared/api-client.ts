@@ -378,6 +378,8 @@ export type UpdateAdminInput = {
   brandIds?: string[];
   programIds?: string[];
   isActive?: boolean;
+  // Non-privileged extras on top of the role; omit to leave the stored value alone.
+  customPermissions?: string[];
 };
 
 export type CreateAdminRoleInput = {

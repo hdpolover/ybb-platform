@@ -22,6 +22,8 @@ import {
 } from "../../components/settings/adminManagement/SendPasswordLinkDialog";
 import { InviteAdminDialog } from "../../components/settings/adminManagement/InviteAdminDialog";
 import { RoleAndProgramsFields } from "../../components/settings/adminManagement/AdminAccessFields";
+import { ExtraPermissionsFields } from "../../components/settings/adminManagement/ExtraPermissionsFields";
+import { isPrivilegedPermission, extraPermissionCategories } from "@/lib/admin-access";
 import { canSendPasswordLink, isPlatformTierRole } from "@/lib/access-requests";
 import {
   listAdmins,
@@ -51,6 +53,11 @@ function statusBadge(isActive: boolean) {
   );
 }
 
+const lower = (values: readonly string[]) => values.map((value) => value.trim().toLowerCase());
+const catalogKeys = new Set(extraPermissionCategories.flatMap((category) => category.permissions.map((p) => p.key)));
+
+const extraCount = (admin: Admin) => (admin.customPermissions ?? []).filter((key) => !isPrivilegedPermission(key)).length;
+
 // ── Edit Modal ────────────────────────────────────────────────────────────────
 
 function EditAdminModal({
@@ -70,6 +77,11 @@ function EditAdminModal({
   const [isActive, setIsActive] = useState(admin.user?.isActive ?? true);
   const [roleId, setRoleId] = useState(admin.roleId ?? "");
   const [programIds, setProgramIds] = useState<string[]>([]);
+  // Stored custom permissions: only catalog keys are editable; privileged ones are shown and never sent.
+  const [extras, setExtras] = useState<string[]>([]);
+  const [loadedExtras, setLoadedExtras] = useState<string[]>([]);
+  const [loadedRoleId, setLoadedRoleId] = useState("");
+  const [legacyPrivileged, setLegacyPrivileged] = useState<string[]>([]);
   // The list rows may not carry program assignments, so fetch the detail before the form is editable.
   const [detailLoaded, setDetailLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -82,6 +94,12 @@ function EditAdminModal({
         if (cancelled) return;
         setRoleId(detail.roleId ?? "");
         setProgramIds(detail.programs?.map((p) => p.programId) ?? detail.programIds ?? []);
+        const stored = detail.customPermissions ?? [];
+        const storedExtras = lower(stored).filter((key) => catalogKeys.has(key));
+        setExtras(storedExtras);
+        setLoadedExtras(storedExtras);
+        setLoadedRoleId(detail.roleId ?? "");
+        setLegacyPrivileged(stored.filter(isPrivilegedPermission));
         setDetailLoaded(true);
       })
       .catch((err) => {
@@ -91,6 +109,11 @@ function EditAdminModal({
       cancelled = true;
     };
   }, [admin.id]);
+
+  const rolePermissions = useMemo(
+    () => new Set(lower(roles.find((role) => role.id === roleId)?.permissions ?? [])),
+    [roles, roleId],
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -107,7 +130,18 @@ function EditAdminModal({
     }
     setLoading(true);
     try {
-      await updateAdmin(admin.id, { fullName: fullName.trim(), roleId, isActive, programIds });
+      // Extras the role already includes are redundant; send only when the effective set changed.
+      const effectiveExtras = extras.filter((key) => !rolePermissions.has(key)).sort();
+      const loadedRoleKeys = new Set(lower(roles.find((role) => role.id === loadedRoleId)?.permissions ?? []));
+      const baseline = loadedExtras.filter((key) => !loadedRoleKeys.has(key)).sort();
+      const extrasChanged = effectiveExtras.join() !== baseline.join();
+      await updateAdmin(admin.id, {
+        fullName: fullName.trim(),
+        roleId,
+        isActive,
+        programIds,
+        ...(extrasChanged ? { customPermissions: effectiveExtras } : {}),
+      });
       onUpdated();
       onClose();
     } catch (err) {
@@ -149,6 +183,13 @@ function EditAdminModal({
             programs={programs}
             programIds={programIds}
             onProgramIdsChange={setProgramIds}
+            disabled={!detailLoaded || loading}
+          />
+          <ExtraPermissionsFields
+            rolePermissions={rolePermissions}
+            extras={extras}
+            onChange={setExtras}
+            legacyPrivileged={legacyPrivileged}
             disabled={!detailLoaded || loading}
           />
           <div className="flex items-center gap-2">
@@ -387,7 +428,14 @@ export default function AdminsPage() {
                   <tr key={admin.id} className={idx % 2 === 0 ? "bg-white" : "bg-zinc-50/60"}>
                     <td className="px-3 py-2 font-semibold text-zinc-900">{admin.fullName}</td>
                     <td className="px-3 py-2 text-zinc-600">{admin.user?.email ?? "—"}</td>
-                    <td className="px-3 py-2 text-zinc-700">{admin.role?.name ?? "—"}</td>
+                    <td className="px-3 py-2 text-zinc-700">
+                      {admin.role?.name ?? "—"}
+                      {extraCount(admin) > 0 && (
+                        <span className="ml-1.5 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                          +{extraCount(admin)} extra
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-zinc-500">
                       {formatDate(admin.createdAt)}
                     </td>
