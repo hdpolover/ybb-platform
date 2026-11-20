@@ -1,19 +1,7 @@
-"use client";
+// services/admin-dashboard/app/programs/[programId]/settings/menu-management/page.tsx
+import { redirect } from "next/navigation";
 
-import { use } from "react";
-import { useAuth } from "@/app/contexts/AuthContext";
-import { MenuManagement } from "@/app/components/settings/MenuManagement";
-
-export default function MenuManagementPage({
-  params,
-}: {
-  params: Promise<{ programId: string }>;
-}) {
-  const { programId } = use(params);
-  const { accessiblePrograms } = useAuth();
-  const programName =
-    accessiblePrograms.find((program) => program.programId === programId)?.programName ??
-    "Selected Program";
-
-  return <MenuManagement programId={programId} programName={programName} />;
+// Moved to the platform area (admins and menu rules are global); kept so old links still land somewhere.
+export default function MenuManagementPage() {
+  redirect("/platform/roles");
 }

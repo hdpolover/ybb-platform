@@ -9,6 +9,8 @@ import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { useApplicationQueue } from "@/app/hooks/useApplicationQueue";
 import { FullyFundedDetailsTabsCard } from "@/app/components/scoring/FullyFundedDetailsTabsCard";
 import { ScoringPanel } from "@/app/components/scoring/ScoringPanel";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import { MobileScoringDock } from "@/app/components/scoring/MobileScoringDock";
 import { ApplicationQueueBar } from "@/app/components/scoring/ApplicationQueueBar";
 import { KeyboardShortcutsHelp } from "@/app/components/scoring/KeyboardShortcutsHelp";
@@ -68,6 +70,7 @@ export default function FullyFundedParticipantDetailPage() {
 
   const { accessiblePrograms } = useAuth();
   const resolvedProgramId = useResolvedProgramId(programId);
+  const canScore = useProgramWriteAccess(programId, programWritePermissions.review);
   const resolvedBrandId = useMemo(() => {
     return (
       accessiblePrograms.find(
@@ -296,6 +299,7 @@ export default function FullyFundedParticipantDetailPage() {
               className="min-h-0 flex-1"
               onSubmitSuccess={handleSubmitSuccess}
               onDirtyChange={setDesktopDirty}
+              canWrite={canScore}
             />
           </div>
         </div>
@@ -307,6 +311,7 @@ export default function FullyFundedParticipantDetailPage() {
         onStageChange={handleStageChange}
         onSubmitSuccess={handleSubmitSuccess}
         onDirtyChange={setMobileDirty}
+        canWrite={canScore}
       />
 
       <KeyboardShortcutsHelp open={helpOpen} onOpenChange={setHelpOpen} />

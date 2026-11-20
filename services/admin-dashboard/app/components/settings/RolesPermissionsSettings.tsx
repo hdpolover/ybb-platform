@@ -10,7 +10,6 @@ import {
 import { toast } from "sonner";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { useAuth } from "@/app/contexts/AuthContext";
-import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import {
   createAdminRole,
   deleteAdminRole,
@@ -46,11 +45,6 @@ export type PermissionCategory = {
   permissions: string[];
 };
 
-export type RolesPermissionsSettingsProps = {
-  programId: string;
-  programName: string;
-};
-
 type RoleFormState = {
   name: string;
   description: string;
@@ -78,9 +72,8 @@ function mapRole(role: ApiAdminRole): RoleRow {
   };
 }
 
-export function RolesPermissionsSettings({ programId, programName }: RolesPermissionsSettingsProps) {
+export function RolesPermissionsSettings() {
   const { accessConfig } = useAuth();
-  const resolvedProgramId = useResolvedProgramId(programId);
   const [roles, setRoles] = useState<RoleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,14 +98,14 @@ export function RolesPermissionsSettings({ programId, programName }: RolesPermis
     setError(null);
 
     try {
-      const response = await listAdminRoles({ programId: resolvedProgramId });
+      const response = await listAdminRoles();
       setRoles(response.map(mapRole));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Failed to load roles.");
     } finally {
       setLoading(false);
     }
-  }, [canAssignRoles, resolvedProgramId]);
+  }, [canAssignRoles]);
 
   useEffect(() => {
     void loadRoles();
@@ -228,11 +221,11 @@ export function RolesPermissionsSettings({ programId, programName }: RolesPermis
       <section className="rounded-md border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 shadow-sm md:px-5 md:py-4 md:text-base">
         <div className="mb-3 space-y-1">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
-            <span>Settings</span>
+            <span>Platform</span>
           </div>
           <h1 className="text-base font-semibold text-zinc-900 md:text-lg">Roles &amp; Permissions</h1>
           <p className="text-xs text-zinc-500 md:text-sm">
-            Create reusable admin roles for {programName} and control which modules they can access.
+            Roles are shared by every program: editing one changes it for all admins who hold it. Program access is granted per admin in Admins.
           </p>
         </div>
 

@@ -25,6 +25,8 @@ interface DocumentReviewTableProps {
   onReview: (item: DocumentReviewQueueItem, action: DocumentReviewAction, note: string) => Promise<void>;
   /** id of the row currently submitting a review, if any. */
   reviewingId: string | null;
+  /** False hides approve/decline/revise: the API requires review:write or applications:write. */
+  canReview: boolean;
 }
 
 /** Decline and request-revision share this modal: both require a note, approve does not. */
@@ -47,6 +49,7 @@ export function DocumentReviewTable({
   onPageChange,
   onReview,
   reviewingId,
+  canReview,
 }: DocumentReviewTableProps) {
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [note, setNote] = useState("");
@@ -136,7 +139,7 @@ export function DocumentReviewTable({
                           <ArrowTopRightOnSquareIcon className="h-4 w-4" />
                         </a>
                       )}
-                      {item.submissionStatus === "uploaded" && (
+                      {canReview && item.submissionStatus === "uploaded" && (
                         <>
                           <button
                             type="button"

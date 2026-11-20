@@ -148,6 +148,7 @@ export default function PaymentsPage({
   // owns the select column) need payments:write or support:write (API-enforced).
   const canSendPaymentHelp = useProgramWriteAccess(programId, programWritePermissions.paymentHelp);
   const canSubmitApplication = useProgramWriteAccess(programId, programWritePermissions.applicationSubmit);
+  const canExport = useProgramWriteAccess(programId, programWritePermissions.paymentsExport);
 
   const program = useMemo(
     () => accessiblePrograms.find((p) => p.programId === programId || p.programSlug === programId),
@@ -697,15 +698,17 @@ export default function PaymentsPage({
         description={`Invoice records${program ? ` for ${program.programName}` : ""}`}
         actions={
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void handleExport()}
-              disabled={exporting || loading}
-              className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 hover:bg-emerald-100"
-            >
-              <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-              {exporting ? "Exporting..." : "Export Excel"}
-            </button>
+            {canExport && (
+              <button
+                type="button"
+                onClick={() => void handleExport()}
+                disabled={exporting || loading}
+                className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-medium text-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 hover:bg-emerald-100"
+              >
+                <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+                {exporting ? "Exporting..." : "Export Excel"}
+              </button>
+            )}
             <Button variant="outline" size="sm" onClick={() => void fetchInvoices()} disabled={loading}>
               <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
               Refresh

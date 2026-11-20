@@ -21,6 +21,8 @@ export type MainConfigurationContentProps = {
   isDirty: boolean;
   onSave: () => void;
   onCancel: () => void;
+  /** False for admins without program:write: switches lock and Save/Reset are hidden. */
+  canWrite: boolean;
 };
 
 export function MainConfigurationContent({
@@ -34,6 +36,7 @@ export function MainConfigurationContent({
   isDirty,
   onSave,
   onCancel,
+  canWrite,
 }: MainConfigurationContentProps) {
   return (
     <section className="space-y-3">
@@ -78,7 +81,8 @@ export function MainConfigurationContent({
                     aria-checked={registrationOpen}
                     aria-describedby="registration-switch-hint"
                     onClick={onToggleRegistration}
-                    className={`relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full border text-[11px] shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
+                    disabled={!canWrite}
+                    className={`relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full disabled:cursor-not-allowed disabled:opacity-60 border text-[11px] shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
                       registrationOpen
                         ? "border-emerald-400 bg-emerald-400"
                         : "border-zinc-300 bg-zinc-200"
@@ -119,7 +123,8 @@ export function MainConfigurationContent({
                     role="switch"
                     aria-checked={emailVerification === "Required"}
                     onClick={onToggleEmailVerification}
-                    className={`relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full border text-[11px] shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
+                    disabled={!canWrite}
+                    className={`relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full disabled:cursor-not-allowed disabled:opacity-60 border text-[11px] shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
                       emailVerification === "Required"
                         ? "border-emerald-400 bg-emerald-400"
                         : "border-zinc-300 bg-zinc-200"
@@ -160,7 +165,8 @@ export function MainConfigurationContent({
                     role="switch"
                     aria-checked={programActive}
                     onClick={onToggleProgramActive}
-                    className={`relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full border text-[11px] shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
+                    disabled={!canWrite}
+                    className={`relative inline-flex h-5 w-9 cursor-pointer items-center rounded-full disabled:cursor-not-allowed disabled:opacity-60 border text-[11px] shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
                       programActive
                         ? "border-emerald-400 bg-emerald-400"
                         : "border-zinc-300 bg-zinc-200"
@@ -188,27 +194,33 @@ export function MainConfigurationContent({
           </div>
         </div>
 
-        <div className="mt-3 flex items-center justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-0 py-2.5">
-          <p role="status" className="mr-auto pl-3 text-xs font-medium text-amber-700 md:text-sm">
-            {isDirty ? "Unsaved changes. Nothing applies until you click Save Changes." : ""}
+        {canWrite ? (
+          <div className="mt-3 flex items-center justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-0 py-2.5">
+            <p role="status" className="mr-auto pl-3 text-xs font-medium text-amber-700 md:text-sm">
+              {isDirty ? "Unsaved changes. Nothing applies until you click Save Changes." : ""}
+            </p>
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={saving || !isDirty}
+              className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-100 disabled:opacity-60 md:text-sm"
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving || !isDirty}
+              className="rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 disabled:opacity-60 md:text-sm"
+            >
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        ) : (
+          <p className="mt-3 border-t border-zinc-200 pt-3 text-xs text-zinc-500 md:text-sm">
+            View only. Changing these settings needs the manage program permission.
           </p>
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={saving || !isDirty}
-            className="rounded-md border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm hover:bg-zinc-100 disabled:opacity-60 md:text-sm"
-          >
-            Reset
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={saving || !isDirty}
-            className="rounded-md border border-blue-500 bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-600 disabled:opacity-60 md:text-sm"
-          >
-            {saving ? "Saving…" : "Save Changes"}
-          </button>
-        </div>
+        )}
       </div>
     </section>
   );

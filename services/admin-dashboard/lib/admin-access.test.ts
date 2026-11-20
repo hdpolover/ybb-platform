@@ -1,6 +1,10 @@
 // services/admin-dashboard/lib/admin-access.test.ts
 import { describe, expect, it } from "vitest";
-import { hasRequiredPermissions, programWritePermissions } from "./admin-access";
+import {
+  getRequiredPermissionsForMenuItem,
+  hasRequiredPermissions,
+  programWritePermissions,
+} from "./admin-access";
 
 // Prod role permission sets (admin_roles, 2026-11-19). The API enforces the
 // same programWritePermissions; this pins which controls each role is offered.
@@ -73,6 +77,16 @@ describe("programWritePermissions against prod roles", () => {
     ["programAdmin", "ambassadors", true],
     ["programAdmin", "reminders", true],
     ["programAdmin", "paymentHelp", true],
+    // Payments export is read-level (reporting.controller.ts); news writers have no payments permission.
+    ["digitalMarketing", "paymentsExport", true],
+    ["programAdmin", "paymentsExport", true],
+    ["reviewer", "paymentsExport", false],
+    ["newsWriter", "paymentsExport", false],
+    // Score save, document review, category switch: review:write or applications:write.
+    ["reviewer", "review", true],
+    ["programAdmin", "review", true],
+    ["digitalMarketing", "review", false],
+    ["newsWriter", "review", false],
   ] as const)("%s may %s: %s", (role, action, expected) => {
     expect(can(role, action)).toBe(expected);
   });
@@ -80,6 +94,31 @@ describe("programWritePermissions against prod roles", () => {
   it("grant-all permissions pass every write", () => {
     for (const anyOf of Object.values(programWritePermissions)) {
       expect(hasRequiredPermissions(new Set(["platform.manage"]), anyOf)).toBe(true);
+    }
+  });
+});
+
+describe("menu rules against prod roles", () => {
+  const sees = (role: string, menuId: string) =>
+    hasRequiredPermissions(new Set(ROLES[role]), getRequiredPermissionsForMenuItem(menuId));
+
+  it.each([
+    // Revenue shows gross/fee/net: payments:read or payments:write, not program:write alone.
+    ["digitalMarketing", "revenue", true],
+    ["reviewer", "revenue", false],
+    ["newsWriter", "revenue", false],
+    // Reminders: the API needs participants:write or program:write, so announcements/payments writers do not see it.
+    ["digitalMarketing", "reminders", true],
+    ["programAdmin", "reminders", true],
+    ["newsWriter", "reminders", false],
+    ["reviewer", "reminders", false],
+  ] as const)("%s sees %s: %s", (role, menuId, expected) => {
+    expect(sees(role, menuId)).toBe(expected);
+  });
+
+  it("an announcements-only or payments-write-only admin no longer sees reminders", () => {
+    for (const permission of ["announcements:write", "payments:write"]) {
+      expect(hasRequiredPermissions(new Set([permission]), getRequiredPermissionsForMenuItem("reminders"))).toBe(false);
     }
   });
 });

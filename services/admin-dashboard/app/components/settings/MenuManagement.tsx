@@ -8,7 +8,6 @@ import {
 } from "@heroicons/react/24/solid";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import { useAuth } from "@/app/contexts/AuthContext";
-import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
 import { listAdminRoles, type AdminRole as ApiAdminRole } from "@/src/shared/api-client";
 import {
   buildPermissionSet,
@@ -28,11 +27,6 @@ export type MenuItemRow = {
   status: MenuItemStatus;
 };
 
-export type MenuManagementProps = {
-  programId: string;
-  programName: string;
-};
-
 type MenuDetail = {
   id: string;
   label: string;
@@ -41,16 +35,15 @@ type MenuDetail = {
   requiredPermissions: string[];
 };
 
-export function MenuManagement({ programId, programName }: MenuManagementProps) {
+export function MenuManagement() {
   const { adminProfile, accessConfig } = useAuth();
-  const resolvedProgramId = useResolvedProgramId(programId);
   const [roles, setRoles] = useState<ApiAdminRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<MenuDetail | null>(null);
 
   const canManageMenuAccess = accessConfig.canManageAdmins || accessConfig.canAssignRoles;
-  const currentPermissionSet = useMemo(() => buildPermissionSet(adminProfile, programId), [adminProfile, programId]);
+  const currentPermissionSet = useMemo(() => buildPermissionSet(adminProfile), [adminProfile]);
   const menuItems = useMemo(() => flattenProgramNavSections(programNavSections), []);
 
   const loadRoles = useCallback(async () => {
@@ -62,13 +55,13 @@ export function MenuManagement({ programId, programName }: MenuManagementProps) 
     setLoading(true);
     setError(null);
     try {
-      setRoles(await listAdminRoles({ programId: resolvedProgramId }));
+      setRoles(await listAdminRoles());
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Failed to load roles.");
     } finally {
       setLoading(false);
     }
-  }, [canManageMenuAccess, resolvedProgramId]);
+  }, [canManageMenuAccess]);
 
   useEffect(() => {
     void loadRoles();
@@ -79,11 +72,11 @@ export function MenuManagement({ programId, programName }: MenuManagementProps) 
       id: item.id,
       sortOrder: index + 1,
       label: `${"— ".repeat(item.depth)}${item.label}`,
-      url: item.href === "" ? `/programs/${programId}` : `/programs/${programId}/${item.href}`,
+      url: item.href === "" ? "/programs/{program}" : `/programs/{program}/${item.href}`,
       requiredPermission: item.requiredPermissions.join(", "),
       status: hasRequiredPermissions(currentPermissionSet, item.requiredPermissions) ? "Active" : "Inactive",
     }));
-  }, [currentPermissionSet, menuItems, programId]);
+  }, [currentPermissionSet, menuItems]);
 
   const activeItems = rows.filter((item) => item.status === "Active").length;
   const protectedItems = rows.filter((item) => item.requiredPermission.length > 0).length;
@@ -99,7 +92,7 @@ export function MenuManagement({ programId, programName }: MenuManagementProps) 
   if (!canManageMenuAccess) {
     return (
       <section className="rounded-md border border-zinc-200 bg-white px-5 py-10 text-center text-sm text-zinc-600 shadow-sm">
-        This program role cannot review or manage menu access.
+        Your role cannot review or manage menu access.
       </section>
     );
   }
@@ -109,11 +102,11 @@ export function MenuManagement({ programId, programName }: MenuManagementProps) 
       <section className="rounded-md border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 shadow-sm md:px-5 md:py-4 md:text-base">
         <div className="mb-3 space-y-1">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-0.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
-            <span>Settings</span>
+            <span>Platform</span>
           </div>
           <h1 className="text-base font-semibold text-zinc-900 md:text-lg">Menu Management</h1>
           <p className="text-xs text-zinc-500 md:text-sm">
-            Navigation is now permission-driven. Edit roles to change access; this page shows the live rules for {programName}.
+            Navigation is now permission-driven. Edit roles to change access; this page shows the live rules every program workspace uses.
           </p>
         </div>
 
