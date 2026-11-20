@@ -53,7 +53,7 @@ export class GetDeletionInsightsHandler implements IQueryHandler<GetDeletionInsi
       this.prisma.$queryRaw<TotalsRow[]>`
         SELECT COUNT(*)::int AS total,
           COUNT(*) FILTER (WHERE created_at >= now() - interval '30 days')::int AS last30,
-          COUNT(*) FILTER (WHERE status::text = 'approved' AND scheduled_deletion_date >= now())::int AS pending_purge,
+          COUNT(*) FILTER (WHERE status::text = 'approved')::int AS pending_purge,
           COUNT(*) FILTER (WHERE status::text = 'completed')::int AS completed,
           COUNT(*) FILTER (WHERE status::text = 'cancelled')::int AS cancelled
         FROM account_deletion_requests`,
