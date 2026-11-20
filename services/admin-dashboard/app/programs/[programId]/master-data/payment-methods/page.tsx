@@ -336,7 +336,7 @@ export default function PaymentMethodsPage() {
                 key={m.id}
                 method={m}
                 draft={drafts[m.id] ?? buildDraft(m)}
-                activeGatewayNames={activeGatewayNames}
+                activeGatewayNames={canEditShared ? activeGatewayNames : null}
                 onUploadImage={(file) => uploadPaymentMethodInstructionImage({ programId, brandId, userId, file })}
                 editSharedLoading={editSharedLoadingId === m.id}
                 readOnly={!canConfigure}
@@ -399,7 +399,8 @@ function MethodRow({
 }: {
   method: ProgramPaymentMethod;
   draft: MethodDraft;
-  activeGatewayNames: Set<string>;
+  // null = gateway status unknown (only platform admins may read gateway configs), so no warning.
+  activeGatewayNames: Set<string> | null;
   onUploadImage: (file: File) => Promise<string>;
   editSharedLoading: boolean;
   readOnly: boolean;
@@ -411,7 +412,8 @@ function MethodRow({
 }) {
   const label = method.display_name || method.name || "";
   const isManual = normalizePaymentMethodType(method.type) === "MANUAL";
-  const gatewayActive = isManual || (!!method.gateway_name && activeGatewayNames.has(method.gateway_name));
+  const gatewayActive =
+    isManual || activeGatewayNames === null || (!!method.gateway_name && activeGatewayNames.has(method.gateway_name));
 
   // Shared methods this program has not enabled are listed so they can be
   // attached, but they must not read as live configuration. Muted, dashed,
