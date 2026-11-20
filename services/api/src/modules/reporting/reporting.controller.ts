@@ -1,4 +1,4 @@
-import { Controller, Logger, Get, Res, Query, UseGuards } from '@nestjs/common';
+import { Controller, ForbiddenException, Logger, Get, Res, Query, UseGuards } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Response } from 'express';
@@ -13,13 +13,27 @@ import { UserRole } from '../../core/entities/user.entity';
 import { acknowledgeRmqMessage } from '@shared/infrastructure/rabbitmq/rmq-ack';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
+import { CurrentUser, CurrentUserData } from '@shared/decorators/current-user.decorator';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
+import {
+  resolveRevenueAccessScope,
+  assertProgramAccess,
+} from '@modules/stats/revenue/utils/revenue-access.util';
+
+// Program-scoped admins (e.g. Finance) may export payments of a program they
+// are assigned to; viewing payments is enough, the same bar as the table.
+const PAYMENT_EXPORT_PERMISSIONS = ['payments:read', 'payments:write'];
 
 @ApiTags('Reporting')
 @Controller('reporting')
 export class ReportingController {
   private readonly logger = new Logger(ReportingController.name);
 
-  constructor(private readonly reportingService: ReportingService) { }
+  constructor(
+    private readonly reportingService: ReportingService,
+    private readonly readPrisma: PrismaReadService,
+  ) { }
 
   @Get('audit-logs/export')
   @AuditTrail({ entityType: 'DataChangeLog', action: ChangeType.create, selectFields: { id: true } })
@@ -73,9 +87,8 @@ export class ReportingController {
   @AuditTrail({ entityType: 'ApplicationInvoice', action: ChangeType.create, selectFields: { id: true }, queryFields: ['programId', 'status', 'paymentMethod', 'tierId', 'feeType', 'applicationStatus', 'followUpStatus', 'payerType', 'currency', 'dateFrom', 'dateTo', 'paidFrom', 'paidTo'] })
   @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  // Unfiltered, cross-brand dumps: there is nothing here to scope to a brand or
-  // program, so they are platform-scope only rather than any ADMIN-role holder.
-  @ScopedBy('platform')
+  // Platform admins may export across programs; everyone else is held to one
+  // assigned program in the handler (assertCanExportPayments).
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Export Payments List (Admin)', operationId: 'exportPayments' })
   @ApiResponse({ status: 200, description: 'Excel file with payments' })
@@ -105,7 +118,9 @@ export class ReportingController {
   async exportPayments(
     @Res() res: Response,
     @Query() query: Record<string, string>,
+    @CurrentUser() user: CurrentUserData,
   ) {
+    await this.assertCanExportPayments(user, query.programId);
     const filters: InvoiceFilterQuery = {
       programId: query.programId,
       applicationId: query.applicationId,
@@ -126,6 +141,16 @@ export class ReportingController {
       maxAmount: query.maxAmount,
     };
     await this.reportingService.exportPayments(res, filters);
+  }
+
+  private async assertCanExportPayments(user: CurrentUserData, programId: string | undefined): Promise<void> {
+    const scope = await resolveRevenueAccessScope(this.readPrisma, user);
+    if (scope.kind === 'platform') return;
+    if (!programId) {
+      throw new ForbiddenException('Choose a program to export its payments.');
+    }
+    await assertProgramAccess(this.readPrisma, scope, programId);
+    await assertProgramPermission(this.readPrisma, user, programId, PAYMENT_EXPORT_PERMISSIONS);
   }
 
   @EventPattern('payment.succeeded')
