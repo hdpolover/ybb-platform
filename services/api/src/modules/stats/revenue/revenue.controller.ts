@@ -52,7 +52,7 @@ export class RevenueController {
     @Query() query: PlatformRevenueQueryDto,
     @CurrentUser() user: CurrentUserData,
   ): Promise<PlatformRevenueRollupResponseDto> {
-    const scope = await resolveRevenueAccessScope(this.readPrisma, user);
+    const scope = await this.resolvePaymentsScope(user);
     return this.revenueService.getPlatformRevenueRollup(query, scope);
   }
 

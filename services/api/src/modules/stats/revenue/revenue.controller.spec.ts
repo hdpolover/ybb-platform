@@ -30,6 +30,7 @@ describe('RevenueController payments permission', () => {
     getProgramRevenueSummary: jest.fn(),
     getRevenueTransactions: jest.fn(),
     exportRevenueTransactions: jest.fn(),
+    getPlatformRevenueRollup: jest.fn(),
   };
   const readPrisma = {};
   const controller = new RevenueController(service as never, readPrisma as never);
@@ -40,6 +41,22 @@ describe('RevenueController payments permission', () => {
     (assertProgramAccess as jest.Mock).mockResolvedValue({ id: PROGRAM_ID });
     (assertProgramPermission as jest.Mock).mockResolvedValue(undefined);
     (programIdsWithPermission as jest.Mock).mockResolvedValue([PROGRAM_ID]);
+  });
+
+  describe('GET revenue (rollup)', () => {
+    it('leaves a platform admin unscoped', async () => {
+      (resolveRevenueAccessScope as jest.Mock).mockResolvedValue(platform);
+      await controller.getPlatformRevenue({} as never, user);
+      expect(service.getPlatformRevenueRollup).toHaveBeenCalledWith({}, platform);
+      expect(programIdsWithPermission).not.toHaveBeenCalled();
+    });
+
+    it('narrows the rollup to programs where the admin holds a payments permission', async () => {
+      (resolveRevenueAccessScope as jest.Mock).mockResolvedValue(assigned);
+      await controller.getPlatformRevenue({} as never, user);
+      expect(programIdsWithPermission).toHaveBeenCalledWith(readPrisma, user, [PROGRAM_ID, OTHER_ID], PAYMENTS);
+      expect(service.getPlatformRevenueRollup).toHaveBeenCalledWith({}, { kind: 'assigned', allowedProgramIds: [PROGRAM_ID] });
+    });
   });
 
   describe('GET programs/:programId/revenue', () => {
