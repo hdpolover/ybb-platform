@@ -865,7 +865,8 @@ export type CreateSupportImpersonationInput = {
   participantId?: string;
   participantEmail?: string;
   programId?: string;
-  supportSecret: string;
+  // Super Admin full flow only; a read-only support view never sends it.
+  supportSecret?: string;
   reason: string;
 };
 

@@ -156,6 +156,10 @@ export default function ParticipantDetailPage() {
   // participants:write (Digital Marketing) is not enough: the API wants applications:write.
   const canEditSubmission = useProgramWriteAccess(programIdParam, programWritePermissions.applicationEdit);
   const { accessiblePrograms, accessConfig } = useAuth();
+  // Super admins keep the full, secret-gated login; everyone else with
+  // support:impersonate gets a read-only view (API decides, this is a courtesy).
+  const holdsSupportView = useProgramWriteAccess(programIdParam, programWritePermissions.supportView);
+  const canViewAsParticipant = holdsSupportView && !accessConfig.isSuperAdmin;
   const queryClient = useQueryClient();
 
   const programId = useMemo(() => {
@@ -261,7 +265,7 @@ export default function ParticipantDetailPage() {
 
   async function handleStartImpersonation() {
     if (!participant) return;
-    if (!supportSecret.trim()) {
+    if (accessConfig.isSuperAdmin && !supportSecret.trim()) {
       toast.error("Support secret is required.");
       return;
     }
@@ -276,14 +280,18 @@ export default function ParticipantDetailPage() {
         participantId: accountId,
         participantEmail: participant.email,
         programId,
-        supportSecret: supportSecret.trim(),
+        ...(accessConfig.isSuperAdmin ? { supportSecret: supportSecret.trim() } : {}),
         reason: reason.trim(),
       });
       window.open(result.loginUrl, "_blank", "noopener,noreferrer");
       setImpersonationOpen(false);
       setSupportSecret("");
       setReason("");
-      toast.success("Participant impersonation session created.");
+      toast.success(
+        accessConfig.isSuperAdmin
+          ? "Participant impersonation session created."
+          : "Read-only participant view opened.",
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create impersonation session.");
     } finally {
@@ -305,13 +313,16 @@ export default function ParticipantDetailPage() {
       <Dialog open={impersonationOpen} onOpenChange={setImpersonationOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Login as Participant</DialogTitle>
+            <DialogTitle>{accessConfig.isSuperAdmin ? "Login as Participant" : "View as participant (read-only)"}</DialogTitle>
             <DialogDescription>
-              This creates a short-lived impersonation link. Every attempt is audited with your reason.
+              {accessConfig.isSuperAdmin
+                ? "This creates a short-lived impersonation link. Every attempt is audited with your reason."
+                : "Opens the participant portal read-only for 30 minutes. Nothing can be changed. Every view is audited with your reason."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
+            {accessConfig.isSuperAdmin ? (
             <div className="space-y-1.5">
               <Label htmlFor="support-secret">Support secret</Label>
               <Input
@@ -323,6 +334,7 @@ export default function ParticipantDetailPage() {
                 placeholder="Enter support secret"
               />
             </div>
+            ) : null}
             <div className="space-y-1.5">
               <Label htmlFor="impersonation-reason">Reason</Label>
               <textarea
@@ -367,7 +379,7 @@ export default function ParticipantDetailPage() {
               Edit Submission
             </Button>
           ) : null}
-          {accessConfig.isSuperAdmin ? (
+          {accessConfig.isSuperAdmin || canViewAsParticipant ? (
             <Button
               variant="outline"
               size="sm"
@@ -376,7 +388,7 @@ export default function ParticipantDetailPage() {
               disabled={!participant}
             >
               <ShieldCheck className="h-4 w-4" />
-              Login as Participant
+              {accessConfig.isSuperAdmin ? "Login as Participant" : "View as participant (read-only)"}
             </Button>
           ) : null}
         </div>
