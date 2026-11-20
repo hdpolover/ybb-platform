@@ -142,7 +142,8 @@ export default function PaymentMethodsPage() {
       // parallel, same "orphaned gateway" warning as the old global screen.
       const [methodsData, gatewayConfigs] = await Promise.all([
         listProgramPaymentMethods(programId),
-        listGatewayConfigs().catch(() => []),
+        // Gateway configs are platform-only; others would just 403 (swallowed).
+        canEditShared ? listGatewayConfigs().catch(() => []) : Promise.resolve([]),
       ]);
       setMethods(methodsData);
       setDrafts(Object.fromEntries(methodsData.map((m) => [m.id, buildDraft(m)])));
@@ -152,7 +153,7 @@ export default function PaymentMethodsPage() {
     }
     catch (err) { setError(err instanceof Error ? err.message : "Failed to load payment methods"); }
     finally { setLoading(false); }
-  }, [programId]);
+  }, [programId, canEditShared]);
 
   useEffect(() => { fetchMethods(); }, [fetchMethods]);
 

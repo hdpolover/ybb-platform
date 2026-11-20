@@ -11,6 +11,8 @@ vi.mock("@/src/shared/api-client", () => ({
   updateProgramConfig: (...args: unknown[]) => updateProgramConfig(...args),
 }));
 vi.mock("@/app/hooks/useResolvedProgramId", () => ({ useResolvedProgramId: (id: string) => id }));
+const canWriteConfig = vi.fn(() => true);
+vi.mock("@/app/hooks/useProgramWriteAccess", () => ({ useProgramWriteAccess: () => canWriteConfig() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const CLOSED_CONFIG = {
@@ -28,6 +30,7 @@ describe("MainConfigurationSettings", () => {
   beforeEach(() => {
     getProgramConfig.mockReset();
     updateProgramConfig.mockReset();
+    canWriteConfig.mockReturnValue(true);
   });
 
   it("shows the registration switch off when the program has registration off", async () => {
@@ -102,5 +105,16 @@ describe("MainConfigurationSettings", () => {
     await waitFor(() => expect(updateProgramConfig).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByRole("button", { name: "Save Changes" })).toBeEnabled());
     expect(screen.getByRole("status")).toHaveTextContent(/unsaved changes/i);
+  });
+
+  it("locks the switches and hides Save/Reset without program:write", async () => {
+    canWriteConfig.mockReturnValue(false);
+    getProgramConfig.mockResolvedValue(CLOSED_CONFIG);
+    renderSettings();
+
+    expect(await registrationSwitch()).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Save Changes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reset" })).not.toBeInTheDocument();
+    expect(screen.getByText(/view only/i)).toBeInTheDocument();
   });
 });

@@ -21,6 +21,7 @@ interface ScoringPanelProps {
   /** Forwarded to AssessmentForm -- see there for what each does. */
   onSubmitSuccess?: (review: ApplicationReviewResponseDto) => void;
   onDirtyChange?: (isDirty: boolean) => void;
+  canWrite?: boolean;
 }
 
 /**
@@ -34,7 +35,7 @@ interface ScoringPanelProps {
  * from the page level.
  */
 export const ScoringPanel = forwardRef<AssessmentFormHandle, ScoringPanelProps>(function ScoringPanel(
-  { applicationId, stage, onStageChange, className, onSubmitSuccess, onDirtyChange },
+  { applicationId, stage, onStageChange, className, onSubmitSuccess, onDirtyChange, canWrite },
   ref,
 ) {
   return (
@@ -57,6 +58,7 @@ export const ScoringPanel = forwardRef<AssessmentFormHandle, ScoringPanelProps>(
           layout="panel"
           onSubmitSuccess={onSubmitSuccess}
           onDirtyChange={onDirtyChange}
+          canWrite={canWrite}
         />
       </div>
     </div>

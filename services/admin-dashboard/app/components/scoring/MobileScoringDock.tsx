@@ -18,6 +18,7 @@ interface MobileScoringDockProps {
    *  changes warning, same as the desktop dock. */
   onSubmitSuccess?: (review: ApplicationReviewResponseDto) => void;
   onDirtyChange?: (isDirty: boolean) => void;
+  canWrite?: boolean;
 }
 
 /**
@@ -32,6 +33,7 @@ export function MobileScoringDock({
   onStageChange,
   onSubmitSuccess,
   onDirtyChange,
+  canWrite,
 }: MobileScoringDockProps) {
   const [open, setOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -69,6 +71,7 @@ export function MobileScoringDock({
               onStageChange={onStageChange}
               onSubmitSuccess={onSubmitSuccess}
               onDirtyChange={onDirtyChange}
+              canWrite={canWrite}
             />
           </div>
         </SheetContent>

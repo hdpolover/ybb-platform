@@ -5,6 +5,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useQueryStates } from "nuqs";
 import { toast } from "sonner";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import {
   listDocumentReviewQueue,
   reviewDocument,
@@ -35,6 +37,7 @@ interface DocumentReviewQueueProps {
 
 export function DocumentReviewQueue({ programId }: DocumentReviewQueueProps) {
   const resolvedProgramId = useResolvedProgramId(programId);
+  const canReview = useProgramWriteAccess(programId, programWritePermissions.review);
 
   const [filters, setFilters] = useQueryStates(documentReviewFilterParsers);
   const { status, page } = filters;
@@ -159,6 +162,7 @@ export function DocumentReviewQueue({ programId }: DocumentReviewQueueProps) {
           onPageChange={handlePageChange}
           onReview={handleReview}
           reviewingId={reviewingId}
+          canReview={canReview}
         />
       )}
     </section>

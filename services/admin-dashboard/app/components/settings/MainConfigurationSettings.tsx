@@ -8,6 +8,8 @@ import {
   updateProgramConfig,
 } from "@/src/shared/api-client";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import { EmptyState } from "@/src/admin/empty-state";
 import { MainConfigurationHeader } from "./mainConfiguration/MainConfigurationHeader";
 import { MainConfigurationContent } from "./mainConfiguration/MainConfigurationContent";
@@ -28,6 +30,7 @@ export function MainConfigurationSettings({
   programName,
 }: MainConfigurationSettingsProps) {
   const resolvedProgramId = useResolvedProgramId(programId);
+  const canWrite = useProgramWriteAccess(programId, programWritePermissions.programConfig);
   // `saved` is what the server last confirmed; `draft` is what the switches show.
   // Nothing is assumed before the first load: a guessed default would render a
   // green switch for a program whose registration is actually off.
@@ -119,6 +122,7 @@ export function MainConfigurationSettings({
           isDirty={isDirty}
           onSave={handleSave}
           onCancel={() => setDraft(saved)}
+          canWrite={canWrite}
         />
       ) : (
         <div className="rounded-md border border-zinc-200 bg-white shadow-sm">

@@ -5,6 +5,8 @@ import { useQueryStates } from "nuqs";
 import { toast } from "sonner";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import {
   listApplications,
   exportApplicationsExcel,
@@ -44,6 +46,8 @@ function clampPageSize(value: number): number {
 export function FullyFundedParticipantsAll({ programId, category }: FullyFundedParticipantsAllProps) {
   const { accessiblePrograms } = useAuth();
   const resolvedProgramId = useResolvedProgramId(programId);
+  const canForceSubmit = useProgramWriteAccess(programId, programWritePermissions.applicationSubmit);
+  const canSwitchCategory = useProgramWriteAccess(programId, programWritePermissions.review);
   const resolvedBrandId = useMemo(
     () =>
       accessiblePrograms.find(
@@ -272,6 +276,8 @@ export function FullyFundedParticipantsAll({ programId, category }: FullyFundedP
           onSwitchCategory={handleSwitchCategory}
           category={category}
           switchingId={switchingId}
+          canForceSubmit={canForceSubmit}
+          canSwitchCategory={canSwitchCategory}
         />
       )}
     </section>

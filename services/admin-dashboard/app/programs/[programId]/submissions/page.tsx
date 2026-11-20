@@ -7,6 +7,8 @@ import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { ClipboardCheck } from "lucide-react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useResolvedProgramId } from "@/app/hooks/useResolvedProgramId";
+import { useProgramWriteAccess } from "@/app/hooks/useProgramWriteAccess";
+import { programWritePermissions } from "@/lib/admin-access";
 import { listApplications, reviewApplication, type Application } from "@/src/shared/api-client";
 import { FilterSelect } from "@/src/ui/select";
 import { FilterPanel, type FilterPanelActiveFilter } from "@/src/ui/filter-panel";
@@ -50,6 +52,7 @@ const submissionsFilterParsers = {
 export default function SubmissionsPage() {
   const params = useParams<{ programId: string }>();
   const resolvedProgramId = useResolvedProgramId(params.programId);
+  const canReview = useProgramWriteAccess(params.programId, programWritePermissions.review);
   const { adminProfile } = useAuth();
   const [items, setItems] = useState<Application[]>([]);
   const [total, setTotal] = useState(0);
@@ -211,13 +214,11 @@ export default function SubmissionsPage() {
                   <td className="px-3 py-2 text-zinc-500">{formatDate(app.createdAt)}</td>
                   <td className="px-3 py-2 text-right">
                     <RowActions
-                      primary={[
-                        {
-                          label: "Review",
-                          icon: ClipboardCheck,
-                          onClick: () => setReviewTarget(app),
-                        },
-                      ]}
+                      primary={
+                        canReview
+                          ? [{ label: "Review", icon: ClipboardCheck, onClick: () => setReviewTarget(app) }]
+                          : []
+                      }
                     />
                   </td>
                 </tr>

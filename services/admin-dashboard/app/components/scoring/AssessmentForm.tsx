@@ -57,6 +57,11 @@ interface AssessmentFormProps {
    * before navigating away from unsaved work. Purely observational.
    */
   onDirtyChange?: (isDirty: boolean) => void;
+  /**
+   * False for admins without review:write/applications:write: the API 403s the
+   * review PUT, so scores are shown read-only and Save/Submit/Reopen are hidden.
+   */
+  canWrite?: boolean;
 }
 
 /** Imperative handle exposed for the review queue's Cmd+Enter/Ctrl+Enter
@@ -116,6 +121,7 @@ function computeSubmitReadiness(
   isSuperAdmin: boolean,
   overrideApplied: boolean,
   saving: boolean,
+  canWrite: boolean,
 ): SubmitReadiness {
   if (loading || noRubric || loadError || !review) return NOT_READY;
 
@@ -124,7 +130,7 @@ function computeSubmitReadiness(
   );
   const gateClosed = stage === "interview" && review.gate.reason !== "open" && !review.gate.isOpen;
   const gateBlocking = gateClosed && !(isSuperAdmin && overrideApplied);
-  const canSubmit = !saving && !gateBlocking && allScored;
+  const canSubmit = canWrite && !saving && !gateBlocking && allScored;
 
   return { allScored, gateClosed, gateBlocking, canSubmit };
 }
@@ -188,7 +194,7 @@ function parseItemFieldIndex(path: string): number | null {
 }
 
 export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormProps>(function AssessmentForm(
-  { applicationId, stage, layout = "stacked", onSubmitSuccess, onDirtyChange },
+  { applicationId, stage, layout = "stacked", onSubmitSuccess, onDirtyChange, canWrite = true },
   ref,
 ) {
   const { accessConfig } = useAuth();
@@ -232,6 +238,7 @@ export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormPro
     accessConfig.isSuperAdmin,
     overrideApplied,
     saving,
+    canWrite,
   );
   const readinessRef = useRef<SubmitReadiness>(readiness);
   readinessRef.current = readiness;
@@ -423,7 +430,7 @@ export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormPro
   const { gateClosed, gateBlocking, canSubmit } = readiness;
 
   const submitted = review.status === "submitted";
-  const inputsDisabled = submitted || gateBlocking;
+  const inputsDisabled = submitted || gateBlocking || !canWrite;
 
   async function handleReopen() {
     setSaving(true);
@@ -606,13 +613,17 @@ export const AssessmentForm = forwardRef<AssessmentFormHandle, AssessmentFormPro
         className="mt-1 flex w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-zinc-100"
         rows={3}
         value={formNotes}
-        disabled={submitted}
+        disabled={submitted || !canWrite}
         onChange={(e) => setFormNotes(e.target.value)}
       />
     </div>
   );
 
-  const actionsSection = submitted ? (
+  const actionsSection = !canWrite ? (
+    <p className="border-t border-zinc-100 pt-4 text-sm text-zinc-500">
+      View only. Saving or submitting scores needs the score applicants or manage submissions permission.
+    </p>
+  ) : submitted ? (
     <div className="flex items-center justify-between border-t border-zinc-100 pt-4">
       <div className="text-sm">
         {saveError && <p className="text-red-600">{saveError}</p>}

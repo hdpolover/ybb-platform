@@ -59,6 +59,9 @@ interface FullyFundedParticipantsTableProps {
   category: "fully_funded" | "self_funded";
   /** accountId of the row currently being switched, if any. */
   switchingId: string | null;
+  /** Hide the write actions for admins the API would 403 on them. */
+  canForceSubmit: boolean;
+  canSwitchCategory: boolean;
 }
 
 export function FullyFundedParticipantsTable({
@@ -72,6 +75,8 @@ export function FullyFundedParticipantsTable({
   onSwitchCategory,
   category,
   switchingId,
+  canForceSubmit,
+  canSwitchCategory,
 }: FullyFundedParticipantsTableProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -173,7 +178,7 @@ export function FullyFundedParticipantsTable({
                         >
                           <EyeIcon className="h-4 w-4" />
                         </button>
-                        {row.status === "draft" && row.registrationPaymentStatus === "paid" && (
+                        {canForceSubmit && row.status === "draft" && row.registrationPaymentStatus === "paid" && (
                           <button
                             type="button"
                             title="Submit on participant's behalf"
@@ -184,7 +189,7 @@ export function FullyFundedParticipantsTable({
                             {submittingId === row.accountId ? "Submitting…" : "Force Submit"}
                           </button>
                         )}
-                        {!SWITCH_CATEGORY_INELIGIBLE_STATUSES.has(row.status) && (
+                        {canSwitchCategory && !SWITCH_CATEGORY_INELIGIBLE_STATUSES.has(row.status) && (
                           <button
                             type="button"
                             title={`Move this applicant to ${switchTargetLabel}`}
