@@ -130,4 +130,31 @@ describe('ProgramRepository', () => {
             expect(result?.id).toBe('prog-1');
         });
     });
+
+    // The dashboard's Preview Settings tab sends previewChecklistItems: null when
+    // the checklist is empty; the column is a non-null String[], so passing null
+    // to Prisma 500'd every save for a program without checklist items.
+    describe('update: previewChecklistItems', () => {
+        const captureUpdateData = async (patch: Record<string, unknown>) => {
+            const update = jest.fn().mockRejectedValue(new Error('stop after capture'));
+            (prisma.program as any).update = update;
+            await expect(repository.update('prog-1', patch as any)).rejects.toThrow('stop after capture');
+            return update.mock.calls[0][0].data;
+        };
+
+        it('stores null as an empty list instead of handing null to Prisma', async () => {
+            const data = await captureUpdateData({ previewChecklistItems: null });
+            expect(data.previewChecklistItems).toEqual([]);
+        });
+
+        it('leaves the column untouched when the field is omitted', async () => {
+            const data = await captureUpdateData({ termsAndConditions: '<p>x</p>' });
+            expect(data.previewChecklistItems).toBeUndefined();
+        });
+
+        it('passes a non-empty list through', async () => {
+            const data = await captureUpdateData({ previewChecklistItems: ['a', 'b'] });
+            expect(data.previewChecklistItems).toEqual(['a', 'b']);
+        });
+    });
 });
