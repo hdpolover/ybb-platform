@@ -42,6 +42,7 @@ import { AuditAdminController } from '@modules/audit/audit-admin.controller';
 import { AuditCleanupService } from '@modules/audit/audit-cleanup.service';
 import { DeletionRequestsController } from '@modules/users/presentation/deletion-requests.controller';
 import { ListDeletionRequestsHandler } from '@modules/users/application/queries/handlers/list-deletion-requests.handler';
+import { GetDeletionInsightsHandler } from '@modules/users/application/queries/handlers/get-deletion-insights.handler';
 import { ReviewDeletionRequestHandler } from '@modules/users/application/commands/handlers/review-deletion-request.handler';
 import { UsersController } from '@modules/users/presentation/users.controller';
 import { CreateUserHandler } from '@modules/users/application/commands/handlers/create-user.handler';
@@ -226,16 +227,19 @@ const SUITES: Record<string, Suite> = {
     build: () => {
       const list = { execute: reached() };
       const review = { execute: reached() };
+      const insights = { execute: reached() };
       return {
         providers: [
           { provide: ListDeletionRequestsHandler, useValue: list },
           { provide: ReviewDeletionRequestHandler, useValue: review },
+          { provide: GetDeletionInsightsHandler, useValue: insights },
         ],
-        spies: [list.execute, review.execute],
+        spies: [list.execute, review.execute, insights.execute],
       };
     },
     routes: [
       ['get', '/admin/deletion-requests'],
+      ['get', '/admin/deletion-requests/insights'],
       ['patch', '/admin/deletion-requests/request-1/review'],
     ],
   },

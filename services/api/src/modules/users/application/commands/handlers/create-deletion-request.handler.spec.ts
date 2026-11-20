@@ -97,6 +97,15 @@ describe('CreateDeletionRequestHandler', () => {
         expect(result.scheduledDeletionDate).toEqual(createdRequest.scheduledDeletionDate);
     });
 
+    it('persists the reason category and a trimmed reason, and null when blank', async () => {
+        await handler.execute(new CreateDeletionRequestCommand('user-1', { reasonCategory: 'cost', reason: '  too pricey ' }));
+        await handler.execute(new CreateDeletionRequestCommand('user-1', { reason: '   ' }));
+
+        const [first, second] = mockTx.accountDeletionRequest.create.mock.calls.map((c) => c[0].data);
+        expect(first).toMatchObject({ reasonCategory: 'cost', reason: 'too pricey' });
+        expect(second).toMatchObject({ reasonCategory: null, reason: null });
+    });
+
     it('never stores the raw cancellation token - only its hash', async () => {
         const command = new CreateDeletionRequestCommand('user-1', {});
         await handler.execute(command);

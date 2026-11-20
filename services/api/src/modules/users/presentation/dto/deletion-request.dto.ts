@@ -1,15 +1,31 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsEnum, IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+
+export const DELETION_REASON_CATEGORIES = [
+    'no_longer_interested',
+    'not_accepted_or_cannot_attend',
+    'too_many_emails',
+    'privacy_concern',
+    'duplicate_account',
+    'cost',
+    'bad_experience',
+    'other',
+] as const;
+
+export const DELETION_REASON_MAX_LENGTH = 500;
 
 export class CreateDeletionRequestDto {
-    @ApiPropertyOptional()
+    @ApiPropertyOptional({ maxLength: DELETION_REASON_MAX_LENGTH, description: 'Optional free text. May contain personal data the participant typed; retained for product improvement.' })
     @IsOptional()
+    @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
     @IsString()
+    @MaxLength(DELETION_REASON_MAX_LENGTH)
     reason?: string;
 
-    @ApiPropertyOptional()
+    @ApiPropertyOptional({ enum: DELETION_REASON_CATEGORIES })
     @IsOptional()
-    @IsString()
+    @IsIn(DELETION_REASON_CATEGORIES)
     reasonCategory?: string;
 }
 

@@ -4,6 +4,8 @@ import { Controller, Get, Param, Patch, Query, Body, UseGuards } from '@nestjs/c
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ListDeletionRequestsHandler } from '../application/queries/handlers/list-deletion-requests.handler';
 import { ReviewDeletionRequestHandler } from '../application/commands/handlers/review-deletion-request.handler';
+import { GetDeletionInsightsHandler } from '../application/queries/handlers/get-deletion-insights.handler';
+import { GetDeletionInsightsQuery } from '../application/queries/get-deletion-insights.query';
 import { ListDeletionRequestsQuery } from '../application/queries/list-deletion-requests.query';
 import { ReviewDeletionRequestCommand } from '../application/commands/review-deletion-request.command';
 import { DeletionRequestResponseDto, ReviewDeletionRequestDto } from './dto/deletion-request.dto';
@@ -26,7 +28,22 @@ export class DeletionRequestsController {
   constructor(
     private readonly listHandler: ListDeletionRequestsHandler,
     private readonly reviewHandler: ReviewDeletionRequestHandler,
+    private readonly insightsHandler: GetDeletionInsightsHandler,
   ) {}
+
+  // Declared before any :id route. No data_snapshot/deletion_log/ip in the response.
+  @Get('insights')
+  @ApiOperation({ summary: 'Deletion request insights: totals, monthly, by reason, by brand, paged list (Admin)' })
+  @ApiQuery({ name: 'status', required: false, enum: ['pending', 'approved', 'rejected', 'completed', 'cancelled'] })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async insights(
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.insightsHandler.execute(new GetDeletionInsightsQuery(status || undefined, Number(page) || 1, Number(limit) || 20));
+  }
 
   @Get()
   @ApiOperation({ summary: 'List Deletion Requests (Admin)' })
