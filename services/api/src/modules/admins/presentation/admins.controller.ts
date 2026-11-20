@@ -155,6 +155,7 @@ export class AdminsController {
             isActive: dto.isActive,
             brandIds: dto.brandIds,
             programIds: dto.programIds,
+            customPermissions: dto.customPermissions,
         });
         const adminId = currentUser.adminId;
         if (!adminId) throw new UnauthorizedException('Admin access required');

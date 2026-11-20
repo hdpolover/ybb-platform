@@ -173,6 +173,7 @@ export class AuditTrailInterceptor implements NestInterceptor {
             id: true,
             fullName: true,
             roleId: true,
+            customPermissions: true,
             updatedAt: true,
             deletedAt: true,
             deletedBy: true,
