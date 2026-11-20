@@ -130,11 +130,31 @@ async function loadNonPlatformAdmin(prisma: PrismaReadService, adminId: string):
     : admin;
 }
 
-function assertHoldsAny(
+/**
+ * Of `programIds`, the ones on which the caller holds one of `anyOf`: the list
+ * twin of assertProgramPermission, for routes with no single program id (a
+ * cross-program list). One admin lookup for the whole list. The platform tier
+ * keeps them all; an unknown principal keeps none.
+ */
+export async function programIdsWithPermission(
+  prisma: PrismaReadService,
+  user: Pick<CurrentUserData, 'adminId'> | undefined,
+  programIds: readonly string[],
+  anyOf: readonly string[],
+): Promise<string[]> {
+  if (!user?.adminId) return [];
+
+  const admin = await loadNonPlatformAdmin(prisma, user.adminId);
+  if (!admin) return [...programIds];
+
+  return programIds.filter((programId) => holdsAny(admin, (grant) => grant.programId === programId, anyOf));
+}
+
+function holdsAny(
   admin: PermissionAdmin,
   countsProgramGrant: (grant: PermissionAdmin['adminPrograms'][number]) => boolean,
   anyOf: readonly string[],
-): void {
+): boolean {
   const granted = new Set(
     [
       ...normalizePermissions(admin.role?.permissions),
@@ -143,11 +163,18 @@ function assertHoldsAny(
     ].map((permission) => permission.toLowerCase()),
   );
 
-  const allowed =
+  return (
     GRANT_ALL_PERMISSIONS.some((permission) => granted.has(permission)) ||
-    anyOf.some((permission) => granted.has(permission.toLowerCase()));
+    anyOf.some((permission) => granted.has(permission.toLowerCase()))
+  );
+}
 
-  if (!allowed) {
+function assertHoldsAny(
+  admin: PermissionAdmin,
+  countsProgramGrant: (grant: PermissionAdmin['adminPrograms'][number]) => boolean,
+  anyOf: readonly string[],
+): void {
+  if (!holdsAny(admin, countsProgramGrant, anyOf)) {
     throw new ForbiddenException(FORBIDDEN_MESSAGE);
   }
 }
