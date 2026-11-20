@@ -73,7 +73,7 @@ export class CreateDeletionRequestHandler {
             const request = await tx.accountDeletionRequest.create({
                 data: {
                     userId: command.userId,
-                    reason: command.dto.reason ?? null,
+                    reason: command.dto.reason?.trim() || null,
                     reasonCategory: command.dto.reasonCategory ?? null,
                     status: DeletionStatus.approved,
                     scheduledDeletionDate,
