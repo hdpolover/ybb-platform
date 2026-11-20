@@ -79,6 +79,7 @@ export const platformNavSections: NavSection[] = [
       { id: "brands", label: "Brands", href: "/platform/brands", icon: FolderOpen },
       { id: "programs", label: "Programs", href: "/platform/programs", icon: Layers },
       { id: "admins", label: "Admins", href: "/platform/admins", icon: UserCheck },
+      { id: "roles", label: "Roles & Permissions", href: "/platform/roles", icon: Shield },
       { id: "audit-log", label: "Audit log", href: "/platform/audit", icon: ScrollText },
     ],
   },
@@ -277,7 +278,6 @@ export const programNavSections: NavSection[] = [
         children: [
           { id: "main-configuration", label: "Main Configuration", href: "settings/main-configuration", icon: Settings },
           { id: "admin-management", label: "Admin Management", href: "settings/admin-management", icon: UserCheck },
-          { id: "roles-permissions", label: "Roles & Permissions", href: "settings/roles-permissions", icon: Shield },
           { id: "menu-management", label: "Menu Management", href: "settings/menu-management", icon: Menu },
         ],
       },
