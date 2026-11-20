@@ -205,6 +205,16 @@ describe('HomeStrategy', () => {
                 },
             },
         });
+
+        // Testimonial lists are capped (take), and admin-entered rows all tie on
+        // isFeatured=false/order=0: soft-deleted rows must be excluded and ties
+        // must resolve newest-first, or freshly added testimonials get cut.
+        const testimonialCalls = mockPrismaService.programTestimonial.findMany.mock.calls;
+        expect(testimonialCalls).toHaveLength(3);
+        for (const [args] of testimonialCalls) {
+            expect(args.where).toMatchObject({ deletedAt: null, isActive: true });
+            expect(args.orderBy[args.orderBy.length - 1]).toEqual({ createdAt: 'desc' });
+        }
     });
 
     it('reads benefits/features/promo_cta/moments_shorts/further_information/payment_info from Program.landingContent, not Brand.metadata, and impact_stats from PlatformSetting, not Brand.metadata', async () => {

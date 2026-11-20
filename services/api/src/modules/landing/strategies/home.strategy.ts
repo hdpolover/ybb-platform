@@ -298,7 +298,8 @@ export class HomeStrategy implements ILandingPageStrategy {
         where: {
           brandId: brand.id,
           category: TESTIMONIAL_CATEGORY.ALUMNI,
-          isActive: true
+          isActive: true,
+          deletedAt: null
         },
         // Videos first: this section is a video reel, and text-only alumni
         // testimonials used to eat the take window so most of a brand's videos
@@ -306,7 +307,9 @@ export class HomeStrategy implements ILandingPageStrategy {
         orderBy: [
           { isFeatured: 'desc' },
           { type: 'desc' },
-          { order: 'asc' }
+          { order: 'asc' },
+          // Admin-entered rows all tie on featured/order; newest wins so new ones aren't cut by take.
+          { createdAt: 'desc' }
         ],
         take: 40
       }),
@@ -314,11 +317,13 @@ export class HomeStrategy implements ILandingPageStrategy {
         where: {
           brandId: brand.id,
           category: TESTIMONIAL_CATEGORY.DELEGATE,
-          isActive: true
+          isActive: true,
+          deletedAt: null
         },
         orderBy: [
           { isFeatured: 'desc' },
-          { order: 'asc' }
+          { order: 'asc' },
+          { createdAt: 'desc' }
         ],
         take: 10
       }),
@@ -326,11 +331,13 @@ export class HomeStrategy implements ILandingPageStrategy {
         where: {
           brandId: brand.id,
           category: TESTIMONIAL_CATEGORY.SPEAKER,
-          isActive: true
+          isActive: true,
+          deletedAt: null
         },
         orderBy: [
           { isFeatured: 'desc' },
-          { order: 'asc' }
+          { order: 'asc' },
+          { createdAt: 'desc' }
         ],
         take: 10
       }),
