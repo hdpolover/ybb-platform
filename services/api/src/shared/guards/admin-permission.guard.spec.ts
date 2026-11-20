@@ -7,6 +7,7 @@ import {
   RequiresProgramPermissionMetadata,
   assertBrandPermission,
   assertProgramPermission,
+  programIdsWithPermission,
 } from './admin-permission.guard';
 
 const PROGRAM_ID = 'program-1';
@@ -210,5 +211,39 @@ describe('assertBrandPermission', () => {
       adminPrograms: [{ programId: 'p-in', permissions: [] }],
     });
     await expect(checkBrand(row, ['p-in']).result).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe('programIdsWithPermission', () => {
+  const ids = ['program-1', 'program-2', 'program-3'];
+  const run = (adminRow: unknown, anyOf = ['payments:read', 'payments:write']) =>
+    programIdsWithPermission(buildPrisma(adminRow) as never, USER, ids, anyOf);
+
+  it('returns nothing for a principal with no admin profile', async () => {
+    await expect(programIdsWithPermission(buildPrisma(null) as never, { userId: 'u' } as never, ids, ['a'])).resolves.toEqual([]);
+  });
+
+  it('returns every program for the platform tier', async () => {
+    await expect(run(admin({ accessLevel: 10 }))).resolves.toEqual(ids);
+  });
+
+  it('returns every program when a role or custom permission grants it', async () => {
+    await expect(run(admin({ role: { name: 'Finance', permissions: ['payments:read'] } }))).resolves.toEqual(ids);
+    await expect(run(admin({ customPermissions: ['payments:write'] }))).resolves.toEqual(ids);
+  });
+
+  it('keeps only programs whose own grant carries the permission', async () => {
+    const row = admin({
+      adminPrograms: [
+        { programId: 'program-1', permissions: ['payments:read'] },
+        { programId: 'program-2', permissions: ['review:write'] },
+        { programId: 'program-3', permissions: [] },
+      ],
+    });
+    await expect(run(row)).resolves.toEqual(['program-1']);
+  });
+
+  it('returns nothing when no grant carries the permission', async () => {
+    await expect(run(admin({ adminPrograms: [{ programId: 'program-1', permissions: ['review:write'] }] }))).resolves.toEqual([]);
   });
 });

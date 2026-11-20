@@ -9,7 +9,8 @@ import { RolesGuard } from '../../auth/infrastructure/guards/roles.guard';
 import { Roles } from '../../auth/application/decorators/roles.decorator';
 import { UserRole } from '../../../core/entities/user.entity';
 import { RevenueService } from './revenue.service';
-import { resolveRevenueAccessScope } from './utils/revenue-access.util';
+import { assertProgramPermission, programIdsWithPermission } from '@shared/guards/admin-permission.guard';
+import { RevenueAccessScope, assertProgramAccess, resolveRevenueAccessScope } from './utils/revenue-access.util';
 import { PlatformRevenueQueryDto, RevenueTransactionsQueryDto } from './dto/revenue-query.dto';
 import { AuditTrail } from '@shared/decorators/audit-trail.decorator';
 import { ChangeType } from '@prisma/client';
@@ -17,6 +18,10 @@ import {
   PlatformRevenueRollupResponseDto,
   ProgramRevenueSummaryResponseDto,
 } from './dto/revenue-response.dto';
+
+// Gross/fee/net per program: assignment alone is not enough, same set as the
+// payments export (reporting.controller.ts).
+const PAYMENTS_PERMISSIONS = ['payments:read', 'payments:write'];
 
 @ApiTags('Revenue')
 @Controller('stats/admin')
@@ -36,7 +41,7 @@ export class RevenueController {
     @Param('programId') programId: string,
     @CurrentUser() user: CurrentUserData,
   ): Promise<ProgramRevenueSummaryResponseDto> {
-    const scope = await resolveRevenueAccessScope(this.readPrisma, user);
+    const scope = await this.resolvePaymentsScope(user, programId);
     return this.revenueService.getProgramRevenueSummary(programId, scope);
   }
 
@@ -47,7 +52,7 @@ export class RevenueController {
     @Query() query: PlatformRevenueQueryDto,
     @CurrentUser() user: CurrentUserData,
   ): Promise<PlatformRevenueRollupResponseDto> {
-    const scope = await resolveRevenueAccessScope(this.readPrisma, user);
+    const scope = await this.resolvePaymentsScope(user);
     return this.revenueService.getPlatformRevenueRollup(query, scope);
   }
 
@@ -58,7 +63,7 @@ export class RevenueController {
     @Query() query: RevenueTransactionsQueryDto,
     @CurrentUser() user: CurrentUserData,
   ) {
-    const scope = await resolveRevenueAccessScope(this.readPrisma, user);
+    const scope = await this.resolvePaymentsScope(user, query.programId);
     return this.revenueService.getRevenueTransactions(query, scope);
   }
 
@@ -71,7 +76,34 @@ export class RevenueController {
     @CurrentUser() user: CurrentUserData,
     @Res() res: Response,
   ) {
-    const scope = await resolveRevenueAccessScope(this.readPrisma, user);
+    const scope = await this.resolvePaymentsScope(user, query.programId);
     await this.revenueService.exportRevenueTransactions(res, query, scope);
+  }
+
+  /**
+   * Platform admins keep their scope untouched. Everyone else must hold a payments
+   * permission: on the named program (404 if not assigned, checked first so the
+   * permission answer cannot reveal unassigned programs, then 403), and with no
+   * program named the scope is cut down to the assigned programs that grant one,
+   * so the list shows less rather than failing.
+   */
+  private async resolvePaymentsScope(user: CurrentUserData, programId?: string): Promise<RevenueAccessScope> {
+    const scope = await resolveRevenueAccessScope(this.readPrisma, user);
+    if (scope.kind === 'platform') return scope;
+
+    if (programId) {
+      await assertProgramAccess(this.readPrisma, scope, programId);
+      await assertProgramPermission(this.readPrisma, user, programId, PAYMENTS_PERMISSIONS);
+    }
+
+    return {
+      kind: 'assigned',
+      allowedProgramIds: await programIdsWithPermission(
+        this.readPrisma,
+        user,
+        scope.allowedProgramIds ?? [],
+        PAYMENTS_PERMISSIONS,
+      ),
+    };
   }
 }
