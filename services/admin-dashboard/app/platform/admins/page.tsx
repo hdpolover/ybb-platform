@@ -21,13 +21,16 @@ import {
   type PasswordLinkTarget,
 } from "../../components/settings/adminManagement/SendPasswordLinkDialog";
 import { InviteAdminDialog } from "../../components/settings/adminManagement/InviteAdminDialog";
-import { canSendPasswordLink } from "@/lib/access-requests";
+import { RoleAndProgramsFields } from "../../components/settings/adminManagement/AdminAccessFields";
+import { canSendPasswordLink, isPlatformTierRole } from "@/lib/access-requests";
 import {
   listAdmins,
+  getAdmin,
   updateAdmin,
   deleteAdmin,
   getPendingAccessRequestCount,
   listAdminRoles,
+  type AccessRequestProgram,
   type AdminRole,
   type Admin,
 } from "../../../src/shared/api-client";
@@ -52,24 +55,59 @@ function statusBadge(isActive: boolean) {
 
 function EditAdminModal({
   admin,
+  roles,
+  programs,
   onClose,
   onUpdated,
 }: {
   admin: Admin;
+  roles: AdminRole[];
+  programs: AccessRequestProgram[];
   onClose: () => void;
   onUpdated: () => void;
 }) {
   const [fullName, setFullName] = useState(admin.fullName);
   const [isActive, setIsActive] = useState(admin.user?.isActive ?? true);
+  const [roleId, setRoleId] = useState(admin.roleId ?? "");
+  const [programIds, setProgramIds] = useState<string[]>([]);
+  // The list rows may not carry program assignments, so fetch the detail before the form is editable.
+  const [detailLoaded, setDetailLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    let cancelled = false;
+    getAdmin(admin.id)
+      .then((detail) => {
+        if (cancelled) return;
+        setRoleId(detail.roleId ?? "");
+        setProgramIds(detail.programs?.map((p) => p.programId) ?? detail.programIds ?? []);
+        setDetailLoaded(true);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load administrator");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [admin.id]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+    const selectedRole = roles.find((role) => role.id === roleId);
+    if (!roleId) {
+      setError("Select a role before saving.");
+      return;
+    }
+    // Platform-tier roles see every program, so only scoped roles need an assignment.
+    if (programIds.length === 0 && !(selectedRole && isPlatformTierRole(selectedRole))) {
+      setError("Assign at least one program.");
+      return;
+    }
+    setLoading(true);
     try {
-      await updateAdmin(admin.id, { fullName, isActive });
+      await updateAdmin(admin.id, { fullName: fullName.trim(), roleId, isActive, programIds });
       onUpdated();
       onClose();
     } catch (err) {
@@ -81,7 +119,7 @@ function EditAdminModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-zinc-200 bg-white p-6 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-zinc-900">Edit Admin</h2>
           <button onClick={onClose} className="text-zinc-400 hover:text-zinc-600">
@@ -103,6 +141,16 @@ function EditAdminModal({
               className="block w-full rounded-md border border-zinc-200 px-3 py-2 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
+          <RoleAndProgramsFields
+            idPrefix="edit-admin"
+            roles={roles}
+            roleId={roleId}
+            onRoleChange={setRoleId}
+            programs={programs}
+            programIds={programIds}
+            onProgramIdsChange={setProgramIds}
+            disabled={!detailLoaded || loading}
+          />
           <div className="flex items-center gap-2">
             <input
               id="isActive"
@@ -125,7 +173,7 @@ function EditAdminModal({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !detailLoaded}
               className="rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
             >
               {loading ? "Saving…" : "Save Changes"}
@@ -424,6 +472,8 @@ export default function AdminsPage() {
       {editTarget && (
         <EditAdminModal
           admin={editTarget}
+          roles={roles}
+          programs={invitePrograms}
           onClose={() => setEditTarget(null)}
           onUpdated={fetchAdmins}
         />
