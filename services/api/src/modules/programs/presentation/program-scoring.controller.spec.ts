@@ -2,6 +2,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ExecutionContext, ForbiddenException, INestApplication, NotFoundException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { AdminScopeGuard } from '@shared/guards/admin-scope.guard';
 import { AdminPermissionGuard, ADMIN_PERMISSION_KEY } from '@shared/guards/admin-permission.guard';
 import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
@@ -268,7 +269,7 @@ describe('UpsertScoringRubricDto: weight/maxScore validation via controller DTO'
 // PrismaReadService is faked), so this fails if the decorators are dropped,
 // point at the wrong param, or the guard stops refusing out-of-scope admins.
 // Unit specs above stub the guard out and cannot see any of that.
-describe('ProgramScoringController write-route scope enforcement (real AdminScopeGuard)', () => {
+describe('ProgramScoringController route scope enforcement (real AdminScopeGuard)', () => {
   const BRAND_ADMIN = {
     accessLevel: 3,
     canManageAdmins: false,
@@ -295,7 +296,13 @@ describe('ProgramScoringController write-route scope enforcement (real AdminScop
 
   const routes: Array<[string, (...args: never[]) => unknown, Record<string, string>]> = [
     ['PUT :programId/scoring-rubrics/:stage', ProgramScoringController.prototype.upsertScoringRubric, { stage: 'application' }],
+    ['GET :programId/scoring-rubrics', ProgramScoringController.prototype.getScoringRubrics, {}],
+    ['GET :programId/scoring-rubrics/versions', ProgramScoringController.prototype.getScoringRubricVersions, {}],
   ];
+
+  it.each(routes)('%s: runs AdminScopeGuard', (_name, handler) => {
+    expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(AdminScopeGuard);
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();

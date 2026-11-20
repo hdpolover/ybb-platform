@@ -60,9 +60,12 @@ export class ProgramScoringController {
     return stageParam;
   }
 
+  // Reads are scoped like the PUT: RolesGuard alone let any admin read any
+  // program's rubric by id. No permission gate: reviewers read the rubric to score.
   @Get(':programId/scoring-rubrics')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get scoring rubrics for a program (application and interview stages)' })
   async getScoringRubrics(
@@ -83,8 +86,9 @@ export class ProgramScoringController {
   // is the PUT below, a different HTTP method), but keep this one declared
   // before any GET :stage sibling if one is ever added.
   @Get(':programId/scoring-rubrics/versions')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, AdminScopeGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ScopedBy('program', 'programId')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'List every version of a program/stage rubric, newest first, flagging versions with submitted reviews' })
   async getScoringRubricVersions(
