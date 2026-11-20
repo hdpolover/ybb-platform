@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PaymentServiceHttpClient } from '@modules/payments/infrastructure/services/payment-service-http.client';
 
 export interface PaymentMethodSummary {
@@ -20,7 +21,14 @@ const TIMEOUT_MS = 3000;
 export class PaymentConfigClient {
   private readonly logger = new Logger(PaymentConfigClient.name);
 
-  constructor(private readonly http: PaymentServiceHttpClient) {}
+  private readonly internalKey: string;
+
+  constructor(
+    private readonly http: PaymentServiceHttpClient,
+    configService: ConfigService,
+  ) {
+    this.internalKey = configService.get<string>('PAYMENT_SERVICE_INTERNAL_KEY') ?? '';
+  }
 
   // Returns null when the answer is genuinely unknown. The caller turns that
   // into an 'unknown' rule status; it must never become a passing rule, which
@@ -33,8 +41,12 @@ export class PaymentConfigClient {
       // the merged participant view, where master fallbacks are
       // indistinguishable from real per-program config.
       const response = await this.http.get<{ data: ProgramMethodView[] }>(
-        `/programs/${programId}/payment-methods?include_disabled=true`,
-        { timeout: TIMEOUT_MS },
+        `/api/v1/programs/${encodeURIComponent(programId)}/payment-methods`,
+        {
+          timeout: TIMEOUT_MS,
+          params: { include_disabled: true },
+          headers: this.internalKey ? { 'X-Internal-Service-Key': this.internalKey } : {},
+        },
       );
 
       const views = response?.data?.data;
