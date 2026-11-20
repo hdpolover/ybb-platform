@@ -74,7 +74,7 @@ export class ProgramContentRepository implements IProgramContentRepository {
 
     async findTestimonialsByProgramId(programId: string, limit?: number): Promise<ProgramTestimonial[]> {
         return this.prisma.programTestimonial.findMany({
-            where: { programId, isActive: true },
+            where: { programId, isActive: true, deletedAt: null },
             orderBy: { order: 'asc' },
             take: limit,
         });
