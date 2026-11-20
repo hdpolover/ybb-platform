@@ -79,6 +79,34 @@ export const permissionCategories: PermissionCategoryDefinition[] = [
   },
 ];
 
+/**
+ * Permissions that only a role may grant: platform tier, admin and role management.
+ * Hand-mirrored from services/api/src/shared/admin-extra-permissions.ts
+ * (PRIVILEGED_PERMISSIONS); keep the two in step. The API is the authority and
+ * rejects these in per-admin extras with a 400.
+ */
+export const PRIVILEGED_PERMISSIONS: readonly string[] = [
+  "*",
+  "platform_access",
+  "platform.manage",
+  "brand.manage",
+  "admin.manage",
+  "roles.manage",
+];
+
+export function isPrivilegedPermission(permission: string): boolean {
+  const value = permission.trim().toLowerCase();
+  return value.endsWith("*") || PRIVILEGED_PERMISSIONS.includes(value);
+}
+
+/** The catalog minus privileged keys: what the per-admin "Extra permissions" section offers. */
+export const extraPermissionCategories: PermissionCategoryDefinition[] = permissionCategories
+  .map((category) => ({
+    ...category,
+    permissions: category.permissions.filter((permission) => !isPrivilegedPermission(permission.key)),
+  }))
+  .filter((category) => category.permissions.length > 0);
+
 const menuPermissionRules: Record<string, string[]> = {
   dashboard: [],
   analytics: ["participants:read", "payments:read", "program:read"],

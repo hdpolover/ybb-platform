@@ -213,3 +213,25 @@ describe('AuditTrailInterceptor queryFields (export routes)', () => {
         expect(JSON.stringify(logged)).not.toMatch(/jane/);
     });
 });
+
+describe('AuditTrailInterceptor Admin update records customPermissions', () => {
+    it('puts customPermissions in both the before and after state so the diff shows it', async () => {
+        const request = { params: { id: 'a1' }, method: 'PATCH', route: { path: '/admins/:id' }, url: '/admins/a1', headers: {}, user: { adminId: 'actor' } };
+        const context = { getHandler: () => function mockHandler() { /* noop */ }, switchToHttp: () => ({ getRequest: () => request }) } as any;
+        const reflector = { get: jest.fn().mockReturnValue({ entityType: 'Admin', action: ChangeType.update }) };
+        const findUnique = jest.fn().mockResolvedValue({ id: 'a1', customPermissions: ['program:read'] });
+        const dataChangeLogService = { logWithDiff: jest.fn().mockResolvedValue(undefined) };
+        const interceptor = new AuditTrailInterceptor(reflector as any, { admin: { findUnique } } as any, dataChangeLogService as any);
+
+        const result = await interceptor.intercept(context, { handle: () => of({ success: true, customPermissions: ['payments:read', 'program:read'] }) } as any);
+        await new Promise<void>((resolve) => result.subscribe({ complete: () => setImmediate(resolve) }));
+
+        expect(findUnique.mock.calls[0][0].select.customPermissions).toBe(true);
+        expect(dataChangeLogService.logWithDiff).toHaveBeenCalledWith(
+            expect.objectContaining({
+                beforeState: { id: 'a1', customPermissions: ['program:read'] },
+                afterState: { customPermissions: ['payments:read', 'program:read'] },
+            }),
+        );
+    });
+});

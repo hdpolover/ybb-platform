@@ -3,6 +3,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../../../../shared/infrastructure/prisma/prisma.service';
 import { UpdateAdminCommand } from '../update-admin.command';
 import { normalizePermissions } from '../../../../../shared/admin-access-response';
+import { mergeCustomPermissions, normalizeExtraPermissions } from '../../../../../shared/admin-extra-permissions';
 
 @Injectable()
 export class UpdateAdminHandler {
@@ -82,6 +83,11 @@ export class UpdateAdminHandler {
                 : admin.adminBrands.map((assignment) => assignment.brandId),
         ));
 
+        // Validated before any write; absent leaves the column alone.
+        const nextCustomPermissions = updates.customPermissions !== undefined
+            ? mergeCustomPermissions(admin.customPermissions, normalizeExtraPermissions(updates.customPermissions))
+            : undefined;
+
         const assignmentRoleName = nextRole?.name ?? 'Admin';
         const assignmentPermissions = normalizePermissions(nextRole?.permissions);
 
@@ -95,12 +101,13 @@ export class UpdateAdminHandler {
             }
 
             // Update Admin-level fields
-            if (updates.fullName !== undefined || updates.roleId !== undefined) {
+            if (updates.fullName !== undefined || updates.roleId !== undefined || nextCustomPermissions !== undefined) {
                 await tx.admin.update({
                     where: { id },
                     data: {
                         fullName: updates.fullName,
                         roleId: updates.roleId,
+                        customPermissions: nextCustomPermissions,
                         updatedAt: new Date(),
                         // updatedBy: updatedBy // Schema check: Admin has no updatedBy field?
                     }
@@ -150,7 +157,8 @@ export class UpdateAdminHandler {
                 }
             }
 
-            return { success: true };
+            // Echoed so the audit diff (Admin select includes customPermissions) sees before/after.
+            return { success: true, customPermissions: nextCustomPermissions ?? normalizePermissions(admin.customPermissions) };
         });
     }
 }

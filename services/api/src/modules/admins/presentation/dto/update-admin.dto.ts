@@ -1,6 +1,6 @@
 
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsUUID, IsArray, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsUUID, IsArray, IsBoolean, ArrayMaxSize } from 'class-validator';
 
 export class UpdateAdminDto {
     @ApiProperty({ required: false })
@@ -29,4 +29,13 @@ export class UpdateAdminDto {
     @IsOptional()
     @IsBoolean()
     isActive?: boolean;
+
+    // Extra permissions on top of the role. Keys are validated against the allow-list
+    // in the handler (normalizeExtraPermissions); absent = leave the column unchanged.
+    @ApiProperty({ required: false, isArray: true })
+    @IsOptional()
+    @IsArray()
+    @ArrayMaxSize(64)
+    @IsString({ each: true })
+    customPermissions?: string[];
 }

@@ -195,6 +195,19 @@ describe('AdminAccessControlService rank rule', () => {
       ).rejects.toThrow('You cannot change your own role.');
     });
 
+    it('cannot change own extra permissions, but may resend them unchanged', async () => {
+      // The admin persona stores admin.manage, brand.manage and program:read; only program:read is an extra.
+      await expect(
+        service.assertCanManageAdmin(actingAs('admin'), ADMINS.admin.id, 'update', { customPermissions: ['program:read', 'payments:write'] }),
+      ).rejects.toThrow('You cannot change your own extra permissions.');
+      await expect(
+        service.assertCanManageAdmin(actingAs('admin'), ADMINS.admin.id, 'update', { customPermissions: [] }),
+      ).rejects.toThrow('You cannot change your own extra permissions.');
+      await expect(
+        service.assertCanManageAdmin(actingAs('admin'), ADMINS.admin.id, 'update', { customPermissions: ['Program:Read'] }),
+      ).resolves.toBeUndefined();
+    });
+
     it('cannot deactivate self', async () => {
       await expect(
         service.assertCanManageAdmin(actingAs('admin'), ADMINS.admin.id, 'update', { isActive: false }),
@@ -269,6 +282,15 @@ describe('AdminAccessControlService rank rule', () => {
           roleId: ROLES.programAdmin.id,
         }),
       ).resolves.toBeUndefined();
+    });
+
+    it('may set extra permissions on a scoped admin, but not on the Admin (800)', async () => {
+      await expect(
+        service.assertCanManageAdmin(actingAs('projectManager'), ADMINS.digitalMarketing.id, 'update', { customPermissions: ['payments:read'] }),
+      ).resolves.toBeUndefined();
+      await expect(
+        service.assertCanManageAdmin(actingAs('projectManager'), ADMINS.admin.id, 'update', { customPermissions: ['payments:read'] }),
+      ).rejects.toThrow('You cannot manage an administrator at or above your own rank.');
     });
 
     it('cannot promote a scoped admin into the platform tier', async () => {
@@ -518,6 +540,20 @@ describe('admin controllers enforce the rank rule before writing', () => {
     expect(handlers.update.execute).not.toHaveBeenCalled();
     expect(handlers.delete.execute).not.toHaveBeenCalled();
     expect(handlers.restore.execute).not.toHaveBeenCalled();
+  });
+
+  it('Project Manager cannot set extras on the Admin (800) or on a peer; the handler is not reached', async () => {
+    const asPm = actingAs('projectManager');
+    await expect(admins.update(ADMINS.admin.id, { customPermissions: ['payments:read'] }, asPm)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(admins.update(ADMINS.projectManagerB.id, { customPermissions: ['payments:read'] }, asPm)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(handlers.update.execute).not.toHaveBeenCalled();
+  });
+
+  it('Project Manager can set extras on a scoped admin and the DTO reaches the handler', async () => {
+    const dto = { customPermissions: ['payments:read'] };
+    await admins.update(ADMINS.digitalMarketing.id, dto, actingAs('projectManager'));
+    expect(handlers.update.execute).toHaveBeenCalledTimes(1);
+    expect(handlers.update.execute.mock.calls[0][0].updates).toEqual(dto);
   });
 
   it('Admin cannot create an admin with the Super Admin role', async () => {

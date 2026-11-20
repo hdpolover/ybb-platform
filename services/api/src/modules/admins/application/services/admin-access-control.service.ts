@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { adminRoleSlug, normalizePermissions } from '@shared/admin-access-response';
+import { normalizeExtraPermissions, storedExtraPermissions } from '@shared/admin-extra-permissions';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
 import {
   getAdminRank,
@@ -23,6 +24,7 @@ export type AdminTargetChanges = {
   isActive?: boolean;
   brandIds?: string[];
   programIds?: string[];
+  customPermissions?: string[];
 };
 
 /** True when `next` is absent (field not sent) or names exactly the current ids. */
@@ -149,6 +151,13 @@ export class AdminAccessControlService {
         !sameIds(changes.programIds, target.adminPrograms.map((assignment) => assignment.programId))
       ) {
         throw new ForbiddenException('You cannot change your own brand or program assignments.');
+      }
+      // Same reason as the role: extras are the other way to raise own access.
+      if (
+        changes.customPermissions !== undefined &&
+        normalizeExtraPermissions(changes.customPermissions).join() !== storedExtraPermissions(target.customPermissions).join()
+      ) {
+        throw new ForbiddenException('You cannot change your own extra permissions.');
       }
       if (action === 'update') return;
     }
