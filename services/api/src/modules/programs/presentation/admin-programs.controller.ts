@@ -86,6 +86,10 @@ export class AdminProgramsController {
   }
 
   @Get(':id')
+  // Platform admins pass the guard without a lookup, so soft-deleted programs stay
+  // readable for them; a program-scoped admin reaches only their assigned ones.
+  @UseGuards(AdminScopeGuard)
+  @ScopedBy('program', 'id')
   @ApiOperation({ summary: 'Get program by ID for admin (bypasses soft-delete filter)' })
   @ApiResponse({ status: 200, description: 'Program found' })
   @ApiResponse({ status: 403, description: 'Admin access required' })
