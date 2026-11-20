@@ -342,7 +342,7 @@ export class AccountDeletionPurgeService {
             profilePictureUrl: null,
             resumeUrl: null,
             deletedAt: new Date(),
-            deletedBy: request.userId,
+            deletedBy: null, // FK to admins(id): a self-requested deletion has no admin actor
           },
         });
 

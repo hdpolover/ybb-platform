@@ -142,6 +142,15 @@ describe('AccountDeletionPurgeService', () => {
       });
     });
 
+    // participants.deleted_by is an FK to admins(id); a self-requested deletion
+    // has no admin, and writing the user id there failed every purge in prod.
+    it('leaves participants.deleted_by null (FK to admins; nobody but the user acted)', async () => {
+      await service.purgeOne(request);
+
+      const call = mockTx.participant.update.mock.calls[0][0];
+      expect(call.data.deletedBy).toBeNull();
+    });
+
     it('nulls the JSON blobs AND the free-text narrative columns on participant_applications', async () => {
       await service.purgeOne(request);
 
