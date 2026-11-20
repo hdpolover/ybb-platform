@@ -85,6 +85,8 @@ export class GetAdminsHandler {
                 accessLevel: admin.accessLevel,
                 canManageAdmins: admin.canManageAdmins,
                 canAssignRoles: admin.canAssignRoles,
+                // Already on the row; lets the list show a "+N extra" badge without a second query.
+                customPermissions: normalizePermissions(admin.customPermissions),
                 user: admin.user ? {
                     id: admin.user.id,
                     email: admin.user.email,
