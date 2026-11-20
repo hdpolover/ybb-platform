@@ -83,6 +83,8 @@ const menuPermissionRules: Record<string, string[]> = {
   dashboard: [],
   analytics: ["participants:read", "payments:read", "program:read"],
   payments: ["payments:read", "payments:write", "program:write"],
+  // Gross/fee/net revenue; the API requires the same.
+  revenue: ["payments:read", "payments:write"],
   scoring: ["review:read", "review:write", "applications:read", "applications:write"],
   "scoring-fully-funded": ["review:read", "review:write", "applications:read", "applications:write"],
   "scoring-interview": ["review:read", "review:write", "applications:read", "applications:write"],
@@ -100,9 +102,9 @@ const menuPermissionRules: Record<string, string[]> = {
   "documents-loa-template": ["documents:write", "content:write", "program:write"],
   "documents-program-guidelines": ["documents:read", "documents:write", "content:read", "content:write", "program:write"],
   announcements: ["announcements:read", "announcements:write", "content:read", "content:write", "program:write"],
-  // Reminders mail real participants about money owed, so it sits behind the
-  // same write-level permissions as announcements plus payments.
-  reminders: ["announcements:write", "payments:write", "participants:write", "program:write"],
+  // Reminders mail real participants about money owed; the API's write
+  // requirement (participant-reminders controller) is participants:write or program:write.
+  reminders: ["participants:write", "program:write"],
   partnerships: ["partnerships:read", "partnerships:write", "content:read", "content:write", "program:write"],
   "master-data": ["program:write", "payments:write", "content:write"],
   "program-details": ["program:write"],
@@ -137,6 +139,10 @@ export const programWritePermissions = {
   // Per-program payment method overlay (payment-admin controller).
   programPaymentConfig: ["payments:write", "program:write"],
   fundingDecision: ["review:write", "applications:write"],
+  // Score save, review actions, document review, category switch (REVIEW_WRITE_PERMISSIONS in applications.controller.ts).
+  review: ["review:write", "applications:write"],
+  // Payments export is read-level, mirrors reporting.controller.ts PAYMENT_EXPORT_PERMISSIONS.
+  paymentsExport: ["payments:read", "payments:write"],
   reminders: ["participants:write", "program:write"],
   applicationEdit: ["applications:write"],
   applicationSubmit: ["applications:write", "payments:write"],
