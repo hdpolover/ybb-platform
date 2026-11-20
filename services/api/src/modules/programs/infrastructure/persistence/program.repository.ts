@@ -270,7 +270,8 @@ export class ProgramRepository implements IProgramRepository {
                 termsAndConditions: data.termsAndConditions,
                 essayGuidelineText: data.essayGuidelineText,
                 essayGuidelineUrl: data.essayGuidelineUrl,
-                previewChecklistItems: data.previewChecklistItems,
+                // Non-null String[] column; the dashboard sends null for "cleared".
+                previewChecklistItems: data.previewChecklistItems === null ? [] : data.previewChecklistItems,
                 metaTitle: data.metaTitle,
                 metaDescription: data.metaDescription,
                 paymentInfoHtml: data.paymentInfoHtml,
