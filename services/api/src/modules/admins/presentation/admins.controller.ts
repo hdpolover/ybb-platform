@@ -257,7 +257,7 @@ export class AdminsController {
     }
 
     @Post('support-access/impersonations')
-    @ApiOperation({ summary: 'Create one-time participant impersonation login URL (Super Admin only)' })
+    @ApiOperation({ summary: 'Create one-time participant login URL (Super Admin: full, secret-gated; other admins with support:impersonate: read-only view)' })
     @ApiResponse({ status: 201, description: 'Impersonation URL created' })
     async createSupportImpersonation(
         @CurrentUser() currentUser: CurrentUserData,

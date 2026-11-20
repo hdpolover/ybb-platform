@@ -22,6 +22,9 @@ export interface JwtPayload {
   // grants admin identity elsewhere.
   impersonatedByAdminId?: string;
   impersonationTicketId?: string;
+  // 'read_only' on a customer-support view: every non-GET request is refused by
+  // ReadOnlySupportInterceptor. Absent on a full (super admin) impersonation.
+  impersonationMode?: 'read_only';
 }
 
 /**
@@ -307,6 +310,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // not called adminId.
       impersonatedByAdminId: payload.impersonatedByAdminId,
       impersonationTicketId: payload.impersonationTicketId,
+      impersonationMode: payload.impersonationMode,
     };
   }
 }

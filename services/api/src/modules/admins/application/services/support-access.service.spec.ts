@@ -69,6 +69,7 @@ describe('SupportAccessService.exchangeImpersonationToken', () => {
       prisma as never,
       jwt,
       config,
+      {} as never,
     );
     return { service, prisma, jwt };
   }
@@ -239,7 +240,7 @@ describe('SupportAccessService.exchangeImpersonationToken mint idempotency', () 
 
     const jwt = { sign: jest.fn().mockReturnValue('jwt') } as unknown as JwtService;
     const config = { get: jest.fn((_k: string, d: string) => d) } as unknown as ConfigService;
-    const service = new SupportAccessService(prisma as never, jwt, config);
+    const service = new SupportAccessService(prisma as never, jwt, config, {} as never);
     return { service, prisma, ticketRow, sessions };
   }
 
@@ -324,7 +325,7 @@ describe('SupportAccessService.endImpersonation', () => {
     };
     const jwt = {} as JwtService;
     const config = {} as ConfigService;
-    const service = new SupportAccessService(prisma as never, jwt, config);
+    const service = new SupportAccessService(prisma as never, jwt, config, {} as never);
     return { service, prisma };
   }
 
@@ -384,9 +385,12 @@ describe('SupportAccessService.endImpersonation', () => {
  * whose every passing condition (super-admin role name or token role, accessLevel
  * >= 10, canManageAdmins, canAssignRoles) is one the scope classifier also counts
  * as platform. A brand admin must be refused before the config, the support
- * secret or the target participant is ever read.
+ * secret or the target participant is ever read. Non-super admins no longer
+ * reach the full flow at all: they fall to the read-only support view, which
+ * answers 404 for a program outside their assignments (see
+ * support-access.read-only.spec.ts for the permitted path).
  */
-describe('SupportAccessService impersonation is Super Admin only', () => {
+describe('SupportAccessService full impersonation is Super Admin only', () => {
   it.each([
     ['Digital Marketing', 1, ['admin', 'Digital Marketing', 'digital_marketing', 'brand:brand-1:member']],
     ['Program Admin', 3, ['admin', 'Program Admin', 'program_admin']],
@@ -404,7 +408,29 @@ describe('SupportAccessService impersonation is Super Admin only', () => {
       participant: { findUnique: jest.fn() },
       supportAccessImpersonationTicket: { create: jest.fn() },
     };
-    const service = new SupportAccessService(prisma as never, {} as JwtService, {} as ConfigService);
+    const prismaRead = {
+      admin: {
+        findUnique: jest.fn().mockResolvedValue({
+          accessLevel,
+          canManageAdmins: false,
+          canAssignRoles: false,
+          customPermissions: [],
+          role: { name: roleName, permissions: [] },
+          adminPrograms: [],
+        }),
+      },
+      program: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: 'program-in-brand-2', brandId: 'brand-2', name: 'P', deletedAt: null }),
+      },
+    };
+    const service = new SupportAccessService(
+      prisma as never,
+      {} as JwtService,
+      {} as ConfigService,
+      prismaRead as never,
+    );
     const scopedAdmin = {
       userId: 'user-9',
       adminId: 'admin-9',
@@ -425,7 +451,7 @@ describe('SupportAccessService impersonation is Super Admin only', () => {
         '127.0.0.1',
         'jest',
       ),
-    ).rejects.toThrow('Only Super Admin can use support access.');
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.supportAccessConfig.findUnique).not.toHaveBeenCalled();
     expect(prisma.participant.findUnique).not.toHaveBeenCalled();
     expect(prisma.supportAccessImpersonationTicket.create).not.toHaveBeenCalled();

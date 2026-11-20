@@ -37,9 +37,13 @@ export class CreateSupportImpersonationDto {
   @IsString()
   programId?: string;
 
-  @ApiProperty({ description: 'Support secret configured in platform settings.' })
+  @ApiProperty({
+    required: false,
+    description: 'Support secret configured in platform settings. Required for Super Admins; ignored for read-only support view.',
+  })
+  @IsOptional()
   @IsString()
-  supportSecret!: string;
+  supportSecret?: string;
 
   @ApiProperty({ description: 'Reason for impersonation (for strict audit).' })
   @IsString()

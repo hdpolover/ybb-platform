@@ -50,17 +50,19 @@ export class DownloadCertificateHandler {
             throw new ForbiddenException('You do not have access to this certificate');
         }
 
-        // Increment download count
-        await this.prisma.participantDocument.update({
-            where: { id: certificateId },
-            data: { downloadCount: document.downloadCount + 1 },
-        });
+        if (!command.isReadOnlySupportView) {
+            // Increment download count
+            await this.prisma.participantDocument.update({
+                where: { id: certificateId },
+                data: { downloadCount: document.downloadCount + 1 },
+            });
 
-        // Invalidate certificates list and participant stats (certificate count is in stats)
-        await Promise.all([
-            this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_CERTIFICATES(userId)),
-            this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_STATS(participant.id)),
-        ]);
+            // Invalidate certificates list and participant stats (certificate count is in stats)
+            await Promise.all([
+                this.cacheService.invalidateKey(CACHE_KEYS.PORTAL_CERTIFICATES(userId)),
+                this.cacheService.invalidateKey(CACHE_KEYS.PARTICIPANT_STATS(participant.id)),
+            ]);
+        }
 
         return {
             fileUrl: await resolveMaskedFileUrl(this.prisma, document.fileUrl),

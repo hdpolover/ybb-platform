@@ -124,6 +124,8 @@ export class DownloadCertificateCommand {
   constructor(
     public readonly userId: string,
     public readonly certificateId: string,
+    // Read-only support view: a GET must not bump the participant's download count.
+    public readonly isReadOnlySupportView = false,
   ) { }
 }
 

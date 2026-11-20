@@ -379,6 +379,10 @@ model SupportAccessImpersonationTicket {
   reason    String @db.Text
   tokenHash String @unique @map("token_hash") @db.Char(64)
 
+  // 'full' = super admin impersonation; 'read_only' = customer-support view
+  // (no refresh token, 30 min access token, every write refused).
+  mode String @default("full") @db.VarChar(16)
+
   // The UserSession this ticket's redeemed access token carries as `sid`.
   // Minted once, on the FIRST exchange, and reused on every replay within the
   // ticket TTL -- otherwise each redeem (React StrictMode remount, new-tab
