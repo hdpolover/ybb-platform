@@ -35,6 +35,7 @@ export const EXTRA_PERMISSION_KEYS: readonly string[] = [
   'participants:write',
   'support:read',
   'support:write',
+  'support:impersonate',
   'content:read',
   'content:write',
   'announcements:read',

@@ -51,6 +51,7 @@ export const permissionCategories: PermissionCategoryDefinition[] = [
       { key: "participants:write", label: "Manage participants", description: "Update participant and ambassador records." },
       { key: "support:read", label: "View support", description: "Read support tickets and participant issues." },
       { key: "support:write", label: "Manage support", description: "Respond to and manage support tickets." },
+      { key: "support:impersonate", label: "View as participant", description: "Open a read-only view of a participant's portal for support." },
     ],
   },
   {
@@ -164,6 +165,8 @@ export const programWritePermissions = {
   paymentHelp: ["payments:write", "support:write", "program:write"],
   // Support ticket reply, status change and delete (admin-support-tickets.controller.ts).
   support: ["support:write"],
+  // Read-only "view as participant" (SupportAccessService.createReadOnlyImpersonation).
+  supportView: ["support:impersonate"],
   // Per-program payment method overlay (payment-admin controller).
   programPaymentConfig: ["payments:write", "program:write"],
   fundingDecision: ["review:write", "applications:write"],

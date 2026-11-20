@@ -8,6 +8,7 @@ import { RetentionService } from './retention.service';
 import { PrismaModule } from '../../shared/infrastructure/prisma/prisma.module';
 import { ExcelModule } from '../../shared/infrastructure/excel/excel.module';
 import { AuditTrailInterceptor } from '../../shared/interceptors/audit-trail.interceptor';
+import { ReadOnlySupportInterceptor } from '../../shared/interceptors/read-only-support.interceptor';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
@@ -17,6 +18,11 @@ import { AuthModule } from '../auth/auth.module';
     AuditService,
     AuditCleanupService,
     RetentionService,
+    // Refuses every write made with a read-only support-view token.
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ReadOnlySupportInterceptor,
+    },
     // Register AuditTrailInterceptor as a global interceptor via DI
     // (needed because it depends on Reflector, PrismaService, DataChangeLogService)
     {

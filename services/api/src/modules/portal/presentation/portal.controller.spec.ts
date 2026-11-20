@@ -256,4 +256,12 @@ describe('PortalController', () => {
       );
     });
   });
+
+  describe('read-only support view', () => {
+    it('refuses the LOA download, which assigns a number and records the download', async () => {
+      await expect(
+        controller.downloadLoa({ userId: 'u1', brandId: 'b1', impersonationMode: 'read_only' } as never),
+      ).rejects.toThrow('Read-only support view');
+    });
+  });
 });

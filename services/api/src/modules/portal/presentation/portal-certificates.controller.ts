@@ -78,7 +78,7 @@ export class PortalCertificatesController {
         const userId = user.userId;
         if (!userId) throw new UnauthorizedException();
         return this.downloadCertificateHandler.execute(
-            new DownloadCertificateCommand(userId, id),
+            new DownloadCertificateCommand(userId, id, user.impersonationMode === 'read_only'),
         );
     }
 }

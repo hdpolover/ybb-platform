@@ -11,6 +11,7 @@ export interface CurrentUserData {
   sid?: string; // Session ID when token is tied to a persisted session
   impersonatedByAdminId?: string; // Set only on an admin-impersonation session
   impersonationTicketId?: string; // The ticket that minted that session
+  impersonationMode?: 'read_only'; // Set on a read-only customer-support view
 }
 
 export const CurrentUser = createParamDecorator(

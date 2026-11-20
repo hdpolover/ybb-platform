@@ -11,9 +11,13 @@ import { randomBytes, randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { ChangeType, ChangedByType } from '@prisma/client';
 import { PrismaService } from '@shared/infrastructure/prisma/prisma.service';
+import { PrismaReadService } from '@shared/infrastructure/prisma/prisma-read.service';
+import { assertProgramPermission } from '@shared/guards/admin-permission.guard';
+import { assertProgramAccess, orNotFound } from '@shared/guards/admin-scope.guard';
+import { resolveRevenueAccessScope } from '@modules/stats/revenue/utils/revenue-access.util';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { hashToken } from '@shared/utils/hash-token.util';
-import { adminRoleSlug } from '@shared/admin-access-response';
+import { adminRoleSlug, normalizePermissions } from '@shared/admin-access-response';
 import {
   CreateSupportImpersonationDto,
   UpdateSupportAccessConfigDto,
@@ -36,7 +40,8 @@ type ImpersonationStartResponse = {
 
 type ImpersonationExchangeResponse = {
   accessToken: string;
-  refreshToken: string;
+  // Absent on a read-only support view: it cannot be renewed, only re-opened.
+  refreshToken?: string;
   redirectTo: string;
 };
 
@@ -44,11 +49,14 @@ type ImpersonationExchangeResponse = {
 export class SupportAccessService {
   private static readonly CONFIG_KEY = 'global';
   private static readonly TICKET_TTL_MS = 5 * 60 * 1000;
+  private static readonly READ_ONLY_SESSION_MS = 30 * 60 * 1000;
+  static readonly SUPPORT_IMPERSONATE_PERMISSION = 'support:impersonate';
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly prismaRead: PrismaReadService,
   ) {}
 
   async getConfig(currentUser: CurrentUserData): Promise<SupportConfigResponse> {
@@ -128,7 +136,11 @@ export class SupportAccessService {
     ipAddress: string,
     userAgent: string,
   ): Promise<ImpersonationStartResponse> {
-    await this.assertSuperAdmin(currentUser);
+    // Super admins keep the full, secret-gated flow untouched; everyone else can
+    // only ever get a read-only view, gated by `support:impersonate`.
+    if (!(await this.isSuperAdmin(currentUser))) {
+      return this.createReadOnlyImpersonation(currentUser, dto, ipAddress, userAgent);
+    }
 
     const config = await this.prisma.supportAccessConfig.findUnique({
       where: { key: SupportAccessService.CONFIG_KEY },
@@ -138,17 +150,107 @@ export class SupportAccessService {
       throw new ForbiddenException('Support access is disabled.');
     }
 
-    const secretOk = await bcrypt.compare(dto.supportSecret, config.secretHash);
+    const secretOk = dto.supportSecret
+      ? await bcrypt.compare(dto.supportSecret, config.secretHash)
+      : false;
     if (!secretOk) {
       throw new UnauthorizedException('Invalid support secret.');
     }
 
-    const reason = dto.reason.trim();
+    const reason = this.requireReason(dto);
+    const target = await this.resolveTargetParticipant(dto);
+
+    return this.issueTicket({
+      adminId: currentUser.adminId!,
+      target,
+      programId: dto.programId ?? null,
+      reason,
+      mode: 'full',
+      ipAddress,
+      userAgent,
+    });
+  }
+
+  /**
+   * Customer-support view. Order matters: the program scope check comes first so
+   * an admin with no reach into the program gets the same 404 whether or not the
+   * participant exists; the permission check comes before any participant lookup.
+   * Never touches the shared support secret.
+   */
+  private async createReadOnlyImpersonation(
+    currentUser: CurrentUserData,
+    dto: CreateSupportImpersonationDto,
+    ipAddress: string,
+    userAgent: string,
+  ): Promise<ImpersonationStartResponse> {
+    // The owner's on/off switch covers every impersonation, read-only included.
+    const config = await this.prisma.supportAccessConfig.findUnique({
+      where: { key: SupportAccessService.CONFIG_KEY },
+    });
+    if (!config?.isEnabled) {
+      throw new ForbiddenException('Support access is disabled.');
+    }
+    if (!dto.participantId || !dto.programId) {
+      throw new BadRequestException('participantId and programId are required.');
+    }
+    const reason = this.requireReason(dto);
+    const notFound = () => new NotFoundException('Participant not found for the selected program.');
+
+    const scope = await resolveRevenueAccessScope(this.prismaRead, currentUser);
+    await orNotFound(() => assertProgramAccess(this.prismaRead, scope, dto.programId!), notFound);
+    await assertProgramPermission(this.prismaRead, currentUser, dto.programId, [
+      SupportAccessService.SUPPORT_IMPERSONATE_PERMISSION,
+    ]);
+    // assertProgramPermission lets every platform-tier admin through; the support
+    // view is an explicit grant, so platform admins must hold the key themselves.
+    if (scope.kind === 'platform') {
+      await this.assertHoldsSupportImpersonate(currentUser);
+    }
+    const target = await orNotFound(() => this.resolveTargetParticipant(dto), notFound);
+
+    return this.issueTicket({
+      adminId: currentUser.adminId!,
+      target,
+      programId: dto.programId,
+      reason,
+      mode: 'read_only',
+      ipAddress,
+      userAgent,
+    });
+  }
+
+  private async assertHoldsSupportImpersonate(currentUser: CurrentUserData): Promise<void> {
+    const admin = await this.prismaRead.admin.findUnique({
+      where: { id: currentUser.adminId! },
+      select: { customPermissions: true, role: { select: { permissions: true } } },
+    });
+    const granted = [
+      ...normalizePermissions(admin?.role?.permissions),
+      ...normalizePermissions(admin?.customPermissions),
+    ].map((permission) => permission.toLowerCase());
+    if (!granted.includes(SupportAccessService.SUPPORT_IMPERSONATE_PERMISSION)) {
+      throw new ForbiddenException('You do not have permission to open a support view.');
+    }
+  }
+
+  private requireReason(dto: CreateSupportImpersonationDto): string {
+    const reason = (dto.reason ?? '').trim();
     if (reason.length < 10) {
       throw new BadRequestException('Reason must be at least 10 characters.');
     }
+    return reason;
+  }
 
-    const target = await this.resolveTargetParticipant(dto);
+  private async issueTicket(params: {
+    adminId: string;
+    target: Awaited<ReturnType<SupportAccessService['resolveTargetParticipant']>>;
+    programId: string | null;
+    reason: string;
+    mode: 'full' | 'read_only';
+    ipAddress: string;
+    userAgent: string;
+  }): Promise<ImpersonationStartResponse> {
+    const { adminId, target, programId, reason, mode, ipAddress, userAgent } = params;
     const portalOrigin = this.resolveParticipantPortalOrigin(
       target.user.brand.websiteUrl,
       target.user.brand.landingUrl,
@@ -163,12 +265,13 @@ export class SupportAccessService {
 
     const ticket = await this.prisma.supportAccessImpersonationTicket.create({
       data: {
-        adminId: currentUser.adminId!,
+        adminId,
         targetUserId: target.user.id,
         targetParticipantId: target.id,
-        targetProgramId: dto.programId ?? null,
+        targetProgramId: programId,
         targetBrandId: target.user.brandId,
         reason,
+        mode,
         tokenHash,
         expiresAt,
         createdIpAddress: ipAddress,
@@ -182,7 +285,7 @@ export class SupportAccessService {
         entityId: ticket.id,
         action: ChangeType.create,
         actorType: ChangedByType.admin,
-        actorId: currentUser.adminId!,
+        actorId: adminId,
         source: 'http',
         endpoint: 'POST /v1/admins/support-access/impersonations',
         httpMethod: 'POST',
@@ -195,6 +298,7 @@ export class SupportAccessService {
           targetParticipantId: ticket.targetParticipantId,
           targetProgramId: ticket.targetProgramId,
           expiresAt: ticket.expiresAt.toISOString(),
+          ...(mode === 'read_only' ? { mode } : {}),
         },
       },
     });
@@ -287,6 +391,17 @@ export class SupportAccessService {
       }
     }
 
+    const isReadOnly = ticket.mode === 'read_only';
+    // Measured from the FIRST redeem, so replays inside the ticket TTL cannot
+    // stretch a read-only view past 30 minutes.
+    const readOnlyEndsAt = new Date(
+      (ticket.consumedAt ?? now).getTime() + SupportAccessService.READ_ONLY_SESSION_MS,
+    );
+    const readOnlyTtlSeconds = Math.max(
+      1,
+      Math.floor((readOnlyEndsAt.getTime() - now.getTime()) / 1000),
+    );
+
     const accessToken = this.jwtService.sign(
       {
         sub: user.id,
@@ -311,23 +426,32 @@ export class SupportAccessService {
         // be ATTRIBUTABLE to an admin, not to become one.
         impersonatedByAdminId: ticket.adminId,
         impersonationTicketId: ticket.id,
+        // Read-only support view: ReadOnlySupportInterceptor refuses every write.
+        ...(isReadOnly ? { impersonationMode: 'read_only' } : {}),
       },
-      { expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '1h') },
-    );
-
-    const refreshToken = this.jwtService.sign(
       {
-        sub: user.id,
-        email: user.email,
-        brandId: user.brandId,
-        jti: randomUUID(),
-        type: 'refresh',
+        expiresIn: isReadOnly
+          ? readOnlyTtlSeconds
+          : this.configService.get<string>('JWT_EXPIRES_IN', '1h'),
       },
-      { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') },
     );
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    // A read-only view is never renewable: no refresh token is minted at all.
+    const refreshToken = isReadOnly
+      ? undefined
+      : this.jwtService.sign(
+          {
+            sub: user.id,
+            email: user.email,
+            brandId: user.brandId,
+            jti: randomUUID(),
+            type: 'refresh',
+          },
+          { expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d') },
+        );
+
+    const expiresAt = isReadOnly ? readOnlyEndsAt : new Date();
+    if (!isReadOnly) expiresAt.setDate(expiresAt.getDate() + 7);
 
     await this.prisma.$transaction([
       this.prisma.user.update({
@@ -347,14 +471,14 @@ export class SupportAccessService {
         create: {
           userId: user.id,
           sessionToken,
-          refreshToken,
+          refreshToken: refreshToken ?? null,
           deviceName: 'admin-impersonation',
           browser: userAgent.slice(0, 100),
           ipAddress,
           expiresAt,
         },
         update: {
-          refreshToken,
+          refreshToken: refreshToken ?? null,
           browser: userAgent.slice(0, 100),
           ipAddress,
           expiresAt,
@@ -471,6 +595,12 @@ export class SupportAccessService {
   }
 
   private async assertSuperAdmin(currentUser: CurrentUserData): Promise<void> {
+    if (!(await this.isSuperAdmin(currentUser))) {
+      throw new ForbiddenException('Only Super Admin can use support access.');
+    }
+  }
+
+  private async isSuperAdmin(currentUser: CurrentUserData): Promise<boolean> {
     if (!currentUser.adminId) {
       throw new UnauthorizedException('Admin access required.');
     }
@@ -495,9 +625,7 @@ export class SupportAccessService {
     const isSuperByAccess =
       admin.accessLevel >= 10 || admin.canManageAdmins || admin.canAssignRoles;
 
-    if (!isSuperByRoleName && !isSuperByToken && !isSuperByAccess) {
-      throw new ForbiddenException('Only Super Admin can use support access.');
-    }
+    return isSuperByRoleName || isSuperByToken || isSuperByAccess;
   }
 
   private toConfigResponse(

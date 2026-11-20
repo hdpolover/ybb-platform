@@ -584,6 +584,10 @@ export class PortalController {
     ): Promise<StreamableFile> {
         const { userId, brandId } = user;
         if (!userId) throw new UnauthorizedException();
+        // Assigns the document number and records the download: a write behind a GET.
+        if (user.impersonationMode === 'read_only') {
+            throw new ForbiddenException('Read-only support view: LOA download is disabled');
+        }
 
         const { buffer, filename } = await this.loaDownloadService.downloadLoa(userId, brandId, programId);
 
