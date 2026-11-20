@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentConfigClient } from './payment-config.client';
+import { ConfigService } from '@nestjs/config';
 import { PaymentServiceHttpClient } from '@modules/payments/infrastructure/services/payment-service-http.client';
 
 const mockHttp = { get: jest.fn() };
@@ -12,18 +13,25 @@ describe('PaymentConfigClient', () => {
       providers: [
         PaymentConfigClient,
         { provide: PaymentServiceHttpClient, useValue: mockHttp },
+        { provide: ConfigService, useValue: { get: (key: string) => (key === 'PAYMENT_SERVICE_INTERNAL_KEY' ? 'k1' : undefined) } },
       ],
     }).compile();
     client = moduleRef.get(PaymentConfigClient);
     jest.clearAllMocks();
   });
 
-  it('requests the admin view so disabled methods are still visible', async () => {
+  // The payment service mounts routes under /api/v1; without it every call 404'd
+  // and both payment readiness rules stayed 'unknown', blocking every publish.
+  it('requests the admin view on the /api/v1 route with the internal key', async () => {
     mockHttp.get.mockResolvedValue({ data: { data: [] } });
     await client.getProgramMethodSummary('p1');
     expect(mockHttp.get).toHaveBeenCalledWith(
-      '/programs/p1/payment-methods?include_disabled=true',
-      expect.objectContaining({ timeout: 3000 }),
+      '/api/v1/programs/p1/payment-methods',
+      expect.objectContaining({
+        timeout: 3000,
+        params: { include_disabled: true },
+        headers: { 'X-Internal-Service-Key': 'k1' },
+      }),
     );
   });
 
