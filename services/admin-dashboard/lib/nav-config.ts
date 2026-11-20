@@ -31,7 +31,6 @@ import {
   Mail,
   ShieldCheck,
   Shield,
-  Menu,
   ChevronRight,
   Images,
   Activity,
@@ -78,6 +77,7 @@ export const platformNavSections: NavSection[] = [
     items: [
       { id: "brands", label: "Brands", href: "/platform/brands", icon: FolderOpen },
       { id: "programs", label: "Programs", href: "/platform/programs", icon: Layers },
+      { id: "users", label: "Users", href: "/platform/users", icon: Users },
       { id: "admins", label: "Admins", href: "/platform/admins", icon: UserCheck },
       { id: "roles", label: "Roles & Permissions", href: "/platform/roles", icon: Shield },
       { id: "audit-log", label: "Audit log", href: "/platform/audit", icon: ScrollText },
@@ -98,6 +98,7 @@ export const platformNavSections: NavSection[] = [
       { id: "system-announcements", label: "Announcements", href: "/platform/announcements", icon: Bell },
       { id: "email-templates", label: "Email Templates", href: "/platform/email-templates", icon: Mail },
       { id: "content-templates", label: "Content Templates", href: "/platform/content-templates", icon: LayoutTemplate },
+      { id: "system-form-fields", label: "Form Fields", href: "/platform/system-form-fields", icon: FileEdit },
     ],
   },
   {
@@ -218,7 +219,6 @@ export const programNavSections: NavSection[] = [
         href: "submissions",
         icon: Inbox,
         children: [
-          { id: "submissions-essays", label: "Essays", href: "submissions/essays", icon: FileEdit },
           { id: "submissions-agreement-letters", label: "Agreement Letters", href: "submissions/agreement-letters", icon: FileText },
         ],
       },
@@ -230,7 +230,6 @@ export const programNavSections: NavSection[] = [
         children: [
           { id: "documents-program-documents", label: "Program Documents", href: "documents/program-documents", icon: FileText },
           { id: "documents-loa-template", label: "Invitation Letter Template", href: "documents/loa-template", icon: FileEdit },
-          { id: "documents-certificates", label: "Certificates", href: "documents/certificates", icon: FileBadge },
           { id: "documents-program-guidelines", label: "Guidelines", href: "documents/program-guidelines", icon: BookOpen },
         ],
       },
@@ -260,7 +259,6 @@ export const programNavSections: NavSection[] = [
           { id: "program-rundowns", label: "Rundowns", href: "master-data/program-rundowns", icon: PlayCircle },
           { id: "program-speakers", label: "Speakers", href: "master-data/program-speakers", icon: Mic },
           { id: "program-awards", label: "Awards", href: "master-data/program-awards", icon: Award },
-          { id: "program-certificates", label: "Certificates", href: "master-data/program-certificates", icon: FileBadge },
           { id: "faqs", label: "FAQs", href: "master-data/faqs", icon: HelpCircle },
         ],
       },
@@ -277,8 +275,6 @@ export const programNavSections: NavSection[] = [
         icon: Settings,
         children: [
           { id: "main-configuration", label: "Main Configuration", href: "settings/main-configuration", icon: Settings },
-          { id: "admin-management", label: "Admin Management", href: "settings/admin-management", icon: UserCheck },
-          { id: "menu-management", label: "Menu Management", href: "settings/menu-management", icon: Menu },
         ],
       },
     ],
