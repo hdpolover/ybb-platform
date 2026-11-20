@@ -17,7 +17,7 @@ import { assertProgramAccess, orNotFound } from '@shared/guards/admin-scope.guar
 import { resolveRevenueAccessScope } from '@modules/stats/revenue/utils/revenue-access.util';
 import { CurrentUserData } from '@shared/decorators/current-user.decorator';
 import { hashToken } from '@shared/utils/hash-token.util';
-import { adminRoleSlug } from '@shared/admin-access-response';
+import { adminRoleSlug, normalizePermissions } from '@shared/admin-access-response';
 import {
   CreateSupportImpersonationDto,
   UpdateSupportAccessConfigDto,
@@ -183,6 +183,13 @@ export class SupportAccessService {
     ipAddress: string,
     userAgent: string,
   ): Promise<ImpersonationStartResponse> {
+    // The owner's on/off switch covers every impersonation, read-only included.
+    const config = await this.prisma.supportAccessConfig.findUnique({
+      where: { key: SupportAccessService.CONFIG_KEY },
+    });
+    if (!config?.isEnabled) {
+      throw new ForbiddenException('Support access is disabled.');
+    }
     if (!dto.participantId || !dto.programId) {
       throw new BadRequestException('participantId and programId are required.');
     }
@@ -194,6 +201,11 @@ export class SupportAccessService {
     await assertProgramPermission(this.prismaRead, currentUser, dto.programId, [
       SupportAccessService.SUPPORT_IMPERSONATE_PERMISSION,
     ]);
+    // assertProgramPermission lets every platform-tier admin through; the support
+    // view is an explicit grant, so platform admins must hold the key themselves.
+    if (scope.kind === 'platform') {
+      await this.assertHoldsSupportImpersonate(currentUser);
+    }
     const target = await orNotFound(() => this.resolveTargetParticipant(dto), notFound);
 
     return this.issueTicket({
@@ -205,6 +217,20 @@ export class SupportAccessService {
       ipAddress,
       userAgent,
     });
+  }
+
+  private async assertHoldsSupportImpersonate(currentUser: CurrentUserData): Promise<void> {
+    const admin = await this.prismaRead.admin.findUnique({
+      where: { id: currentUser.adminId! },
+      select: { customPermissions: true, role: { select: { permissions: true } } },
+    });
+    const granted = [
+      ...normalizePermissions(admin?.role?.permissions),
+      ...normalizePermissions(admin?.customPermissions),
+    ].map((permission) => permission.toLowerCase());
+    if (!granted.includes(SupportAccessService.SUPPORT_IMPERSONATE_PERMISSION)) {
+      throw new ForbiddenException('You do not have permission to open a support view.');
+    }
   }
 
   private requireReason(dto: CreateSupportImpersonationDto): string {

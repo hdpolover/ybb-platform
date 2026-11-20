@@ -34,10 +34,11 @@ describe('SupportAccessService read-only support view', () => {
     ...overrides,
   });
 
-  function build(admin: Record<string, unknown>, opts: { inProgram?: boolean } = {}) {
+  function build(admin: Record<string, unknown>, opts: { inProgram?: boolean; enabled?: boolean } = {}) {
     const prisma = {
       admin: { findUnique: jest.fn().mockResolvedValue(admin) },
-      supportAccessConfig: { findUnique: jest.fn().mockResolvedValue(null) },
+      // isEnabled only: the read-only path never reads or checks the secret hash.
+      supportAccessConfig: { findUnique: jest.fn().mockResolvedValue({ isEnabled: opts.enabled ?? true, secretHash: null }) },
       participant: { findUnique: jest.fn().mockResolvedValue(participant) },
       participantApplication: {
         findFirst: jest.fn().mockResolvedValue(opts.inProgram === false ? null : { id: 'app-1' }),
@@ -68,7 +69,6 @@ describe('SupportAccessService read-only support view', () => {
       const res = await service.createImpersonation(actor, dto as never, '1.1.1.1', 'ua');
 
       expect(res.loginUrl).toContain('https://portal.example.com/admin-impersonation?token=');
-      expect(prisma.supportAccessConfig.findUnique).not.toHaveBeenCalled();
       expect(prisma.supportAccessImpersonationTicket.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ mode: 'read_only', targetProgramId: 'prog-1', adminId: 'admin-1' }),
       });
@@ -77,6 +77,35 @@ describe('SupportAccessService read-only support view', () => {
           afterState: expect.objectContaining({ mode: 'read_only' }),
         }),
       });
+    });
+
+    it('403 when the owner has switched support access off', async () => {
+      const { service, prisma } = build(supportAdmin(), { enabled: false });
+      await expect(service.createImpersonation(actor, dto as never, '1.1.1.1', 'ua')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.supportAccessImpersonationTicket.create).not.toHaveBeenCalled();
+    });
+
+    it('403 for a platform-tier admin who does not hold support:impersonate explicitly', async () => {
+      const platformAdmin = supportAdmin({
+        role: { name: 'Platform Admin', permissions: ['platform_access', 'platform.manage', 'program:read'] },
+      });
+      const { service, prisma } = build(platformAdmin);
+      await expect(service.createImpersonation(actor, dto as never, '1.1.1.1', 'ua')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.supportAccessImpersonationTicket.create).not.toHaveBeenCalled();
+    });
+
+    it('allows a platform-tier admin who holds support:impersonate as an extra', async () => {
+      const platformAdmin = supportAdmin({
+        role: { name: 'Platform Admin', permissions: ['platform_access', 'platform.manage'] },
+        customPermissions: ['support:impersonate'],
+      });
+      const { service, prisma } = build(platformAdmin);
+      await service.createImpersonation(actor, dto as never, '1.1.1.1', 'ua');
+      expect(prisma.supportAccessImpersonationTicket.create).toHaveBeenCalled();
     });
 
     it('403 when the admin lacks support:impersonate', async () => {

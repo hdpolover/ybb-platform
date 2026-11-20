@@ -404,7 +404,7 @@ describe('SupportAccessService full impersonation is Super Admin only', () => {
           role: { name: roleName },
         }),
       },
-      supportAccessConfig: { findUnique: jest.fn() },
+      supportAccessConfig: { findUnique: jest.fn().mockResolvedValue({ isEnabled: true, secretHash: 'h' }) },
       participant: { findUnique: jest.fn() },
       supportAccessImpersonationTicket: { create: jest.fn() },
     };
@@ -452,7 +452,6 @@ describe('SupportAccessService full impersonation is Super Admin only', () => {
         'jest',
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
-    expect(prisma.supportAccessConfig.findUnique).not.toHaveBeenCalled();
     expect(prisma.participant.findUnique).not.toHaveBeenCalled();
     expect(prisma.supportAccessImpersonationTicket.create).not.toHaveBeenCalled();
   });
