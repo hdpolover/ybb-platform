@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   PencilSquareIcon,
   PlayCircleIcon,
@@ -13,9 +13,12 @@ import {
   createProgramTestimonial,
   updateProgramTestimonial,
   deleteProgramTestimonial,
+  uploadFileViaPresignedUrl,
 } from "@/src/shared/api-client";
+import { useAuth } from "@/app/contexts/AuthContext";
 import { DrawerShell } from "@/src/ui/drawer/drawer-shell";
 import type { VideoTestimonyRow } from "./VideoTestimonialsTable";
+import { parseVideoUrl, VIDEO_PLATFORM_LABEL } from "./video-platform";
 
 const INPUT_CLS =
   "block w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
@@ -31,31 +34,6 @@ export function VideoSearch({ value, onChange }: { value: string; onChange: (v: 
       className={INPUT_CLS}
     />
   );
-}
-
-// ─── YouTube helpers ───────────────────────────────────────────────────────────
-function extractYouTubeId(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname.includes("youtube.com")) {
-      const v = parsed.searchParams.get("v");
-      if (v) return v;
-      const shortsMatch = parsed.pathname.match(/\/shorts\/([A-Za-z0-9_-]{11})/);
-      if (shortsMatch) return shortsMatch[1];
-      const embedMatch = parsed.pathname.match(/\/embed\/([A-Za-z0-9_-]{11})/);
-      if (embedMatch) return embedMatch[1];
-    }
-    if (parsed.hostname === "youtu.be") {
-      const id = parsed.pathname.slice(1);
-      return id || null;
-    }
-  } catch {}
-  return null;
-}
-
-function toEmbedUrl(url: string): string | null {
-  const id = extractYouTubeId(url);
-  return id ? `https://www.youtube.com/embed/${id}` : null;
 }
 
 // ─── Add / Edit Form Drawer ────────────────────────────────────────────────────
@@ -77,18 +55,35 @@ function VideoFormDrawer({
   const isEditMode = !!initialData;
 
   const [title, setTitle] = useState("");
-  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const { adminProfile } = useAuth();
+  const [videoUrl, setVideoUrl] = useState("");
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const ytId = extractYouTubeId(youtubeUrl);
+  const parsed = parseVideoUrl(videoUrl);
+  const shownThumb = coverPreview ?? initialData?.thumbnailUrl ?? parsed?.thumbnailUrl ?? null;
+
+  useEffect(() => {
+    if (!coverFile) {
+      setCoverPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(coverFile);
+    setCoverPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [coverFile]);
 
   useEffect(() => {
     if (isOpen) {
       setTitle(initialData?.name ?? "");
-      setYoutubeUrl(initialData?.youtubeUrl ?? "");
+      setVideoUrl(initialData?.videoUrl ?? "");
+      setCoverFile(null);
+      if (coverInputRef.current) coverInputRef.current.value = "";
       setDescription(initialData?.description ?? "");
       setIsActive(initialData?.isActive ?? true);
       setSaving(false);
@@ -97,18 +92,37 @@ function VideoFormDrawer({
   }, [isOpen, initialData]);
 
   async function handleSave() {
-    if (!youtubeUrl.trim() || !title.trim() || !description.trim()) {
+    if (!videoUrl.trim() || !title.trim() || !description.trim()) {
       setError("All fields are required.");
+      return;
+    }
+    if (!parsed) {
+      setError("Paste the full link of a YouTube, Instagram, TikTok or Facebook video.");
       return;
     }
     setSaving(true);
     setError(null);
     try {
+      let thumbnailUrl: string | undefined;
+      if (coverFile) {
+        const userId = adminProfile?.userId;
+        if (!userId || !brandId) throw new Error("Cannot upload cover: missing user or brand context.");
+        // Same bucket as testimonial photos (program-testimonies page): public CDN URL.
+        const upload = await uploadFileViaPresignedUrl(coverFile, {
+          userId,
+          brandId,
+          bucket: "avatars",
+          assetType: "avatar",
+        });
+        if (!upload.publicUrl) throw new Error("Upload succeeded but no public URL returned.");
+        thumbnailUrl = upload.publicUrl;
+      }
       if (isEditMode && initialData) {
         await updateProgramTestimonial(initialData.id, {
           name: title.trim(),
           testimonial: description.trim(),
-          videoUrl: youtubeUrl.trim(),
+          videoUrl: videoUrl.trim(),
+          ...(thumbnailUrl ? { thumbnailUrl } : {}),
           type: "video",
           isActive,
         });
@@ -117,7 +131,8 @@ function VideoFormDrawer({
         await createProgramTestimonial(programId, {
           name: title.trim(),
           testimonial: description.trim(),
-          videoUrl: youtubeUrl.trim(),
+          videoUrl: videoUrl.trim(),
+          ...(thumbnailUrl ? { thumbnailUrl } : {}),
           type: "video",
           category: "alumni",
           brandId,
@@ -139,8 +154,8 @@ function VideoFormDrawer({
       title={isEditMode ? "Edit Video Testimonial" : "Add Video Testimonial"}
       description={
         isEditMode
-          ? "Update the YouTube URL, title, description, and status."
-          : "Add a YouTube Shorts or regular YouTube URL."
+          ? "Update the video link, cover, title, description, and status."
+          : "Add a YouTube, Instagram, TikTok or Facebook video link."
       }
       error={error}
       locked={saving}
@@ -166,41 +181,61 @@ function VideoFormDrawer({
         </>
       }
     >
-      {/* YouTube URL + live thumbnail preview */}
+      {/* Video URL + live thumbnail preview */}
       <div>
         <label className="mb-1.5 block text-xs font-medium text-zinc-500">
-          YouTube URL <span className="text-rose-500">*</span>
-          <span className="ml-1 font-normal text-zinc-400">(Shorts or regular)</span>
+          Video URL <span className="text-rose-500">*</span>
+          <span className="ml-1 font-normal text-zinc-400">(YouTube, Instagram, TikTok or Facebook)</span>
         </label>
         <input
           type="url"
-          value={youtubeUrl}
-          onChange={(e) => setYoutubeUrl(e.target.value)}
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
           className={INPUT_CLS}
-          placeholder="https://www.youtube.com/shorts/... or watch?v=..."
+          placeholder="https://www.instagram.com/reel/... or youtube.com/shorts/..."
         />
-        {youtubeUrl && (
+        {videoUrl && (
           <div className="mt-2 flex items-center gap-3">
             <div className="h-14 w-20 flex-shrink-0 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100">
-              {ytId ? (
+              {shownThumb ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`}
-                  alt="Thumbnail preview"
-                  className="h-full w-full object-cover"
-                />
+                <img src={shownThumb} alt="Thumbnail preview" className="h-full w-full object-cover" />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-xs text-zinc-400">
-                  Invalid
+                  {parsed ? "No cover" : "Invalid"}
                 </div>
               )}
             </div>
-            {ytId ? (
-              <span className="text-xs text-emerald-600">✓ Valid YouTube URL (ID: {ytId})</span>
+            {parsed ? (
+              <span className="text-xs text-emerald-600">Valid {VIDEO_PLATFORM_LABEL[parsed.platform]} link</span>
             ) : (
-              <span className="text-xs text-rose-500">Could not extract video ID</span>
+              <span className="text-xs text-rose-500">
+                Not a supported video link. Open the video and copy its full link (short links like vm.tiktok.com or fb.watch don&apos;t embed).
+              </span>
             )}
           </div>
+        )}
+      </div>
+
+      {/* Cover image: needed for platforms without a public thumbnail */}
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-zinc-500">
+          Cover image
+          <span className="ml-1 font-normal text-zinc-400">
+            {parsed?.platform === "youtube" ? "(optional, YouTube thumbnail used otherwise)" : "(recommended for Instagram, TikTok and Facebook)"}
+          </span>
+        </label>
+        <input
+          ref={coverInputRef}
+          type="file"
+          accept="image/*"
+          onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
+          className="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-md file:border file:border-zinc-200 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-zinc-700 hover:file:bg-zinc-50"
+        />
+        {parsed && parsed.platform !== "youtube" && !shownThumb && (
+          <p className="mt-1 text-xs text-amber-600">
+            Without a cover, the landing page card shows &quot;No preview&quot;.
+          </p>
         )}
       </div>
 
@@ -260,7 +295,8 @@ function VideoViewDrawer({
   onClose: () => void;
   row: VideoTestimonyRow;
 }) {
-  const embedUrl = toEmbedUrl(row.youtubeUrl);
+  const parsed = parseVideoUrl(row.videoUrl);
+  const embedUrl = parsed?.embedUrl ?? null;
 
   return (
     <DrawerShell
@@ -279,7 +315,11 @@ function VideoViewDrawer({
         </button>
       }
     >
-      <div className="aspect-video w-full overflow-hidden rounded-xl border border-zinc-200 bg-black/90 shadow-inner">
+      <div
+        className={`overflow-hidden rounded-xl border border-zinc-200 bg-black/90 shadow-inner ${
+          !parsed || parsed.platform === "youtube" ? "aspect-video w-full" : "mx-auto aspect-[9/16] h-[70vh] max-w-full"
+        }`}
+      >
         {embedUrl ? (
           <iframe
             src={embedUrl}
@@ -290,21 +330,23 @@ function VideoViewDrawer({
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm font-medium text-zinc-300">
-            Invalid YouTube URL.
+            Unsupported video link.
           </div>
         )}
       </div>
 
       <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-5">
         <div>
-          <div className="mb-1 text-xs font-medium text-zinc-500">YouTube URL</div>
+          <div className="mb-1 text-xs font-medium text-zinc-500">
+            {parsed ? `${VIDEO_PLATFORM_LABEL[parsed.platform]} URL` : "Video URL"}
+          </div>
           <a
-            href={row.youtubeUrl}
+            href={row.videoUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="break-all text-sm font-medium text-blue-600 underline underline-offset-2"
           >
-            {row.youtubeUrl}
+            {row.videoUrl}
           </a>
         </div>
         <div>

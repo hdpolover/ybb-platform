@@ -42,7 +42,8 @@ export default function VideoTestimonialsPage() {
         .map((t) => ({
           id: t.id,
           name: t.name,
-          youtubeUrl: t.videoUrl ?? "",
+          videoUrl: t.videoUrl ?? "",
+          thumbnailUrl: t.thumbnailUrl ?? null,
           description: t.testimonial,
           isActive: t.isActive ?? true,
         }));
@@ -61,7 +62,7 @@ export default function VideoTestimonialsPage() {
   const filtered = search.trim()
     ? items.filter(
         (r) =>
-          r.youtubeUrl.toLowerCase().includes(search.toLowerCase()) ||
+          r.videoUrl.toLowerCase().includes(search.toLowerCase()) ||
           r.description.toLowerCase().includes(search.toLowerCase()) ||
           r.name.toLowerCase().includes(search.toLowerCase()),
       )
