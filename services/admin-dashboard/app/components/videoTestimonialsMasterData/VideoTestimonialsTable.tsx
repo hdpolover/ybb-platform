@@ -6,33 +6,16 @@ import {
   EditVideoAction,
   DeleteVideoAction,
 } from "./VideoActions";
+import { parseVideoUrl, VIDEO_PLATFORM_LABEL } from "./video-platform";
 
 export type VideoTestimonyRow = {
   id: string;
   name: string;
-  youtubeUrl: string;
+  videoUrl: string;
+  thumbnailUrl: string | null;
   description: string;
   isActive: boolean;
 };
-
-function extractYouTubeId(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname.includes("youtube.com")) {
-      const v = parsed.searchParams.get("v");
-      if (v) return v;
-      const shortsMatch = parsed.pathname.match(/\/shorts\/([A-Za-z0-9_-]{11})/);
-      if (shortsMatch) return shortsMatch[1];
-      const embedMatch = parsed.pathname.match(/\/embed\/([A-Za-z0-9_-]{11})/);
-      if (embedMatch) return embedMatch[1];
-    }
-    if (parsed.hostname === "youtu.be") {
-      const id = parsed.pathname.slice(1);
-      return id || null;
-    }
-  } catch {}
-  return null;
-}
 
 export function VideoTestimonialsTable({
   data,
@@ -78,7 +61,7 @@ export function VideoTestimonialsTable({
             <tr>
               <th className="w-12 px-6 py-4 font-semibold">No</th>
               <th className="w-32 px-6 py-4 font-semibold">Thumbnail</th>
-              <th className="px-6 py-4 font-semibold">YouTube URL</th>
+              <th className="px-6 py-4 font-semibold">Video URL</th>
               <th className="px-6 py-4 font-semibold">Description</th>
               <th className="w-32 px-6 py-4 font-semibold">Status</th>
               <th className="px-6 py-4 text-right font-semibold">Action</th>
@@ -99,7 +82,8 @@ export function VideoTestimonialsTable({
               </tr>
             ) : (
               data.map((row, index) => {
-                const ytId = extractYouTubeId(row.youtubeUrl);
+                const parsed = parseVideoUrl(row.videoUrl);
+                const thumb = row.thumbnailUrl ?? parsed?.thumbnailUrl ?? null;
                 return (
                   <tr key={row.id} className="transition-colors hover:bg-zinc-50/50">
                     <td className="px-6 py-4 align-top text-xs font-medium text-zinc-500">
@@ -107,10 +91,10 @@ export function VideoTestimonialsTable({
                     </td>
                     <td className="px-6 py-4 align-top">
                       <div className="flex h-16 w-24 items-center justify-center overflow-hidden rounded-md border border-zinc-200 bg-zinc-50 shadow-sm">
-                        {ytId ? (
+                        {thumb ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`}
+                            src={thumb}
                             alt="Video thumbnail"
                             className="h-full w-full object-cover"
                           />
@@ -120,13 +104,16 @@ export function VideoTestimonialsTable({
                       </div>
                     </td>
                     <td className="px-6 py-4 align-top">
+                      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                        {parsed ? VIDEO_PLATFORM_LABEL[parsed.platform] : "Unsupported link"}
+                      </div>
                       <a
-                        href={row.youtubeUrl}
+                        href={row.videoUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="block max-w-xs break-all text-sm font-medium text-blue-600 underline underline-offset-2 hover:text-blue-700 md:max-w-sm"
                       >
-                        {row.youtubeUrl}
+                        {row.videoUrl}
                       </a>
                     </td>
                     <td className="px-6 py-4 align-top">
