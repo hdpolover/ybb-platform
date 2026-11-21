@@ -27,7 +27,7 @@ function youtubeId(url: URL): string | null {
   if (!hostIs(url.hostname, "youtube.com")) return null;
   const v = url.searchParams.get("v");
   if (v) return v;
-  return url.pathname.match(/\/(?:shorts|embed|live)\/([A-Za-z0-9_-]{11})/)?.[1] ?? null;
+  return url.pathname.match(/\/(?:shorts|embed)\/([A-Za-z0-9_-]{11})/)?.[1] ?? null;
 }
 
 export function parseVideoUrl(raw: string): ParsedVideo | null {

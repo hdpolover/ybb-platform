@@ -42,6 +42,8 @@ describe("parseVideoUrl", () => {
     "https://fb.watch/abc123/",
     "https://www.facebook.com/share/v/abc123/",
     "https://www.instagram.com/ybb.foundation/",
+    // the portal cannot embed /live/ links
+    "https://www.youtube.com/live/dQw4w9WgXcQ",
     "https://example.com/video/123",
     "not a url",
     "",

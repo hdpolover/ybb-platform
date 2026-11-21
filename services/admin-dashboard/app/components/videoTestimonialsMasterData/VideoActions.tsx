@@ -59,6 +59,7 @@ function VideoFormDrawer({
   const [videoUrl, setVideoUrl] = useState("");
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [removeCover, setRemoveCover] = useState(false);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -66,7 +67,12 @@ function VideoFormDrawer({
   const [error, setError] = useState<string | null>(null);
 
   const parsed = parseVideoUrl(videoUrl);
-  const shownThumb = coverPreview ?? initialData?.thumbnailUrl ?? parsed?.thumbnailUrl ?? null;
+  // A stored cover belongs to the stored link: changing the link drops it.
+  const keptCover =
+    !removeCover && initialData?.thumbnailUrl && videoUrl.trim() === initialData.videoUrl.trim()
+      ? initialData.thumbnailUrl
+      : null;
+  const shownThumb = coverPreview ?? keptCover ?? parsed?.thumbnailUrl ?? null;
 
   useEffect(() => {
     if (!coverFile) {
@@ -83,6 +89,7 @@ function VideoFormDrawer({
       setTitle(initialData?.name ?? "");
       setVideoUrl(initialData?.videoUrl ?? "");
       setCoverFile(null);
+      setRemoveCover(false);
       if (coverInputRef.current) coverInputRef.current.value = "";
       setDescription(initialData?.description ?? "");
       setIsActive(initialData?.isActive ?? true);
@@ -103,7 +110,8 @@ function VideoFormDrawer({
     setSaving(true);
     setError(null);
     try {
-      let thumbnailUrl: string | undefined;
+      let thumbnailUrl: string | null | undefined =
+        initialData?.thumbnailUrl && !keptCover ? null : undefined;
       if (coverFile) {
         const userId = adminProfile?.userId;
         if (!userId || !brandId) throw new Error("Cannot upload cover: missing user or brand context.");
@@ -122,7 +130,7 @@ function VideoFormDrawer({
           name: title.trim(),
           testimonial: description.trim(),
           videoUrl: videoUrl.trim(),
-          ...(thumbnailUrl ? { thumbnailUrl } : {}),
+          ...(thumbnailUrl !== undefined ? { thumbnailUrl } : {}),
           type: "video",
           isActive,
         });
@@ -229,9 +237,25 @@ function VideoFormDrawer({
           ref={coverInputRef}
           type="file"
           accept="image/*"
-          onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            setCoverFile(e.target.files?.[0] ?? null);
+            setRemoveCover(false);
+          }}
           className="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-md file:border file:border-zinc-200 file:bg-white file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-zinc-700 hover:file:bg-zinc-50"
         />
+        {(coverFile || keptCover) && (
+          <button
+            type="button"
+            onClick={() => {
+              setCoverFile(null);
+              setRemoveCover(true);
+              if (coverInputRef.current) coverInputRef.current.value = "";
+            }}
+            className="mt-1 text-xs font-medium text-rose-600 hover:text-rose-700"
+          >
+            Remove cover
+          </button>
+        )}
         {parsed && parsed.platform !== "youtube" && !shownThumb && (
           <p className="mt-1 text-xs text-amber-600">
             Without a cover, the landing page card shows &quot;No preview&quot;.

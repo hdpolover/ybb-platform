@@ -1651,6 +1651,7 @@ export function createProgramTestimonial(
     avatarUrl?: string;
     type?: string;
     videoUrl?: string;
+    thumbnailUrl?: string | null;
     isActive?: boolean;
     order?: number;
     brandId?: string;
@@ -1674,6 +1675,7 @@ export function updateProgramTestimonial(
     avatarUrl?: string;
     type?: string;
     videoUrl?: string;
+    thumbnailUrl?: string | null;
     isActive?: boolean;
     // No brandId: the API refuses moving a testimonial to another brand on update.
     category?: string;
