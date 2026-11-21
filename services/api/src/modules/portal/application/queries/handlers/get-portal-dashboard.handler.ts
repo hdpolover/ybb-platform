@@ -81,7 +81,7 @@ export class GetPortalDashboardHandler implements IQueryHandler<GetPortalDashboa
                         applicationDeadline: true,
                         fundingResultsAnnouncedAt: true,
                         formFields: {
-                            where: { isActive: true },
+                            where: { isActive: true, deletedAt: null },
                             select: {
                                 section: true,
                                 name: true,

@@ -121,6 +121,30 @@ describe('GetPortalSubmissionDetailHandler.findIncompleteRequiredItems', () => {
         );
     });
 
+    // Fields deleted in admin are soft-deleted (deleted_at set, is_active left true).
+    // Without this filter the portal kept rendering them next to their replacements
+    // (CYS 2027 duplicate emergency fields) and the submit gate counted them.
+    it('loads only form fields that are not soft-deleted', async () => {
+        const { handler, prisma } = setup(COMPLETE);
+
+        await handler.findIncompleteRequiredItems('user-1');
+
+        const findFormFieldsWhere = (node: unknown): unknown => {
+            if (!node || typeof node !== 'object') return undefined;
+            const record = node as Record<string, unknown>;
+            if (record.formFields && typeof record.formFields === 'object') {
+                return (record.formFields as Record<string, unknown>).where;
+            }
+            for (const value of Object.values(record)) {
+                const found = findFormFieldsWhere(value);
+                if (found) return found;
+            }
+            return undefined;
+        };
+        const where = findFormFieldsWhere(prisma.participantApplication.findFirst.mock.calls[0][0]);
+        expect(where).toEqual({ isActive: true, deletedAt: null });
+    });
+
     describe('conditional visibility (visibleWhen)', () => {
         const alumniFields = [
             formField('is_alumni', true, 4),

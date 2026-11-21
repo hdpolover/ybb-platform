@@ -305,7 +305,7 @@ export class GetPortalSubmissionDetailHandler
                             orderBy: { order: 'asc' },
                         },
                         formFields: {
-                            where: { isActive: true },
+                            where: { isActive: true, deletedAt: null },
                             select: {
                                 id: true,
                                 section: true,
