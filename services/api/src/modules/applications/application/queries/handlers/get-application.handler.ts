@@ -314,7 +314,7 @@ export class GetApplicationHandler {
   ): Promise<void> {
     try {
       const allFields = await this.prisma.applicationFormField.findMany({
-        where: { programId: application.programId, isActive: true },
+        where: { programId: application.programId, isActive: true, deletedAt: null },
         orderBy: { order: 'asc' },
       });
       // Fields scoped to a category the applicant isn't in are hidden, not

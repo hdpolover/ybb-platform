@@ -53,7 +53,7 @@ export class GetPortalSubmissionsHandler implements IQueryHandler<GetPortalSubmi
                         id: true,
                         name: true,
                         formFields: {
-                            where: { isActive: true },
+                            where: { isActive: true, deletedAt: null },
                             select: {
                                 section: true,
                                 name: true,

@@ -300,7 +300,7 @@ export class ProgramContentRepository implements IProgramContentRepository {
 
     async findFormFieldsByProgramId(programId: string): Promise<ApplicationFormField[]> {
         return this.prisma.applicationFormField.findMany({
-            where: { programId, isActive: true },
+            where: { programId, isActive: true, deletedAt: null },
             orderBy: { order: 'asc' },
         });
     }
