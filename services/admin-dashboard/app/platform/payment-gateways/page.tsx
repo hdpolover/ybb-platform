@@ -76,7 +76,7 @@ export default function PaymentGatewaysPage() {
       listGatewayConfigs(),
       listPlatformBrands(),
       listPaymentMethods(),
-      listPlatformPrograms({ page: 1, limit: 200 }),
+      listPlatformPrograms({ page: 1, limit: 100 }),
     ]);
 
     if (configsResult.status === "rejected") {

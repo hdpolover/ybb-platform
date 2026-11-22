@@ -412,7 +412,7 @@ export default function PlatformEmailTemplatesPage() {
       const [templateList, brandList, programList] = await Promise.all([
         listEmailTemplates(),
         listPlatformBrands(),
-        listPlatformPrograms({ page: 1, limit: 200 }),
+        listPlatformPrograms({ page: 1, limit: 100 }),
       ]);
 
       setTemplates(templateList);
