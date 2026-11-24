@@ -230,7 +230,7 @@ function VideoFormDrawer({
         <label className="mb-1.5 block text-xs font-medium text-zinc-500">
           Cover image
           <span className="ml-1 font-normal text-zinc-400">
-            {parsed?.platform === "youtube" ? "(optional, YouTube thumbnail used otherwise)" : "(optional)"}
+            {parsed?.platform === "youtube" ? "(optional, YouTube thumbnail used otherwise)" : "(recommended)"}
           </span>
         </label>
         <input
@@ -257,8 +257,9 @@ function VideoFormDrawer({
           </button>
         )}
         {parsed && parsed.platform !== "youtube" && !shownThumb && (
-          <p className="mt-1 text-xs text-zinc-400">
-            Without a cover, the landing page card shows a play button instead of a photo.
+          <p className="mt-1 text-xs text-amber-600">
+            Instagram, TikTok and Facebook don&apos;t share a preview image. Upload a screenshot of the
+            video, or the landing page card shows a plain play button instead of a photo.
           </p>
         )}
       </div>
