@@ -9,6 +9,7 @@ import { AdminSidebar } from "./admin-sidebar";
 import type { NavSection } from "@/lib/nav-config";
 import { toast } from "sonner";
 import { clearAllCache, purgeQueues } from "@/src/shared/api-client";
+import { useAuth } from "@/app/contexts/AuthContext";
 import {
   Tooltip,
   TooltipContent,
@@ -45,6 +46,8 @@ export function AdminNavbar({
   const [clearing, setClearing] = React.useState(false);
   const [queueOpen, setQueueOpen] = React.useState(false);
   const [purging, setPurging] = React.useState(false);
+  // Both endpoints are SUPER_ADMIN-only; other admins only ever got a 403.
+  const { accessConfig } = useAuth();
 
   async function handleConfirm() {
     setClearing(true);
@@ -146,38 +149,40 @@ export function AdminNavbar({
         </div>
 
         <div className="flex items-center gap-2">
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setQueueOpen(true)}
-                  aria-label="Purge queues"
-                  className="text-zinc-500"
-                >
-                  <RefreshCw className="h-5 w-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Purge queues</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setOpen(true)}
-                  aria-label="Clear cache"
-                  className="text-zinc-500"
-                >
-                  <Trash2 className="h-5 w-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                Clear cache
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          {accessConfig.isSuperAdmin && (
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setQueueOpen(true)}
+                    aria-label="Purge queues"
+                    className="text-zinc-500"
+                  >
+                    <RefreshCw className="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Purge queues</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setOpen(true)}
+                    aria-label="Clear cache"
+                    className="text-zinc-500"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  Clear cache
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           <Button variant="ghost" size="icon" className="text-zinc-500" onClick={() => {}}>
             <Link href={homeHref} aria-label="Home" className="flex items-center justify-center">
               <Home className="h-5 w-5" />
