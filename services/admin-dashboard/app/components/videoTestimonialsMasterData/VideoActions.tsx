@@ -451,9 +451,11 @@ export function ViewVideoAction({ row }: { row: VideoTestimonyRow }) {
 
 export function EditVideoAction({
   row,
+  brandId,
   onSuccess,
 }: {
   row: VideoTestimonyRow;
+  brandId: string;
   onSuccess: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -470,6 +472,7 @@ export function EditVideoAction({
       <VideoFormDrawer
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
+        brandId={brandId}
         initialData={row}
         onSuccess={onSuccess}
       />
