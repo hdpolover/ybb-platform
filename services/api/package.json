@@ -24,6 +24,7 @@
     "seed:prod:submission-config": "npm run build:seed && node dist/prisma/seeds/main-prod-submission-config.js",
     "build:seed": "tsc --project tsconfig.seed.json",
     "prisma:generate": "prisma generate",
+    "prisma:list-relations": "ts-node scripts/generate-list-relations.ts",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:prod": "prisma migrate deploy",
     "prisma:studio": "prisma studio",

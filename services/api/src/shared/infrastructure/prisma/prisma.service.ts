@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { EventEmitter } from 'node:events';
 import { MetricsService } from '../monitoring/metrics.service';
+import { LIST_RELATIONS } from './list-relations.generated';
 
 type PrismaServiceOptions = {
   connectionString?: string;
@@ -458,7 +459,11 @@ function getRelationFields(modelName: string): Map<string, RelationField> {
   if (model) {
     for (const field of model.fields) {
       if (field.kind === 'object' && typeof field.type === 'string') {
-        map.set(field.name, { type: field.type, isList: field.isList });
+        // Prisma 7's runtime dmmf has no `isList`; list-ness comes from the schema-derived constant.
+        map.set(field.name, {
+          type: field.type,
+          isList: LIST_RELATIONS[modelName]?.[field.name] !== undefined,
+        });
       }
     }
   }
@@ -470,7 +475,7 @@ function getRelationFields(modelName: string): Map<string, RelationField> {
 // into the `where` of any nested to-many relation that targets a soft-deletable
 // model. To-one relations are skipped because Prisma rejects `where` on singular
 // relation includes. Caller-explicit `where.deletedAt` is preserved.
-function applyDeletedAtToIncludes(parentModel: string, includeOrSelect: unknown): unknown {
+export function applyDeletedAtToIncludes(parentModel: string, includeOrSelect: unknown): unknown {
   if (!includeOrSelect || typeof includeOrSelect !== 'object' || Array.isArray(includeOrSelect)) {
     return includeOrSelect;
   }
