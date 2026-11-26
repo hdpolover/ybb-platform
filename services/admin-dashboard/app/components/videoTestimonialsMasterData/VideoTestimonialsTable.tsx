@@ -137,7 +137,7 @@ export function VideoTestimonialsTable({
                         <ViewVideoAction row={row} />
                         {canWrite && (
                           <>
-                            <EditVideoAction row={row} onSuccess={onRefresh} />
+                            <EditVideoAction row={row} brandId={brandId} onSuccess={onRefresh} />
                             <DeleteVideoAction id={row.id} onSuccess={onRefresh} />
                           </>
                         )}
